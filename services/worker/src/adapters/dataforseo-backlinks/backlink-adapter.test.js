@@ -53,6 +53,7 @@ const TEST_OUT_DIR = resolve(
   "..",
   "..",
   "..",
+  "..",
   "artifacts",
   "local",
   "backlink-tests",
