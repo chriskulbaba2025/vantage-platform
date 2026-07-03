@@ -1,0 +1,13 @@
+{
+  "name": "vantage-worker",
+  "version": "0.1.0",
+  "description": "Vantage Platform — Worker services (backlink adapter, audit runners)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test:backlinks": "node --test src/adapters/dataforseo-backlinks/backlink-adapter.test.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

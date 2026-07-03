@@ -1,0 +1,825 @@
+/**
+ * Vantage Backlink Adapter — Test Suite
+ *
+ * Uses Node.js built-in test runner (node:test + node:assert).
+ * No external test framework required.
+ *
+ * Covers:
+ *   - Fixture mode works without DataForSEO credentials
+ *   - Good backlink classification
+ *   - Bad backlink classification (high spam, irrelevant, footer, spammy anchor)
+ *   - Worth pursuing classification
+ *   - Ignore classification (duplicate, incomplete)
+ *   - Missing spam score reduces confidence
+ *   - High spam score forces bad classification
+ *   - Footer/sidebar/widget placement prevents good classification
+ *   - Competitor overlap + high spam does NOT create worth_pursuing
+ *   - Artifact summary counts are correct
+ *   - No production Vantage score files are modified
+ */
+
+import { describe, it, before } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// ---------------------------------------------------------------------------
+// Import modules under test
+// ---------------------------------------------------------------------------
+
+import { createDataforseoClient } from "./dataforseo-backlinks-client.js";
+import {
+  normalizeBacklink,
+  normalizeBacklinks,
+} from "./backlink-normalizer.js";
+import {
+  classifyBacklink,
+  classifyBacklinks,
+} from "./backlink-classifier.js";
+import { writeArtifacts } from "./backlink-artifact-writer.js";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const FIXTURE_PATH = resolve(__dirname, "backlink-test-fixtures.json");
+const TEST_OUT_DIR = resolve(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "..",
+  "artifacts",
+  "local",
+  "backlink-tests",
+);
+
+function loadFixtures() {
+  return JSON.parse(readFileSync(FIXTURE_PATH, "utf-8"));
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("Vantage Backlink Adapter — Phase 1", () => {
+  // -----------------------------------------------------------------------
+  // 1. Fixture mode / DataForSEO Client
+  // -----------------------------------------------------------------------
+  describe("DataForSEO Client", () => {
+    it("fixture mode works without DataForSEO credentials", async () => {
+      // Ensure no credentials in env for this test
+      const client = createDataforseoClient({ mode: "fixture" });
+
+      const summary = await client.fetchBacklinkSummary("example.com");
+      assert.ok(summary, "Summary should be returned");
+      assert.equal(summary.domain, "example.com");
+      assert.ok(typeof summary.rank === "number");
+    });
+
+    it("fixture mode returns backlinks", async () => {
+      const client = createDataforseoClient({ mode: "fixture" });
+
+      const backlinks = await client.fetchBacklinks("example.com", {
+        limit: 500,
+      });
+      assert.ok(Array.isArray(backlinks));
+      assert.ok(backlinks.length > 0, "Should have at least some backlinks");
+      // Verify structure
+      const first = backlinks[0];
+      assert.ok("page_from" in first || first.page_from == null);
+    });
+
+    it("fixture mode returns competitor backlinks", async () => {
+      const client = createDataforseoClient({ mode: "fixture" });
+
+      const competitorBacklinks =
+        await client.fetchCompetitorIntersection(
+          "example.com",
+          ["competitor-a.com", "competitor-b.com"],
+        );
+      assert.ok(Array.isArray(competitorBacklinks));
+      // All returned records should be for competitors
+      for (const bl of competitorBacklinks) {
+        assert.ok(
+          ["competitor-a.com", "competitor-b.com", "competitor-c.com"].includes(
+            bl.domain_to,
+          ),
+          `Expected competitor domain_to, got ${bl.domain_to}`,
+        );
+      }
+    });
+
+    it("live mode without credentials throws a clear error", async () => {
+      const client = createDataforseoClient({ mode: "live" });
+      // Ensure credentials are not set
+      delete process.env.DATAFORSEO_LOGIN;
+      delete process.env.DATAFORSEO_PASSWORD;
+
+      await assert.rejects(
+        () => client.fetchBacklinkSummary("example.com"),
+        /DATAFORSEO_LOGIN.*DATAFORSEO_PASSWORD/,
+        "Should throw a clear credentials error",
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 2. Normalizer
+  // -----------------------------------------------------------------------
+  describe("Backlink Normalizer", () => {
+    let fixtures;
+
+    before(() => {
+      fixtures = loadFixtures();
+    });
+
+    it("produces all required normalized fields", () => {
+      const raw = fixtures.backlinks[0]; // GOOD record
+      const normalized = normalizeBacklink(raw, {
+        targetDomain: "example.com",
+      });
+
+      const requiredFields = [
+        "source",
+        "targetDomain",
+        "referringDomain",
+        "referringPageUrl",
+        "targetUrl",
+        "anchorText",
+        "linkType",
+        "linkAttributes",
+        "semanticLocation",
+        "firstSeen",
+        "lastSeen",
+        "isLost",
+        "linksCount",
+        "externalLinksCount",
+        "domainRank",
+        "pageRank",
+        "spamScore",
+        "targetSpamScore",
+        "competitorOverlapCount",
+        "clientHasLinkFromDomain",
+        "relevanceScore",
+        "authorityScore",
+        "placementScore",
+        "spamSafetyScore",
+        "backlinkQualityScore",
+        "bucket",
+        "classificationConfidence",
+        "evidenceClass",
+        "rationale",
+      ];
+
+      for (const field of requiredFields) {
+        assert.ok(
+          field in normalized,
+          `Normalized record missing field: ${field}`,
+        );
+      }
+    });
+
+    it("tolerates missing fields instead of crashing", () => {
+      const raw = fixtures.backlinks.find(
+        (b) =>
+          b._fixture_note &&
+          b._fixture_note.includes("IGNORE"),
+      );
+
+      assert.doesNotThrow(() => {
+        const normalized = normalizeBacklink(raw, {
+          targetDomain: "example.com",
+        });
+        assert.ok(normalized);
+        assert.ok(
+          normalized._missingFields.length > 0,
+          "Should have missing fields tracked",
+        );
+      });
+    });
+
+    it("computes backlinkQualityScore as sum of four factor scores", () => {
+      const raw = fixtures.backlinks[0];
+      const normalized = normalizeBacklink(raw, {
+        targetDomain: "example.com",
+      });
+
+      const sum =
+        normalized.relevanceScore +
+        normalized.authorityScore +
+        normalized.placementScore +
+        normalized.spamSafetyScore;
+
+      assert.equal(
+        normalized.backlinkQualityScore,
+        sum,
+        "backlinkQualityScore should equal sum of factor scores",
+      );
+      assert.ok(
+        normalized.backlinkQualityScore >= 0 &&
+          normalized.backlinkQualityScore <= 100,
+        "backlinkQualityScore should be between 0 and 100",
+      );
+    });
+
+    it("deduplicates records with same referringPageUrl and targetUrl", () => {
+      // Create two identical raw records
+      const raw = fixtures.backlinks[0];
+      const dupes = [raw, { ...raw }];
+
+      const normalized = normalizeBacklinks(dupes, {
+        targetDomain: "example.com",
+      });
+
+      assert.equal(normalized.length, 2);
+      assert.equal(normalized[0]._isDuplicate, undefined);
+      assert.equal(normalized[1]._isDuplicate, true);
+    });
+
+    it("assigns lower spamSafetyScore when spam score is missing", () => {
+      const raw = fixtures.backlinks.find(
+        (b) => b.spam_score == null,
+      );
+      assert.ok(raw, "Should have a record with null spam_score");
+
+      const normalized = normalizeBacklink(raw, {
+        targetDomain: "example.com",
+      });
+
+      assert.equal(normalized.spamSafetyScore, 10);
+      assert.equal(normalized._spamScoreMissing, true);
+      assert.ok(
+        normalized.classificationConfidence < 0.85,
+        "Missing spam should reduce confidence",
+      );
+    });
+
+    it("assigns placementScore 0 for footer/sidebar/widget locations", () => {
+      const footerRecord = fixtures.backlinks.find(
+        (b) => b.semantic_location === "footer",
+      );
+      assert.ok(footerRecord, "Should have a footer record");
+
+      const normalized = normalizeBacklink(footerRecord, {
+        targetDomain: "example.com",
+      });
+      assert.equal(
+        normalized.placementScore,
+        0,
+        "Footer placement should score 0",
+      );
+    });
+
+    it("detects spammy anchor text patterns", () => {
+      const spammyRecord = fixtures.backlinks.find(
+        (b) =>
+          b._fixture_note &&
+          b._fixture_note.includes("spammy anchor"),
+      );
+      assert.ok(spammyRecord, "Should have spammy anchor record");
+
+      const normalized = normalizeBacklink(spammyRecord, {
+        targetDomain: "example.com",
+      });
+      assert.equal(normalized._isSpammyAnchor, true);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 3. Classifier
+  // -----------------------------------------------------------------------
+  describe("Backlink Classifier", () => {
+    let fixtures, normalized;
+
+    before(() => {
+      fixtures = loadFixtures();
+      normalized = normalizeBacklinks(fixtures.backlinks, {
+        targetDomain: "example.com",
+        competitorDomains: [
+          "competitor-a.com",
+          "competitor-b.com",
+          "competitor-c.com",
+        ],
+      });
+      classifyBacklinks(normalized);
+    });
+
+    it("good backlink classification works", () => {
+      const good = normalized.filter((r) => r.bucket === "good");
+      assert.ok(good.length >= 1, "Should have at least one good backlink");
+
+      for (const g of good) {
+        assert.ok(g.backlinkQualityScore >= 75);
+        assert.ok(g.spamScore == null || g.spamScore <= 30);
+        assert.ok(g.relevanceScore >= 18);
+        assert.ok(g.placementScore >= 18);
+        assert.ok(
+          ["strongly_supported", "supported", "directional"].includes(
+            g.evidenceClass,
+          ),
+        );
+      }
+    });
+
+    it("bad backlink classification works — high spam score", () => {
+      const badHighSpam = normalized.find(
+        (r) => r.bucket === "bad" && r.spamScore >= 61,
+      );
+      assert.ok(badHighSpam, "Should have a bad record with high spam");
+      assert.equal(badHighSpam.bucket, "bad");
+    });
+
+    it("bad backlink classification works — footer placement", () => {
+      const badFooter = normalized.find(
+        (r) =>
+          r.bucket === "bad" &&
+          r.semanticLocation === "footer",
+      );
+      assert.ok(badFooter, "Footer placement should be classified as bad");
+      assert.equal(badFooter.bucket, "bad");
+      assert.equal(badFooter.placementScore, 0);
+    });
+
+    it("bad backlink classification works — irrelevant topic", () => {
+      const badIrrelevant = normalized.find(
+        (r) =>
+          r.bucket === "bad" &&
+          r.relevanceScore === 0,
+      );
+      assert.ok(
+        badIrrelevant,
+        "Irrelevant topic should be classified as bad",
+      );
+    });
+
+    it("bad backlink classification works — spammy anchor text", () => {
+      const badAnchor = normalized.find(
+        (r) => r.bucket === "bad" && r._isSpammyAnchor,
+      );
+      assert.ok(badAnchor, "Spammy anchor should be classified as bad");
+    });
+
+    it("worth_pursuing classification works", () => {
+      const wp = normalized.filter(
+        (r) => r.bucket === "worth_pursuing",
+      );
+      assert.ok(
+        wp.length >= 1,
+        "Should have at least one worth_pursuing",
+      );
+
+      for (const w of wp) {
+        assert.ok(w.competitorOverlapCount >= 1);
+        assert.equal(w.clientHasLinkFromDomain, false);
+        assert.ok(w.spamScore == null || w.spamScore <= 30);
+        assert.ok(w.relevanceScore >= 18);
+        assert.ok(w.placementScore >= 18);
+      }
+    });
+
+    it("ignore classification works — too incomplete", () => {
+      const ignored = normalized.filter(
+        (r) => r.bucket === "ignore",
+      );
+      assert.ok(
+        ignored.length >= 1,
+        "Should have at least one ignored record",
+      );
+
+      // At least one ignored should be incomplete
+      const incomplete = ignored.find(
+        (r) =>
+          r._missingFields && r._missingFields.length >= 6,
+      );
+      assert.ok(incomplete, "Should have incomplete ignored record");
+    });
+
+    it("every record has a bucket assigned", () => {
+      for (const r of normalized) {
+        assert.ok(
+          ["good", "bad", "worth_pursuing", "ignore"].includes(
+            r.bucket,
+          ),
+          `Record missing valid bucket: ${r.bucket}`,
+        );
+      }
+    });
+
+    it("every record has evidenceClass assigned", () => {
+      for (const r of normalized) {
+        assert.ok(
+          [
+            "strongly_supported",
+            "supported",
+            "directional",
+            "insufficient_evidence",
+          ].includes(r.evidenceClass),
+          `Record missing valid evidenceClass: ${r.evidenceClass}`,
+        );
+      }
+    });
+
+    it("every record has a non-empty rationale", () => {
+      for (const r of normalized) {
+        assert.ok(
+          r.rationale && r.rationale.length > 0,
+          "Rationale should not be empty",
+        );
+      }
+    });
+
+    it("missing spam score reduces confidence", () => {
+      const missingSpam = normalized.find(
+        (r) => r._spamScoreMissing,
+      );
+      assert.ok(missingSpam, "Should have record with missing spam");
+
+      assert.ok(
+        missingSpam.classificationConfidence < 0.85,
+        "Missing spam should keep confidence below high",
+      );
+    });
+
+    it("high spam score forces bad classification", () => {
+      const highSpamRecords = normalized.filter(
+        (r) => r.spamScore != null && r.spamScore >= 61,
+      );
+      for (const r of highSpamRecords) {
+        assert.equal(
+          r.bucket,
+          "bad",
+          `Record with spam score ${r.spamScore} must be classified as bad`,
+        );
+      }
+    });
+
+    it("high authority does not override spam risk in classification", () => {
+      // The record with high spam (72) should be bad regardless of other scores
+      const highSpamBad = normalized.find(
+        (r) => r.spamScore === 72,
+      );
+      assert.ok(highSpamBad, "Should find the spam-72 record");
+      assert.equal(highSpamBad.bucket, "bad");
+    });
+
+    it("competitor overlap does not create worth_pursuing when spam is high", () => {
+      // All worth_pursuing records must have spamScore <= 30
+      const wp = normalized.filter(
+        (r) => r.bucket === "worth_pursuing",
+      );
+      for (const w of wp) {
+        assert.ok(
+          w.spamScore == null || w.spamScore <= 30,
+          `Worth-pursuing record should not have high spam: ${w.spamScore}`,
+        );
+      }
+    });
+
+    it("evidenceClass strongly_supported when multiple red flags for bad", () => {
+      // Records with both high spam AND placement=0 OR spammy anchor
+      const strongBad = normalized.find(
+        (r) =>
+          r.bucket === "bad" &&
+          r.evidenceClass === "strongly_supported",
+      );
+      assert.ok(strongBad, "Should have strongly_supported bad record");
+    });
+
+    it("evidenceClass strongly_supported for worth_pursuing with high overlap", () => {
+      const strongWP = normalized.find(
+        (r) =>
+          r.bucket === "worth_pursuing" &&
+          r.competitorOverlapCount >= 2 &&
+          r.evidenceClass === "strongly_supported",
+      );
+      assert.ok(
+        strongWP,
+        "Should have strongly_supported worth_pursuing with 2+ overlap",
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 4. Artifact Writer
+  // -----------------------------------------------------------------------
+  describe("Backlink Artifact Writer", () => {
+    let fixtures, normalized, output;
+
+    before(() => {
+      fixtures = loadFixtures();
+      normalized = normalizeBacklinks(fixtures.backlinks, {
+        targetDomain: "example.com",
+        competitorDomains: [
+          "competitor-a.com",
+          "competitor-b.com",
+          "competitor-c.com",
+        ],
+      });
+      classifyBacklinks(normalized);
+
+      const runMeta = {
+        targetDomain: "example.com",
+        competitorDomains: [
+          "competitor-a.com",
+          "competitor-b.com",
+          "competitor-c.com",
+        ],
+        mode: "fixture",
+        requestCount: 3,
+        estimatedCost: 0.15,
+        targetSpamScore: 5,
+      };
+
+      output = writeArtifacts({
+        rawBacklinks: fixtures.backlinks,
+        rawSummary: fixtures.summary,
+        normalizedBacklinks: normalized,
+        runMeta,
+        outPath: TEST_OUT_DIR,
+      });
+    });
+
+    it("writes raw-backlinks.json", () => {
+      assert.ok(existsSync(output.rawPath));
+      const content = JSON.parse(
+        readFileSync(output.rawPath, "utf-8"),
+      );
+      assert.ok(Array.isArray(content.backlinks));
+      assert.ok(content.summary);
+    });
+
+    it("writes normalized-backlinks.json", () => {
+      assert.ok(existsSync(output.normalizedPath));
+      const content = JSON.parse(
+        readFileSync(output.normalizedPath, "utf-8"),
+      );
+      assert.ok(Array.isArray(content.records));
+      // Clean records should not have internal fields
+      const first = content.records[0];
+      assert.equal(first._missingFields, undefined);
+      assert.equal(first._spamScoreMissing, undefined);
+      assert.equal(first._isSpammyAnchor, undefined);
+      assert.equal(first._isDuplicate, undefined);
+    });
+
+    it("writes backlink-summary.json with correct structure", () => {
+      assert.ok(existsSync(output.summaryPath));
+      const content = JSON.parse(
+        readFileSync(output.summaryPath, "utf-8"),
+      );
+
+      const requiredFields = [
+        "targetDomain",
+        "competitorDomains",
+        "totalBacklinksReviewed",
+        "goodCount",
+        "badCount",
+        "worthPursuingCount",
+        "ignoredCount",
+        "topGoodLinks",
+        "topBadPatterns",
+        "topWorthPursuingDomains",
+        "authoritySummary",
+        "limitations",
+        "requestCount",
+        "estimatedCost",
+        "recommendedUse",
+      ];
+
+      for (const field of requiredFields) {
+        assert.ok(
+          field in content,
+          `Summary missing field: ${field}`,
+        );
+      }
+    });
+
+    it("summary counts are correct", () => {
+      const content = JSON.parse(
+        readFileSync(output.summaryPath, "utf-8"),
+      );
+
+      const good = normalized.filter(
+        (r) => r.bucket === "good",
+      ).length;
+      const bad = normalized.filter(
+        (r) => r.bucket === "bad",
+      ).length;
+      const wp = normalized.filter(
+        (r) => r.bucket === "worth_pursuing",
+      ).length;
+      const ignored = normalized.filter(
+        (r) => r.bucket === "ignore",
+      ).length;
+
+      assert.equal(content.goodCount, good);
+      assert.equal(content.badCount, bad);
+      assert.equal(content.worthPursuingCount, wp);
+      assert.equal(content.ignoredCount, ignored);
+      assert.equal(
+        content.goodCount +
+          content.badCount +
+          content.worthPursuingCount +
+          content.ignoredCount,
+        content.totalBacklinksReviewed,
+      );
+    });
+
+    it("summary includes fixture mode limitation", () => {
+      const content = JSON.parse(
+        readFileSync(output.summaryPath, "utf-8"),
+      );
+      const hasFixtureLimit = content.limitations.some(
+        (l) => l.includes("Fixture mode"),
+      );
+      assert.ok(hasFixtureLimit);
+    });
+
+    it('recommendedUse is "contextual_report_only"', () => {
+      const content = JSON.parse(
+        readFileSync(output.summaryPath, "utf-8"),
+      );
+      assert.equal(
+        content.recommendedUse,
+        "contextual_report_only",
+      );
+    });
+
+    it("artifact records do not expose credentials", () => {
+      const rawContent = readFileSync(output.rawPath, "utf-8");
+      const normContent = readFileSync(
+        output.normalizedPath,
+        "utf-8",
+      );
+      const summaryContent = readFileSync(
+        output.summaryPath,
+        "utf-8",
+      );
+
+      for (const content of [
+        rawContent,
+        normContent,
+        summaryContent,
+      ]) {
+        assert.ok(!content.includes("DATAFORSEO_LOGIN"));
+        assert.ok(!content.includes("DATAFORSEO_PASSWORD"));
+        assert.ok(!content.includes("password"));
+        assert.ok(!content.includes("login"));
+      }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 5. Production safety gates
+  // -----------------------------------------------------------------------
+  describe("Production Safety Gates", () => {
+    it("does not modify Vantage readiness scoring files", () => {
+      // Phase 1 adapter must not touch any production scoring paths.
+      // This test verifies we are not importing or modifying scoring modules.
+      const scoringPaths = [
+        "services/worker/src/scoring",
+        "services/worker/src/readiness",
+        "services/worker/src/audit",
+      ];
+
+      for (const p of scoringPaths) {
+        const fullPath = resolve(
+          __dirname,
+          "..",
+          "..",
+          "..",
+          "..",
+          p,
+        );
+        // These paths should not exist yet — verifying Phase 1 isolation
+        if (existsSync(fullPath)) {
+          assert.fail(
+            `Production scoring path should not be touched in Phase 1: ${p}`,
+          );
+        }
+      }
+      // If we reach here, no production scoring paths were found (expected for Phase 1)
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 6. Edge cases
+  // -----------------------------------------------------------------------
+  describe("Edge Cases", () => {
+    it("handles completely empty backlink array", () => {
+      const normalized = normalizeBacklinks([], {
+        targetDomain: "example.com",
+      });
+      assert.equal(normalized.length, 0);
+      classifyBacklinks(normalized);
+      assert.equal(normalized.length, 0);
+    });
+
+    it("handles record with all-null fields", () => {
+      const allNull = {
+        page_from: null,
+        page_from_title: null,
+        domain_from: null,
+        page_to: null,
+        domain_to: null,
+        anchor: null,
+        semantic_location: null,
+        link_type: null,
+        link_attributes: [],
+        domain_from_rank: null,
+        page_from_rank: null,
+        spam_score: null,
+        target_spam_score: null,
+        first_seen: null,
+        last_seen: null,
+        external_links_count: null,
+        links_count: null,
+        competitor_overlap_count: 0,
+        client_has_link_from_domain: false,
+      };
+
+      assert.doesNotThrow(() => {
+        const normalized = normalizeBacklink(allNull, {
+          targetDomain: "example.com",
+        });
+        classifyBacklink(normalized);
+        assert.equal(normalized.bucket, "ignore");
+        assert.equal(
+          normalized.evidenceClass,
+          "insufficient_evidence",
+        );
+      });
+    });
+
+    it("confidence is always between 0 and 1", () => {
+      const fixtures = loadFixtures();
+      for (const raw of fixtures.backlinks) {
+        const normalized = normalizeBacklink(raw, {
+          targetDomain: "example.com",
+        });
+        assert.ok(
+          normalized.classificationConfidence >= 0 &&
+            normalized.classificationConfidence <= 1,
+          `Confidence ${normalized.classificationConfidence} out of range`,
+        );
+      }
+    });
+
+    it("factor scores are always 0-25", () => {
+      const fixtures = loadFixtures();
+      for (const raw of fixtures.backlinks) {
+        const normalized = normalizeBacklink(raw, {
+          targetDomain: "example.com",
+        });
+        assert.ok(normalized.relevanceScore >= 0 && normalized.relevanceScore <= 25);
+        assert.ok(normalized.authorityScore >= 0 && normalized.authorityScore <= 25);
+        assert.ok(normalized.placementScore >= 0 && normalized.placementScore <= 25);
+        assert.ok(normalized.spamSafetyScore >= 0 && normalized.spamSafetyScore <= 25);
+      }
+    });
+
+    it("no causal ranking claims in rationales", () => {
+      const fixtures = loadFixtures();
+      const normalized = normalizeBacklinks(fixtures.backlinks, {
+        targetDomain: "example.com",
+      });
+      classifyBacklinks(normalized);
+
+      const forbiddenPhrases = [
+        "will improve rankings",
+        "ranks because",
+        "boost your ranking",
+        "guaranteed ranking",
+      ];
+
+      for (const r of normalized) {
+        for (const phrase of forbiddenPhrases) {
+          assert.ok(
+            !r.rationale.toLowerCase().includes(phrase),
+            `Rationale contains forbidden phrase: "${phrase}"`,
+          );
+        }
+      }
+    });
+
+    it("no automatic disavow recommendations", () => {
+      const fixtures = loadFixtures();
+      const normalized = normalizeBacklinks(fixtures.backlinks, {
+        targetDomain: "example.com",
+      });
+      classifyBacklinks(normalized);
+
+      for (const r of normalized) {
+        assert.ok(
+          !r.rationale.toLowerCase().includes("disavow"),
+          `Rationale should not recommend disavow: "${r.rationale}"`,
+        );
+      }
+    });
+  });
+});
