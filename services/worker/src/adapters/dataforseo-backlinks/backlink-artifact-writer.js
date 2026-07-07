@@ -185,7 +185,7 @@ function buildSummary(normalizedRecords, runMeta) {
   }
   if (competitorDomains.length === 0) {
     limitations.push(
-      "No competitor domains provided — worth_pursuing classification skipped. Only good/bad classification performed.",
+      "No competitor domains supplied; worth_pursuing discovery skipped.",
     );
   }
 

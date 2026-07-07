@@ -16,7 +16,7 @@
  * Flags:
  *   --target       Target domain to audit (required)
  *   --competitors  Comma-separated competitor domains (optional)
- *   --fixture      Use local fixture data instead of live API (default: true)
+ *   --fixture      Use local fixture data instead of live API
  *   --out          Output directory override (default: artifacts/local/backlink-tests/)
  *
  * Produces:
@@ -40,7 +40,7 @@ function parseArgs(argv) {
   const args = {
     target: null,
     competitors: [],
-    fixture: true, // default to fixture mode for safety
+    fixture: false, // default to live mode — use --fixture for local testing
     out: null,
   };
 

@@ -358,10 +358,14 @@ export function normalizeBacklink(raw, context = {}) {
 
   const missingFields = collectMissingFields(raw);
 
-  const competitorOverlapCount =
-    raw.competitor_overlap_count != null
-      ? raw.competitor_overlap_count
-      : 0;
+  const hasCompetitors =
+    context.competitorDomains && context.competitorDomains.length > 0;
+
+  const competitorOverlapCount = hasCompetitors
+    ? (raw.competitor_overlap_count != null
+        ? raw.competitor_overlap_count
+        : 0)
+    : 0;
 
   const classificationConfidence = computeConfidence(
     relevance.confidence,
