@@ -8,10 +8,13 @@
  *   4. backlink-manifest.json   — Stable contract for downstream consumers
  *
  * Default local output path: artifacts/local/backlink-tests/
+ *
+ * File I/O is delegated to the artifact store (storage/artifact-store.js)
+ * so the adapter is not coupled to a specific storage backend.
  */
 
-import { writeFileSync, mkdirSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { resolve } from "node:path";
+import { writeJsonArtifact } from "../../storage/artifact-store.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,11 +27,11 @@ const MANIFEST_VERSION = "1.0.0";
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the output directory. Creates it if it doesn't exist.
+ * Resolve the output directory. Directory creation is handled by the
+ * artifact store on first write.
  */
-function ensureOutputDir(outPath) {
-  mkdirSync(outPath, { recursive: true });
-  return outPath;
+function resolveOutputDir(outPath) {
+  return outPath || resolve("artifacts", "local", "backlink-tests");
 }
 
 // ---------------------------------------------------------------------------
@@ -620,9 +623,7 @@ export function writeArtifacts({
   outPath,
   fetchError = null,
 }) {
-  const outputDir = ensureOutputDir(
-    outPath || resolve("artifacts", "local", "backlink-tests"),
-  );
+  const outputDir = resolveOutputDir(outPath);
 
   // 1. Raw artifact
   const rawPayload = {
@@ -635,8 +636,11 @@ export function writeArtifacts({
     summary: rawSummary,
     backlinks: rawBacklinks,
   };
-  const rawPath = join(outputDir, "raw-backlinks.json");
-  writeFileSync(rawPath, JSON.stringify(rawPayload, null, 2), "utf-8");
+  const rawPath = writeJsonArtifact(
+    outputDir,
+    "raw-backlinks.json",
+    rawPayload,
+  );
 
   // 2. Normalized artifact
   const normalizedPayload = {
@@ -653,26 +657,18 @@ export function writeArtifacts({
       return clean;
     }),
   };
-  const normalizedPath = join(
+  const normalizedPath = writeJsonArtifact(
     outputDir,
     "normalized-backlinks.json",
-  );
-  writeFileSync(
-    normalizedPath,
-    JSON.stringify(normalizedPayload, null, 2),
-    "utf-8",
+    normalizedPayload,
   );
 
   // 3. Summary artifact
   const summary = buildSummary(normalizedBacklinks, runMeta);
-  const summaryPath = join(
+  const summaryPath = writeJsonArtifact(
     outputDir,
     "backlink-summary.json",
-  );
-  writeFileSync(
-    summaryPath,
-    JSON.stringify(summary, null, 2),
-    "utf-8",
+    summary,
   );
 
   // 4. Manifest artifact — stable contract for downstream consumers
@@ -684,14 +680,10 @@ export function writeArtifacts({
     outputPaths,
     fetchError,
   );
-  const manifestPath = join(
+  const manifestPath = writeJsonArtifact(
     outputDir,
     "backlink-manifest.json",
-  );
-  writeFileSync(
-    manifestPath,
-    JSON.stringify(manifest, null, 2),
-    "utf-8",
+    manifest,
   );
 
   return {

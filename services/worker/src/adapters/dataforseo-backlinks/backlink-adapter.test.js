@@ -54,6 +54,14 @@ import {
   validateSummaryArtifact,
   validateManifestArtifact,
 } from "./backlink-artifact-writer.js";
+import {
+  buildArtifactPath,
+  writeJsonArtifact,
+  readJsonArtifact,
+  artifactExists,
+  listArtifacts,
+  createLocalArtifactStore,
+} from "../../storage/artifact-store.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1242,7 +1250,172 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 6. Production safety gates
+  // 6. Artifact Store (storage boundary for local → S3 migration)
+  // -----------------------------------------------------------------------
+  describe("Artifact Store", () => {
+    const STORE_TEST_DIR = resolve(TEST_OUT_DIR, "_store_test");
+
+    it("writeJsonArtifact writes JSON to disk", () => {
+      const data = { hello: "world", count: 42 };
+      const filePath = writeJsonArtifact(
+        STORE_TEST_DIR,
+        "test-write.json",
+        data,
+      );
+      assert.ok(existsSync(filePath), "File should exist after write");
+
+      const read = JSON.parse(readFileSync(filePath, "utf-8"));
+      assert.deepEqual(read, data);
+    });
+
+    it("readJsonArtifact reads JSON from disk", () => {
+      const data = { foo: "bar", items: [1, 2, 3] };
+      writeJsonArtifact(STORE_TEST_DIR, "test-read.json", data);
+
+      const result = readJsonArtifact(STORE_TEST_DIR, "test-read.json");
+      assert.deepEqual(result, data);
+    });
+
+    it("readJsonArtifact returns null for missing file", () => {
+      const result = readJsonArtifact(
+        STORE_TEST_DIR,
+        "nonexistent.json",
+      );
+      assert.equal(result, null);
+    });
+
+    it("artifactExists returns true for existing file", () => {
+      writeJsonArtifact(STORE_TEST_DIR, "test-exists.json", { a: 1 });
+      assert.equal(
+        artifactExists(STORE_TEST_DIR, "test-exists.json"),
+        true,
+      );
+    });
+
+    it("artifactExists returns false for missing file", () => {
+      assert.equal(
+        artifactExists(STORE_TEST_DIR, "missing-file.json"),
+        false,
+      );
+    });
+
+    it("listArtifacts returns sorted JSON filenames", () => {
+      writeJsonArtifact(STORE_TEST_DIR, "zebra.json", {});
+      writeJsonArtifact(STORE_TEST_DIR, "alpha.json", {});
+      writeJsonArtifact(STORE_TEST_DIR, "notes.txt", {}); // should be excluded
+
+      const list = listArtifacts(STORE_TEST_DIR);
+      assert.ok(Array.isArray(list));
+      assert.ok(list.includes("alpha.json"));
+      assert.ok(list.includes("zebra.json"));
+      assert.ok(!list.includes("notes.txt"));
+      // Verify sorted
+      assert.ok(list.indexOf("alpha.json") < list.indexOf("zebra.json"));
+    });
+
+    it("listArtifacts returns empty array for missing directory", () => {
+      const list = listArtifacts(
+        resolve(STORE_TEST_DIR, "_nonexistent_dir_"),
+      );
+      assert.deepEqual(list, []);
+    });
+
+    it("blocks path traversal with ../ in name", () => {
+      assert.throws(
+        () =>
+          writeJsonArtifact(STORE_TEST_DIR, "../../secret.json", {
+            bad: true,
+          }),
+        /invalid|path separator/i,
+      );
+    });
+
+    it("blocks path traversal with .. bare name", () => {
+      assert.throws(
+        () => writeJsonArtifact(STORE_TEST_DIR, "..", { bad: true }),
+        /invalid|traversal/i,
+      );
+    });
+
+    it("blocks path traversal with backslash in name", () => {
+      assert.throws(
+        () =>
+          writeJsonArtifact(
+            STORE_TEST_DIR,
+            "sub\\..\\secret.json",
+            { bad: true },
+          ),
+        /invalid|path separator/i,
+      );
+    });
+
+    it("buildArtifactPath returns path under base directory", () => {
+      const baseDir = resolve(STORE_TEST_DIR);
+      const filePath = buildArtifactPath(baseDir, "example.json");
+      assert.ok(
+        filePath.startsWith(baseDir),
+        `Expected ${filePath} to start with ${baseDir}`,
+      );
+      assert.ok(filePath.endsWith("example.json"));
+    });
+
+    it("artifact paths remain under artifacts/local/backlink-tests/", () => {
+      // All four standard backlink artifacts must resolve under the base dir
+      const artifacts = [
+        "raw-backlinks.json",
+        "normalized-backlinks.json",
+        "backlink-summary.json",
+        "backlink-manifest.json",
+      ];
+      for (const name of artifacts) {
+        const filePath = buildArtifactPath(TEST_OUT_DIR, name);
+        assert.ok(
+          filePath.startsWith(TEST_OUT_DIR),
+          `${name} path must be under base dir: ${filePath}`,
+        );
+      }
+    });
+
+    it("writes JSON with stable formatting (2-space indent)", () => {
+      const filePath = writeJsonArtifact(
+        STORE_TEST_DIR,
+        "format-test.json",
+        { key: "value", nested: { inner: 1 } },
+      );
+      const raw = readFileSync(filePath, "utf-8");
+      // Verify 2-space indentation is used
+      const lines = raw.split("\n");
+      const indentLine = lines.find((l) => l.trimStart().startsWith('"nested"'));
+      assert.ok(indentLine, "Should have nested key line");
+      assert.ok(indentLine.startsWith("  "));
+      assert.ok(!indentLine.startsWith("    "));
+    });
+
+    it("createLocalArtifactStore returns a bound store instance", () => {
+      const store = createLocalArtifactStore({
+        baseDir: STORE_TEST_DIR,
+      });
+
+      const filePath = store.writeJsonArtifact("store-test.json", {
+        via: "store",
+      });
+      assert.ok(existsSync(filePath));
+
+      const read = store.readJsonArtifact("store-test.json");
+      assert.deepEqual(read, { via: "store" });
+
+      assert.equal(store.artifactExists("store-test.json"), true);
+
+      const list = store.listArtifacts();
+      assert.ok(list.includes("store-test.json"));
+
+      const builtPath = store.buildArtifactPath("store-test.json");
+      assert.ok(builtPath.startsWith(resolve(STORE_TEST_DIR)));
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 7. Production safety gates
   // -----------------------------------------------------------------------
   describe("Production Safety Gates", () => {
     it("does not modify Vantage readiness scoring files", () => {
@@ -1275,7 +1448,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 7. Edge cases
+  // 8. Edge cases
   // -----------------------------------------------------------------------
   describe("Edge Cases", () => {
     it("handles completely empty backlink array", () => {
