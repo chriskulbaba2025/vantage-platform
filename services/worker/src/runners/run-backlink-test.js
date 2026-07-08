@@ -186,7 +186,8 @@ async function main() {
       "ERROR: --target is required.\n" +
         "Usage: node run-backlink-test.js --target example.com [--competitors a.com,b.com] [--fixture]",
     );
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   // Cap competitor domains at 3 (PRD §16.2)
@@ -223,7 +224,8 @@ async function main() {
   } catch (err) {
     console.error(`ERROR fetching summary: ${err.message}`);
     console.error("Cannot proceed without summary data.");
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   try {
@@ -308,5 +310,5 @@ async function main() {
 main().catch((err) => {
   console.error("FATAL:", err.message);
   console.error(err.stack);
-  process.exit(1);
+  process.exitCode = 1;
 });

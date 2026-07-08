@@ -54,11 +54,173 @@ function loadFixtures() {
 }
 
 // ---------------------------------------------------------------------------
+// Response parsing (exported for testing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Safely parse a DataForSEO API response body.
+ *
+ * Handles:
+ *   - Normal JSON objects (response.json() already parsed)
+ *   - Double-encoded JSON strings (body is a JSON-encoded string)
+ *   - Root-level status_code validation
+ *
+ * @param {object|string} body - Raw response body from the API.
+ * @param {string} endpoint - API endpoint label for error messages.
+ * @returns {object} Parsed and validated response object.
+ */
+export function parseDataforseoResponse(body, endpoint) {
+  let parsed = body;
+
+  // Handle double-encoded JSON: if the body is a string, parse it.
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      throw new Error(
+        `DataForSEO ${endpoint}: unable to parse response body as JSON`,
+      );
+    }
+  }
+
+  // If we still have a string after first parse, try one more time
+  // (some proxy/gateway setups double-encode).
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      throw new Error(
+        `DataForSEO ${endpoint}: unable to parse response body as JSON (double-encoded)`,
+      );
+    }
+  }
+
+  // Validate root status_code when present.
+  if (
+    parsed.status_code != null &&
+    parsed.status_code !== 20000
+  ) {
+    throw new Error(
+      `DataForSEO ${endpoint}: API error ` +
+        `(status_code=${parsed.status_code}, ` +
+        `message="${parsed.status_message || "unknown"}")`,
+    );
+  }
+
+  return parsed;
+}
+
+/**
+ * Extract and validate a task result from a parsed DataForSEO response.
+ *
+ * Validates:
+ *   - tasks array is present and non-empty
+ *   - Task-level status_code is 20000
+ *   - result array is present and non-empty
+ *
+ * @param {object} response - Parsed DataForSEO response object.
+ * @param {string} endpoint - API endpoint label for error messages.
+ * @returns {object} The first result object: response.tasks[0].result[0].
+ */
+export function extractTaskResult(response, endpoint) {
+  if (
+    !response ||
+    !response.tasks ||
+    !Array.isArray(response.tasks) ||
+    response.tasks.length === 0
+  ) {
+    throw new Error(
+      `DataForSEO ${endpoint}: no tasks in response`,
+    );
+  }
+
+  const task = response.tasks[0];
+
+  // Validate task-level status_code.
+  if (
+    task.status_code != null &&
+    task.status_code !== 20000
+  ) {
+    throw new Error(
+      `DataForSEO ${endpoint}: task error ` +
+        `(status_code=${task.status_code}, ` +
+        `message="${task.status_message || "unknown"}")`,
+    );
+  }
+
+  if (
+    !task.result ||
+    !Array.isArray(task.result) ||
+    task.result.length === 0
+  ) {
+    throw new Error(
+      `DataForSEO ${endpoint}: no result data in task`,
+    );
+  }
+
+  return task.result[0];
+}
+
+/**
+ * Extract all task results from a parsed DataForSEO response.
+ *
+ * Returns an array of result[0] from each task, skipping tasks with
+ * empty results (logged as warnings).
+ *
+ * @param {object} response - Parsed DataForSEO response object.
+ * @param {string} endpoint - API endpoint label for error messages.
+ * @returns {Array<object>} Array of result objects.
+ */
+export function extractAllTaskResults(response, endpoint) {
+  if (
+    !response ||
+    !response.tasks ||
+    !Array.isArray(response.tasks) ||
+    response.tasks.length === 0
+  ) {
+    return [];
+  }
+
+  const results = [];
+
+  for (let i = 0; i < response.tasks.length; i++) {
+    const task = response.tasks[i];
+
+    // Validate task-level status_code.
+    if (
+      task.status_code != null &&
+      task.status_code !== 20000
+    ) {
+      // Log warning but continue with other tasks
+      console.warn(
+        `DataForSEO ${endpoint}: task ${i} error ` +
+          `(status_code=${task.status_code}, ` +
+          `message="${task.status_message || "unknown"}") — skipping`,
+      );
+      continue;
+    }
+
+    if (
+      task.result &&
+      Array.isArray(task.result) &&
+      task.result.length > 0
+    ) {
+      results.push(task.result[0]);
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Live API helpers (Phase 1 — minimal, structural)
 // ---------------------------------------------------------------------------
 
 /**
  * POST to a DataForSEO endpoint. Returns parsed JSON or throws on failure.
+ *
+ * Reads the response as text first so we can apply safe parsing with
+ * double-encoding detection.
  */
 async function dataforseoPost(endpoint, body, { login, password }) {
   const url = `${DATAFORSEO_BASE}${endpoint}`;
@@ -78,7 +240,9 @@ async function dataforseoPost(endpoint, body, { login, password }) {
     );
   }
 
-  return response.json();
+  // Read response as text so we can detect double-encoding.
+  const rawText = await response.text();
+  return parseDataforseoResponse(rawText, endpoint);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +273,7 @@ export function createDataforseoClient(opts = {}) {
       return fixtures.summary;
     }
 
-    // Live mode — Phase 1 structural placeholder
+    // Live mode
     const { login, password } = getCredentials();
     if (!login || !password) {
       throw new Error(
@@ -125,24 +289,13 @@ export function createDataforseoClient(opts = {}) {
       },
     ];
 
-    const result = await dataforseoPost(
+    const response = await dataforseoPost(
       "/backlinks/summary/live",
       body,
       { login, password },
     );
 
-    // DataForSEO wraps results in tasks array
-    if (
-      !result ||
-      !result.tasks ||
-      !result.tasks[0] ||
-      !result.tasks[0].result ||
-      !result.tasks[0].result[0]
-    ) {
-      throw new Error(`No summary data returned for ${target}`);
-    }
-
-    return result.tasks[0].result[0];
+    return extractTaskResult(response, "/backlinks/summary/live");
   }
 
   /**
@@ -164,7 +317,7 @@ export function createDataforseoClient(opts = {}) {
       return all.slice(0, limit);
     }
 
-    // Live mode — Phase 1 structural placeholder
+    // Live mode
     const { login, password } = getCredentials();
     if (!login || !password) {
       throw new Error(
@@ -181,23 +334,14 @@ export function createDataforseoClient(opts = {}) {
       },
     ];
 
-    const result = await dataforseoPost(
+    const response = await dataforseoPost(
       "/backlinks/backlinks/live",
       body,
       { login, password },
     );
 
-    if (
-      !result ||
-      !result.tasks ||
-      !result.tasks[0] ||
-      !result.tasks[0].result ||
-      !result.tasks[0].result[0]
-    ) {
-      return [];
-    }
-
-    return result.tasks[0].result[0].items || [];
+    const result = extractTaskResult(response, "/backlinks/backlinks/live");
+    return result.items || [];
   }
 
   /**
@@ -231,7 +375,7 @@ export function createDataforseoClient(opts = {}) {
       return competitorBacklinks.slice(0, limit);
     }
 
-    // Live mode — Phase 1 structural placeholder
+    // Live mode
     const { login, password } = getCredentials();
     if (!login || !password) {
       throw new Error(
@@ -246,22 +390,18 @@ export function createDataforseoClient(opts = {}) {
       order_by: ["rank", "desc"],
     }));
 
-    const result = await dataforseoPost(
+    const response = await dataforseoPost(
       "/backlinks/backlinks/live",
       tasks,
       { login, password },
     );
 
-    if (
-      !result ||
-      !result.tasks
-    ) {
-      return [];
-    }
-
-    return result.tasks.flatMap(
-      (t) => t?.result?.[0]?.items || [],
+    const results = extractAllTaskResults(
+      response,
+      "/backlinks/backlinks/live",
     );
+
+    return results.flatMap((r) => r.items || []);
   }
 
   return {

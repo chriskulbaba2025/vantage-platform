@@ -1,15 +1,11 @@
 {
-  "targetDomain": "example.com",
-  "competitorDomains": [
-    "competitor-a.com",
-    "competitor-b.com",
-    "competitor-c.com"
-  ],
-  "totalBacklinksReviewed": 19,
-  "goodCount": 3,
+  "targetDomain": "solescience.ca",
+  "competitorDomains": [],
+  "totalBacklinksReviewed": 15,
+  "goodCount": 6,
   "badCount": 6,
-  "worthPursuingCount": 3,
-  "ignoredCount": 7,
+  "worthPursuingCount": 0,
+  "ignoredCount": 3,
   "topGoodLinks": [
     {
       "referringDomain": "industryweekly.com",
@@ -31,6 +27,20 @@
       "anchorText": "Example Co",
       "backlinkQualityScore": 93,
       "evidenceClass": "supported"
+    },
+    {
+      "referringDomain": "martechguide.org",
+      "referringPageUrl": "https://martechguide.org/resources/top-agencies/",
+      "anchorText": "digital transformation agency",
+      "backlinkQualityScore": 93,
+      "evidenceClass": "strongly_supported"
+    },
+    {
+      "referringDomain": "industryweekly.com",
+      "referringPageUrl": "https://industryweekly.com/2026/01/consulting-landscape/",
+      "anchorText": "enterprise consulting solutions",
+      "backlinkQualityScore": 93,
+      "evidenceClass": "strongly_supported"
     }
   ],
   "topBadPatterns": [
@@ -101,44 +111,23 @@
       ]
     }
   ],
-  "topWorthPursuingDomains": [
-    {
-      "referringDomain": "industryweekly.com",
-      "overlapCount": 3,
-      "referringPageUrl": "https://industryweekly.com/2026/01/consulting-landscape/",
-      "domainRank": 1200,
-      "evidenceClass": "strongly_supported"
-    },
-    {
-      "referringDomain": "martechguide.org",
-      "overlapCount": 2,
-      "referringPageUrl": "https://martechguide.org/resources/top-agencies/",
-      "domainRank": 3400,
-      "evidenceClass": "strongly_supported"
-    },
-    {
-      "referringDomain": "consulting-directory.org",
-      "overlapCount": 1,
-      "referringPageUrl": "https://consulting-directory.org/firms/enterprise/",
-      "domainRank": 8900,
-      "evidenceClass": "supported"
-    }
-  ],
+  "topWorthPursuingDomains": [],
   "authoritySummary": {
     "referringDomains": 12,
-    "backlinks": 19,
-    "backlinksSpamScore": 23,
+    "backlinks": 15,
+    "backlinksSpamScore": 27,
     "targetSpamScore": 5
   },
   "limitations": [
     "Fixture mode — results use simulated data, not live DataForSEO API responses.",
     "2 backlink(s) have missing spam scores; manual review required for those records.",
-    "2 backlink(s) have missing fields; confidence may be reduced."
+    "2 backlink(s) have missing fields; confidence may be reduced.",
+    "No competitor domains supplied; worth_pursuing discovery skipped."
   ],
-  "requestCount": 3,
-  "estimatedCost": 0.0319,
+  "requestCount": 2,
+  "estimatedCost": 0.021500000000000002,
   "recommendedUse": "contextual_report_only",
   "mode": "fixture",
-  "createdAt": "2026-07-03T11:19:31.668Z",
-  "completedAt": "2026-07-03T11:19:31.668Z"
+  "createdAt": "2026-07-07T21:38:04.641Z",
+  "completedAt": "2026-07-07T21:38:04.641Z"
 }

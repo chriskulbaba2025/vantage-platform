@@ -16,6 +16,7 @@
  *   - Competitor overlap + high spam does NOT create worth_pursuing
  *   - Artifact summary counts are correct
  *   - No production Vantage score files are modified
+ *   - Live response parsing (status_code validation, double-encoding, task extraction)
  */
 
 import { describe, it, before } from "node:test";
@@ -31,7 +32,12 @@ const __dirname = dirname(__filename);
 // Import modules under test
 // ---------------------------------------------------------------------------
 
-import { createDataforseoClient } from "./dataforseo-backlinks-client.js";
+import {
+  createDataforseoClient,
+  parseDataforseoResponse,
+  extractTaskResult,
+  extractAllTaskResults,
+} from "./dataforseo-backlinks-client.js";
 import {
   normalizeBacklink,
   normalizeBacklinks,
@@ -64,12 +70,312 @@ function loadFixtures() {
 }
 
 // ---------------------------------------------------------------------------
+// Live-style response fixtures for parser tests
+// ---------------------------------------------------------------------------
+
+/**
+ * A valid DataForSEO summary response matching the live API shape.
+ */
+const LIVE_SUMMARY_RESPONSE = {
+  status_code: 20000,
+  status_message: "Ok.",
+  time: "0.1234 sec.",
+  cost: 0.001,
+  tasks_count: 1,
+  tasks: [
+    {
+      id: "12345678-0001-0001-0000-000000000000",
+      status_code: 20000,
+      status_message: "Ok.",
+      time: "0.1234 sec.",
+      cost: 0.001,
+      result_count: 1,
+      result: [
+        {
+          domain: "solescience.ca",
+          rank: 270,
+          backlinks: 2473,
+          referring_domains: 526,
+          referring_pages: 1927,
+          backlinks_spam_score: 7,
+          target_spam_score: 0,
+        },
+      ],
+    },
+  ],
+};
+
+/**
+ * A double-encoded JSON string (simulates proxy/gateway wrapping).
+ */
+const DOUBLE_ENCODED_RESPONSE = JSON.stringify(LIVE_SUMMARY_RESPONSE);
+
+/**
+ * A valid DataForSEO backlinks list response.
+ */
+const LIVE_BACKLINKS_RESPONSE = {
+  status_code: 20000,
+  status_message: "Ok.",
+  tasks: [
+    {
+      id: "12345678-0002-0001-0000-000000000000",
+      status_code: 20000,
+      status_message: "Ok.",
+      result: [
+        {
+          items: [
+            {
+              page_from: "https://example.com/link-page",
+              domain_from: "example.com",
+              page_to: "https://solescience.ca/",
+              domain_to: "solescience.ca",
+              anchor: "consulting services",
+              domain_from_rank: 500,
+              page_from_rank: 1000,
+              spam_score: 5,
+              semantic_location: "article",
+              link_type: "anchor",
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("Vantage Backlink Adapter — Phase 1", () => {
   // -----------------------------------------------------------------------
-  // 1. Fixture mode / DataForSEO Client
+  // 1. Response Parsing (live DataForSEO response handling)
+  // -----------------------------------------------------------------------
+  describe("DataForSEO Response Parsing", () => {
+    // --- parseDataforseoResponse ---
+
+    it("parses a live-style summary response object correctly", () => {
+      const result = parseDataforseoResponse(
+        LIVE_SUMMARY_RESPONSE,
+        "/backlinks/summary/live",
+      );
+      assert.equal(result.status_code, 20000);
+      assert.equal(result.tasks.length, 1);
+      assert.equal(result.tasks[0].status_code, 20000);
+    });
+
+    it("parses a double-encoded JSON string response", () => {
+      const result = parseDataforseoResponse(
+        DOUBLE_ENCODED_RESPONSE,
+        "/backlinks/summary/live",
+      );
+      assert.equal(result.status_code, 20000);
+      assert.equal(result.tasks[0].result[0].domain, "solescience.ca");
+      assert.equal(result.tasks[0].result[0].rank, 270);
+    });
+
+    it("parses a triple-encoded JSON string (edge case)", () => {
+      const tripleEncoded = JSON.stringify(DOUBLE_ENCODED_RESPONSE);
+      const result = parseDataforseoResponse(
+        tripleEncoded,
+        "/backlinks/summary/live",
+      );
+      assert.equal(result.status_code, 20000);
+      assert.equal(result.tasks[0].result[0].domain, "solescience.ca");
+    });
+
+    it("throws clear error when root status_code is not 20000", () => {
+      const badResponse = {
+        status_code: 40001,
+        status_message: "Invalid request.",
+        tasks: [],
+      };
+      assert.throws(
+        () =>
+          parseDataforseoResponse(badResponse, "/backlinks/summary/live"),
+        /status_code=40001/,
+      );
+      assert.throws(
+        () =>
+          parseDataforseoResponse(badResponse, "/backlinks/summary/live"),
+        /Invalid request/,
+      );
+    });
+
+    it("throws on unparseable string", () => {
+      assert.throws(
+        () =>
+          parseDataforseoResponse(
+            "not valid json {{{",
+            "/backlinks/summary/live",
+          ),
+        /unable to parse/,
+      );
+    });
+
+    it("does not reject zero-valued fields as missing", () => {
+      // target_spam_score=0 and rank=270 should be preserved, not rejected
+      const result = parseDataforseoResponse(
+        LIVE_SUMMARY_RESPONSE,
+        "/backlinks/summary/live",
+      );
+      const summary = result.tasks[0].result[0];
+      assert.equal(summary.target_spam_score, 0);
+      assert.equal(summary.rank, 270);
+      assert.equal(summary.backlinks, 2473);
+    });
+
+    // --- extractTaskResult ---
+
+    it("extractTaskResult returns tasks[0].result[0] for valid response", () => {
+      const result = extractTaskResult(
+        LIVE_SUMMARY_RESPONSE,
+        "/backlinks/summary/live",
+      );
+      assert.equal(result.domain, "solescience.ca");
+      assert.equal(result.rank, 270);
+      assert.equal(result.backlinks, 2473);
+      assert.equal(result.target_spam_score, 0);
+    });
+
+    it("extractTaskResult throws on missing tasks", () => {
+      assert.throws(
+        () => extractTaskResult({}, "/backlinks/summary/live"),
+        /no tasks in response/,
+      );
+      assert.throws(
+        () =>
+          extractTaskResult({ tasks: [] }, "/backlinks/summary/live"),
+        /no tasks in response/,
+      );
+    });
+
+    it("extractTaskResult throws when task status_code is not 20000", () => {
+      const badTask = {
+        tasks: [
+          {
+            status_code: 40002,
+            status_message: "Task failed.",
+            result: [],
+          },
+        ],
+      };
+      assert.throws(
+        () =>
+          extractTaskResult(badTask, "/backlinks/summary/live"),
+        /task error/,
+      );
+      assert.throws(
+        () =>
+          extractTaskResult(badTask, "/backlinks/summary/live"),
+        /status_code=40002/,
+      );
+    });
+
+    it("extractTaskResult throws when result array is empty", () => {
+      const emptyResult = {
+        tasks: [
+          {
+            status_code: 20000,
+            status_message: "Ok.",
+            result: [],
+          },
+        ],
+      };
+      assert.throws(
+        () =>
+          extractTaskResult(emptyResult, "/backlinks/summary/live"),
+        /no result data/,
+      );
+    });
+
+    it("extractTaskResult tolerates absent task status_code (older API versions)", () => {
+      // Some API versions omit task-level status_code on success.
+      // We should not reject those — only reject explicitly non-20000 codes.
+      const noTaskStatus = {
+        tasks: [
+          {
+            result: [
+              { domain: "example.com", rank: 100 },
+            ],
+          },
+        ],
+      };
+      assert.doesNotThrow(() => {
+        const r = extractTaskResult(noTaskStatus, "/backlinks/summary/live");
+        assert.equal(r.domain, "example.com");
+        assert.equal(r.rank, 100);
+      });
+    });
+
+    // --- extractAllTaskResults ---
+
+    it("extractAllTaskResults returns all task results", () => {
+      const multiTask = {
+        tasks: [
+          {
+            status_code: 20000,
+            result: [{ items: [{ a: 1 }] }],
+          },
+          {
+            status_code: 20000,
+            result: [{ items: [{ b: 2 }] }],
+          },
+        ],
+      };
+      const results = extractAllTaskResults(
+        multiTask,
+        "/backlinks/backlinks/live",
+      );
+      assert.equal(results.length, 2);
+      assert.deepEqual(results[0].items, [{ a: 1 }]);
+      assert.deepEqual(results[1].items, [{ b: 2 }]);
+    });
+
+    it("extractAllTaskResults skips failed tasks gracefully", () => {
+      const mixedTasks = {
+        tasks: [
+          {
+            status_code: 20000,
+            result: [{ items: [{ ok: true }] }],
+          },
+          {
+            status_code: 40002,
+            status_message: "Task failed.",
+            result: [],
+          },
+          {
+            status_code: 20000,
+            result: [{ items: [{ also_ok: true }] }],
+          },
+        ],
+      };
+      const results = extractAllTaskResults(
+        mixedTasks,
+        "/backlinks/backlinks/live",
+      );
+      assert.equal(results.length, 2);
+      assert.deepEqual(results[0].items, [{ ok: true }]);
+      assert.deepEqual(results[1].items, [{ also_ok: true }]);
+    });
+
+    it("extractAllTaskResults returns empty array for missing tasks", () => {
+      assert.deepEqual(
+        extractAllTaskResults({}, "/backlinks/backlinks/live"),
+        [],
+      );
+      assert.deepEqual(
+        extractAllTaskResults(
+          { tasks: [] },
+          "/backlinks/backlinks/live",
+        ),
+        [],
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 2. Fixture mode / DataForSEO Client
   // -----------------------------------------------------------------------
   describe("DataForSEO Client", () => {
     it("fixture mode works without DataForSEO credentials", async () => {
@@ -130,7 +436,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 2. Normalizer
+  // 3. Normalizer
   // -----------------------------------------------------------------------
   describe("Backlink Normalizer", () => {
     let fixtures;
@@ -292,7 +598,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 3. Classifier
+  // 4. Classifier
   // -----------------------------------------------------------------------
   describe("Backlink Classifier", () => {
     let fixtures, normalized;
@@ -506,7 +812,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 4. Artifact Writer
+  // 5. Artifact Writer
   // -----------------------------------------------------------------------
   describe("Backlink Artifact Writer", () => {
     let fixtures, normalized, output;
@@ -676,7 +982,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 5. Production safety gates
+  // 6. Production safety gates
   // -----------------------------------------------------------------------
   describe("Production Safety Gates", () => {
     it("does not modify Vantage readiness scoring files", () => {
@@ -709,7 +1015,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 6. Edge cases
+  // 7. Edge cases
   // -----------------------------------------------------------------------
   describe("Edge Cases", () => {
     it("handles completely empty backlink array", () => {
