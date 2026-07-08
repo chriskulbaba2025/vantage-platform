@@ -46,7 +46,14 @@ import {
   classifyBacklink,
   classifyBacklinks,
 } from "./backlink-classifier.js";
-import { writeArtifacts } from "./backlink-artifact-writer.js";
+import {
+  writeArtifacts,
+  validateRequiredFields,
+  validateRawArtifact,
+  validateNormalizedArtifact,
+  validateSummaryArtifact,
+  validateManifestArtifact,
+} from "./backlink-artifact-writer.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -812,7 +819,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 5. Artifact Writer
+  // 5. Artifact Writer (4 artifacts: raw, normalized, summary, manifest)
   // -----------------------------------------------------------------------
   describe("Backlink Artifact Writer", () => {
     let fixtures, normalized, output;
@@ -851,6 +858,42 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
       });
     });
 
+    // --- All four artifacts exist ---
+
+    it("writes all four artifacts to disk", () => {
+      assert.ok(existsSync(output.rawPath), "raw-backlinks.json missing");
+      assert.ok(existsSync(output.normalizedPath), "normalized-backlinks.json missing");
+      assert.ok(existsSync(output.summaryPath), "backlink-summary.json missing");
+      assert.ok(existsSync(output.manifestPath), "backlink-manifest.json missing");
+    });
+
+    it("all artifact paths are under artifacts/local/backlink-tests/", () => {
+      const base = resolve(
+        __dirname,
+        "..",
+        "..",
+        "..",
+        "..",
+        "..",
+        "artifacts",
+        "local",
+        "backlink-tests",
+      );
+      for (const p of [
+        output.rawPath,
+        output.normalizedPath,
+        output.summaryPath,
+        output.manifestPath,
+      ]) {
+        assert.ok(
+          p.startsWith(base),
+          `Path not under artifacts/local/backlink-tests/: ${p}`,
+        );
+      }
+    });
+
+    // --- Raw artifact ---
+
     it("writes raw-backlinks.json", () => {
       assert.ok(existsSync(output.rawPath));
       const content = JSON.parse(
@@ -859,6 +902,8 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
       assert.ok(Array.isArray(content.backlinks));
       assert.ok(content.summary);
     });
+
+    // --- Normalized artifact ---
 
     it("writes normalized-backlinks.json", () => {
       assert.ok(existsSync(output.normalizedPath));
@@ -873,6 +918,8 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
       assert.equal(first._isSpammyAnchor, undefined);
       assert.equal(first._isDuplicate, undefined);
     });
+
+    // --- Summary artifact ---
 
     it("writes backlink-summary.json with correct structure", () => {
       assert.ok(existsSync(output.summaryPath));
@@ -957,7 +1004,125 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
       );
     });
 
-    it("artifact records do not expose credentials", () => {
+    // --- Manifest artifact ---
+
+    it("manifest artifact exists and is valid JSON", () => {
+      assert.ok(existsSync(output.manifestPath));
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      assert.ok(manifest, "Manifest should be non-null");
+    });
+
+    it("manifest target equals the requested target", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      assert.equal(manifest.target, "example.com");
+    });
+
+    it("manifest mode equals fixture in fixture tests", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      assert.equal(manifest.mode, "fixture");
+    });
+
+    it("manifest has all required top-level fields", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      const required = [
+        "artifactVersion",
+        "generatedAt",
+        "mode",
+        "target",
+        "includeSubdomains",
+        "hasCompetitors",
+        "competitors",
+        "worth_pursuing",
+        "summaryMetrics",
+        "files",
+        "source",
+        "limitations",
+      ];
+      for (const field of required) {
+        assert.ok(
+          field in manifest,
+          `Manifest missing field: ${field}`,
+        );
+      }
+    });
+
+    it("manifest summaryMetrics has all required fields", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      const required = [
+        "rank",
+        "backlinks",
+        "referring_domains",
+        "referring_pages",
+        "backlinks_spam_score",
+        "target_spam_score",
+      ];
+      for (const field of required) {
+        assert.ok(
+          field in manifest.summaryMetrics,
+          `manifest.summaryMetrics missing field: ${field}`,
+        );
+      }
+    });
+
+    it("manifest worth_pursuing is 0 when no competitors are supplied", () => {
+      // Run a second write without competitors
+      const noCompNormalized = normalizeBacklinks(fixtures.backlinks, {
+        targetDomain: "example.com",
+        competitorDomains: [],
+      });
+      classifyBacklinks(noCompNormalized);
+
+      const noCompOutput = writeArtifacts({
+        rawBacklinks: fixtures.backlinks,
+        rawSummary: fixtures.summary,
+        normalizedBacklinks: noCompNormalized,
+        runMeta: {
+          targetDomain: "example.com",
+          competitorDomains: [],
+          mode: "fixture",
+          requestCount: 2,
+          estimatedCost: 0.02,
+          targetSpamScore: 5,
+        },
+        outPath: TEST_OUT_DIR,
+      });
+
+      const manifest = JSON.parse(
+        readFileSync(noCompOutput.manifestPath, "utf-8"),
+      );
+      assert.equal(manifest.worth_pursuing, 0);
+      assert.equal(manifest.hasCompetitors, false);
+      assert.deepEqual(manifest.competitors, []);
+    });
+
+    it("manifest source.provider is dataforseo", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      assert.equal(manifest.source.provider, "dataforseo");
+    });
+
+    it("manifest source.endpoints is an array", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      assert.ok(Array.isArray(manifest.source.endpoints));
+      assert.ok(manifest.source.endpoints.length >= 1);
+    });
+
+    // --- Credential safety ---
+
+    it("no credential values appear in manifest or artifacts", () => {
       const rawContent = readFileSync(output.rawPath, "utf-8");
       const normContent = readFileSync(
         output.normalizedPath,
@@ -967,17 +1132,112 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
         output.summaryPath,
         "utf-8",
       );
+      const manifestContent = readFileSync(
+        output.manifestPath,
+        "utf-8",
+      );
 
       for (const content of [
         rawContent,
         normContent,
         summaryContent,
+        manifestContent,
       ]) {
         assert.ok(!content.includes("DATAFORSEO_LOGIN"));
         assert.ok(!content.includes("DATAFORSEO_PASSWORD"));
         assert.ok(!content.includes("password"));
         assert.ok(!content.includes("login"));
       }
+    });
+
+    // --- Schema validation ---
+
+    it("validateRawArtifact passes for valid artifact", () => {
+      const raw = JSON.parse(readFileSync(output.rawPath, "utf-8"));
+      const result = validateRawArtifact(raw);
+      assert.equal(result.valid, true, `Errors: ${result.errors.join("; ")}`);
+    });
+
+    it("validateNormalizedArtifact passes for valid artifact", () => {
+      const norm = JSON.parse(
+        readFileSync(output.normalizedPath, "utf-8"),
+      );
+      const result = validateNormalizedArtifact(norm);
+      assert.equal(result.valid, true, `Errors: ${result.errors.join("; ")}`);
+    });
+
+    it("validateSummaryArtifact passes for valid artifact", () => {
+      const summary = JSON.parse(
+        readFileSync(output.summaryPath, "utf-8"),
+      );
+      const result = validateSummaryArtifact(summary);
+      assert.equal(result.valid, true, `Errors: ${result.errors.join("; ")}`);
+    });
+
+    it("validateManifestArtifact passes for valid manifest", () => {
+      const manifest = JSON.parse(
+        readFileSync(output.manifestPath, "utf-8"),
+      );
+      const result = validateManifestArtifact(manifest);
+      assert.equal(result.valid, true, `Errors: ${result.errors.join("; ")}`);
+    });
+
+    it("validateRequiredFields fails clearly when a required field is missing", () => {
+      const incomplete = { targetDomain: "example.com" };
+      const result = validateRequiredFields(incomplete, [
+        "targetDomain",
+        "competitorDomains",
+        "mode",
+      ]);
+      assert.equal(result.valid, false);
+      assert.ok(result.missing.includes("competitorDomains"));
+      assert.ok(result.missing.includes("mode"));
+      assert.ok(!result.missing.includes("targetDomain"));
+    });
+
+    it("validateRawArtifact fails when required field is missing", () => {
+      const bad = { _description: "test" };
+      const result = validateRawArtifact(bad);
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.length > 0);
+    });
+
+    it("validateManifestArtifact fails when summaryMetrics field is missing", () => {
+      const bad = {
+        artifactVersion: "1.0.0",
+        generatedAt: new Date().toISOString(),
+        mode: "fixture",
+        target: "example.com",
+        includeSubdomains: false,
+        hasCompetitors: false,
+        competitors: [],
+        worth_pursuing: 0,
+        summaryMetrics: {
+          // missing backlinks field
+          rank: null,
+          referring_domains: null,
+          referring_pages: null,
+          backlinks_spam_score: null,
+          target_spam_score: null,
+        },
+        files: {
+          rawBacklinks: "/tmp/raw.json",
+          normalizedBacklinks: "/tmp/norm.json",
+          backlinkSummary: "/tmp/summary.json",
+        },
+        source: {
+          provider: "dataforseo",
+          endpoints: [],
+          responseMode: "fixture",
+        },
+        limitations: [],
+      };
+      const result = validateManifestArtifact(bad);
+      assert.equal(result.valid, false);
+      assert.ok(
+        result.errors.some((e) => e.includes("backlinks")),
+        `Expected error about missing backlinks, got: ${result.errors.join("; ")}`,
+      );
     });
   });
 

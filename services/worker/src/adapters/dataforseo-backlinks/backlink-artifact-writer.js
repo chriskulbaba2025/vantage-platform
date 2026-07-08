@@ -1,16 +1,23 @@
 /**
  * Backlink Artifact Writer
  *
- * Writes the three output artifacts for a backlink test run:
- *   1. raw-backlinks.json    — Raw DataForSEO response data
+ * Writes the four output artifacts for a backlink test run:
+ *   1. raw-backlinks.json       — Raw DataForSEO response data
  *   2. normalized-backlinks.json — Normalized and classified records
- *   3. backlink-summary.json — Human-readable summary
+ *   3. backlink-summary.json    — Human-readable summary
+ *   4. backlink-manifest.json   — Stable contract for downstream consumers
  *
  * Default local output path: artifacts/local/backlink-tests/
  */
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const MANIFEST_VERSION = "1.0.0";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,6 +29,384 @@ import { resolve, join } from "node:path";
 function ensureOutputDir(outPath) {
   mkdirSync(outPath, { recursive: true });
   return outPath;
+}
+
+// ---------------------------------------------------------------------------
+// Schema validators (exported for testing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Required top-level fields for raw-backlinks.json.
+ */
+const RAW_REQUIRED_FIELDS = [
+  "_description",
+  "targetDomain",
+  "competitorDomains",
+  "mode",
+  "createdAt",
+  "summary",
+  "backlinks",
+];
+
+/**
+ * Required top-level fields for normalized-backlinks.json.
+ */
+const NORMALIZED_REQUIRED_FIELDS = [
+  "_description",
+  "targetDomain",
+  "competitorDomains",
+  "mode",
+  "createdAt",
+  "totalRecords",
+  "records",
+];
+
+/**
+ * Required top-level fields for backlink-summary.json.
+ */
+const SUMMARY_REQUIRED_FIELDS = [
+  "targetDomain",
+  "competitorDomains",
+  "totalBacklinksReviewed",
+  "goodCount",
+  "badCount",
+  "worthPursuingCount",
+  "ignoredCount",
+  "topGoodLinks",
+  "topBadPatterns",
+  "topWorthPursuingDomains",
+  "authoritySummary",
+  "limitations",
+  "requestCount",
+  "estimatedCost",
+  "recommendedUse",
+  "mode",
+  "createdAt",
+];
+
+/**
+ * Required top-level fields for backlink-manifest.json.
+ */
+const MANIFEST_REQUIRED_FIELDS = [
+  "artifactVersion",
+  "generatedAt",
+  "mode",
+  "target",
+  "includeSubdomains",
+  "hasCompetitors",
+  "competitors",
+  "worth_pursuing",
+  "summaryMetrics",
+  "files",
+  "source",
+  "limitations",
+];
+
+/**
+ * Required fields inside manifest.summaryMetrics.
+ */
+const MANIFEST_METRICS_REQUIRED_FIELDS = [
+  "rank",
+  "backlinks",
+  "referring_domains",
+  "referring_pages",
+  "backlinks_spam_score",
+  "target_spam_score",
+];
+
+/**
+ * Required fields inside manifest.files.
+ */
+const MANIFEST_FILES_REQUIRED_FIELDS = [
+  "rawBacklinks",
+  "normalizedBacklinks",
+  "backlinkSummary",
+];
+
+/**
+ * Required fields inside manifest.source.
+ */
+const MANIFEST_SOURCE_REQUIRED_FIELDS = [
+  "provider",
+  "endpoints",
+  "responseMode",
+];
+
+/**
+ * Validate that an object has all required fields (non-missing).
+ *
+ * @param {object} obj        - The object to validate.
+ * @param {string[]} required - List of required field names.
+ * @returns {{ valid: boolean, missing: string[] }}
+ */
+export function validateRequiredFields(obj, required) {
+  const missing = [];
+  for (const field of required) {
+    if (obj[field] === undefined || obj[field] === null) {
+      missing.push(field);
+    }
+  }
+  return { valid: missing.length === 0, missing };
+}
+
+/**
+ * Validate the raw-backlinks.json artifact structure.
+ *
+ * @param {object} artifact - Parsed raw artifact.
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateRawArtifact(artifact) {
+  const errors = [];
+  const { valid, missing } = validateRequiredFields(
+    artifact,
+    RAW_REQUIRED_FIELDS,
+  );
+  if (!valid) {
+    errors.push(`Missing required fields: ${missing.join(", ")}`);
+  }
+  if (artifact && !Array.isArray(artifact.backlinks)) {
+    errors.push("backlinks must be an array");
+  }
+  if (artifact && !artifact.summary) {
+    errors.push("summary is required");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate the normalized-backlinks.json artifact structure.
+ *
+ * @param {object} artifact - Parsed normalized artifact.
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateNormalizedArtifact(artifact) {
+  const errors = [];
+  const { valid, missing } = validateRequiredFields(
+    artifact,
+    NORMALIZED_REQUIRED_FIELDS,
+  );
+  if (!valid) {
+    errors.push(`Missing required fields: ${missing.join(", ")}`);
+  }
+  if (artifact && !Array.isArray(artifact.records)) {
+    errors.push("records must be an array");
+  }
+  if (
+    artifact &&
+    typeof artifact.totalRecords === "number" &&
+    artifact.records &&
+    artifact.totalRecords !== artifact.records.length
+  ) {
+    errors.push(
+      `totalRecords (${artifact.totalRecords}) does not match records.length (${artifact.records.length})`,
+    );
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate the backlink-summary.json artifact structure.
+ *
+ * @param {object} artifact - Parsed summary artifact.
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateSummaryArtifact(artifact) {
+  const errors = [];
+  const { valid, missing } = validateRequiredFields(
+    artifact,
+    SUMMARY_REQUIRED_FIELDS,
+  );
+  if (!valid) {
+    errors.push(`Missing required fields: ${missing.join(", ")}`);
+  }
+  // Cross-field consistency
+  if (artifact) {
+    const total =
+      (artifact.goodCount || 0) +
+      (artifact.badCount || 0) +
+      (artifact.worthPursuingCount || 0) +
+      (artifact.ignoredCount || 0);
+    if (
+      typeof artifact.totalBacklinksReviewed === "number" &&
+      total !== artifact.totalBacklinksReviewed
+    ) {
+      errors.push(
+        `Bucket sum (${total}) does not match totalBacklinksReviewed (${artifact.totalBacklinksReviewed})`,
+      );
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate the backlink-manifest.json artifact structure.
+ *
+ * @param {object} manifest - Parsed manifest artifact.
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateManifestArtifact(manifest) {
+  const errors = [];
+
+  // Top-level required fields
+  const top = validateRequiredFields(manifest, MANIFEST_REQUIRED_FIELDS);
+  if (!top.valid) {
+    errors.push(`Missing top-level fields: ${top.missing.join(", ")}`);
+  }
+
+  // summaryMetrics required fields
+  if (manifest && manifest.summaryMetrics) {
+    const metrics = validateRequiredFields(
+      manifest.summaryMetrics,
+      MANIFEST_METRICS_REQUIRED_FIELDS,
+    );
+    if (!metrics.valid) {
+      errors.push(
+        `Missing summaryMetrics fields: ${metrics.missing.join(", ")}`,
+      );
+    }
+  } else if (manifest) {
+    errors.push("summaryMetrics is required");
+  }
+
+  // files required fields
+  if (manifest && manifest.files) {
+    const files = validateRequiredFields(
+      manifest.files,
+      MANIFEST_FILES_REQUIRED_FIELDS,
+    );
+    if (!files.valid) {
+      errors.push(`Missing files fields: ${files.missing.join(", ")}`);
+    }
+  } else if (manifest) {
+    errors.push("files is required");
+  }
+
+  // source required fields
+  if (manifest && manifest.source) {
+    const source = validateRequiredFields(
+      manifest.source,
+      MANIFEST_SOURCE_REQUIRED_FIELDS,
+    );
+    if (!source.valid) {
+      errors.push(`Missing source fields: ${source.missing.join(", ")}`);
+    }
+  } else if (manifest) {
+    errors.push("source is required");
+  }
+
+  // Type checks
+  if (manifest) {
+    if (!Array.isArray(manifest.competitors)) {
+      errors.push("competitors must be an array");
+    }
+    if (!Array.isArray(manifest.limitations)) {
+      errors.push("limitations must be an array");
+    }
+    if (manifest.source && !Array.isArray(manifest.source.endpoints)) {
+      errors.push("source.endpoints must be an array");
+    }
+    if (typeof manifest.hasCompetitors !== "boolean") {
+      errors.push("hasCompetitors must be a boolean");
+    }
+    if (typeof manifest.includeSubdomains !== "boolean") {
+      errors.push("includeSubdomains must be a boolean");
+    }
+    if (typeof manifest.worth_pursuing !== "number") {
+      errors.push("worth_pursuing must be a number");
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ---------------------------------------------------------------------------
+// Manifest builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the backlink-manifest.json artifact.
+ *
+ * This is the stable contract that downstream consumers (AWS storage,
+ * Railway worker, n8n orchestration) can rely on without knowing the
+ * internal structure of the other artifacts.
+ *
+ * @param {object} summary       - The built summary object.
+ * @param {object} runMeta       - Run metadata.
+ * @param {object} rawSummary    - Raw DataForSEO summary response.
+ * @param {object} outputPaths   - Paths to the other three artifacts.
+ * @param {Error|null} fetchError - Captured fetch error (for credential-blocker detection).
+ * @returns {object} Manifest object.
+ */
+function buildManifest(
+  summary,
+  runMeta,
+  rawSummary,
+  outputPaths,
+  fetchError,
+) {
+  const targetDomain = runMeta.targetDomain || "";
+  const competitorDomains = runMeta.competitorDomains || [];
+  const mode = runMeta.mode || "fixture";
+
+  // Determine endpoints used
+  const endpoints = ["/v3/backlinks/summary/live"];
+  if (runMeta.requestCount >= 2) {
+    endpoints.push("/v3/backlinks/backlinks/live");
+  }
+
+  // Build limitations from summary + credential detection
+  const limitations = [...(summary.limitations || [])];
+
+  // Detect live credential blocker from fetch error
+  if (fetchError && mode === "live") {
+    const isCredentialBlocker =
+      fetchError.message &&
+      (fetchError.message.includes("401") ||
+        fetchError.message.includes("40100") ||
+        fetchError.message.includes("Unauthorized") ||
+        fetchError.message.includes("DATAFORSEO_LOGIN"));
+    if (isCredentialBlocker) {
+      limitations.push(
+        "Live DataForSEO verification blocked by external credential authorization failure.",
+      );
+    }
+  }
+
+  // Deduplicate limitations
+  const uniqueLimitations = [...new Set(limitations)];
+
+  return {
+    artifactVersion: MANIFEST_VERSION,
+    generatedAt: new Date().toISOString(),
+    mode,
+    target: targetDomain,
+    includeSubdomains: false,
+    hasCompetitors: competitorDomains.length > 0,
+    competitors: competitorDomains,
+    worth_pursuing: summary.worthPursuingCount,
+    summaryMetrics: {
+      rank: rawSummary?.rank ?? null,
+      backlinks: rawSummary?.backlinks ?? null,
+      referring_domains: rawSummary?.referring_domains ?? null,
+      referring_pages: rawSummary?.referring_pages ?? null,
+      backlinks_spam_score:
+        rawSummary?.backlinks_spam_score ??
+        rawSummary?.spam_score ??
+        null,
+      target_spam_score: rawSummary?.target_spam_score ?? null,
+    },
+    files: {
+      rawBacklinks: outputPaths.rawPath,
+      normalizedBacklinks: outputPaths.normalizedPath,
+      backlinkSummary: outputPaths.summaryPath,
+    },
+    source: {
+      provider: "dataforseo",
+      endpoints,
+      responseMode: mode,
+    },
+    limitations: uniqueLimitations,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +609,8 @@ function buildSummary(normalizedRecords, runMeta) {
  * @param {Array<object>} params.normalizedBacklinks - Normalized & classified records.
  * @param {object} params.runMeta              - Run metadata (targetDomain, competitorDomains, mode, etc.).
  * @param {string} [params.outPath]            - Output directory. Defaults to artifacts/local/backlink-tests/.
- * @returns {{ rawPath: string, normalizedPath: string, summaryPath: string }}
+ * @param {Error|null} [params.fetchError]     - Captured fetch error for credential-blocker detection.
+ * @returns {{ rawPath: string, normalizedPath: string, summaryPath: string, manifestPath: string, summary: object }}
  */
 export function writeArtifacts({
   rawBacklinks,
@@ -232,6 +618,7 @@ export function writeArtifacts({
   normalizedBacklinks,
   runMeta,
   outPath,
+  fetchError = null,
 }) {
   const outputDir = ensureOutputDir(
     outPath || resolve("artifacts", "local", "backlink-tests"),
@@ -288,9 +675,40 @@ export function writeArtifacts({
     "utf-8",
   );
 
-  return { rawPath, normalizedPath, summaryPath, summary };
+  // 4. Manifest artifact — stable contract for downstream consumers
+  const outputPaths = { rawPath, normalizedPath, summaryPath };
+  const manifest = buildManifest(
+    summary,
+    runMeta,
+    rawSummary,
+    outputPaths,
+    fetchError,
+  );
+  const manifestPath = join(
+    outputDir,
+    "backlink-manifest.json",
+  );
+  writeFileSync(
+    manifestPath,
+    JSON.stringify(manifest, null, 2),
+    "utf-8",
+  );
+
+  return {
+    rawPath,
+    normalizedPath,
+    summaryPath,
+    manifestPath,
+    summary,
+    manifest,
+  };
 }
 
 export default {
   writeArtifacts,
+  validateRequiredFields,
+  validateRawArtifact,
+  validateNormalizedArtifact,
+  validateSummaryArtifact,
+  validateManifestArtifact,
 };

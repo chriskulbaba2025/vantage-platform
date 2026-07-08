@@ -23,10 +23,11 @@
  *   artifacts/local/backlink-tests/raw-backlinks.json
  *   artifacts/local/backlink-tests/normalized-backlinks.json
  *   artifacts/local/backlink-tests/backlink-summary.json
+ *   artifacts/local/backlink-tests/backlink-manifest.json
  *   + console summary
  */
 
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { createDataforseoClient } from "../adapters/dataforseo-backlinks/dataforseo-backlinks-client.js";
 import { normalizeBacklinks } from "../adapters/dataforseo-backlinks/backlink-normalizer.js";
 import { classifyBacklinks } from "../adapters/dataforseo-backlinks/backlink-classifier.js";
@@ -84,9 +85,12 @@ function printConsoleSummary(summary, outputPaths) {
     "  VANTAGE BACKLINK ADAPTER — TEST RUN COMPLETE",
     "════════════════════════════════════════════════════════",
     "",
-    `  Target domain:          ${summary.targetDomain}`,
-    `  Competitor domains:     ${summary.competitorDomains.length > 0 ? summary.competitorDomains.join(", ") : "(none — worth_pursuing skipped)"}`,
     `  Mode:                   ${summary.mode}`,
+    `  Target:                 ${summary.targetDomain}`,
+    `  Artifact directory:     ${outputPaths.manifestPath ? resolve(dirname(outputPaths.manifestPath)) : "N/A"}`,
+    "",
+    `  Competitor domains:     ${summary.competitorDomains.length > 0 ? summary.competitorDomains.join(", ") : "(none — worth_pursuing skipped)"}`,
+    `  Worth pursuing:         ${summary.worthPursuingCount}`,
     "",
     "  ── Classification Results ──",
     "",
@@ -161,6 +165,7 @@ function printConsoleSummary(summary, outputPaths) {
     `  Raw:           ${outputPaths.rawPath}`,
     `  Normalized:    ${outputPaths.normalizedPath}`,
     `  Summary:       ${outputPaths.summaryPath}`,
+    `  Manifest:      ${outputPaths.manifestPath || "N/A"}`,
     "",
     `  Request count:    ${summary.requestCount}`,
     `  Estimated cost:   $${summary.estimatedCost.toFixed(4)}`,
@@ -217,11 +222,13 @@ async function main() {
   let rawBacklinks = [];
   let requestCount = 0;
   let estimatedCost = 0;
+  let fetchError = null;
 
   try {
     rawSummary = await client.fetchBacklinkSummary(args.target);
     requestCount++;
   } catch (err) {
+    fetchError = err;
     console.error(`ERROR fetching summary: ${err.message}`);
     console.error("Cannot proceed without summary data.");
     process.exitCode = 1;
@@ -299,6 +306,7 @@ async function main() {
     normalizedBacklinks,
     runMeta,
     outPath,
+    fetchError,
   });
 
   // -------------------------------------------------------------------
