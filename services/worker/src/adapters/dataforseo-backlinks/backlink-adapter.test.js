@@ -61,7 +61,12 @@ import {
   artifactExists,
   listArtifacts,
   createLocalArtifactStore,
+  createArtifactStore,
 } from "../../storage/artifact-store.js";
+import {
+  buildS3Key,
+  createS3ArtifactStore,
+} from "../../storage/s3-artifact-store.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1415,7 +1420,274 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 7. Production safety gates
+  // 7. S3 Artifact Store (mocked — no real AWS calls)
+  // -----------------------------------------------------------------------
+  describe("S3 Artifact Store", () => {
+    const TEST_BUCKET = "test-bucket";
+    const TEST_PREFIX = "vantage/backlinks/";
+
+    /**
+     * Build a mock S3 client with in-memory storage.
+     * Objects stored as  { key: string, body: string }.
+     */
+    function createMockS3Client() {
+      const store = new Map(); // key → { body, contentType }
+
+      return {
+        store, // expose for test assertions
+
+        async send(command) {
+          // Use explicit _command marker to distinguish types
+          const cmdType = command._command;
+
+          // PutObject
+          if (cmdType === "PutObject") {
+            store.set(command.Key, {
+              body: command.Body,
+              contentType: command.ContentType,
+            });
+            return { ETag: '"mock-etag"' };
+          }
+
+          // GetObject
+          if (cmdType === "GetObject") {
+            if (store.has(command.Key)) {
+              const obj = store.get(command.Key);
+              return { Body: obj.body, ContentType: obj.contentType };
+            }
+            const err = new Error("NoSuchKey: The specified key does not exist.");
+            err.name = "NoSuchKey";
+            err.Code = "NoSuchKey";
+            throw err;
+          }
+
+          // HeadObject
+          if (cmdType === "HeadObject") {
+            if (store.has(command.Key)) {
+              return { ContentLength: store.get(command.Key).body.length };
+            }
+            const err = new Error("NotFound: Resource not found.");
+            err.name = "NotFound";
+            err.Code = "NotFound";
+            err.$metadata = { httpStatusCode: 404 };
+            throw err;
+          }
+
+          // ListObjectsV2
+          if (cmdType === "ListObjectsV2") {
+            const contents = [];
+            for (const [key, obj] of store) {
+              if (key.startsWith(command.Prefix)) {
+                contents.push({ Key: key, Size: obj.body.length });
+              }
+            }
+            return { Contents: contents, IsTruncated: false, KeyCount: contents.length };
+          }
+
+          throw new Error(`Mock S3: unknown command type=${cmdType}`);
+        },
+      };
+    }
+
+    it("writes JSON through a mock S3 client", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      const key = await store.writeJsonArtifact("test.json", {
+        hello: "world",
+      });
+      assert.ok(key.startsWith(TEST_PREFIX));
+      assert.ok(key.endsWith("test.json"));
+      assert.equal(mock.store.has(key), true);
+
+      const stored = mock.store.get(key);
+      const parsed = JSON.parse(stored.body);
+      assert.deepEqual(parsed, { hello: "world" });
+      assert.ok(stored.body.includes('"hello"'));
+    });
+
+    it("reads JSON through a mock S3 client", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      await store.writeJsonArtifact("read-test.json", { foo: "bar" });
+      const result = await store.readJsonArtifact("read-test.json");
+      assert.deepEqual(result, { foo: "bar" });
+    });
+
+    it("readJsonArtifact returns null for missing key", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      const result = await store.readJsonArtifact("nonexistent.json");
+      assert.equal(result, null);
+    });
+
+    it("artifactExists returns true for stored object", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      await store.writeJsonArtifact("exists-test.json", { a: 1 });
+      const exists = await store.artifactExists("exists-test.json");
+      assert.equal(exists, true);
+    });
+
+    it("artifactExists returns false for missing object", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      const exists = await store.artifactExists("missing.json");
+      assert.equal(exists, false);
+    });
+
+    it("listArtifacts returns sorted keys under prefix", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      await store.writeJsonArtifact("zebra.json", {});
+      await store.writeJsonArtifact("alpha.json", {});
+
+      const list = await store.listArtifacts();
+      assert.ok(list.includes("alpha.json"));
+      assert.ok(list.includes("zebra.json"));
+      assert.ok(list.indexOf("alpha.json") < list.indexOf("zebra.json"));
+    });
+
+    it("S3 keys remain under the configured prefix", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: "custom/prefix/",
+      });
+
+      const key = await store.writeJsonArtifact("data.json", { x: 1 });
+      assert.ok(key.startsWith("custom/prefix/"));
+      assert.ok(!key.includes(".."));
+      assert.ok(!key.includes("\\"));
+    });
+
+    it("buildS3Key rejects path traversal with ../", () => {
+      assert.throws(
+        () => buildS3Key(TEST_PREFIX, "../../secret.json"),
+        /invalid|path separator/i,
+      );
+    });
+
+    it("buildS3Key rejects bare .. name", () => {
+      assert.throws(
+        () => buildS3Key(TEST_PREFIX, ".."),
+        /invalid|traversal/i,
+      );
+    });
+
+    it("buildS3Key rejects backslash traversal", () => {
+      assert.throws(
+        () => buildS3Key(TEST_PREFIX, "sub\\..\\secret.json"),
+        /invalid|path separator/i,
+      );
+    });
+
+    it("S3 key is never an absolute local path", () => {
+      const key = buildS3Key(TEST_PREFIX, "data.json");
+      assert.ok(!key.includes(":\\"));
+      assert.ok(!key.startsWith("/"));
+      assert.ok(key.startsWith(TEST_PREFIX));
+    });
+
+    it("writes JSON with stable formatting (2-space indent)", async () => {
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+        prefix: TEST_PREFIX,
+      });
+
+      await store.writeJsonArtifact("format.json", {
+        nested: { deep: true },
+      });
+      const stored = mock.store.get(TEST_PREFIX + "format.json");
+      const lines = stored.body.split("\n");
+      const indentLine = lines.find((l) =>
+        l.trimStart().startsWith('"deep"'),
+      );
+      assert.ok(indentLine);
+      assert.ok(indentLine.startsWith("    ")); // 4 spaces for 2nd level
+    });
+
+    it("S3 store throws without s3Client", () => {
+      assert.throws(
+        () =>
+          createS3ArtifactStore({ bucket: TEST_BUCKET, prefix: TEST_PREFIX }),
+        /s3Client/,
+      );
+    });
+
+    it("S3 store throws without bucket", () => {
+      const mock = createMockS3Client();
+      assert.throws(
+        () =>
+          createS3ArtifactStore({ s3Client: mock, prefix: TEST_PREFIX }),
+        /bucket/,
+      );
+    });
+
+    it("no AWS credentials required for tests", () => {
+      // Verify no AWS env vars are expected or read
+      const mock = createMockS3Client();
+      const store = createS3ArtifactStore({
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+      });
+      assert.ok(store.writeJsonArtifact);
+      assert.ok(store.readJsonArtifact);
+      // No env var check was performed
+    });
+
+    it("createArtifactStore returns local store by default", () => {
+      const store = createArtifactStore({ type: "local" });
+      assert.ok(typeof store.writeJsonArtifact === "function");
+      assert.ok(typeof store.readJsonArtifact === "function");
+    });
+
+    it("createArtifactStore returns S3 store when type=s3", () => {
+      const mock = createMockS3Client();
+      const store = createArtifactStore({
+        type: "s3",
+        s3Client: mock,
+        bucket: TEST_BUCKET,
+      });
+      assert.ok(typeof store.writeJsonArtifact === "function");
+      assert.ok(typeof store.readJsonArtifact === "function");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 8. Production safety gates
   // -----------------------------------------------------------------------
   describe("Production Safety Gates", () => {
     it("does not modify Vantage readiness scoring files", () => {
@@ -1448,7 +1720,7 @@ describe("Vantage Backlink Adapter — Phase 1", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 8. Edge cases
+  // 9. Edge cases
   // -----------------------------------------------------------------------
   describe("Edge Cases", () => {
     it("handles completely empty backlink array", () => {

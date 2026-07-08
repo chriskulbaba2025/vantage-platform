@@ -13,6 +13,7 @@
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve, join, basename, normalize } from "node:path";
+import { createS3ArtifactStore } from "./s3-artifact-store.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -194,6 +195,42 @@ export function createLocalArtifactStore(opts = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Multi-backend factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create an artifact store instance for the configured backend.
+ *
+ *   createArtifactStore({ type: "local" })              → local store
+ *   createArtifactStore({ type: "s3", s3Client, bucket }) → S3 store
+ *
+ * Defaults to "local" when no type is given so the existing runner
+ * behaviour is preserved without configuration.
+ *
+ * @param {object} opts
+ * @param {"local"|"s3"} [opts.type="local"] - Store backend.
+ * @param {string} [opts.baseDir]             - Local store base directory.
+ * @param {object} [opts.s3Client]            - S3 client instance.
+ * @param {string} [opts.bucket]              - S3 bucket name.
+ * @param {string} [opts.prefix]              - S3 key prefix.
+ * @returns {object} Store instance.
+ */
+export function createArtifactStore(opts = {}) {
+  const type = opts.type || "local";
+
+  if (type === "s3") {
+    return createS3ArtifactStore({
+      s3Client: opts.s3Client,
+      bucket: opts.bucket,
+      prefix: opts.prefix,
+    });
+  }
+
+  // Default: local store
+  return createLocalArtifactStore({ baseDir: opts.baseDir });
+}
+
 export default {
   buildArtifactPath,
   writeJsonArtifact,
@@ -201,4 +238,5 @@ export default {
   artifactExists,
   listArtifacts,
   createLocalArtifactStore,
+  createArtifactStore,
 };
