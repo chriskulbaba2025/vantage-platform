@@ -1,0 +1,77 @@
+{
+  "name": "Vantage Audit Orchestration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vantage-audit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7e9b85bd-b4cb-49ab-a190-77c15f95b57c",
+      "name": "Audit Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-640, 0],
+      "webhookId": "e391cb73-7428-4abc-bd32-37fefba97e4a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nif (!body.targetUrl || typeof body.targetUrl !== 'string') {\n  throw new Error('targetUrl is required');\n}\nconst competitors = Array.isArray(body.competitors)\n  ? body.competitors.filter(Boolean).slice(0, 3)\n  : [];\nreturn [{ json: {\n  targetUrl: body.targetUrl.trim(),\n  businessName: String(body.businessName ?? '').trim(),\n  location: String(body.location ?? '').trim(),\n  language: String(body.language ?? 'en-CA').trim(),\n  primaryGoal: String(body.primaryGoal ?? 'Generate qualified enquiries').trim(),\n  competitors,\n  ga4: body.ga4 && typeof body.ga4 === 'object' ? body.ga4 : {}\n} }];"
+      },
+      "id": "5c2c86ce-2379-450e-b6c2-56e754296f60",
+      "name": "Validate Audit Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.VANTAGE_WORKER_URL}}/audits",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-vantage-secret", "value": "={{$env.VANTAGE_WEBHOOK_SECRET}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}",
+        "options": {
+          "timeout": 600000,
+          "response": { "response": { "neverError": false, "responseFormat": "json" } }
+        }
+      },
+      "id": "39c9833c-c36d-45aa-af4c-52e4a5f6034d",
+      "name": "Run Vantage Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-120, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": { "responseCode": 201 }
+      },
+      "id": "df0ac8d5-0f3c-4d99-bd2b-4da9ead5f4d2",
+      "name": "Return Audit Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [160, 0]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Audit Webhook": { "main": [[{ "node": "Validate Audit Request", "type": "main", "index": 0 }]] },
+    "Validate Audit Request": { "main": [[{ "node": "Run Vantage Audit", "type": "main", "index": 0 }]] },
+    "Run Vantage Audit": { "main": [[{ "node": "Return Audit Result", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "versionId": "d55ee80f-0285-45a2-b6bf-012dfe3e72fb",
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}
