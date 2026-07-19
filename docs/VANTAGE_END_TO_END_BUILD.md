@@ -64,6 +64,10 @@ The performance collector uses PageSpeed Insights, local Lighthouse fallback thr
 
 DataForSEO and GA4 do not block the core audit when credentials are absent. Their absence is recorded in the evidence manifest and does not reduce the conversion-readiness score.
 
+## Backlink transition
+
+The original Phase 1 backlink suite included an isolation assertion requiring production scoring and audit directories not to exist. That assertion became invalid when the end-to-end worker was built. The historical suite is preserved as `backlink-adapter.legacy.js`; CI now tests the integrated production provider in `src/evidence/backlinks-provider.test.js`, including optional operation, live `target` payloads, and competitor opportunity classification.
+
 ## n8n
 
 Import `services/n8n/vantage-audit-orchestration.json`. Configure `VANTAGE_WORKER_URL` and `VANTAGE_WEBHOOK_SECRET`. n8n orchestrates only; all evidence, scoring, report generation, and storage remain in the worker.
