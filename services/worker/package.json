@@ -1,13 +1,27 @@
 {
   "name": "vantage-worker",
-  "version": "0.1.0",
-  "description": "Vantage Platform — Worker services (backlink adapter, audit runners)",
+  "version": "0.2.0",
+  "description": "Vantage website evidence, scoring, and locked-report worker",
   "type": "module",
   "private": true,
   "scripts": {
-    "test:backlinks": "node --test src/adapters/dataforseo-backlinks/backlink-adapter.test.js"
+    "start": "node src/server.js",
+    "audit": "node src/runners/run-audit.js",
+    "test": "node --test",
+    "test:backlinks": "node --test src/adapters/dataforseo-backlinks/backlink-adapter.test.js",
+    "check:template": "node src/report/verify-template.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@aws-sdk/client-s3": "^3.1086.0",
+    "chrome-launcher": "^1.0.0",
+    "google-auth-library": "^10.3.0",
+    "lighthouse": "^12.8.2",
+    "playwright": "^1.61.1"
   }
 }
