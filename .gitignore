@@ -1,2 +1,7 @@
-# Generated local backlink test artifacts
-artifacts/local/backlink-tests/*
+node_modules/
+services/worker/node_modules/
+artifacts/cache/
+artifacts/reports/
+artifacts/local/backlink-tests/
+.env
+*.log
