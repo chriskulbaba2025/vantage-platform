@@ -8,7 +8,111 @@ const FAQ_RE = /\b(faq|frequently asked|common questions)\b/i;
 const PRICE_RE = /(?:\$|CAD\s?\$|USD\s?\$|£|€)\s?\d|\b(pricing|price|cost|investment|fee)\b/i;
 const POLICY_RE = /\b(privacy|terms|refund|cancellation|cookie policy)\b/i;
 const SOCIAL_HOSTS = ["linkedin.com", "facebook.com", "instagram.com", "youtube.com", "tiktok.com", "x.com", "twitter.com"];
-const SERVICE_HINT_RE = /\b(service|coaching|consulting|therapy|speaking|workshop|scan|membership|program|training|assessment|audit|solution)\b/i;
+
+// ── Validated service extraction ──────────────────────────────────────────
+
+const GENERIC_HEADINGS = new Set([
+  "services", "service areas", "learn more", "contact", "book", "assessment",
+  "about", "faq", "get started", "our services", "what we do", "solutions",
+  "welcome", "home", "more info", "details", "resources", "get in touch",
+  "contact us", "about us", "our team", "our story", "blog", "news",
+  "privacy policy", "terms of service", "terms and conditions",
+]);
+
+const INSTRUCTIONAL_STARTS = new Set([
+  "learn", "book", "contact", "call", "schedule", "subscribe", "buy",
+  "start", "get", "download", "join", "register", "sign", "request",
+  "discover", "explore", "find", "read", "see", "view", "try", "visit",
+  "click", "check", "go", "ask", "answer", "tell", "know", "need",
+  "want", "like", "help", "match", "we", "i", "you", "do", "does",
+  "how", "what", "when", "where", "why", "who", "can", "will", "should",
+  "would", "could", "shall", "may", "might", "must", "let", "make",
+  "take", "give", "use", "choose", "select", "pick", "search", "look",
+  "browse", "shop", "order", "pay", "submit", "send", "share", "follow",
+]);
+
+function isValidServiceText(text) {
+  const cleaned = text.trim();
+  if (!cleaned) return false;
+  const lower = cleaned.toLowerCase();
+
+  // Reject questions
+  if (cleaned.includes("?")) return false;
+
+  // Reject full sentences (text ending with sentence punctuation)
+  if (/[.!;:]$/.test(cleaned)) return false;
+
+  // Reject generic headings
+  if (GENERIC_HEADINGS.has(lower)) return false;
+
+  // Word count: 1–6 words
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 6) return false;
+
+  // Reject CTAs
+  if (CTA_RE.test(lower)) return false;
+
+  // Reject instructional / nav / sentence starts
+  if (INSTRUCTIONAL_STARTS.has(words[0])) return false;
+
+  // Reject if it starts with an article, preposition, or conjunction
+  if (/^(the|a|an|our|your|their|its|this|that|these|those|with|without|for|from|and|or|but|in|on|at|to|by|of|via|per)\b/i.test(words[0])) return false;
+
+  // Must contain at least one meaningful content word (4+ chars, not a
+  // generic filler)
+  const GENERIC_FILLERS = new Set([
+    "service", "services", "area", "areas", "learn", "more", "contact",
+    "book", "about", "assessment", "solution", "solutions", "care",
+    "help", "support", "team", "info", "information", "resource",
+    "resources", "welcome", "home", "page", "online", "professional",
+    "quality", "best", "top", "expert", "experts", "special", "dedicated",
+    "comprehensive", "complete", "custom", "personal", "individual",
+    "unique", "innovative", "advanced", "modern", "proven", "trusted",
+    "leading", "premier", "premium", "affordable", "effective",
+    "efficient", "reliable", "safe", "convenient", "flexible",
+    "available", "new", "better", "right", "good", "great",
+  ]);
+  const hasMeaningfulWord = words.some((w) => {
+    const clean = w.replace(/[^a-z]/g, "");
+    return clean.length >= 4 && !GENERIC_FILLERS.has(clean);
+  });
+  return hasMeaningfulWord;
+}
+
+function extractSchemaServices($) {
+  const services = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).text());
+      const visit = (node) => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        const type = node["@type"];
+        const typeList = Array.isArray(type) ? type : type ? [type] : [];
+        for (const t of typeList) {
+          const tLower = String(t).toLowerCase();
+          if (tLower === "service" || tLower === "offercatalog") {
+            const name = node.name;
+            if (name && typeof name === "string" && name.trim()) {
+              services.push(cleanText(name));
+            }
+            if (node.itemListElement && Array.isArray(node.itemListElement)) {
+              for (const item of node.itemListElement) {
+                const itemName = item?.item?.name || item?.name || "";
+                if (itemName && typeof itemName === "string" && itemName.trim()) {
+                  services.push(cleanText(itemName));
+                }
+              }
+            }
+          }
+        }
+        Object.values(node).forEach(visit);
+      };
+      visit(data);
+    } catch { /* ignore invalid JSON */ }
+  });
+  return [...new Set(services.filter(Boolean))];
+}
 
 function absoluteUrl(href, base, allowedProtocols = ["http:", "https:"]) {
   try {
@@ -102,8 +206,27 @@ export function extractPage(url, status, headers, html, rendered = false) {
   });
   const emailLinks = links.filter((l) => l.url.startsWith("mailto:"));
   const phoneLinks = links.filter((l) => l.url.startsWith("tel:"));
-  const serviceCandidates = [...headings.h2, ...headings.h3, ...links.map((l) => l.text)]
-    .filter((text) => text.length > 2 && text.length < 80 && SERVICE_HINT_RE.test(text));
+  // ── Validated service extraction ──
+  // 1. Schema markup (Service / OfferCatalog) — highest confidence
+  // Use a fresh cheerio instance — scripts are removed from $ above
+  const schemaServices = extractSchemaServices(cheerio.load(html));
+
+  // 2. H2 / H3 headings that pass strict validation (not CTAs, questions,
+  //    navigation labels, generic headings, instructional sentences, or
+  //    single-word fillers)
+  const headingServices = [...headings.h2, ...headings.h3]
+    .filter((text) => text.length > 2 && text.length < 80 && isValidServiceText(text));
+
+  // Merge: schema first, then heading-derived (deduplicated, case-insensitive)
+  const seen = new Set(schemaServices.map((s) => s.toLowerCase()));
+  const merged = [...schemaServices];
+  for (const s of headingServices) {
+    if (!seen.has(s.toLowerCase())) {
+      seen.add(s.toLowerCase());
+      merged.push(s);
+    }
+  }
+  const serviceCandidates = merged;
 
   return {
     url,
