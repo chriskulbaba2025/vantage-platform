@@ -47,17 +47,45 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
   const domain = domainOf(targetUrl);
   const allSchema = new Set(pages.flatMap((p) => p.schemaTypes));
   const allServices = new Set(pages.flatMap((p) => p.serviceCandidates));
-  const topicCounts = new Map();
-  for (const page of pages) {
-    const candidates = [...page.headings.h1, ...page.headings.h2, ...page.headings.h3];
-    for (const heading of candidates) {
-      for (const token of heading.toLowerCase().match(/[a-z][a-z-]{3,}/g) || []) {
-        if (["about", "contact", "services", "service", "learn", "more", "home", "welcome", "with", "from", "your", "this", "that"].includes(token)) continue;
-        topicCounts.set(token, (topicCounts.get(token) || 0) + 1);
-      }
+  const phraseCounts = new Map();
+
+  function addPhrase(phrase) {
+    const cleaned = phrase.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, " ").trim();
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    if (words.length < 1 || words.length > 5) return;
+
+    // Skip single-word entries that are too short or generic
+    if (words.length === 1) {
+      const w = words[0].replace(/-/g, "");
+      if (w.length < 5) return;
+      const GENERIC_SINGLE = new Set([
+        "about", "contact", "services", "service", "learn", "more", "home",
+        "welcome", "assessment", "solution", "solutions", "area", "areas",
+        "care", "help", "support", "team", "info", "information", "resource",
+        "resources", "page", "online", "better", "right", "good", "great",
+        "professional", "quality", "expert", "experts", "dedicated",
+        "comprehensive", "complete", "custom", "personal", "individual",
+        "unique", "innovative", "advanced", "modern", "proven", "trusted",
+        "leading", "premier", "premium", "affordable", "effective",
+        "efficient", "reliable", "convenient", "flexible",
+      ]);
+      if (GENERIC_SINGLE.has(w)) return;
     }
+
+    phraseCounts.set(cleaned, (phraseCounts.get(cleaned) || 0) + 1);
   }
-  const topicKeywords = [...topicCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([word]) => word);
+
+  // Feed validated services, page titles, and H1 headings into phrase extraction
+  for (const svc of allServices) addPhrase(svc);
+  for (const page of pages) {
+    if (page.title) addPhrase(page.title);
+    for (const h1 of page.headings.h1) addPhrase(h1);
+  }
+
+  const topicKeywords = [...phraseCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([phrase]) => phrase);
   const internalLinks = pages.flatMap((p) => p.links).filter((l) => {
     try { return domainOf(l.url) === domain; } catch { return false; }
   });

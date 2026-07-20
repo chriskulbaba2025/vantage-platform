@@ -29,9 +29,13 @@ function buildConversionPaths(site) {
 }
 
 function topicRows(site) {
-  const services = site.services.length ? site.services : site.topicKeywords.slice(0, 8).map((x) => x.replace(/\b\w/g, (c) => c.toUpperCase()));
+  // Prefer validated services; fall back to multi-word topicKeywords only
+  const services = site.services.length
+    ? site.services
+    : site.topicKeywords.filter((t) => t.split(/\s+/).length >= 2).slice(0, 8);
+  const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
   return services.slice(0, 8).map((service, index) => ({
-    topic: service,
+    topic: typeof service === "string" ? pretty(service) : String(service),
     stage: index % 3 === 0 ? "TOFU" : index % 3 === 1 ? "MOFU" : "BOFU",
     blocker: !site.trust.credentials ? "Doubt" : !site.trust.pricing ? "Offer clarity" : "Unclear next step",
     trustAsset: !site.trust.credentials ? "Credential" : !site.trust.testimonials ? "Testimonial" : "Process proof",
@@ -43,16 +47,41 @@ function topicRows(site) {
 }
 
 function contentIdeas(site) {
-  const topics = (site.topicKeywords.length ? site.topicKeywords : ["service", "results", "process"]).slice(0, 3);
-  const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+  // Build topics from validated services and multi-word topicKeywords.
+  // Single short words (like "foot") are rejected because they produce
+  // nonsensical content ideas such as "What Is Foot?".
+  const candidates = [
+    ...site.services,
+    ...site.topicKeywords.filter((t) => t.split(/\s+/).length >= 2),
+  ];
+  const deduped = [...new Set(candidates.map((s) => s.toLowerCase()))];
+  const topics = deduped.slice(0, 3);
+
+  // Fallback when no meaningful topics are available — use multi-word
+  // placeholders so generated ideas are still useful.
+  const safeTopics = topics.length
+    ? topics
+    : ["your service", "the process", "your goals"];
+
+  const pretty = (s) => {
+    const titleCase = String(s).replace(/\b\w/g, (c) => c.toUpperCase());
+    // Defense-in-depth: if a single short word slipped through, prefix it
+    // so we never produce "What Is Foot?" in a report.
+    if (titleCase.split(/\s+/).length === 1 && titleCase.length < 7) {
+      return `Professional ${titleCase}`;
+    }
+    return titleCase;
+  };
+
+  const [t0, t1, t2] = [pretty(safeTopics[0]), pretty(safeTopics[1]), pretty(safeTopics[2])];
   return {
     tofu: [
-      { idea: `What Is ${pretty(topics[0])}?`, frame: "Answer-first", type: "Guide", question: "What is this?", priority: "H" },
-      { idea: `Signs You May Need ${pretty(topics[1] || topics[0])}`, frame: "Answer-first", type: "Article", question: "Does this apply to me?", priority: "M" },
-      { idea: `Can ${pretty(topics[0])} Produce Measurable Change?`, frame: "Objection handler", type: "Educational page", question: "Will this work?", priority: "H" },
+      { idea: `What Is ${t0}?`, frame: "Answer-first", type: "Guide", question: "What is this?", priority: "H" },
+      { idea: `Signs You May Need ${t1}`, frame: "Answer-first", type: "Article", question: "Does this apply to me?", priority: "M" },
+      { idea: `Can ${t0} Produce Measurable Change?`, frame: "Objection handler", type: "Educational page", question: "Will this work?", priority: "H" },
     ],
     mofu: [
-      { idea: `${pretty(topics[0])}: Options and Fit`, frame: "Comparison/fit", type: "Comparison page", question: "Which option is right?", priority: "H" },
+      { idea: `${t0}: Options and Fit`, frame: "Comparison/fit", type: "Comparison page", question: "Which option is right?", priority: "H" },
       { idea: "What Happens in the Process", frame: "Process page", type: "Process page", question: "What should I expect?", priority: "H" },
       { idea: "Client Results and Outcomes", frame: "Case study", type: "Case study", question: "What results are possible?", priority: "H" },
       { idea: "Who Leads This Work?", frame: "Founder/expert", type: "Founder page", question: "Why trust this provider?", priority: "H" },
@@ -63,8 +92,8 @@ function contentIdeas(site) {
       { idea: "Frequently Asked Questions with Examples", frame: "Testimonial FAQ", type: "FAQ page", question: "What concerns are common?", priority: "H" },
     ],
     leading: [
-      { query: `${topics.join(" ")} for decision making`, rationale: "Connects the offer to an urgent practical use", priority: "H" },
-      { query: `${topics[0]} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },
+      { query: `${t0} for decision making`, rationale: "Connects the offer to an urgent practical use", priority: "H" },
+      { query: `${t0} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },
     ],
   };
 }
