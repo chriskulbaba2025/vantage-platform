@@ -21,13 +21,35 @@ export function scoreAudit(input, evidence) {
     technical: scoreTechnical(site),
     performance: scorePerformance(performance),
   };
-  scores.conversionReadiness = clamp(scores.trust * 0.28 + scores.conversionPathways * 0.24 + scores.contentDepth * 0.18 + scores.technical * 0.18 + scores.performance * 0.12);
+  // Redistribute conversion-readiness weights when performance is unavailable
+  // so the composite score stays on a 0–100 scale.
+  const perfAvailable = scores.performance !== null;
+  const w = perfAvailable
+    ? { trust: 0.28, conversion: 0.24, content: 0.18, technical: 0.18, performance: 0.12 }
+    : { trust: 0.32, conversion: 0.27, content: 0.21, technical: 0.20 };
+  scores.conversionReadiness = clamp(
+    scores.trust * w.trust +
+    scores.conversionPathways * w.conversion +
+    scores.contentDepth * w.content +
+    scores.technical * w.technical +
+    (perfAvailable ? scores.performance * w.performance : 0),
+  );
   scores.awareness = clamp(scores.contentDepth * 0.55 + (site.trust.faq ? 20 : 0) + Math.min(25, site.pageCount * 3));
   scores.consideration = clamp(scores.trust * 0.6 + scores.contentDepth * 0.2 + (site.trust.faq ? 10 : 0) + (site.trust.pricing ? 10 : 0));
   scores.decision = clamp(scores.conversionPathways * 0.65 + scores.trust * 0.25 + (site.trust.pricing ? 10 : 0));
   scores.aiReadiness = clamp((site.schemaTypes.length ? 25 : 0) + (site.pages[0]?.headings?.h1?.length ? 15 : 0) + (site.trust.faq ? 20 : 0) + Math.min(20, site.pageCount * 3) + (site.topicKeywords.length >= 5 ? 20 : 5));
 
-  const coreEvidence = [site.pageCount > 0 ? 55 : 0, performance?.status === "complete" ? 25 : 10, evidence.competitors?.length ? (evidence.competitors.some((x) => x.status === "complete") ? 15 : 5) : 10, evidence.backlinks?.status === "complete" ? 5 : 3];
+  // Performance evidence is binary: either we have measured data from at
+  // least one strategy or we have nothing.  When collectPerformance returns
+  // status "failed" both mobile and desktop are empty — there is no partial
+  // tier.
+  const perfEvidenceScore = performance?.status === "complete" ? 25 : 0;
+  const coreEvidence = [
+    site.pageCount > 0 ? 55 : 0,
+    perfEvidenceScore,
+    evidence.competitors?.length ? (evidence.competitors.some((x) => x.status === "complete") ? 15 : 5) : 10,
+    evidence.backlinks?.status === "complete" ? 5 : 3,
+  ];
   const evidenceConfidenceScore = clamp(coreEvidence.reduce((a, b) => a + b, 0));
   const findings = buildFindings(site, performance);
   const top = findings.slice(0, 3).map((f) => f.problem.toLowerCase());

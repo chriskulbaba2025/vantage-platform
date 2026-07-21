@@ -35,3 +35,32 @@ test("collectPerformance falls back when PageSpeed is unavailable", async () => 
   assert.equal(result.desktop.scores.seo, 83);
   assert.equal(result.fieldData.phone.status, "not_configured");
 });
+
+test("collectPerformance marks status failed when both PageSpeed and Lighthouse are unavailable", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) return new Response("quota", { status: 429 });
+    return new Response("not found", { status: 404 });
+  };
+  const localRunner = async () => { throw new Error("Lighthouse crashed"); };
+  const result = await collectPerformance("https://example.com", { fetchImpl, localRunner, disableCache: true });
+  assert.equal(result.status, "failed");
+  assert.equal(result.mobile.status, "failed");
+  assert.equal(result.desktop.status, "failed");
+  assert.equal(result.mobile.source, "unavailable");
+  assert.equal(result.desktop.source, "unavailable");
+  assert.deepEqual(result.mobile.scores, {});
+  assert.ok(result.limitations.length >= 4, "Expected at least 4 limitation messages (2 PSI + 2 LH failures)");
+});
+
+test("collectPerformance produces complete status with valid PageSpeed result", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      return new Response(JSON.stringify({ lighthouseResult: lhr }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const result = await collectPerformance("https://example.com", { fetchImpl, disableCache: true });
+  assert.equal(result.status, "complete");
+  assert.equal(result.mobile.source, "pagespeed-insights");
+  assert.equal(result.mobile.scores.performance, 71);
+});

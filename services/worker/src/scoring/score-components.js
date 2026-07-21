@@ -60,7 +60,11 @@ function scoreTechnical(site) {
 function scorePerformance(performance) {
   const mobile = performance?.mobile?.scores?.performance;
   const desktop = performance?.desktop?.scores?.performance;
-  return clamp(average([mobile, desktop]) ?? 40);
+  const avg = average([mobile, desktop]);
+  // Return null when no numeric performance result exists (e.g. PageSpeed
+  // returned 429 and local Lighthouse also failed).  When a numeric average
+  // is available it is clamped to 0–100 to match the original protection.
+  return avg === null ? null : clamp(avg);
 }
 
 function buildFindings(site, performance) {
