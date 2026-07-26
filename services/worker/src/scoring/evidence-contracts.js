@@ -92,6 +92,7 @@ export function migrateStatus(legacy) {
 export function buildSourceStatus(fields) {
   return Object.freeze({
     provider:            fields.provider,
+    intendedProvider:    fields.intendedProvider ?? fields.provider,
     adapterVersion:      fields.adapterVersion ?? "1.0.0",
     startedAt:           fields.startedAt,
     completedAt:         fields.completedAt,

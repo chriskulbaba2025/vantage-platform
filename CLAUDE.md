@@ -11,6 +11,8 @@ Completed:
 - Task 3: DataForSEO On-Page adapter merged in PR #5
 - Task 4: Production crawling switched from legacy crawler to DataForSEO as part of PR #5
 - Task 5: V3 scoring model and module gates merged in PR #6
+- Task 6: Human review gate and approved multi-page reports merged in PR #7
+- Task 7: PageSpeed-to-Lighthouse production fallback (current)
 
 Railway variables configured:
 
