@@ -402,7 +402,8 @@ function buildNotAssessedModel(input, evidence) {
       bofu: [],
       leading: [],
     },
-    competitors: competitorComparison(evidence.competitors || []),
+    competitors: competitorComparison(evidence.competitors || [], evidence.competitorOpportunities),
+    competitorOpportunities: evidence.competitorOpportunities,
     evidence,
     _crawlSuppressed: true,
   };
@@ -545,7 +546,8 @@ export function scoreAudit(input, evidence) {
     conversionPaths: buildConversionPaths(site),
     readinessMap: topicRows(site),
     contentIdeas: contentIdeas(site),
-    competitors: competitorComparison(evidence.competitors || []),
+    competitors: competitorComparison(evidence.competitors || [], evidence.competitorOpportunities),
+    competitorOpportunities: evidence.competitorOpportunities,
     evidence,
   };
 }

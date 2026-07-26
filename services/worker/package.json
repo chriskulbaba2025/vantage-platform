@@ -10,7 +10,8 @@
     "test": "node --test src/evidence/*.test.js src/scoring/*.test.js src/report/*.test.js src/audit/*.test.js src/adapters/**/*.test.js src/auth/*.test.js",
     "test:backlinks": "node --test src/evidence/backlinks-provider.test.js",
     "check:template": "node src/report/verify-template.js",
-    "acceptance:task7": "node scripts/acceptance-task7.js"
+    "acceptance:task7": "node scripts/acceptance-task7.js",
+    "acceptance:task9": "node scripts/acceptance-task9.js"
   },
   "engines": {
     "node": ">=20.0.0"

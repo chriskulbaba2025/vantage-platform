@@ -163,6 +163,41 @@ DataForSEO, GA4, and GSC do not block the core audit when credentials are absent
 5. For GSC: add the service account email as a delegated owner in Search Console.
 6. For GA4: grant the service account or OAuth user "Viewer" access on the GA4 property.
 
+## Task 9 — Competitor Opportunity Layer (PRD §12)
+
+### Competitor sources
+- **User-supplied**: up to 3 competitor URLs from the audit request (crawled for on-page evidence).
+- **DataForSEO SERP**: localized organic SERP results for priority topics using audit's location and language.
+- Both sources operate independently — SERP failure does not block supplied-competitor analysis.
+
+### Per-topic selection
+- Competitors are mapped to specific priority topics or service clusters from crawl data.
+- Each candidate preserves: topic, URL, domain, discovery source, SERP position (when available), geographic context, language context, page type, raw artifact reference.
+
+### Qualification gates (5 checks)
+Every candidate must pass: geographic relevance, service relevance, audience relevance, commercial-intent relevance, page-type comparability.
+Excluded by default: directories, marketplaces, social profiles, generic news, irrelevant aggregators.
+
+### Auditor approval
+- Each retained competitor selection requires: `pending` → `approved` or `rejected`.
+- Only approved selections may generate client-facing competitor gaps.
+- Approval integrated with existing human-review workflow and append-only override pattern.
+
+### Qualified-gap gates (6 checks)
+A gap becomes a recommendation only when all pass: offer alignment, audience alignment, buyer-journey alignment, expertise credibility, conversion-path viability, realistic competitive feasibility.
+
+### Failure behaviour
+- SERP failure → supplied-competitor analysis continues.
+- Blocked competitor → preserved as BLOCKED, not bypassed.
+- One failed competitor → other competitors proceed.
+- Missing competitor evidence → no zero score or false negative finding.
+- PARTIAL source status with explicit limitation recorded.
+
+### Test command
+```bash
+npm run acceptance:task9
+```
+
 ## Secrets required later
 
 - `GOOGLE_PAGESPEED_API_KEY`

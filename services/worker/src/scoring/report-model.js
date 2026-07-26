@@ -99,8 +99,9 @@ function contentIdeas(site) {
   };
 }
 
-function competitorComparison(competitorResults) {
-  return competitorResults.map((item) => {
+function competitorComparison(competitorResults, competitorOpportunities) {
+  // Backward-compatible: build basic crawl comparison
+  const comparisons = competitorResults.map((item) => {
     if (item.status !== SOURCE_STATUS.AVAILABLE) return { name: item.url, url: item.url, status: "Unavailable", note: item.error };
     const site = item.evidence;
     return {
@@ -115,6 +116,24 @@ function competitorComparison(competitorResults) {
       pathClarity: site.forms.length || site.ctas.length ? "Moderate" : "Light",
     };
   });
+
+  // Attach competitor opportunity layer data
+  const oppGaps = competitorOpportunities?.gaps || [];
+  const oppQualified = competitorOpportunities?.candidates?.qualified || [];
+  const oppExcluded = competitorOpportunities?.candidates?.excluded || [];
+
+  return {
+    comparisons,
+    opportunities: {
+      topics: competitorOpportunities?.topics || [],
+      qualifiedCandidates: oppQualified,
+      excludedCandidates: oppExcluded,
+      gaps: oppGaps,
+      allGaps: competitorOpportunities?.allGaps || [],
+      sources: competitorOpportunities?.sources || {},
+      limitations: competitorOpportunities?.limitations || [],
+    },
+  };
 }
 
 export { buildConversionPaths, topicRows, contentIdeas, competitorComparison };

@@ -85,9 +85,18 @@ function contentIdeas(model) {
 function competitorBenchmark(model) {
   const site = model.evidence.site;
   const competitors = model.competitors;
-  const supplied = competitors.length ? table(["#", "Name", "URL", "Topic"], competitors.map((c, i) => [e(i + 1), e(c.name), `<a href="${e(c.url)}" target="_blank" rel="noopener">${e(new URL(c.url).hostname)}</a>`, e(c.topic || c.note || "Unavailable")])) : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>';
-  const headers = ["Signal", site.domain, ...competitors.map((c) => c.name)];
-  const value = (label, target, key) => [e(label), e(target), ...competitors.map((c) => e(c[key] || "Unavailable"))];
+  const opp = model.competitorOpportunities || {};
+
+  // Traditional crawl-based comparison (backward compat)
+  const supplied = competitors.comparisons
+    ? competitors.comparisons.length
+      ? table(["#", "Name", "URL", "Topic"], competitors.comparisons.map((c, i) => [e(i + 1), e(c.name), `<a href="${e(c.url)}" target="_blank" rel="noopener">${e(new URL(c.url).hostname)}</a>`, e(c.topic || c.note || "Unavailable")]))
+      : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>'
+    : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>';
+
+  const comps = competitors.comparisons || [];
+  const headers = ["Signal", site.domain, ...comps.map((c) => c.name)];
+  const value = (label, target, key) => [e(label), e(target), ...comps.map((c) => e(c[key] || "Unavailable"))];
   const rows = [
     value("Offer Clarity", site.services.length >= 3 ? "Moderate" : "Light", "offerClarity"),
     value("Trust Proof (on-site)", model.bands.trust, "trustProof"),
@@ -96,8 +105,59 @@ function competitorBenchmark(model) {
     value("On-Site E-E-A-T Proof", model.bands.trust === "Not Assessed" ? "Not Assessed" : model.bands.trust, "eeat"),
     value("Conversion Path Clarity", (model.scores.conversionPathways ?? 0) >= 70 ? "Strong" : (model.scores.conversionPathways ?? 0) >= 40 ? "Moderate" : "Light", "pathClarity"),
   ];
-  const opportunity = competitors.length ? `The strongest positioning opportunity is to make the detected offer stack explicit, support it with visible proof, and connect each offer to one primary action. The comparison is based on visible on-page evidence from ${competitors.length} supplied competitor site(s).` : "A competitor-based positioning opportunity cannot be stated until competitor URLs are supplied. The report does not invent market-wide claims.";
-  return section("supplied-competitor-benchmark", "06", "Supplied Competitor Benchmark — Conversion Positioning", `<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>`);
+
+  // ── Competitor Opportunity Layer ─────────────────────────────────────
+  const gaps = opp.gaps || [];
+  const qualifiedCandidates = opp.qualifiedCandidates || [];
+  const excludedCandidates = opp.excludedCandidates || [];
+  const sources = opp.sources || {};
+  const limitations = opp.limitations || [];
+
+  const serpSource = sources.dataforseoSerp?.status || "NOT_CONNECTED";
+  const suppliedSource = sources.supplied?.status || "NOT_APPLICABLE";
+
+  const oppSection = gaps.length > 0
+    ? `<h3>Qualified Competitor Gaps</h3>
+<p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">Only approved, qualified gaps that passed all eligibility checks are shown. Each gap is tied to SERP or supplied-competitor evidence.</p>
+${table(
+  ["Topic", "Competitor Page", "Client Coverage", "Competitor Coverage", "Conversion Relevance", "Confidence", "Limitation"],
+  gaps.map((g) => [
+    e(g.clientTopic),
+    `<a href="${e(g.competitorPage)}" target="_blank" rel="noopener">${e(g.competitorDomain || new URL(g.competitorPage).hostname)}</a>`,
+    e(g.clientCoverage),
+    e((g.observedCompetitorCoverage || []).join(", ") || "N/A"),
+    e(g.conversionRelevance),
+    e(g.confidence),
+    e(g.limitationStatement?.slice(0, 120)),
+  ]),
+)}
+${gaps.some((g) => g.recommendation) ? `<h3>Recommendations</h3><ul>${gaps.filter((g) => g.recommendation).map((g) => `<li><strong>${e(g.clientTopic)}:</strong> ${e(g.recommendation)}</li>`).join("")}</ul>` : ""}`
+    : '<div class="note"><strong>No qualified gaps:</strong> No competitor gaps passed all qualification checks and auditor approval. This may indicate that competitors have not been approved, or that available competitors do not meet the comparison criteria.</div>';
+
+  const sourcesSection = `<h3>Competitor Sources</h3>
+<ul>
+<li><strong>User-supplied:</strong> ${e(suppliedSource)} — ${e(sources.supplied?.candidateCount || 0)} candidate(s)</li>
+<li><strong>DataForSEO SERP:</strong> ${e(serpSource)} — ${e(sources.dataforseoSerp?.candidateCount || 0)} candidate(s)${sources.dataforseoSerp?.taskIds?.length ? ` (task: ${e(sources.dataforseoSerp.taskIds.join(", "))})` : ""}</li>
+<li><strong>Qualified candidates:</strong> ${e(qualifiedCandidates.length)}</li>
+<li><strong>Excluded candidates:</strong> ${e(excludedCandidates.length)}</li>
+</ul>`;
+
+  const excludedSection = excludedCandidates.length > 0
+    ? `<h3>Excluded Candidates</h3>
+<p style="font-size:.8rem;color:var(--muted)">These candidates were excluded by the qualification gate and did not generate recommendations.</p>
+${table(["URL", "Domain", "Reason"], excludedCandidates.slice(0, 10).map((c) => [e(c.candidateUrl?.slice(0, 60)), e(c.domain), e(c.exclusionReason)]))}`
+    : "";
+
+  const opportunity = comps.length
+    ? `The strongest positioning opportunity is to make the detected offer stack explicit, support it with visible proof, and connect each offer to one primary action. The comparison is based on visible on-page evidence from ${comps.length} supplied competitor site(s)${serpSource === "AVAILABLE" ? ` and DataForSEO SERP analysis of ${qualifiedCandidates.length} qualified candidates` : ""}.`
+    : "A competitor-based positioning opportunity cannot be stated until competitor URLs are supplied. The report does not invent market-wide claims.";
+
+  return section(
+    "supplied-competitor-benchmark",
+    "06",
+    "Supplied Competitor Benchmark — Conversion Positioning",
+    `${sourcesSection}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}${oppSection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}`,
+  );
 }
 
 export { scorecard, priorityFixes, conversionPaths, readinessMap, contentIdeas, competitorBenchmark };

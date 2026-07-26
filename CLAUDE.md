@@ -13,7 +13,8 @@ Completed:
 - Task 5: V3 scoring model and module gates merged in PR #6
 - Task 6: Human review gate and approved multi-page reports merged in PR #7
 - Task 7: PageSpeed-to-Lighthouse production fallback merged in PR #8
-- Task 8: GA4 and GSC OAuth connections (current)
+- Task 8: GA4 and GSC OAuth connections merged in PR #9
+- Task 9: V3 competitor opportunity layer (current)
 
 Railway variables configured:
 
