@@ -1,4 +1,5 @@
 import { domainOf } from "../utils.js";
+import { SOURCE_STATUS } from "./evidence-contracts.js";
 import { band, scoreTrust } from "./score-components.js";
 
 function buildConversionPaths(site) {
@@ -100,7 +101,7 @@ function contentIdeas(site) {
 
 function competitorComparison(competitorResults) {
   return competitorResults.map((item) => {
-    if (item.status !== "complete") return { name: item.url, url: item.url, status: "Unavailable", note: item.error };
+    if (item.status !== SOURCE_STATUS.AVAILABLE) return { name: item.url, url: item.url, status: "Unavailable", note: item.error };
     const site = item.evidence;
     return {
       name: site.pages[0]?.title || site.domain,

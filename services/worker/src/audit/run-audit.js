@@ -7,6 +7,7 @@ import { renderReport } from "../report/render-report.js";
 import { createReportStore } from "../storage/report-store.js";
 import { createRunId, domainOf, normalizeUrl, slugify } from "../utils.js";
 import { loadConfig } from "../config.js";
+import { SOURCE_STATUS, validateEvidenceEnvelope, downgradeToFailed } from "../scoring/evidence-contracts.js";
 
 function validateInput(raw) {
   if (!raw || typeof raw !== "object") throw new Error("Audit input must be an object");
@@ -27,7 +28,32 @@ function validateInput(raw) {
 function safeResult(provider, label) {
   return async (...args) => {
     try { return await provider(...args); }
-    catch (error) { return { status: "failed", error: `${label}: ${error.message}`, limitations: [`${label}: ${error.message}`] }; }
+    catch (error) {
+      return {
+        evidenceVersion: "1.0.0",
+        source: label,
+        sourceStatus: SOURCE_STATUS.FAILED,
+        status: SOURCE_STATUS.FAILED,
+        error: `${label}: ${error.message}`,
+        limitations: [`${label}: ${error.message}`],
+        collectedAt: new Date().toISOString(),
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        rawArtifactRef: null,
+        _sourceStatus: {
+          provider: label,
+          adapterVersion: "1.0.0",
+          startedAt: null,
+          completedAt: new Date().toISOString(),
+          requestId: null,
+          retryCount: 0,
+          returnedRecordCount: 0,
+          expectedRecordCount: null,
+          errorCategory: "internal",
+          limitation: `${label}: ${error.message}`,
+          rawArtifactRef: null,
+        },
+      };
+    }
   };
 }
 
@@ -78,7 +104,20 @@ export async function runAudit(rawInput, options = {}) {
     }),
   ]);
 
-  const evidence = { site, performance, competitors, backlinks, ga4 };
+  // Boundary validation — downgrade any evidence that fails the envelope
+  // contract before it reaches scoring.  Invalid shapes must never carry
+  // AVAILABLE or PARTIAL into scoreAudit.
+  function validateAndDowngrade(shape, label) {
+    const result = validateEvidenceEnvelope(shape, label);
+    if (result.valid) return shape;
+    return downgradeToFailed(shape, result.errors, label);
+  }
+  const validatedSite = validateAndDowngrade(site, "site");
+  const validatedPerformance = validateAndDowngrade(performance, "performance");
+  const validatedBacklinks = validateAndDowngrade(backlinks, "backlinks");
+  const validatedGa4 = validateAndDowngrade(ga4, "ga4");
+
+  const evidence = { site: validatedSite, performance: validatedPerformance, competitors, backlinks: validatedBacklinks, ga4: validatedGa4 };
   const model = scoreAudit(input, evidence);
   const html = await (options.renderReport || renderReport)(model);
   const slug = slugify(input.businessName || domainOf(input.targetUrl));
@@ -94,11 +133,11 @@ export async function runAudit(rawInput, options = {}) {
     status: "complete",
     scores: model.scores,
     sources: {
-      website: "complete",
-      performance: performance.status,
-      competitors: competitors.length ? "complete" : "not_supplied",
-      backlinks: backlinks.status,
-      ga4: ga4.status,
+      website: SOURCE_STATUS.AVAILABLE,
+      performance: validatedPerformance.sourceStatus,
+      competitors: competitors.length ? SOURCE_STATUS.AVAILABLE : SOURCE_STATUS.NOT_APPLICABLE,
+      backlinks: validatedBacklinks.sourceStatus,
+      ga4: validatedGa4.sourceStatus,
     },
     files: ["index.html", "audit.json", "evidence.json", "manifest.json"],
   };

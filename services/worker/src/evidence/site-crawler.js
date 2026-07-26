@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { normalizeUrl, domainOf, withTimeout } from "../utils.js";
 import { cleanText, extractPage } from "./page-extractor.js";
+import { SOURCE_STATUS, buildSourceStatus, EVIDENCE_ENVELOPE_VERSION } from "../scoring/evidence-contracts.js";
 
 async function fetchText(url, fetchImpl, timeoutMs = 20000) {
   const response = await withTimeout(fetchImpl(url, {
@@ -103,7 +104,11 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
   const forms = pages.flatMap((p) => p.forms);
   const ctas = pages.flatMap((p) => p.ctas);
   const images = pages.flatMap((p) => p.images);
+  const collectedAt = new Date().toISOString();
   return {
+    evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
+    source: "vantage-crawler",
+    sourceStatus: SOURCE_STATUS.AVAILABLE,
     targetUrl,
     domain,
     crawledAt: new Date().toISOString(),
@@ -143,6 +148,22 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
     },
     securityHeaders,
     limitations,
+    collectedAt,
+    coverage: { requested: pages.length, completed: pages.length, failed: 0 },
+    rawArtifactRef: null,
+    _sourceStatus: buildSourceStatus({
+      provider: "vantage-crawler",
+      adapterVersion: "1.0.0",
+      startedAt: null, // set by caller crawlSite
+      completedAt: collectedAt,
+      requestId: null,
+      retryCount: 0,
+      returnedRecordCount: pages.length,
+      expectedRecordCount: pages.length,
+      errorCategory: null,
+      limitation: null,
+      rawArtifactRef: null,
+    }),
   };
 }
 
@@ -208,9 +229,9 @@ export async function crawlCompetitors(urls = [], options = {}) {
   for (const url of urls.slice(0, 3)) {
     try {
       const evidence = await crawlSite(url, { ...options, maxPages: Math.min(options.maxPages || 8, 8) });
-      results.push({ status: "complete", url, evidence });
+      results.push({ status: SOURCE_STATUS.AVAILABLE, url, evidence });
     } catch (error) {
-      results.push({ status: "failed", url, error: error.message });
+      results.push({ status: SOURCE_STATUS.FAILED, url, error: error.message });
     }
   }
   return results;
