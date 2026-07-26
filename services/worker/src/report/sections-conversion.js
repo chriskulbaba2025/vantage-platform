@@ -4,25 +4,52 @@ import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 function scorecard(model) {
   const { scores, bands, evidenceConfidenceScore, rootCause, evidence } = model;
   const site = evidence.site;
-  return section("executive-conversion-scorecard", "01", "Executive Conversion Scorecard", `
-<p>Vantage Phase 1 Audit of <strong>${e(site.domain)}</strong>, a ${e(site.pageCount)}-page crawlable website detected as ${e(site.platform)}.</p>
-<div class="score-grid" style="margin:20px 0">
-${scoreCard(scores.conversionReadiness, "Conversion Readiness")}
+
+  // PRD §15.3 — assessed weight and readiness status
+  const assessedWeight = model.assessedWeight ?? 100;
+  const readinessStatus = model.readinessStatus ?? null;
+  const showNumeric = model.showNumericScore !== false;
+
+  // Readiness score card
+  const readinessDisplay = showNumeric && scores.conversionReadiness !== null
+    ? scores.conversionReadiness
+    : "—";
+  const readinessLabel = readinessStatus === "Provisional"
+    ? "Conversion Readiness (Provisional)"
+    : "Conversion Readiness";
+
+  // Assessed weight and status banner
+  const statusBanner = readinessStatus && readinessStatus !== "Complete"
+    ? `<div class="note" style="margin-bottom:16px"><strong>Readiness Status:</strong> ${e(readinessStatus)}. <strong>Assessed Weight:</strong> ${e(assessedWeight)}% of total intended dimensions. ${!showNumeric ? "An overall numeric score cannot be shown because assessed weight is below 60%." : "The score is provisional because less than 80% of intended evidence dimensions were assessed. Missing module weight was not redistributed."}</div>`
+    : "";
+
+  const legacyReadiness = model._crawlSuppressed
+    ? '<div class="score-grid" style="margin:20px 0">' +
+      scoreCard("Not Assessed", "Conversion Readiness", false) +
+      scoreCard(bands.evidenceConfidence, "Evidence Confidence", false) +
+      '</div>'
+    : `<div class="score-grid" style="margin:20px 0">
+${scoreCard(readinessDisplay, readinessLabel, showNumeric && scores.conversionReadiness !== null)}
 ${scoreCard(bands.evidenceConfidence, "Evidence Confidence", false)}
-${scoreCard(bands.trust, "On-Site Trust Proof", false)}
+${scoreCard(bands.trust !== "Not Assessed" ? bands.trust : "Not Assessed", "On-Site Trust Proof", false)}
 ${scoreCard(scores.contentDepth, "Content Depth")}
 ${scoreCard(scores.conversionPathways, "Conversion Pathways")}
-</div>
+</div>`;
+
+  return section("executive-conversion-scorecard", "01", "Executive Conversion Scorecard", `
+<p>Vantage Phase 1 Audit of <strong>${e(site.domain)}</strong>, a ${e(site.pageCount)}-page crawlable website detected as ${e(site.platform)}.</p>
+${statusBanner}${legacyReadiness}
 <div class="confidence-note"><h3>Evidence Confidence — ${e(bands.evidenceConfidence)}</h3>
 <p><strong>Strong:</strong> ${e(site.pageCount)} page(s) were captured with page-level metadata, headings, links, forms, trust signals, schema, images, and response-header evidence.</p>
 <p style="margin-top:6px"><strong>Performance:</strong> ${e(evidence.performance?.mobile?.source || "No performance source")} supplied mobile data and ${e(evidence.performance?.desktop?.source || "no performance source")} supplied desktop data.</p>
 <p style="margin-top:6px"><strong>Competitors:</strong> ${e(model.competitors.length)} supplied competitor site(s) produced comparable on-page evidence.</p>
 <p style="margin-top:6px"><strong>Optional analytics:</strong> ${e(evidence.ga4?.sourceStatus === SOURCE_STATUS.AVAILABLE ? "GA4 data was included as context." : "GA4 was not connected; the audit completed without analytics and no score was reduced.")}</p>
-<p style="margin-top:6px"><strong>Confidence score:</strong> ${e(evidenceConfidenceScore)}/100.</p></div>
+<p style="margin-top:6px"><strong>Confidence score:</strong> ${e(evidenceConfidenceScore)}/100.</p>
+<p style="margin-top:6px"><strong>Assessed weight:</strong> ${e(assessedWeight)}% of intended dimensions.</p></div>
 <h3>Root Cause</h3><p>${e(rootCause)}</p>
 <h3>Funnel-Stage Readiness</h3>
 <div class="score-grid">${scoreCard(scores.awareness, "Awareness (TOFU)")}${scoreCard(scores.consideration, "Consideration (MOFU)")}${scoreCard(scores.decision, "Decision (BOFU)")}</div>
-<p style="font-size:.85rem;color:var(--muted);margin-top:8px"><strong>TOFU:</strong> ${scores.awareness < 50 ? "Educational discovery coverage is limited." : "The site has a usable awareness foundation."} <strong>MOFU:</strong> ${scores.consideration < 50 ? "Proof and comparison content are insufficient." : "Consideration support is present."} <strong>BOFU:</strong> ${scores.decision < 50 ? "Conversion reassurance and offer clarity remain weak." : "Decision-stage actions are reasonably clear."}</p>`);
+<p style="font-size:.85rem;color:var(--muted);margin-top:8px"><strong>TOFU:</strong> ${scores.awareness === null ? "Not assessed." : scores.awareness < 50 ? "Educational discovery coverage is limited." : "The site has a usable awareness foundation."} <strong>MOFU:</strong> ${scores.consideration === null ? "Not assessed." : scores.consideration < 50 ? "Proof and comparison content are insufficient." : "Consideration support is present."} <strong>BOFU:</strong> ${scores.decision === null ? "Not assessed." : scores.decision < 50 ? "Conversion reassurance and offer clarity remain weak." : "Decision-stage actions are reasonably clear."}</p>`);
 }
 
 function priorityFixes(model) {
@@ -65,9 +92,9 @@ function competitorBenchmark(model) {
     value("Offer Clarity", site.services.length >= 3 ? "Moderate" : "Light", "offerClarity"),
     value("Trust Proof (on-site)", model.bands.trust, "trustProof"),
     value("CTA Clarity", site.ctas.length ? "Moderate" : "Light", "ctaClarity"),
-    value("Content Depth", model.scores.contentDepth >= 70 ? "Strong" : model.scores.contentDepth >= 40 ? "Moderate" : "Light", "contentDepth"),
-    value("On-Site E-E-A-T Proof", model.bands.trust, "eeat"),
-    value("Conversion Path Clarity", model.scores.conversionPathways >= 70 ? "Strong" : model.scores.conversionPathways >= 40 ? "Moderate" : "Light", "pathClarity"),
+    value("Content Depth", (model.scores.contentDepth ?? 0) >= 70 ? "Strong" : (model.scores.contentDepth ?? 0) >= 40 ? "Moderate" : "Light", "contentDepth"),
+    value("On-Site E-E-A-T Proof", model.bands.trust === "Not Assessed" ? "Not Assessed" : model.bands.trust, "eeat"),
+    value("Conversion Path Clarity", (model.scores.conversionPathways ?? 0) >= 70 ? "Strong" : (model.scores.conversionPathways ?? 0) >= 40 ? "Moderate" : "Light", "pathClarity"),
   ];
   const opportunity = competitors.length ? `The strongest positioning opportunity is to make the detected offer stack explicit, support it with visible proof, and connect each offer to one primary action. The comparison is based on visible on-page evidence from ${competitors.length} supplied competitor site(s).` : "A competitor-based positioning opportunity cannot be stated until competitor URLs are supplied. The report does not invent market-wide claims.";
   return section("supplied-competitor-benchmark", "06", "Supplied Competitor Benchmark — Conversion Positioning", `<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>`);
