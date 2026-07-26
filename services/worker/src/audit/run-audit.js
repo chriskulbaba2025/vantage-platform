@@ -16,6 +16,14 @@ import {
   validateEvidenceEnvelope,
   downgradeToFailed,
 } from "../scoring/evidence-contracts.js";
+import {
+  LIFECYCLE_STATUS,
+  buildReviewRecord,
+  buildApprovalRecord,
+  validateTransition,
+  isReviewComplete,
+} from "./review-gate.js";
+import { renderApprovedReport } from "../report/render-approved-report.js";
 
 // ---------------------------------------------------------------------------
 // Input validation
@@ -311,7 +319,7 @@ export async function runAudit(rawInput, options = {}) {
     targetDomain: site.domain,
     startedAt,
     completedAt,
-    status: "complete",
+    status: "draft",
     scores: model.scores,
     sources: {
       website: validatedSite.sourceStatus,
@@ -338,12 +346,146 @@ export async function runAudit(rawInput, options = {}) {
   return {
     runId,
     slug,
-    status: "complete",
+    status: "draft",
+    lifecycleStatus: LIFECYCLE_STATUS.DRAFT,
     model,
     manifest,
     storage,
     html: options.includeHtml ? html : undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Review and approval operations (PRD §18)
+// ---------------------------------------------------------------------------
+
+/**
+ * Submit a Principal Auditor review for an audit.
+ *
+ * Validates the review payload, persists the review record, and transitions
+ * the lifecycle from draft → reviewed (or reviewed → reviewed for re-review).
+ *
+ * Returns the updated lifecycle record.
+ */
+export async function submitReview(store, slug, runId, reviewPayload) {
+  // Validate the review payload
+  const { valid, record, errors } = buildReviewRecord({
+    ...reviewPayload,
+    runId,
+  });
+
+  if (!valid) {
+    throw Object.assign(
+      new Error(`Invalid review: ${errors.join("; ")}`),
+      { statusCode: 422, errors },
+    );
+  }
+
+  // Persist
+  const updated = await store.writeReview(slug, runId, record);
+  return updated;
+}
+
+/**
+ * Approve an audit after review.
+ *
+ * Requires a complete review. Renders the approved multi-page report
+ * (15 individual pages + index) and persists all pages atomically.
+ *
+ * If any page write fails, the lifecycle is NOT updated to approved —
+ * the audit remains in its current (reviewed) state and the failure
+ * is recorded as a limitation.
+ *
+ * No server-generated PDF. Each approved page includes a browser-print
+ * button that uses window.print() + @media print CSS.
+ *
+ * Returns { lifecycle, pageCount }.
+ */
+export async function approveAudit(store, slug, runId, approver, opts = {}) {
+  // Load current lifecycle
+  const lc = await store._readLifecycle(slug, runId);
+  if (!lc) {
+    throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+  }
+
+  // Idempotency: already approved
+  if (lc.status === LIFECYCLE_STATUS.APPROVED) {
+    return { lifecycle: lc, pageCount: (lc.artifacts?.final || []).length };
+  }
+
+  // Validate transition
+  const transition = validateTransition(lc.status, LIFECYCLE_STATUS.APPROVED);
+  if (!transition.valid) {
+    throw Object.assign(
+      new Error(`Invalid state transition: ${transition.errors.join("; ")}`),
+      { statusCode: 409 },
+    );
+  }
+
+  // Ensure review is complete
+  if (!lc.review || !isReviewComplete(lc.review)) {
+    throw Object.assign(
+      new Error("Approval requires a complete review"),
+      { statusCode: 422 },
+    );
+  }
+
+  // Require model for multi-page rendering
+  if (!opts.model) {
+    throw Object.assign(
+      new Error("Audit model is required for approved report rendering"),
+      { statusCode: 422 },
+    );
+  }
+
+  // Build approval record
+  const { valid, record: approvalRecord, errors } = buildApprovalRecord(
+    runId,
+    lc.review,
+    approver,
+    { notes: opts.notes },
+  );
+
+  if (!valid) {
+    throw Object.assign(
+      new Error(`Invalid approval: ${errors.join("; ")}`),
+      { statusCode: 422, errors },
+    );
+  }
+
+  // Render approved multi-page report (all-or-nothing)
+  let approvedPages;
+  try {
+    const result = renderApprovedReport(opts.model);
+    approvedPages = result.pages; // Map<filename, html>
+  } catch (renderErr) {
+    await store.addLimitation(
+      slug, runId,
+      `Approved report rendering failed: ${renderErr.message}`,
+    );
+    throw Object.assign(
+      new Error(`Approved report rendering failed: ${renderErr.message}`),
+      { statusCode: 500 },
+    );
+  }
+
+  // Write all approved pages atomically
+  // If any page write fails, the store throws and lifecycle stays at reviewed
+  const updatedLc = await store.writeApprovedPages(
+    slug, runId, approvalRecord, approvedPages,
+  );
+
+  return {
+    lifecycle: updatedLc,
+    pageCount: approvedPages.size,
+  };
+}
+
+/**
+ * Retrieve the full lifecycle and review state for an audit.
+ */
+export async function getAuditStatus(store, slug, runId) {
+  return store.getStatus(slug, runId);
 }
 
 export { validateInput };

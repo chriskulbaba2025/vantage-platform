@@ -5,7 +5,7 @@ import { scoreAudit } from "../scoring/vantage-score.js";
 import { stableHash } from "../utils.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 
-const EXPECTED_CSS_HASH = "04f85950237982d04619cd03a9170a19920cbc9b712c4f191711cba3144cdc7d";
+const EXPECTED_CSS_HASH = "cdb85a48290033f4c71b09154570369b5054441f7a080df14372a2b20ba4bdaa";
 const norm = (s) => s.replace(/\r\n/g, "\n");
 const style = (html) => norm(html.match(/<style>[\s\S]*?<\/style>/)?.[0] || "");
 
@@ -21,5 +21,54 @@ test("renderReport preserves locked style and all thirteen section IDs", async (
   assert.equal(stableHash(style(html)), EXPECTED_CSS_HASH);
   assert.equal((html.match(/<section id=/g) || []).length, 13);
   assert.match(html, /Example Business/);
+  assert.doesNotMatch(html, /\{\{[A-Z_]+\}\}/);
+});
+
+// ── Print-to-PDF button tests ──────────────────────────────────────────
+
+test("print button does NOT appear on draft report (isApproved false)", async () => {
+  const html = await renderReport(model(), { isApproved: false });
+  assert.doesNotMatch(html, /Print or save this page as PDF/);
+  assert.doesNotMatch(html, /print-page-btn/);
+});
+
+test("print button DOES appear on approved report (isApproved true)", async () => {
+  const html = await renderReport(model(), { isApproved: true });
+  assert.match(html, /Print or save this page as PDF/);
+  assert.match(html, /print-page-btn/);
+  assert.match(html, /window\.print\(\)/);
+});
+
+test("print button has no-print class so it hides during printing", async () => {
+  const html = await renderReport(model(), { isApproved: true });
+  assert.match(html, /class="print-page-btn no-print"/);
+  assert.match(html, /class="print-button-container/);
+});
+
+test("print CSS hides navigation and controls", async () => {
+  const html = await renderReport(model());
+  // @media print rules hide nav and print controls
+  assert.match(html, /\.top-nav,\.nav-toggle,\.print-button-container,footer button,\.no-print\{display:none!important\}/);
+});
+
+test("print CSS preserves content with sensible page breaks", async () => {
+  const html = await renderReport(model());
+  assert.match(html, /section\{[^}]*break-inside:avoid[^}]*\}/);
+  assert.match(html, /tr\{[^}]*page-break-inside:avoid[^}]*\}/);
+  assert.match(html, /h2,h3,h4\{[^}]*page-break-after:avoid[^}]*\}/);
+});
+
+test("print CSS includes @page margin", async () => {
+  const html = await renderReport(model());
+  assert.match(html, /@page\{margin:15mm\}/);
+});
+
+test("approved report HTML resolves all template tokens", async () => {
+  const html = await renderReport(model(), { isApproved: true });
+  assert.doesNotMatch(html, /\{\{[A-Z_]+\}\}/);
+});
+
+test("draft report HTML resolves all template tokens", async () => {
+  const html = await renderReport(model(), { isApproved: false });
   assert.doesNotMatch(html, /\{\{[A-Z_]+\}\}/);
 });
