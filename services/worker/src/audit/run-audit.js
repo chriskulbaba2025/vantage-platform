@@ -483,127 +483,75 @@ export async function runAudit(rawInput, options = {}) {
  * Returns the updated lifecycle record.
  */
 /**
- * Apply competitor approval/rejection decisions from a review payload.
+ * Submit a Principal Auditor review for an audit.
  *
- * Loads the canonical evidence + model, applies decisions, rebuilds gaps,
- * persists updated artifacts, and appends override records.
+ * ALL validation happens in memory BEFORE any persistent mutation.
+ * Competitor decisions are applied, evidence + model recalculated,
+ * override records built, and the complete review record validated.
+ * Only then is the atomic transaction committed via the store.
  *
- * This is called by submitReview() before the review is persisted.
- * Atomic: if evidence/model persistence fails, the review is not written.
- *
- * @returns {{ evidence, model }} updated evidence and model
+ * Atomic: if any stage fails (validation, staging, or commit), the
+ * previous evidence, model, review, and lifecycle remain fully active.
  */
-async function _applyCompetitorDecisions(store, slug, runId, reviewPayload, reviewer) {
+export async function submitReview(store, slug, runId, reviewPayload) {
+  const reviewer = String(reviewPayload.reviewer || "").trim();
   const decisions = reviewPayload.competitorDecisions;
-  if (!Array.isArray(decisions) || decisions.length === 0) {
-    // No decisions to apply — return null
-    return null;
-  }
 
-  // Load canonical artifacts
-  let evidence;
-  let model;
-  try {
-    const evidenceRaw = await store.readFile(`${slug}/${runId}/evidence.json`);
-    evidence = JSON.parse(evidenceRaw.toString("utf8"));
-    const modelRaw = await store.readFile(`${slug}/${runId}/audit.json`);
-    model = JSON.parse(modelRaw.toString("utf8"));
-  } catch {
+  // ── Phase 1: Load current committed state ─────────────────────────────
+  const committed = await store.readCommittedArtifacts(slug, runId);
+  if (!committed) {
     throw Object.assign(
-      new Error("Cannot apply competitor decisions — audit artifacts not found"),
+      new Error("Cannot review — audit artifacts not found"),
       { statusCode: 404 },
     );
   }
 
-  const opp = evidence.competitorOpportunities;
-  const qualifiedCandidates = opp?.candidates?.qualified || [];
-
-  // Build known candidate URL set from qualified candidates only
-  const knownCandidateUrls = new Set(qualifiedCandidates.map((c) => c.candidateUrl));
-
-  // Validate decisions against known candidates
-  const validation = validateCompetitorDecisions(decisions, knownCandidateUrls);
-  if (!validation.valid) {
-    throw Object.assign(
-      new Error(`Invalid competitor decisions: ${validation.errors.join("; ")}`),
-      { statusCode: 422, errors: validation.errors },
-    );
-  }
-
-  // Apply decisions to qualified candidates
-  const decisionMap = new Map(validation.records.map((r) => [r.candidateUrl, r.decision]));
-  for (const candidate of qualifiedCandidates) {
-    if (decisionMap.has(candidate.candidateUrl)) {
-      candidate.approvalStatus = decisionMap.get(candidate.candidateUrl);
-    }
-  }
-
-  // Rebuild gaps: only approved + all gates passed → client-facing
-  const allGaps = opp.allGaps || [];
-  const updatedAllGaps = allGaps.map((g) => {
-    const candidateDecision = decisionMap.get(g.competitorPage);
-    const newApproval = candidateDecision || g.approvalStatus || "pending";
-    return { ...g, approvalStatus: newApproval };
-  });
-
-  // Re-filter client-facing gaps
-  const updatedGaps = updatedAllGaps.filter(
-    (g) => g.approvalStatus === "approved" && g.gapPassed === true,
-  );
-
-  // Update evidence in place
-  if (opp.candidates) {
-    opp.candidates.qualified = qualifiedCandidates;
-  }
-  opp.allGaps = updatedAllGaps;
-  opp.gaps = updatedGaps;
-
-  // Update the model's competitor evidence
-  evidence.competitorOpportunities = opp;
-
-  // Re-score with updated evidence to reflect competitor decisions
-  // (scoring weights unaffected; only competitor findings/gaps change)
-  const updatedModel = scoreAudit(model.input, evidence);
-
-  // Build override records for audit history
-  const overrideRecords = buildCompetitorOverrides(validation.records, reviewer);
-
-  // Persist updated evidence and model atomically BEFORE review write
-  // (if this fails, the review won't be written — atomic safety)
-  await store.writeEvidenceAndModel(slug, runId, evidence, updatedModel);
-
-  // Return updated artifacts + override records
-  return { evidence, model: updatedModel, overrides: overrideRecords };
-}
-
-/**
- * Submit a Principal Auditor review for an audit.
- *
- * Validates the review payload, applies competitor approval/rejection
- * decisions (when provided), persists updated evidence/model, and
- * transitions the lifecycle from draft → reviewed.
- *
- * Returns the updated lifecycle record.
- */
-export async function submitReview(store, slug, runId, reviewPayload) {
-  // ── Apply competitor decisions BEFORE building review record ──────────
-  const reviewer = String(reviewPayload.reviewer || "").trim();
+  let evidence = committed.evidence;
+  let model = committed.model;
   let competitorOverrides = [];
 
-  try {
-    const decisionResult = await _applyCompetitorDecisions(
-      store, slug, runId, reviewPayload, reviewer,
-    );
-    if (decisionResult?.overrides) {
-      competitorOverrides = decisionResult.overrides;
+  // ── Phase 2: Validate and apply competitor decisions (in memory) ──────
+  if (Array.isArray(decisions) && decisions.length > 0) {
+    const opp = evidence.competitorOpportunities;
+    const qualifiedCandidates = opp?.candidates?.qualified || [];
+    const knownCandidateUrls = new Set(qualifiedCandidates.map((c) => c.candidateUrl));
+
+    const validation = validateCompetitorDecisions(decisions, knownCandidateUrls);
+    if (!validation.valid) {
+      throw Object.assign(
+        new Error(`Invalid competitor decisions: ${validation.errors.join("; ")}`),
+        { statusCode: 422, errors: validation.errors },
+      );
     }
-  } catch (err) {
-    // Re-throw with appropriate status code
-    throw err;
+
+    // Apply decisions (in-memory only — no files touched yet)
+    const decisionMap = new Map(validation.records.map((r) => [r.candidateUrl, r.decision]));
+    for (const candidate of qualifiedCandidates) {
+      if (decisionMap.has(candidate.candidateUrl)) {
+        candidate.approvalStatus = decisionMap.get(candidate.candidateUrl);
+      }
+    }
+
+    const allGaps = opp.allGaps || [];
+    const updatedAllGaps = allGaps.map((g) => {
+      const candidateDecision = decisionMap.get(g.competitorPage);
+      return { ...g, approvalStatus: candidateDecision || g.approvalStatus || "pending" };
+    });
+
+    opp.allGaps = updatedAllGaps;
+    opp.gaps = updatedAllGaps.filter((g) => g.approvalStatus === "approved" && g.gapPassed === true);
+    if (opp.candidates) opp.candidates.qualified = qualifiedCandidates;
+    evidence.competitorOpportunities = opp;
+
+    // Re-score with updated evidence
+    model = scoreAudit(model.input, evidence);
+
+    // Build override records
+    competitorOverrides = buildCompetitorOverrides(validation.records, reviewer);
   }
 
-  // ── Build review record ───────────────────────────────────────────────
-  const { valid, record, errors } = buildReviewRecord({
+  // ── Phase 3: Build and validate complete review record ────────────────
+  const { valid, record: reviewRecord, errors } = buildReviewRecord({
     ...reviewPayload,
     runId,
     overrides: [
@@ -613,14 +561,23 @@ export async function submitReview(store, slug, runId, reviewPayload) {
   });
 
   if (!valid) {
+    // NO persistent mutation occurred — evidence/model changes were in-memory only
     throw Object.assign(
       new Error(`Invalid review: ${errors.join("; ")}`),
       { statusCode: 422, errors },
     );
   }
 
-  // Persist
-  const updated = await store.writeReview(slug, runId, record);
+  // ── Phase 4: Atomic transaction commit ────────────────────────────────
+  // All-or-nothing: if this fails, nothing was changed on disk
+  const updated = await store.commitCompetitorReview({
+    slug,
+    runId,
+    evidence,
+    model,
+    reviewRecord,
+  });
+
   return updated;
 }
 
@@ -668,8 +625,15 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     );
   }
 
-  // Require model for multi-page rendering
-  if (!opts.model) {
+  // Require model for multi-page rendering — load from committed state if not provided
+  let model = opts.model || null;
+  if (!model) {
+    const committed = await store.readCommittedArtifacts(slug, runId);
+    if (committed?.model) {
+      model = committed.model;
+    }
+  }
+  if (!model) {
     throw Object.assign(
       new Error("Audit model is required for approved report rendering"),
       { statusCode: 422 },
@@ -678,7 +642,7 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
 
   // ── Competitor approval gate (Task 9) ─────────────────────────────────
   // Validate: no pending or rejected competitor candidates in client-facing gaps
-  const competitorOpps = opts.model.evidence?.competitorOpportunities;
+  const competitorOpps = model.evidence?.competitorOpportunities;
   if (competitorOpps) {
     const gaps = competitorOpps.gaps || [];
     const allGaps = competitorOpps.allGaps || [];
@@ -768,7 +732,7 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
   // Render approved multi-page report (all-or-nothing)
   let approvedPages;
   try {
-    const result = renderApprovedReport(opts.model);
+    const result = renderApprovedReport(model);
     approvedPages = result.pages; // Map<filename, html>
   } catch (renderErr) {
     await store.addLimitation(

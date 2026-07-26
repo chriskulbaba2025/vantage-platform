@@ -1,6 +1,15 @@
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { resolve, join, normalize, sep, dirname } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { slugify } from "../utils.js";
+
+function createTransactionId() {
+  return `txn-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+}
+
+function sha256(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
 
 function safeSegment(value) {
   const segment = slugify(value);
@@ -107,15 +116,136 @@ export function createLocalReportStore(options = {}) {
       return readFile(full);
     },
 
-    /** Atomically persist updated evidence and model for an existing audit. */
-    async writeEvidenceAndModel(slug, runId, evidence, model) {
+    /**
+     * Atomic competitor-review transaction.
+     *
+     * Stages updated evidence, model, and review record, then commits by
+     * atomically writing the lifecycle.  If any stage fails, the lifecycle
+     * is not updated and the previous state remains fully active.
+     *
+     * Post-commit, staged artifacts are copied to canonical paths
+     * (best-effort — the transaction directory is canonical if copies fail).
+     */
+    async commitCompetitorReview({ slug, runId, evidence, model, reviewRecord }) {
       const dir = reportDir(slug, runId);
       if (!(dir === baseDir || dir.startsWith(baseDir + sep))) throw new Error("Report output escaped base directory");
-      await mkdir(dir, { recursive: true });
 
-      // Write evidence and model atomically (temp → rename)
-      await atomicWrite(join(dir, "evidence.json"), JSON.stringify(evidence, null, 2));
-      await atomicWrite(join(dir, "audit.json"), JSON.stringify(model, null, 2));
+      // Load current lifecycle (must exist)
+      const currentLc = await readLifecycle(slug, runId);
+      if (!currentLc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+      if (currentLc.status !== "draft" && currentLc.status !== "reviewed") {
+        throw Object.assign(new Error(`Cannot review audit in "${currentLc.status}" status`), { statusCode: 409 });
+      }
+
+      const txId = createTransactionId();
+      const txnDir = join(dir, ".txn", txId);
+      const evidenceBody = JSON.stringify(evidence, null, 2);
+      const modelBody = JSON.stringify(model, null, 2);
+      const reviewBody = JSON.stringify(reviewRecord, null, 2);
+
+      // ── Stage all artifacts ──────────────────────────────────────────
+      try {
+        await mkdir(txnDir, { recursive: true });
+        await writeFile(join(txnDir, "evidence.json"), evidenceBody, "utf8");
+        await writeFile(join(txnDir, "audit.json"), modelBody, "utf8");
+        await writeFile(join(txnDir, "review-record.json"), reviewBody, "utf8");
+
+        const meta = {
+          txId,
+          createdAt: new Date().toISOString(),
+          checksums: {
+            evidence: sha256(evidenceBody),
+            model: sha256(modelBody),
+            review: sha256(reviewBody),
+          },
+        };
+        await writeFile(join(txnDir, "tx-meta.json"), JSON.stringify(meta, null, 2), "utf8");
+
+        // Verify all staged files exist and match checksums
+        const verifyEvidence = await readFile(join(txnDir, "evidence.json"), "utf8");
+        const verifyModel = await readFile(join(txnDir, "audit.json"), "utf8");
+        const verifyReview = await readFile(join(txnDir, "review-record.json"), "utf8");
+        if (sha256(verifyEvidence) !== meta.checksums.evidence) throw new Error("Staged evidence checksum mismatch");
+        if (sha256(verifyModel) !== meta.checksums.model) throw new Error("Staged model checksum mismatch");
+        if (sha256(verifyReview) !== meta.checksums.review) throw new Error("Staged review checksum mismatch");
+      } catch (stageErr) {
+        // Clean up staging — but don't touch active state
+        try { await rm(txnDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+        throw stageErr;
+      }
+
+      // ── Commit: atomically write lifecycle (this IS the commit barrier) ──
+      const existingOverrides = Array.isArray(currentLc.overrides) ? currentLc.overrides : [];
+      const newOverrides = Array.isArray(reviewRecord.overrides) ? reviewRecord.overrides : [];
+
+      const updatedLc = {
+        ...currentLc,
+        status: "reviewed",
+        activeReviewTxId: txId,
+        review: {
+          reviewer: reviewRecord.reviewer,
+          reviewedAt: reviewRecord.reviewedAt,
+          checklist: reviewRecord.checklist,
+          findingsReviewed: reviewRecord.findingsReviewed ?? null,
+          notes: reviewRecord.notes ?? null,
+          limitationsAccepted: reviewRecord.limitationsAccepted ?? false,
+        },
+        overrides: [...existingOverrides, ...newOverrides],
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await atomicWrite(lifecyclePath(slug, runId), JSON.stringify(updatedLc, null, 2));
+      } catch (commitErr) {
+        // Lifecycle write failed — clean staging but leave active state intact
+        try { await rm(txnDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+        throw commitErr;
+      }
+
+      // ── Post-commit: copy staged to canonical paths (best-effort) ──
+      try {
+        await atomicWrite(join(dir, "evidence.json"), evidenceBody);
+        await atomicWrite(join(dir, "audit.json"), modelBody);
+      } catch { /* canonical copies are best-effort — txn dir is authoritative */ }
+
+      return updatedLc;
+    },
+
+    /**
+     * Read evidence.json and audit.json for the active committed state.
+     * Resolves through the lifecycle's activeReviewTxId, falling back to
+     * canonical paths.
+     */
+    async readCommittedArtifacts(slug, runId) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) return null;
+
+      const dir = reportDir(slug, runId);
+      const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
+
+      // Try transaction directory first, then canonical paths
+      const resolvePath = (filename) => {
+        if (txId) {
+          const txnPath = join(dir, ".txn", txId, filename);
+          return txnPath;
+        }
+        return join(dir, filename);
+      };
+
+      try {
+        const evidenceRaw = await readFile(resolvePath("evidence.json"), "utf8");
+        const modelRaw = await readFile(resolvePath("audit.json"), "utf8");
+        const reviewRaw = txId ? await readFile(join(dir, ".txn", txId, "review-record.json"), "utf8").catch(() => null) : null;
+
+        return {
+          evidence: JSON.parse(evidenceRaw),
+          model: JSON.parse(modelRaw),
+          reviewRecord: reviewRaw ? JSON.parse(reviewRaw) : null,
+          txId,
+        };
+      } catch {
+        return null;
+      }
     },
 
     // ── Lifecycle operations ──────────────────────────────────────────
@@ -473,19 +603,111 @@ export function createS3ReportStore(options = {}) {
       };
     },
 
-    /** Atomically persist updated evidence and model (S3). */
-    async writeEvidenceAndModel(slug, runId, _evidence, _model) {
-      // S3 path: re-upload evidence.json + audit.json
+    /**
+     * Atomic competitor-review transaction (S3).
+     *
+     * Stages to versioned prefix, verifies all writes, then commits
+     * by writing the lifecycle.  The lifecycle's activeReviewTxId is
+     * the sole commit pointer.  Orphaned staged objects are safe.
+     */
+    async commitCompetitorReview({ slug, runId, evidence, model, reviewRecord }) {
       const s3Client = resolvedS3Client;
       if (!s3Client || !reportsBucket) {
-        throw new Error("S3 client or bucket not configured for evidence/model persistence");
+        throw new Error("S3 client or bucket not configured");
       }
-      const evidenceKey = `${reportsPrefix}/${slug}/${runId}/evidence.json`;
-      const auditKey = `${reportsPrefix}/${slug}/${runId}/audit.json`;
-      await Promise.all([
-        s3Client.send(new (await import("@aws-sdk/client-s3")).PutObjectCommand({ Bucket: reportsBucket, Key: evidenceKey, Body: JSON.stringify(_evidence, null, 2), ContentType: "application/json; charset=utf-8" })),
-        s3Client.send(new (await import("@aws-sdk/client-s3")).PutObjectCommand({ Bucket: reportsBucket, Key: auditKey, Body: JSON.stringify(_model, null, 2), ContentType: "application/json; charset=utf-8" })),
+
+      const currentLc = await readLifecycle(slug, runId);
+      if (!currentLc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+      if (currentLc.status !== "draft" && currentLc.status !== "reviewed") {
+        throw Object.assign(new Error(`Cannot review audit in "${currentLc.status}" status`), { statusCode: 409 });
+      }
+
+      const { S3Client: _S3, PutObjectCommand } = await import("@aws-sdk/client-s3");
+      const txId = createTransactionId();
+      const txnPrefix = `${reportsPrefix}/${slug}/${runId}/.txn/${txId}`;
+      const evidenceBody = JSON.stringify(evidence, null, 2);
+      const modelBody = JSON.stringify(model, null, 2);
+      const reviewBody = JSON.stringify(reviewRecord, null, 2);
+
+      const putOpts = { Bucket: reportsBucket, ContentType: "application/json; charset=utf-8", CacheControl: "no-cache" };
+
+      // ── Stage all artifacts ──────────────────────────────────────────
+      const stageResults = await Promise.allSettled([
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/evidence.json`, Body: evidenceBody })),
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/audit.json`, Body: modelBody })),
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/review-record.json`, Body: reviewBody })),
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/tx-meta.json`, Body: JSON.stringify({
+          txId, createdAt: new Date().toISOString(),
+          checksums: { evidence: sha256(evidenceBody), model: sha256(modelBody), review: sha256(reviewBody) },
+        }) })),
       ]);
+
+      const failed = stageResults.filter((r) => r.status === "rejected");
+      if (failed.length > 0) {
+        throw new Error(`S3 staging failed: ${failed.map((f) => f.reason?.message).join("; ")}`);
+      }
+
+      // ── Commit: write lifecycle (the commit barrier) ──
+      const existingOverrides = Array.isArray(currentLc.overrides) ? currentLc.overrides : [];
+      const newOverrides = Array.isArray(reviewRecord.overrides) ? reviewRecord.overrides : [];
+      const updatedLc = {
+        ...currentLc, status: "reviewed", activeReviewTxId: txId,
+        review: {
+          reviewer: reviewRecord.reviewer, reviewedAt: reviewRecord.reviewedAt,
+          checklist: reviewRecord.checklist, findingsReviewed: reviewRecord.findingsReviewed ?? null,
+          notes: reviewRecord.notes ?? null, limitationsAccepted: reviewRecord.limitationsAccepted ?? false,
+        },
+        overrides: [...existingOverrides, ...newOverrides],
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await s3Client.send(new PutObjectCommand({
+          ...putOpts, Key: lifecycleKey(slug, runId),
+          Body: JSON.stringify(updatedLc, null, 2),
+        }));
+      } catch (commitErr) {
+        throw commitErr; // lifecycle unchanged → staged objects are orphaned but harmless
+      }
+
+      // Post-commit canonical copies (best-effort)
+      try {
+        await Promise.allSettled([
+          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${reportsPrefix}/${slug}/${runId}/evidence.json`, Body: evidenceBody })),
+          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${reportsPrefix}/${slug}/${runId}/audit.json`, Body: modelBody })),
+        ]);
+      } catch { /* canonical copies are best-effort */ }
+
+      return updatedLc;
+    },
+
+    /**
+     * Read committed artifacts for the active transaction.
+     */
+    async readCommittedArtifacts(slug, runId) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) return null;
+      const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const s3Client = resolvedS3Client;
+      if (!s3Client) return null;
+
+      const resolveKey = (filename) => {
+        if (txId) return `${reportsPrefix}/${slug}/${runId}/.txn/${txId}/${filename}`;
+        return `${reportsPrefix}/${slug}/${runId}/${filename}`;
+      };
+
+      try {
+        const [evResp, mdResp] = await Promise.all([
+          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: resolveKey("evidence.json") })),
+          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: resolveKey("audit.json") })),
+        ]);
+        const evidence = JSON.parse(await evResp.Body.transformToString("utf8"));
+        const model = JSON.parse(await mdResp.Body.transformToString("utf8"));
+        return { evidence, model, txId, reviewRecord: null };
+      } catch {
+        return null;
+      }
     },
 
     async writeReview(slug, runId, reviewRecord) {

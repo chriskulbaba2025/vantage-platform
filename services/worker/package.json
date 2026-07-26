@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "audit": "node src/runners/run-audit.js",
-    "test": "node --test src/evidence/*.test.js src/scoring/*.test.js src/report/*.test.js src/audit/*.test.js src/adapters/**/*.test.js src/auth/*.test.js",
+    "test": "node --test src/evidence/*.test.js src/scoring/*.test.js src/report/*.test.js src/audit/*.test.js src/storage/*.test.js src/adapters/**/*.test.js src/auth/*.test.js",
     "test:backlinks": "node --test src/evidence/backlinks-provider.test.js",
     "check:template": "node src/report/verify-template.js",
     "acceptance:task7": "node scripts/acceptance-task7.js",
