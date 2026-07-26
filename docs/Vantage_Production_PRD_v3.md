@@ -6,7 +6,7 @@
 **Owner:** Omnipressence  
 **Primary product:** Vantage Phase 1 Conversion Readiness Audit  
 **Expansion layer:** Vantage Continuous Evidence  
-**Deployment baseline:** Railway worker, self-hosted n8n, static HTML reporting, Puppeteer PDF rendering  
+**Deployment baseline:** Railway worker, self-hosted n8n, static multi-page HTML reporting, browser-native per-page PDF export  
 **Primary crawl provider:** DataForSEO On-Page API  
 **Performance provider:** Google PageSpeed Insights API  
 **Performance fallback:** Lighthouse CLI  
@@ -202,8 +202,8 @@ An audit must run without GA4 or GSC.
 | Search performance | GSC API, optional |
 | SERP and backlink enrichment | DataForSEO APIs, gated by audit configuration |
 | Storage | PostgreSQL-compatible database plus object storage |
-| HTML report | Static generated report |
-| PDF report | Puppeteer rendering of approved HTML |
+| HTML report | Static generated draft report plus approved multi-page client report |
+| PDF export | Browser-native print/save-to-PDF for the current approved report page; no server-generated PDF required at launch |
 | Monitoring | Provider success rate, latency, quota, and error logging |
 
 ## 6.2 Audit Flow
@@ -221,7 +221,8 @@ Create audit
 → render draft HTML
 → principal auditor review
 → approve report
-→ render final HTML and PDF
+→ render approved multi-page HTML
+→ enable browser-native per-page print/save-to-PDF
 → preserve baseline for future comparison
 ```
 
@@ -838,6 +839,55 @@ Reports must not say:
 - “competitors outperform” without defined comparative evidence;
 - “this will increase revenue” without outcome evidence.
 
+## 17.5 Approved Multi-Page Report Delivery
+
+The approved client-facing report must be rendered as separate HTML pages.
+
+Each required report section must have its own page:
+
+1. Executive scorecard
+2. Priority fixes
+3. Conversion path architecture
+4. Conversion readiness map
+5. Topical map and qualified content opportunities
+6. Competitor benchmark
+7. Trust and E-E-A-T readiness
+8. CMS and platform constraints
+9. Technical SEO hygiene
+10. Heading and semantic structure
+11. Schema and entity clarity
+12. Performance
+13. Internal-link opportunities
+14. Evidence appendix
+15. Deferred and unavailable analysis
+
+Requirements:
+
+- An approved report index page must link to every report page.
+- Every report page must use shared navigation.
+- Every report page must show:
+  - business name;
+  - audit date;
+  - page title;
+  - approval status;
+  - scoring version.
+- Every approved report page must include a visible `Print or save this page as PDF` button.
+- The print control must use the browser print dialog.
+- Printing must include only the current report page.
+- Print styling must hide:
+  - navigation;
+  - controls;
+  - print buttons;
+  - non-report interface elements.
+- No server-generated PDF artifact is required for launch.
+- The system must not claim that a PDF artifact exists unless one was actually generated.
+- Draft and reviewed reports must not be exposed through client-facing report routes.
+- Approval must not complete unless every required approved HTML page is written successfully.
+- Partial approved-report generation must not expose an incomplete report.
+- Approved report pages must be supported by both local and production object storage.
+- Approved report artifact metadata must list every generated HTML page.
+- Invalid or path-traversal report page requests must be rejected.
+
 ---
 
 # 18. Human Review Gate
@@ -937,7 +987,15 @@ Alert conditions:
 - [ ] No unavailable source is presented as a business failure.
 - [ ] Root cause is supported by top findings.
 - [ ] Every recommendation contains a verification method.
-- [ ] HTML and PDF match the canonical JSON evidence artifact.
+- [ ] Approved reports render as separate HTML pages.
+- [ ] Every required approved report page is generated.
+- [ ] Every approved page has its own print-to-PDF button.
+- [ ] Printing exports only the current page.
+- [ ] Approved HTML pages match the canonical JSON evidence artifact.
+- [ ] Draft and reviewed pages remain blocked from client delivery.
+- [ ] Partial page-generation failure prevents approval.
+- [ ] Local and production object storage preserve all approved pages.
+- [ ] No ungenerated PDF artifact is reported.
 - [ ] Principal Auditor approval is required.
 
 ---
@@ -951,7 +1009,7 @@ Vantage is launch-ready only when:
 - GA4 and GSC OAuth connections work, while remaining optional;
 - provider states and module gates are implemented;
 - false scoring from missing evidence is impossible under automated tests;
-- the canonical evidence artifact drives HTML and PDF;
+- the canonical evidence artifact drives draft HTML and every approved report page;
 - the human review gate is functional;
 - five to ten controlled pilot audits pass review;
 - each pilot records false positives, false negatives, source failures, audit cost, and completion time;
