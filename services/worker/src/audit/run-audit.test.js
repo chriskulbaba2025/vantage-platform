@@ -214,7 +214,8 @@ test("runAudit completes without API secrets and writes the full report artifact
       runId: "20260726-test-001",
     },
   );
-  assert.equal(result.status, "complete");
+  assert.equal(result.status, "draft");
+  assert.equal(result.lifecycleStatus, "draft");
   const html = await readFile(result.storage.indexPath, "utf8");
   assert.match(html, /Vantage Phase 1 Audit/);
   assert.equal(result.manifest.sources.website, SOURCE_STATUS.AVAILABLE);
@@ -484,7 +485,7 @@ test("production crawl path calls DataForSEO adapter with configured values", as
     },
   );
 
-  assert.equal(result.status, "complete");
+  assert.equal(result.status, "draft");
   // The crawler was called
   assert.ok(crawlCall, "crawler should have been called");
   assert.ok(crawlCall.targetUrl.includes("example.com"));
@@ -541,7 +542,7 @@ test("NOT_CONNECTED crawl suppresses all crawl-dependent modules", async () => {
     },
   );
 
-  assert.equal(result.status, "complete");
+  assert.equal(result.status, "draft");
 
   // Crawl source is NOT_CONNECTED
   assert.equal(
@@ -827,7 +828,7 @@ test("default production path with no credentials returns NOT_CONNECTED without 
     },
   );
 
-  assert.equal(result.status, "complete");
+  assert.equal(result.status, "draft");
   assert.equal(
     result.manifest.sources.website,
     SOURCE_STATUS.NOT_CONNECTED,
