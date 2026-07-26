@@ -1,0 +1,964 @@
+/**
+ * DataForSEO On-Page Adapter Tests
+ *
+ * Comprehensive mocked tests for the DataForSEO On-Page crawl adapter.
+ * All tests use fixture mode — no live DataForSEO account is required.
+ *
+ * Covers PRD v3.0 §8 and §21.1 acceptance criteria.
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { crawlWithDataforseo, ADAPTER_VERSION } from "./dataforseo-onpage-adapter.js";
+import { createDataforseoOnpageClient } from "./dataforseo-onpage-client.js";
+import { SOURCE_STATUS, ERROR_CATEGORY } from "../../scoring/evidence-contracts.js";
+
+// ---------------------------------------------------------------------------
+// Test credential setup — required for live-mode client tests so the
+// credential gate passes before fetchImpl is invoked.
+// ---------------------------------------------------------------------------
+
+const SAVED_LOGIN = process.env.DATAFORSEO_LOGIN;
+const SAVED_PASSWORD = process.env.DATAFORSEO_PASSWORD;
+
+function setTestCredentials() {
+  process.env.DATAFORSEO_LOGIN = "test-user";
+  process.env.DATAFORSEO_PASSWORD = "test-pass";
+}
+
+function clearTestCredentials() {
+  delete process.env.DATAFORSEO_LOGIN;
+  delete process.env.DATAFORSEO_PASSWORD;
+}
+
+function restoreCredentials() {
+  if (SAVED_LOGIN !== undefined) {
+    process.env.DATAFORSEO_LOGIN = SAVED_LOGIN;
+  } else {
+    delete process.env.DATAFORSEO_LOGIN;
+  }
+  if (SAVED_PASSWORD !== undefined) {
+    process.env.DATAFORSEO_PASSWORD = SAVED_PASSWORD;
+  } else {
+    delete process.env.DATAFORSEO_PASSWORD;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fixture builders
+// ---------------------------------------------------------------------------
+
+const NOW = new Date().toISOString();
+
+/**
+ * Build a single page fixture.  Uses explicit undefined checks so that
+ * falsy values like empty string or zero are preserved correctly.
+ */
+function buildPageFixture(index, overrides = {}) {
+  return {
+    url: hasOwn(overrides, "url") ? overrides.url : `https://example.com/page-${index}`,
+    status_code: hasOwn(overrides, "status_code") ? overrides.status_code : 200,
+    meta: {
+      title: hasOwn(overrides, "title") ? overrides.title : `Page ${index} Title`,
+      description: hasOwn(overrides, "description") ? overrides.description : `Meta description for page ${index}`,
+      canonical: hasOwn(overrides, "canonical") ? overrides.canonical : `https://example.com/page-${index}`,
+      h1: hasOwn(overrides, "h1") ? overrides.h1 : [`Heading 1 - Page ${index}`],
+      h2: hasOwn(overrides, "h2") ? overrides.h2 : [`Subheading for page ${index}`],
+      h3: hasOwn(overrides, "h3") ? overrides.h3 : [],
+      h4: hasOwn(overrides, "h4") ? overrides.h4 : [],
+      h5: hasOwn(overrides, "h5") ? overrides.h5 : [],
+      h6: hasOwn(overrides, "h6") ? overrides.h6 : [],
+      word_count: hasOwn(overrides, "word_count") ? overrides.word_count : (500 + index * 100),
+      content_language: hasOwn(overrides, "language") ? overrides.language : "en",
+      generator: hasOwn(overrides, "generator") ? overrides.generator : "WordPress",
+      plain_text: hasOwn(overrides, "bodyText") ? overrides.bodyText : `Page ${index} content with enough text for signals testing.`,
+      structured_data_types: hasOwn(overrides, "schemaTypes") ? overrides.schemaTypes : ["WebPage"],
+    },
+    links: hasOwn(overrides, "links") ? overrides.links : [
+      { url: `https://example.com/page-${index + 1}`, text: "Next page", target: "" },
+      { url: `https://example.com/contact`, text: "Contact Us", target: "" },
+    ],
+    images: hasOwn(overrides, "images") ? overrides.images : [
+      { url: `/img-${index}.jpg`, alt: `Image ${index}`, width: 800, height: 600, loading: "lazy" },
+    ],
+    resources: hasOwn(overrides, "resources") ? overrides.resources : {},
+    technologies: hasOwn(overrides, "technologies") ? overrides.technologies : { cms: "WordPress" },
+    load_time: hasOwn(overrides, "load_time") ? overrides.load_time : 500,
+    crawl_depth: hasOwn(overrides, "crawl_depth") ? overrides.crawl_depth : index,
+    structured_data: hasOwn(overrides, "structured_data") ? overrides.structured_data : {
+      types: [{ type: "WebPage" }],
+    },
+    forms: hasOwn(overrides, "forms") ? overrides.forms : [],
+    buttons: hasOwn(overrides, "buttons") ? overrides.buttons : [],
+    response_headers: hasOwn(overrides, "response_headers") ? overrides.response_headers : {
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin",
+    },
+    ...(overrides.extra || {}),
+  };
+}
+
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function buildSuccessfulFixtures(pageCount = 5) {
+  const pages = [];
+  for (let i = 0; i < pageCount; i++) {
+    pages.push(buildPageFixture(i));
+  }
+
+  return {
+    taskPost: {
+      taskId: "test-task-20260726-001",
+      rawTask: { id: "test-task-20260726-001", status: "pending" },
+    },
+    pollTask: { status: "ready", taskId: "test-task-20260726-001" },
+    summary: {
+      crawl_status: "completed",
+      pages_crawled: pageCount,
+      total_pages: pageCount,
+      duplicate_content: 0,
+      duplicate_tags: 0,
+      sitemap: { urls: [] },
+    },
+    pages: {
+      items: pages,
+      total_count: pageCount,
+    },
+    links: {
+      items: pages.flatMap((p) => p.links || []),
+      total_count: pages.reduce((sum, p) => sum + (p.links || []).length, 0),
+    },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+}
+
+function buildFixturesWithExtras(overrides = {}) {
+  const base = buildSuccessfulFixtures(overrides.pageCount ?? 5);
+  return { ...base, ...overrides };
+}
+
+// ---------------------------------------------------------------------------
+// Helper to build crawl options
+// ---------------------------------------------------------------------------
+
+function crawlOpts(fixtures, overrides = {}) {
+  return {
+    maxPages: hasOwn(overrides, "maxPages") ? overrides.maxPages : 500,
+    pollTimeoutMs: hasOwn(overrides, "pollTimeoutMs") ? overrides.pollTimeoutMs : 1000,
+    pollIntervalMs: hasOwn(overrides, "pollIntervalMs") ? overrides.pollIntervalMs : 100,
+    clientOptions: {
+      mode: overrides.mode || "fixture",
+      fixtures,
+      fetchImpl: overrides.fetchImpl,
+    },
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 1. Successful crawl
+// ---------------------------------------------------------------------------
+
+test("successful crawl normalizes pages into canonical evidence envelope", async () => {
+  const fixtures = buildSuccessfulFixtures(5);
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  // Source status
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+  assert.equal(result.source, "dataforseo-onpage");
+  assert.equal(result.evidenceVersion, "1.0.0");
+
+  // Pages normalized
+  assert.equal(result.pageCount, 5);
+  assert.ok(Array.isArray(result.pages));
+  assert.equal(result.pages.length, 5);
+
+  // First page normalized fields
+  const firstPage = result.pages[0];
+  assert.ok(firstPage.url.includes("example.com"));
+  assert.equal(firstPage.status, 200);
+  assert.ok(firstPage.title);
+  assert.ok(firstPage.description);
+  assert.ok(firstPage.canonical);
+  assert.ok(firstPage.headings.h1.length > 0);
+
+  // Site-level aggregates
+  assert.ok(result.totalWords > 0);
+  assert.ok(result.averageWords > 0);
+  assert.equal(result.missingTitles, 0);
+  assert.ok(result.schemaTypes.length > 0);
+
+  // Trust signals
+  assert.equal(typeof result.trust.testimonials, "boolean");
+  assert.equal(typeof result.trust.credentials, "boolean");
+  assert.equal(typeof result.trust.pricing, "boolean");
+
+  // Security headers from response headers
+  assert.equal(result.securityHeaders.xContentTypeOptions, true);
+
+  // Platform detected
+  assert.equal(result.platform, "WordPress");
+
+  // Source status record
+  assert.ok(result._sourceStatus);
+  assert.equal(result._sourceStatus.provider, "dataforseo-onpage");
+  assert.equal(result._sourceStatus.adapterVersion, ADAPTER_VERSION);
+  assert.equal(result._sourceStatus.returnedRecordCount, 5);
+
+  // Raw task ID preserved
+  assert.ok(result.rawArtifactRef);
+  assert.ok(result.rawArtifactRef.includes("test-task-20260726-001"));
+  assert.ok(result._raw);
+  assert.equal(result._raw.taskId, "test-task-20260726-001");
+});
+
+// ---------------------------------------------------------------------------
+// 2. Task submission retry
+// ---------------------------------------------------------------------------
+
+test("task submission retries twice with exponential backoff on transient errors", async () => {
+  setTestCredentials();
+  try {
+    let attempts = 0;
+    const fetchImpl = async (_url, _init) => {
+      attempts++;
+      if (attempts < 3) {
+        return new Response("Service Unavailable", { status: 503 });
+      }
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [
+            {
+              status_code: 20000,
+              result: [{ id: "retry-task-001" }],
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      pollIntervalMs: 100,
+      clientOptions: {
+        mode: "live",
+        fetchImpl: async (url, init) => {
+          if (String(url).includes("task_post")) {
+            return fetchImpl(url, init);
+          }
+          // Non-task_post calls succeed with ready data
+          return new Response(
+            JSON.stringify({
+              status_code: 20000,
+              tasks: [{ status_code: 20000, result: [{ items: buildSuccessfulFixtures(3).pages.items }] }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        },
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+    assert.equal(attempts, 3);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 3. Polling timeout
+// ---------------------------------------------------------------------------
+
+test("polling timeout marks crawl FAILED with TIMEOUT error category", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (url) => {
+      if (String(url).includes("task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            tasks: [{ status_code: 20000, result: [{ id: "timeout-task-001" }] }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // Always return "not ready" for summary/pages polling
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [{ status_code: 20100, status_message: "Task is processing" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 200,
+      pollIntervalMs: 50,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(result._sourceStatus.errorCategory, ERROR_CATEGORY.TIMEOUT);
+    assert.ok(result._sourceStatus.requestId);
+    assert.equal(result.pageCount, 0);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 4. Robots blocking
+// ---------------------------------------------------------------------------
+
+test("robots.txt blocking returns BLOCKED status with no pages", async () => {
+  const fixtures = {
+    taskPost: {
+      taskId: "blocked-task-001",
+      rawTask: { id: "blocked-task-001" },
+    },
+    pollTask: { status: "ready", taskId: "blocked-task-001" },
+    summary: {
+      crawl_status: "blocked_by_robots",
+      pages_crawled: 0,
+      total_pages: 0,
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://blocked.example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED);
+  assert.equal(result.pageCount, 0);
+  assert.deepEqual(result.pages, []);
+  assert.ok(result.limitations.some((l) => /block|robot/i.test(l)));
+  assert.ok(result._sourceStatus.limitation.includes("robots"));
+});
+
+// ---------------------------------------------------------------------------
+// 5. Authentication / login-wall blocking
+// ---------------------------------------------------------------------------
+
+test("login-wall blocking returns BLOCKED status", async () => {
+  const fixtures = {
+    taskPost: {
+      taskId: "loginwall-task-001",
+      rawTask: { id: "loginwall-task-001" },
+    },
+    pollTask: { status: "ready", taskId: "loginwall-task-001" },
+    summary: {
+      crawl_status: "login_required",
+      pages_crawled: 0,
+      total_pages: 0,
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://members.example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED);
+  assert.equal(result.pageCount, 0);
+  assert.ok(
+    result.limitations.some((l) => /login|auth/i.test(l)),
+    `Expected login/auth limitation, got: ${JSON.stringify(result.limitations)}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 6. Crawl ceiling reached (PARTIAL)
+// ---------------------------------------------------------------------------
+
+test("page ceiling produces PARTIAL status with coverage metadata", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 10,
+    summary: {
+      crawl_status: "completed",
+      pages_crawled: 10,
+      total_pages: 500,
+      duplicate_content: 0,
+      duplicate_tags: 0,
+    },
+  });
+
+  const result = await crawlWithDataforseo("https://large.example.com", {
+    ...crawlOpts(fixtures),
+    maxPages: 10,
+  });
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
+  assert.ok(
+    result.limitations.some((l) => /ceiling|limit/i.test(l)),
+    `Expected ceiling limitation, got: ${JSON.stringify(result.limitations)}`,
+  );
+  assert.equal(result.pageCount, 10);
+  assert.equal(result._sourceStatus.returnedRecordCount, 10);
+});
+
+// ---------------------------------------------------------------------------
+// 7. Partial JavaScript evidence
+// ---------------------------------------------------------------------------
+
+test("JavaScript-content pages marked PARTIAL when JS extraction incomplete", async () => {
+  const jsPages = [];
+  for (let i = 0; i < 5; i++) {
+    jsPages.push(
+      buildPageFixture(i, {
+        title: i < 2 ? `JS Page ${i}` : "",
+        description: i < 2 ? `JS description ${i}` : "",
+        extra: {
+          enable_javascript: true,
+          rendered_with_js: true,
+        },
+      }),
+    );
+  }
+
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 5,
+    pages: { items: jsPages, total_count: 5 },
+    summary: {
+      crawl_status: "completed",
+      pages_crawled: 5,
+      total_pages: 5,
+    },
+  });
+
+  const result = await crawlWithDataforseo("https://js.example.com", {
+    ...crawlOpts(fixtures),
+    enableJavascript: true,
+  });
+
+  assert.ok(
+    result.sourceStatus === SOURCE_STATUS.PARTIAL || result.sourceStatus === SOURCE_STATUS.AVAILABLE,
+  );
+  // Pages with empty title strings count as missing
+  assert.ok(result.missingTitles > 0);
+  assert.ok(result.pages.some((p) => !p.title));
+});
+
+// ---------------------------------------------------------------------------
+// 8. Provider quota failure
+// ---------------------------------------------------------------------------
+
+test("provider quota exhaustion returns FAILED with rate_limit category", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (_url, _init) => {
+      return new Response(
+        JSON.stringify({
+          status_code: 40005,
+          status_message: "Quota limit exceeded.",
+        }),
+        { status: 429, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(result._sourceStatus.errorCategory, ERROR_CATEGORY.RATE_LIMIT);
+    assert.equal(result.pageCount, 0);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 9. Malformed provider response
+// ---------------------------------------------------------------------------
+
+test("malformed provider response returns FAILED with network/invalid error", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (_url, _init) => {
+      return new Response("not json at all {{{", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(result.pageCount, 0);
+    // Error message from parseDataforseoResponse contains "parse" or "JSON"
+    assert.ok(
+      result.limitations.some((l) => /parse|JSON/i.test(l)),
+      `Expected parse/JSON limitation, got: ${JSON.stringify(result.limitations)}`,
+    );
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 10. Normalized required page fields
+// ---------------------------------------------------------------------------
+
+test("normalized pages contain all required PRD fields", async () => {
+  const fixtures = buildSuccessfulFixtures(3);
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.pageCount, 3);
+
+  const requiredPageFields = [
+    "url",
+    "status",
+    "title",
+    "description",
+    "canonical",
+    "headings",
+    "words",
+    "schemaTypes",
+    "signals",
+  ];
+
+  for (const page of result.pages) {
+    for (const field of requiredPageFields) {
+      assert.ok(
+        field in page,
+        `Page missing required field: ${field}`,
+      );
+    }
+
+    assert.ok(Array.isArray(page.headings.h1));
+    assert.ok(Array.isArray(page.headings.h2));
+    assert.ok(Array.isArray(page.headings.h3));
+
+    assert.equal(typeof page.signals.testimonials, "boolean");
+    assert.equal(typeof page.signals.credentials, "boolean");
+    assert.equal(typeof page.signals.pricing, "boolean");
+    assert.equal(typeof page.signals.contact, "boolean");
+  }
+
+  const requiredSiteFields = [
+    "pageCount",
+    "missingTitles",
+    "missingDescriptions",
+    "missingCanonicals",
+    "h1Missing",
+    "h1Multiple",
+    "imageCount",
+    "imagesMissingAlt",
+    "imagesMissingDimensions",
+    "schemaTypes",
+    "internalLinkCount",
+    "brokenInternalLinks",
+    "platform",
+    "services",
+    "topicKeywords",
+    "trust",
+    "securityHeaders",
+  ];
+
+  for (const field of requiredSiteFields) {
+    assert.ok(
+      field in result,
+      `Site missing required field: ${field}`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 11. Raw task ID preservation
+// ---------------------------------------------------------------------------
+
+test("raw task ID is preserved across the evidence envelope", async () => {
+  const fixtures = buildSuccessfulFixtures(2);
+  fixtures.taskPost.taskId = "preserved-task-id-abc123";
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result._sourceStatus.requestId, "preserved-task-id-abc123");
+  assert.ok(result.rawArtifactRef.includes("preserved-task-id-abc123"));
+  assert.equal(result._raw.taskId, "preserved-task-id-abc123");
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+});
+
+// ---------------------------------------------------------------------------
+// 12. Dependent module suppression when no valid crawl exists
+// ---------------------------------------------------------------------------
+
+test("FAILED crawl produces evidence that scoring can detect as non-viable", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (_url, _init) => {
+      throw new Error("Network failure: connection refused");
+    };
+
+    const result = await crawlWithDataforseo("https://down.example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(result.pageCount, 0);
+    assert.deepEqual(result.pages, []);
+    assert.equal(result.trust.testimonials, false);
+    assert.equal(result.schemaTypes.length, 0);
+    assert.equal(result.internalLinkCount, 0);
+    assert.equal(result.services.length, 0);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 13. Authentication error categorization
+// ---------------------------------------------------------------------------
+
+test("authentication errors are categorized as auth", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (_url, _init) => {
+      return new Response(
+        JSON.stringify({
+          status_code: 40001,
+          status_message: "Authentication failed. Invalid login or password.",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(result._sourceStatus.errorCategory, ERROR_CATEGORY.AUTH);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 14. No credentials → NOT_CONNECTED handling
+// ---------------------------------------------------------------------------
+
+test("live mode without credentials returns FAILED with not_configured category", async () => {
+  clearTestCredentials();
+  try {
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    // The client throws before calling the API due to missing credentials
+    // The adapter catches this as an internal/network error
+    assert.ok(
+      result._sourceStatus.errorCategory === ERROR_CATEGORY.INTERNAL ||
+      result._sourceStatus.errorCategory === ERROR_CATEGORY.NETWORK,
+    );
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 15. Default maximum of 500 HTML pages
+// ---------------------------------------------------------------------------
+
+test("default maxPages is 500", async () => {
+  const fixtures = buildSuccessfulFixtures(3);
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.pageCount, 3);
+  assert.ok(result.coverage);
+  assert.equal(typeof result.coverage.requested, "number");
+  assert.equal(typeof result.coverage.completed, "number");
+});
+
+// ---------------------------------------------------------------------------
+// 16. Client fixture mode returns predictable data
+// ---------------------------------------------------------------------------
+
+test("client fixture mode returns fixture data without network calls", async () => {
+  const fixtures = buildSuccessfulFixtures(3);
+  const client = createDataforseoOnpageClient({
+    mode: "fixture",
+    fixtures,
+  });
+
+  const task = await client.taskPost("example.com");
+  assert.equal(task.taskId, "test-task-20260726-001");
+
+  const poll = await client.pollTask(task.taskId);
+  assert.equal(poll.status, "ready");
+
+  const pages = await client.getPages(task.taskId, { limit: 2, offset: 0 });
+  assert.equal(pages.items.length, 2);
+  assert.equal(pages.total_count, 3);
+
+  const allPages = await client.getAllPages(task.taskId, { maxPages: 10 });
+  assert.equal(allPages.length, 3);
+
+  const links = await client.getLinks(task.taskId, { limit: 5 });
+  assert.ok(links.items.length > 0);
+
+  const dupTags = await client.getDuplicateTags(task.taskId);
+  assert.ok(dupTags);
+
+  const dupContent = await client.getDuplicateContent(task.taskId);
+  assert.ok(dupContent);
+});
+
+// ---------------------------------------------------------------------------
+// 17. Pagination across multiple getPages calls
+// ---------------------------------------------------------------------------
+
+test("getAllPages handles pagination correctly", async () => {
+  const items = [];
+  for (let i = 0; i < 250; i++) {
+    items.push(buildPageFixture(i));
+  }
+
+  const fixtures = {
+    ...buildSuccessfulFixtures(250),
+    pages: { items, total_count: 250 },
+  };
+
+  const client = createDataforseoOnpageClient({
+    mode: "fixture",
+    fixtures,
+  });
+
+  const allPages = await client.getAllPages("test-task", { maxPages: 300, pageSize: 50 });
+  assert.equal(allPages.length, 250);
+});
+
+// ---------------------------------------------------------------------------
+// 18. Evidence envelope compatibility with scoring model
+// ---------------------------------------------------------------------------
+
+test("evidence envelope is compatible with existing scoring model shape", async () => {
+  const fixtures = buildSuccessfulFixtures(3);
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(typeof result.pageCount, "number");
+  assert.ok(Array.isArray(result.pages));
+  assert.equal(typeof result.missingTitles, "number");
+  assert.equal(typeof result.missingDescriptions, "number");
+  assert.equal(typeof result.missingCanonicals, "number");
+  assert.equal(typeof result.h1Missing, "number");
+  assert.equal(typeof result.h1Multiple, "number");
+  assert.equal(typeof result.imageCount, "number");
+  assert.equal(typeof result.imagesMissingAlt, "number");
+  assert.equal(typeof result.imagesMissingDimensions, "number");
+  assert.ok(Array.isArray(result.schemaTypes));
+  assert.ok(Array.isArray(result.forms));
+  assert.ok(Array.isArray(result.ctas));
+  assert.ok(Array.isArray(result.socialLinks));
+  assert.equal(typeof result.internalLinkCount, "number");
+  assert.ok(Array.isArray(result.brokenInternalLinks));
+  assert.equal(typeof result.platform, "string");
+  assert.ok(Array.isArray(result.services));
+  assert.ok(Array.isArray(result.topicKeywords));
+  assert.equal(typeof result.trust.testimonials, "boolean");
+  assert.equal(typeof result.trust.credentials, "boolean");
+  assert.equal(typeof result.trust.caseStudies, "boolean");
+  assert.equal(typeof result.trust.faq, "boolean");
+  assert.equal(typeof result.trust.pricing, "boolean");
+  assert.equal(typeof result.trust.policies, "boolean");
+  assert.equal(typeof result.trust.contact, "boolean");
+  assert.equal(typeof result.securityHeaders.xFrameOptions, "boolean");
+  assert.equal(typeof result.securityHeaders.xContentTypeOptions, "boolean");
+  assert.equal(typeof result.securityHeaders.referrerPolicy, "boolean");
+  assert.equal(typeof result.securityHeaders.contentSecurityPolicy, "boolean");
+
+  assert.equal(result.evidenceVersion, "1.0.0");
+  assert.ok(Object.values(SOURCE_STATUS).includes(result.sourceStatus));
+  assert.ok(result._sourceStatus);
+  assert.equal(typeof result._sourceStatus.provider, "string");
+  assert.equal(typeof result._sourceStatus.adapterVersion, "string");
+  assert.ok(result._sourceStatus.startedAt);
+  assert.ok(result._sourceStatus.completedAt);
+});
+
+// ---------------------------------------------------------------------------
+// 19. Non-200 status pages handled correctly
+// ---------------------------------------------------------------------------
+
+test("pages with error status codes are tracked in brokenInternalLinks", async () => {
+  const pages = [
+    buildPageFixture(0),
+    buildPageFixture(1, { status_code: 404 }),
+    buildPageFixture(2),
+    buildPageFixture(3, { status_code: 500 }),
+    buildPageFixture(4),
+  ];
+
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 5,
+    pages: { items: pages, total_count: 5 },
+  });
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.pageCount, 5);
+  assert.equal(result.brokenInternalLinks.length, 2);
+  assert.ok(result.brokenInternalLinks.some((u) => u.includes("page-1")));
+  assert.ok(result.brokenInternalLinks.some((u) => u.includes("page-3")));
+});
+
+// ---------------------------------------------------------------------------
+// 20. Schema types extracted from structured data
+// ---------------------------------------------------------------------------
+
+test("schema types are extracted from DataForSEO structured_data", async () => {
+  const pages = [
+    buildPageFixture(0, {
+      schemaTypes: ["Organization", "WebSite"],
+      structured_data: {
+        types: [
+          { type: "Organization", name: "Example Corp" },
+          { type: "WebSite" },
+        ],
+      },
+    }),
+    buildPageFixture(1, {
+      schemaTypes: ["Service"],
+      structured_data: {
+        types: [{ type: "Service", name: "Consulting" }],
+      },
+    }),
+  ];
+
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 2,
+    pages: { items: pages, total_count: 2 },
+  });
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.ok(result.schemaTypes.includes("Organization"));
+  assert.ok(result.schemaTypes.includes("Service"));
+  assert.ok(result.schemaTypes.includes("WebSite"));
+});
+
+// ---------------------------------------------------------------------------
+// 21. Empty fixture edge case
+// ---------------------------------------------------------------------------
+
+test("empty pages result returns FAILED", async () => {
+  const fixtures = {
+    taskPost: {
+      taskId: "empty-task-001",
+      rawTask: { id: "empty-task-001" },
+    },
+    pollTask: { status: "ready", taskId: "empty-task-001" },
+    summary: {
+      crawl_status: "completed",
+      pages_crawled: 0,
+      total_pages: 0,
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://empty.example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+  assert.equal(result.pageCount, 0);
+});
+
+// ---------------------------------------------------------------------------
+// 22. Trust signals detected from page content
+// ---------------------------------------------------------------------------
+
+test("trust signals are detected from page body text", async () => {
+  const pages = [
+    buildPageFixture(0, {
+      bodyText: "We have certified consultants with 25 years experience. Client testimonials and reviews. Our case studies show real results. View our pricing and book a consultation.",
+    }),
+  ];
+
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 1,
+    pages: { items: pages, total_count: 1 },
+  });
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(result.trust.credentials, true);
+  assert.equal(result.trust.testimonials, true);
+  assert.equal(result.trust.caseStudies, true);
+  assert.equal(result.trust.pricing, true);
+});

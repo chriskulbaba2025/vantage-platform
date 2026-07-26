@@ -23,5 +23,13 @@ export function loadConfig(env = process.env) {
     awsRegion: env.AWS_REGION || "ca-central-1",
     reportsBucket: env.VANTAGE_REPORTS_BUCKET || "",
     reportsPrefix: env.VANTAGE_REPORTS_PREFIX || "vantage/reports",
+    // DataForSEO On-Page adapter settings (PRD v3.0 §8.4)
+    onpageMaxPages: intEnv("VANTAGE_ONPAGE_MAX_PAGES", 500, 1, 10000),
+    onpageJsRendering: env.VANTAGE_ONPAGE_JS_RENDERING === "true",
+    onpageBrowserRendering: env.VANTAGE_ONPAGE_BROWSER_RENDERING === "true",
+    onpagePollTimeoutMs: intEnv("VANTAGE_ONPAGE_POLL_TIMEOUT_MS", 600000, 10000, 3600000),
+    onpagePollIntervalMs: intEnv("VANTAGE_ONPAGE_POLL_INTERVAL_MS", 10000, 2000, 120000),
+    onpageIncludePatterns: (env.VANTAGE_ONPAGE_INCLUDE_PATTERNS || "").split(",").map((s) => s.trim()).filter(Boolean),
+    onpageExcludePatterns: (env.VANTAGE_ONPAGE_EXCLUDE_PATTERNS || "").split(",").map((s) => s.trim()).filter(Boolean),
   };
 }
