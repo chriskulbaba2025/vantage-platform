@@ -10,6 +10,7 @@ Completed:
 - Task 2: V3 canonical source-status and evidence contracts merged in PR #4
 - Task 3: DataForSEO On-Page adapter merged in PR #5
 - Task 4: Production crawling switched from legacy crawler to DataForSEO as part of PR #5
+- Task 5: V3 scoring model and module gates merged in PR #6
 
 Railway variables configured:
 
