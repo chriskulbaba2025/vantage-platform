@@ -4,10 +4,25 @@ import { runAudit, submitReview, approveAudit, getAuditStatus } from "./audit/ru
 import { loadConfig } from "./config.js";
 import { createLocalReportStore, createReportStore } from "./storage/report-store.js";
 import { LIFECYCLE_STATUS } from "./audit/review-gate.js";
+import { createTokenStore } from "./auth/token-store.js";
+import { createOAuthService } from "./auth/oauth-service.js";
 
 const config = loadConfig();
 const localStore = createLocalReportStore({ baseDir: config.artifactDir, publicBaseUrl: config.publicReportBaseUrl });
 const store = createReportStore(config);
+
+// ── OAuth infrastructure ────────────────────────────────────────────────
+const tokenStore = createTokenStore({
+  encryptionKey: config.vantageEncryptionKey,
+  storageDir: config.artifactDir ? `${config.artifactDir}/tokens` : null,
+});
+
+const oauthService = createOAuthService({
+  clientId: config.googleClientId,
+  clientSecret: config.googleClientSecret,
+  redirectUri: config.googleRedirectUri,
+  tokenStore,
+});
 const contentType = (path) => ({ ".html": "text/html; charset=utf-8", ".json": "application/json; charset=utf-8" }[extname(path)] || "application/octet-stream");
 
 function send(res, status, body, type = "application/json; charset=utf-8") {
@@ -82,7 +97,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/audits") {
       if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
       const input = await readJson(req);
-      const result = await runAudit(input, { config });
+      const result = await runAudit(input, { config, oauthService });
       return send(res, 201, {
         status: result.status,
         lifecycleStatus: result.lifecycleStatus,
@@ -295,6 +310,82 @@ const server = createServer(async (req, res) => {
       }
 
       return send(res, 404, { error: "S3 report serving not available via this endpoint" });
+    }
+
+    // ── OAuth: Connect (get auth URL) ────────────────────────────────────
+    if (req.method === "POST" && url.pathname.startsWith("/connect/")) {
+      if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+      const provider = url.pathname.replace("/connect/", "");
+      if (!["ga4", "gsc"].includes(provider)) {
+        return send(res, 400, { error: "Unknown provider. Use /connect/ga4 or /connect/gsc" });
+      }
+
+      try {
+        const authUrl = oauthService.getAuthUrl(
+          provider === "ga4" ? "google-analytics-4" : "google-search-console",
+        );
+        return send(res, 200, { provider, authUrl });
+      } catch (err) {
+        return send(res, 500, { error: err.message });
+      }
+    }
+
+    // ── OAuth: Callback ──────────────────────────────────────────────────
+    if (req.method === "GET" && url.pathname === "/oauth/callback") {
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state"); // provider name
+
+      if (!code) {
+        return send(res, 400, { error: "Missing authorization code" });
+      }
+
+      const provider = state === "ga4" ? "google-analytics-4"
+        : state === "gsc" ? "google-search-console"
+        : null;
+
+      if (!provider) {
+        return send(res, 400, { error: "Invalid or missing state parameter" });
+      }
+
+      try {
+        const result = await oauthService.exchangeCode(code, provider);
+        return send(res, 200, {
+          status: "connected",
+          provider: result.provider,
+          scope: result.scope,
+          expiresAt: result.expiresAt,
+        });
+      } catch (err) {
+        return send(res, 500, { error: err.message });
+      }
+    }
+
+    // ── OAuth: Connection status ─────────────────────────────────────────
+    if (req.method === "GET" && url.pathname.startsWith("/connection/")) {
+      if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+      const providerRaw = url.pathname.replace("/connection/", "");
+      const provider = providerRaw === "ga4" ? "google-analytics-4"
+        : providerRaw === "gsc" ? "google-search-console"
+        : null;
+      if (!provider) {
+        return send(res, 400, { error: "Unknown provider. Use /connection/ga4 or /connection/gsc" });
+      }
+      const status = await oauthService.getStatus(provider);
+      return send(res, 200, status);
+    }
+
+    // ── OAuth: Disconnect ────────────────────────────────────────────────
+    if (req.method === "POST" && url.pathname.startsWith("/disconnect/")) {
+      if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+      const providerRaw = url.pathname.replace("/disconnect/", "");
+      const provider = providerRaw === "ga4" ? "google-analytics-4"
+        : providerRaw === "gsc" ? "google-search-console"
+        : null;
+      if (!provider) {
+        return send(res, 400, { error: "Unknown provider. Use /disconnect/ga4 or /disconnect/gsc" });
+      }
+      const result = await oauthService.disconnect(provider);
+      return send(res, 200, result);
     }
 
     // ── Fallback ───────────────────────────────────────────────────────

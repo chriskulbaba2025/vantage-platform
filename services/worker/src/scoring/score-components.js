@@ -397,6 +397,7 @@ export function calculateEvidenceConfidence(evidence, findings) {
     { key: "site", required: true },
     { key: "performance", required: true },
     { key: "ga4", required: false },
+    { key: "gsc", required: false },
     { key: "backlinks", required: false },
   ];
   let sourceScore = 0;
@@ -633,7 +634,7 @@ const RULE_VERSION = SCORING_VERSION;
  *  - scoreBearing
  *  - rawPriority, finalPriority
  */
-export function buildFindings(site, performance) {
+export function buildFindings(site, performance, gsc) {
   const findings = [];
 
   const add = (opts) => {
@@ -995,6 +996,112 @@ export function buildFindings(site, performance) {
       implementationPracticality: 90,
       verificationMethod: "Re-crawl and verify image dimensions on all images.",
     });
+  }
+
+  // ── GSC-dependent findings ──────────────────────────────────────────
+  if (gsc && gsc.sourceStatus === SOURCE_STATUS.AVAILABLE) {
+    const gscThreshold = gsc.sufficiency?.threshold || 100;
+    const sufficient = gsc.sufficiency?.sufficient !== false;
+
+    // High-opportunity queries with low CTR may indicate title/snippet issues
+    const lowCtrQueries = (gsc.rows || [])
+      .filter((r) => r.impressions >= 50 && r.ctr < 0.03)
+      .slice(0, 5);
+    if (lowCtrQueries.length > 0) {
+      add({
+        ruleId: "VAN-GSC-001",
+        dimension: "content_funnel",
+        module: "funnel_coverage",
+        title: "Search queries have low click-through rate",
+        severity: "Medium",
+        key: "gsc_ctr",
+        confidence: sufficient ? CONFIDENCE_LEVELS.STRONGLY_SUPPORTED : CONFIDENCE_LEVELS.DIRECTIONAL,
+        affectedUrls: lowCtrQueries.map((r) => r.page).filter(Boolean).slice(0, 10),
+        evidence: lowCtrQueries.map((r) => ({
+          provider: "google-search-console",
+          sourceStatus: SOURCE_STATUS.AVAILABLE,
+          field: `query:${r.query}`,
+          observedValue: `CTR ${(r.ctr * 100).toFixed(1)}%, ${r.impressions} impressions`,
+          artifactRef: null,
+        })),
+        evidenceText: `${lowCtrQueries.length} queries below 3% CTR with at least 50 impressions each`,
+        businessImpact: "Valuable search visibility is not converting into visits — title or snippet may not match intent",
+        recommendation: "Review low-CTR queries and improve titles and meta descriptions to match search intent",
+        effort: "M",
+        conversionImpact: 55,
+        gapSeverity: 50,
+        businessRelevance: 60,
+        competitiveSignal: 45,
+        implementationPracticality: 65,
+        verificationMethod: "Compare CTR changes in GSC 28 days after title/meta updates are applied.",
+      });
+    }
+
+    // High-impression queries with high average position (>10) may indicate ranking gaps
+    const positionGapQueries = (gsc.rows || [])
+      .filter((r) => r.impressions >= 100 && r.position > 10)
+      .slice(0, 5);
+    if (positionGapQueries.length > 0) {
+      add({
+        ruleId: "VAN-GSC-002",
+        dimension: "content_funnel",
+        module: "content_depth",
+        title: "Search queries rank below page one",
+        severity: "Medium",
+        key: "gsc_position",
+        confidence: sufficient ? CONFIDENCE_LEVELS.SUPPORTED : CONFIDENCE_LEVELS.DIRECTIONAL,
+        affectedUrls: positionGapQueries.map((r) => r.page).filter(Boolean).slice(0, 10),
+        evidence: positionGapQueries.map((r) => ({
+          provider: "google-search-console",
+          sourceStatus: SOURCE_STATUS.AVAILABLE,
+          field: `query:${r.query}`,
+          observedValue: `Position ${r.position.toFixed(1)}, ${r.impressions} impressions`,
+          artifactRef: null,
+        })),
+        evidenceText: `${positionGapQueries.length} queries with position > 10 and >= ${gscThreshold} impressions each`,
+        businessImpact: "Content may not be comprehensive enough to rank on page one for important terms",
+        recommendation: "Expand content depth for these query topics and improve internal linking to supporting pages",
+        effort: "H",
+        conversionImpact: 50,
+        gapSeverity: 45,
+        businessRelevance: 55,
+        competitiveSignal: 50,
+        implementationPracticality: 30,
+        verificationMethod: "Monitor position changes in GSC 28 days after content improvements are published.",
+      });
+    }
+
+    // Topic demand insight (informational, not scored)
+    if ((gsc.topQueries || []).length > 0 && sufficient) {
+      add({
+        ruleId: "VAN-GSC-003",
+        dimension: "content_funnel",
+        module: "content_depth",
+        title: "Search demand exceeds visible content depth",
+        severity: "Low",
+        key: "gsc_demand",
+        confidence: CONFIDENCE_LEVELS.DIRECTIONAL,
+        evidence: [
+          {
+            provider: "google-search-console",
+            sourceStatus: SOURCE_STATUS.AVAILABLE,
+            field: "search_demand",
+            observedValue: `${gsc.totals.impressions || 0} total impressions across ${(gsc.topQueries || []).length} queries`,
+            artifactRef: null,
+          },
+        ],
+        evidenceText: `${(gsc.topQueries || []).length} search queries generating impressions without dedicated content`,
+        businessImpact: "Search demand exists for topics that lack dedicated landing pages",
+        recommendation: "Create content targeted at high-impression, low-position queries",
+        effort: "H",
+        conversionImpact: 40,
+        gapSeverity: 40,
+        businessRelevance: 50,
+        competitiveSignal: 35,
+        implementationPracticality: 25,
+        verificationMethod: "Re-run GSC collection after new content is published and indexed.",
+      });
+    }
   }
 
   // Sort by final priority descending, then by severity rank

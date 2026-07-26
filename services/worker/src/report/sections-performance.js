@@ -121,6 +121,7 @@ function appendix(model) {
   const perfGate = perfAvailable ? "PASS" : "UNAVAILABLE";
   const backlinksAvailable = ev.backlinks?.sourceStatus === SOURCE_STATUS.AVAILABLE;
   const ga4Available = ev.ga4?.sourceStatus === SOURCE_STATUS.AVAILABLE;
+  const gscAvailable = ev.gsc?.sourceStatus === SOURCE_STATUS.AVAILABLE;
 
   // Performance source detail for appendix
   const perfIntended = ev.performance?.intendedProvider || "pagespeed-insights";
@@ -140,12 +141,21 @@ function appendix(model) {
     ["Competitor Benchmark", `${model.competitors.length} supplied URL(s)`, model.competitors.length ? "PASS" : "NOT SUPPLIED"],
     ["Backlinks", "DataForSEO", backlinksAvailable ? `PASS — ${ev.backlinks.totalBacklinksReviewed} reviewed` : "NOT CONFIGURED"],
     ["GA4", "Google Analytics Data API", ga4Available ? "PASS — contextual only" : "NOT CONFIGURED — no score impact"],
+    ["Search Console", "Google Search Console API", gscAvailable ? `PASS — ${ev.gsc?.totals?.impressions || 0} impressions` : "NOT CONFIGURED — no score impact"],
   ];
 
   const limitations = [...(ev.site.limitations || []), ...(ev.performance?.limitations || [])];
   if (!backlinksAvailable) limitations.push("Backlink evidence was not included because DataForSEO credentials were not configured.");
   if (!ga4Available) limitations.push("GA4 was not connected. The audit completed without analytics and the score was not reduced.");
   if (!perfAvailable) limitations.push("No performance measurement (PageSpeed Insights or local Lighthouse) was available for this audit. Performance scores and metrics are unavailable.");
+  if (!gscAvailable) limitations.push("GSC was not connected. Search-console evidence was not included and the score was not reduced.");
+  if (gscAvailable && ev.gsc?.sufficiency?.sufficient === false) {
+    limitations.push(`GSC data is below the sufficiency threshold (${ev.gsc?.sufficiency?.threshold || 100} impressions). GSC-derived findings use directional confidence.`);
+  }
+  if (ga4Available && ev.ga4?.measurementReadiness?.issues?.length > 0) {
+    const readinessIssues = ev.ga4.measurementReadiness.issues.map((i) => `${i.type}: ${i.detail}`).join("; ");
+    limitations.push(`GA4 measurement readiness: ${readinessIssues}`);
+  }
 
   // Add fallback detail when applicable
   if (perfFallbackUsed) {

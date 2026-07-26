@@ -440,7 +440,8 @@ export function scoreAudit(input, evidence) {
   const funnelScores = computeFunnelScores(site, dimensionScores);
 
   // ── Build findings ─────────────────────────────────────────────────
-  const findings = buildFindings(site, performance);
+  const gsc = evidence.gsc;
+  const findings = buildFindings(site, performance, gsc);
 
   // ── Evidence confidence ────────────────────────────────────────────
   const evidenceConfidence = calculateEvidenceConfidence(evidence, findings);

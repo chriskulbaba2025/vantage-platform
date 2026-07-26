@@ -3,6 +3,7 @@ import { crawlWithDataforseo } from "../adapters/dataforseo-onpage/dataforseo-on
 import { collectPerformance, collectPerformanceForPages } from "../evidence/pagespeed-client.js";
 import { collectBacklinks } from "../evidence/backlinks-provider.js";
 import { collectGa4 } from "../evidence/ga4-client.js";
+import { collectGsc } from "../evidence/gsc-client.js";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReport } from "../report/render-report.js";
 import { createReportStore } from "../storage/report-store.js";
@@ -295,6 +296,10 @@ export async function runAudit(rawInput, options = {}) {
     options.collectGa4 || collectGa4,
     "GA4 collection failed",
   );
+  const gscCollector = safeResult(
+    options.collectGsc || collectGsc,
+    "GSC collection failed",
+  );
 
   // ── Collect evidence ────────────────────────────────────────────────
   const site = await crawler(input.targetUrl, {
@@ -335,7 +340,7 @@ export async function runAudit(rawInput, options = {}) {
     effectivePerformanceCollector = collectPerformanceForPages;
   }
 
-  const [performance, competitors, backlinks, ga4] = await Promise.all([
+  const [performance, competitors, backlinks, ga4, gsc] = await Promise.all([
     performanceCollector(perfUrls, {
       apiKey: config.pagespeedApiKey,
       cruxApiKey: config.cruxApiKey,
@@ -361,6 +366,12 @@ export async function runAudit(rawInput, options = {}) {
       serviceAccountJson:
         input.ga4.serviceAccountJson || config.googleServiceAccountJson,
       fetchImpl: options.fetchImpl,
+      oauthService: options.oauthService || null,
+    }),
+    gscCollector(input.targetUrl, {
+      serviceAccountJson: config.googleServiceAccountJson,
+      fetchImpl: options.fetchImpl,
+      oauthService: options.oauthService || null,
     }),
   ]);
 
@@ -377,6 +388,7 @@ export async function runAudit(rawInput, options = {}) {
   );
   const validatedBacklinks = validateAndDowngrade(backlinks, "backlinks");
   const validatedGa4 = validateAndDowngrade(ga4, "ga4");
+  const validatedGsc = validateAndDowngrade(gsc, "gsc");
 
   const evidence = {
     site: validatedSite,
@@ -384,6 +396,7 @@ export async function runAudit(rawInput, options = {}) {
     competitors,
     backlinks: validatedBacklinks,
     ga4: validatedGa4,
+    gsc: validatedGsc,
   };
 
   // ── Score ───────────────────────────────────────────────────────────
@@ -413,6 +426,7 @@ export async function runAudit(rawInput, options = {}) {
         : SOURCE_STATUS.NOT_APPLICABLE,
       backlinks: validatedBacklinks.sourceStatus,
       ga4: validatedGa4.sourceStatus,
+      gsc: validatedGsc.sourceStatus,
     },
     files: ["index.html", "audit.json", "evidence.json", "manifest.json"],
   };
