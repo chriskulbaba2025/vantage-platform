@@ -625,27 +625,49 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     );
   }
 
-  // Require model for multi-page rendering — load from committed state if not provided
-  let model = opts.model || null;
-  if (!model) {
-    const committed = await store.readCommittedArtifacts(slug, runId);
-    if (committed?.model) {
-      model = committed.model;
+  // ── Load committed artifacts (authoritative — never accept stale model) ──
+  const committed = await store.readCommittedArtifacts(slug, runId);
+
+  // When lifecycle has an active transaction but committed artifacts are missing
+  // or mismatched, block approval.
+  if (lc.activeReviewTxId) {
+    if (!committed) {
+      throw Object.assign(
+        new Error(`Approval rejected — lifecycle references transaction "${lc.activeReviewTxId}" but committed artifacts could not be read`),
+        { statusCode: 422 },
+      );
+    }
+    if (committed.txId !== lc.activeReviewTxId) {
+      throw Object.assign(
+        new Error(`Approval rejected — transaction ID mismatch: lifecycle has "${lc.activeReviewTxId}", committed artifacts have "${committed.txId}"`),
+        { statusCode: 422 },
+      );
     }
   }
-  if (!model) {
+
+  if (!committed || !committed.model) {
     throw Object.assign(
-      new Error("Audit model is required for approved report rendering"),
+      new Error("Audit model is required for approved report rendering — committed artifacts not found"),
       { statusCode: 422 },
     );
   }
 
+  // Verify committed review agrees with lifecycle review
+  if (committed.reviewRecord && lc.review) {
+    if (committed.reviewRecord.reviewer !== lc.review.reviewer) {
+      throw Object.assign(
+        new Error("Approval rejected — committed review and lifecycle review disagree"),
+        { statusCode: 422 },
+      );
+    }
+  }
+
+  const model = committed.model;
+
   // ── Competitor approval gate (Task 9) ─────────────────────────────────
-  // Validate: no pending or rejected competitor candidates in client-facing gaps
   const competitorOpps = model.evidence?.competitorOpportunities;
   if (competitorOpps) {
     const gaps = competitorOpps.gaps || [];
-    const allGaps = competitorOpps.allGaps || [];
     const qualifiedCandidates = competitorOpps.candidates?.qualified || [];
 
     // Check 1: no pending/rejected gaps in client-facing output
@@ -666,8 +688,7 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
       if (!gap.gapPassed) {
         throw Object.assign(
           new Error(
-            `Approval rejected — competitor gap for "${gap.competitorPage}" ` +
-            `does not pass all qualified-gap checks.`,
+            `Approval rejected — competitor gap for "${gap.competitorPage}" does not pass all qualified-gap checks.`,
           ),
           { statusCode: 422 },
         );
@@ -675,8 +696,7 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
       if (!gap.qualificationPassed) {
         throw Object.assign(
           new Error(
-            `Approval rejected — competitor candidate "${gap.competitorPage}" ` +
-            `does not pass all qualification checks.`,
+            `Approval rejected — competitor candidate "${gap.competitorPage}" does not pass all qualification checks.`,
           ),
           { statusCode: 422 },
         );
@@ -686,13 +706,11 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     // Check 3: evidence and model agree on approval states
     for (const candidate of qualifiedCandidates) {
       if (candidate.approvalStatus === "pending") {
-        // Pending candidates are allowed as long as they have no client-facing gaps
         const hasGap = gaps.some((g) => g.competitorPage === candidate.candidateUrl);
         if (hasGap) {
           throw Object.assign(
             new Error(
-              `Approval rejected — pending candidate "${candidate.candidateUrl}" ` +
-              `has a client-facing gap. Approve or reject all competitors before approval.`,
+              `Approval rejected — pending candidate "${candidate.candidateUrl}" has a client-facing gap.`,
             ),
             { statusCode: 422 },
           );
@@ -707,7 +725,7 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     if (!competitorChecklistItem || !competitorChecklistItem.reviewed) {
       throw Object.assign(
         new Error(
-          "Approval rejected — the \"Competitor selections\" checklist item must be reviewed before approval.",
+          "Approval rejected — the \"Competitor selections\" checklist item must be reviewed.",
         ),
         { statusCode: 422 },
       );

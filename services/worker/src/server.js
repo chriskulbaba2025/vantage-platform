@@ -116,41 +116,54 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && auditPath && !auditPath.action) {
       if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
 
-      // Look up audit by runId — we need slug.  Try local store first.
-      // The store expects both slug and runId.  We derive slug from the
-      // runId by scanning the artifacts directory (local only).
       let statusResult = null;
-      if (!config.reportsBucket) {
-        // For local store we can scan for the runId
-        const { readdir } = await import("node:fs/promises");
+      let slug = url.searchParams.get("slug") || "";
+
+      if (config.reportsBucket) {
+        // S3: slug must be supplied as query parameter
+        if (!slug) {
+          return send(res, 422, {
+            error: "Slug query parameter is required for S3-backed audit status",
+            code: "SLUG_REQUIRED",
+            hint: "GET /audits/:runId?slug=<audit-slug>",
+          });
+        }
         try {
-          const slugs = await readdir(config.artifactDir);
-          for (const slug of slugs) {
-            try {
-              const st = await store.getStatus(slug, auditPath.runId);
-              if (st) {
-                statusResult = { ...st, slug };
-                break;
-              }
-            } catch { /* skip */ }
-          }
-        } catch { /* dir may not exist */ }
+          const st = await store.getStatus(slug, auditPath.runId);
+          if (st) statusResult = { ...st, slug };
+        } catch { /* not found */ }
+      } else {
+        // Local: scan for the runId, or use supplied slug
+        if (slug) {
+          try {
+            const st = await store.getStatus(slug, auditPath.runId);
+            if (st) statusResult = { ...st, slug };
+          } catch { /* not found */ }
+        }
+        if (!statusResult) {
+          const { readdir } = await import("node:fs/promises");
+          try {
+            const slugs = await readdir(config.artifactDir);
+            for (const s of slugs) {
+              try {
+                const st = await store.getStatus(s, auditPath.runId);
+                if (st) { statusResult = { ...st, slug: s }; break; }
+              } catch { /* skip */ }
+            }
+          } catch { /* dir may not exist */ }
+        }
       }
 
       if (!statusResult) {
         return send(res, 404, { error: "Audit not found", runId: auditPath.runId });
       }
 
-      // Enrich with competitor review data when available
+      // Enrich with competitor review data from committed transaction
       if (statusResult) {
         try {
-          // Try to load competitor candidates for auditor review
-          const evidenceRaw = await (config.reportsBucket
-            ? Promise.resolve(null)
-            : localStore.readFile(`${statusResult.slug}/${auditPath.runId}/evidence.json`).catch(() => null));
-          if (evidenceRaw) {
-            const evidence = JSON.parse(evidenceRaw.toString("utf8"));
-            const opp = evidence?.competitorOpportunities;
+          const committed = await store.readCommittedArtifacts(statusResult.slug, auditPath.runId);
+          if (committed) {
+            const opp = committed.evidence?.competitorOpportunities;
             if (opp) {
               statusResult.competitorReview = {
                 topics: opp.topics || [],
@@ -178,10 +191,11 @@ const server = createServer(async (req, res) => {
                 })),
                 sources: opp.sources,
                 limitations: opp.limitations || [],
+                activeTxId: committed.txId || null,
               };
             }
           }
-        } catch { /* competitor data is supplementary — don't fail the request */ }
+        } catch { /* competitor data is supplementary */ }
       }
 
       return send(res, 200, statusResult);
@@ -263,23 +277,10 @@ const server = createServer(async (req, res) => {
         return send(res, 404, { error: "Audit not found — supply slug in payload or ensure local storage is in use", runId });
       }
 
-      // Attempt to read the audit model for final rendering
-      let model = null;
+      // approveAudit() loads the committed model internally — do NOT pass a stale one
       try {
-        if (!config.reportsBucket) {
-          const auditRaw = await store.readFile(`${slug}/${runId}/audit.json`);
-          model = JSON.parse(auditRaw.toString("utf8"));
-        }
-      } catch { /* model not available */ }
-
-      try {
-        if (!model) {
-          return send(res, 422, { error: "Audit model is required for approval — audit.json could not be read" });
-        }
-
         const result = await approveAudit(store, slug, runId, approver, {
           notes: payload.notes,
-          model,
         });
         const status = await store.getStatus(slug, runId);
 

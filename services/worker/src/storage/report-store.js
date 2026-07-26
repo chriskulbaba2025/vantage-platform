@@ -223,25 +223,57 @@ export function createLocalReportStore(options = {}) {
       const dir = reportDir(slug, runId);
       const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
 
-      // Try transaction directory first, then canonical paths
-      const resolvePath = (filename) => {
-        if (txId) {
-          const txnPath = join(dir, ".txn", txId, filename);
-          return txnPath;
+      if (txId) {
+        // ── Transaction path: verify checksums ──────────────────────────
+        const txnDir = join(dir, ".txn", txId);
+        try {
+          // Read and validate tx-meta first
+          const metaRaw = await readFile(join(txnDir, "tx-meta.json"), "utf8");
+          const meta = JSON.parse(metaRaw);
+
+          // Verify transaction ID matches
+          if (meta.txId !== txId) return null;
+
+          // Read all artifacts
+          const [evidenceRaw, modelRaw, reviewRaw] = await Promise.all([
+            readFile(join(txnDir, "evidence.json"), "utf8"),
+            readFile(join(txnDir, "audit.json"), "utf8"),
+            readFile(join(txnDir, "review-record.json"), "utf8").catch(() => null),
+          ]);
+
+          // Verify checksums
+          if (sha256(evidenceRaw) !== meta.checksums?.evidence) return null;
+          if (sha256(modelRaw) !== meta.checksums?.model) return null;
+          if (reviewRaw && meta.checksums?.review && sha256(reviewRaw) !== meta.checksums.review) return null;
+
+          // Verify review record agrees with lifecycle
+          const parsedReview = reviewRaw ? JSON.parse(reviewRaw) : null;
+          if (parsedReview && lc.review) {
+            if (parsedReview.reviewer !== lc.review.reviewer) return null;
+          }
+
+          return {
+            evidence: JSON.parse(evidenceRaw),
+            model: JSON.parse(modelRaw),
+            reviewRecord: parsedReview,
+            txId,
+          };
+        } catch {
+          return null;
         }
-        return join(dir, filename);
-      };
+      }
 
+      // ── Pre-transaction path: read canonical files ────────────────────
       try {
-        const evidenceRaw = await readFile(resolvePath("evidence.json"), "utf8");
-        const modelRaw = await readFile(resolvePath("audit.json"), "utf8");
-        const reviewRaw = txId ? await readFile(join(dir, ".txn", txId, "review-record.json"), "utf8").catch(() => null) : null;
-
+        const [evidenceRaw, modelRaw] = await Promise.all([
+          readFile(join(dir, "evidence.json"), "utf8"),
+          readFile(join(dir, "audit.json"), "utf8"),
+        ]);
         return {
           evidence: JSON.parse(evidenceRaw),
           model: JSON.parse(modelRaw),
-          reviewRecord: reviewRaw ? JSON.parse(reviewRaw) : null,
-          txId,
+          reviewRecord: null,
+          txId: null,
         };
       } catch {
         return null;
@@ -692,22 +724,44 @@ export function createS3ReportStore(options = {}) {
       const s3Client = resolvedS3Client;
       if (!s3Client) return null;
 
-      const resolveKey = (filename) => {
+      const getKey = (filename) => {
         if (txId) return `${reportsPrefix}/${slug}/${runId}/.txn/${txId}/${filename}`;
         return `${reportsPrefix}/${slug}/${runId}/${filename}`;
       };
 
+      if (txId) {
+        try {
+          const [metaResp, evResp, mdResp] = await Promise.all([
+            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("tx-meta.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("evidence.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("audit.json") })),
+          ]);
+          const metaRaw = await metaResp.Body.transformToString("utf8");
+          const meta = JSON.parse(metaRaw);
+          if (meta.txId !== txId) return null;
+          const [evidenceRaw, modelRaw] = await Promise.all([evResp.Body.transformToString("utf8"), mdResp.Body.transformToString("utf8")]);
+          if (sha256(evidenceRaw) !== meta.checksums?.evidence) return null;
+          if (sha256(modelRaw) !== meta.checksums?.model) return null;
+          let reviewRecord = null;
+          try {
+            const revResp = await s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("review-record.json") }));
+            const reviewRaw = await revResp.Body.transformToString("utf8");
+            if (meta.checksums?.review && sha256(reviewRaw) !== meta.checksums.review) return null;
+            reviewRecord = JSON.parse(reviewRaw);
+          } catch { /* review optional */ }
+          return { evidence: JSON.parse(evidenceRaw), model: JSON.parse(modelRaw), reviewRecord, txId };
+        } catch { return null; }
+      }
+
       try {
         const [evResp, mdResp] = await Promise.all([
-          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: resolveKey("evidence.json") })),
-          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: resolveKey("audit.json") })),
+          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("evidence.json") })),
+          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("audit.json") })),
         ]);
         const evidence = JSON.parse(await evResp.Body.transformToString("utf8"));
         const model = JSON.parse(await mdResp.Body.transformToString("utf8"));
-        return { evidence, model, txId, reviewRecord: null };
-      } catch {
-        return null;
-      }
+        return { evidence, model, txId: null, reviewRecord: null };
+      } catch { return null; }
     },
 
     async writeReview(slug, runId, reviewRecord) {

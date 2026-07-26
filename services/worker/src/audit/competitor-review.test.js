@@ -400,7 +400,7 @@ test("T9-REVIEW-06: approval fails when competitor_selections not reviewed", asy
 // T9-REVIEW-07: approval fails when client-facing gap references pending candidate
 // ---------------------------------------------------------------------------
 
-test("T9-REVIEW-07: approval fails when a client-facing gap references pending candidate", async () => {
+test("T9-REVIEW-07: approval fails when committed evidence has a pending gap in client-facing output", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vantage-comp-review-"));
   const store = createLocalReportStore({ baseDir: dir });
 
@@ -414,36 +414,22 @@ test("T9-REVIEW-07: approval fails when a client-facing gap references pending c
       collectBacklinks: async () => NOT_CONNECTED_BACKLINKS,
       collectGa4: async () => NOT_CONNECTED_GA4,
       collectGsc: async () => NOT_CONNECTED_GSC,
-      store, runId: "test-review-005",
+      store, runId: "test-review-007",
     },
   );
 
-  // Submit review WITHOUT competitor decisions (all stay pending)
-  await submitReview(store, result.slug, result.runId, {
-    reviewer: "auditor@example.com",
-    checklist: [
-      { id: "source_failures", reviewed: true }, { id: "top_ten_findings", reviewed: true },
-      { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
-      { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
-      { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-      { id: "implementation_feasibility", reviewed: true },
-    ],
-    limitationsAccepted: true,
-    notes: "Review without competitor decisions — all remain pending",
-  });
-
-  // Manually inject a pending gap into the model to simulate inconsistency
-  const model = { ...result.model };
-  model.evidence = {
-    ...model.evidence,
+  // Load current committed state and tamper: inject a pending gap into client-facing gaps
+  const committed = await store.readCommittedArtifacts(result.slug, result.runId);
+  const tamperedEvidence = {
+    ...committed.evidence,
     competitorOpportunities: {
-      ...(model.evidence.competitorOpportunities || {}),
+      ...(committed.evidence.competitorOpportunities || {}),
       gaps: [
         {
           clientTopic: "Consulting",
           competitorPage: "https://competitor-1.example/services/consulting",
           competitorDomain: "competitor-1.example",
-          approvalStatus: "pending", // pending!
+          approvalStatus: "pending",
           gapPassed: true, qualificationPassed: true,
           conversionRelevance: "High", confidence: "Moderate",
           limitationStatement: "Test gap — should be rejected",
@@ -452,8 +438,28 @@ test("T9-REVIEW-07: approval fails when a client-facing gap references pending c
     },
   };
 
+  // Commit a review with the tampered evidence (pending gap in client-facing output)
+  const checklist = [
+    { id: "source_failures", reviewed: true }, { id: "top_ten_findings", reviewed: true },
+    { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
+    { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
+    { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
+    { id: "implementation_feasibility", reviewed: true },
+  ];
+
+  await store.commitCompetitorReview({
+    slug: result.slug, runId: result.runId,
+    evidence: tamperedEvidence,
+    model: { ...committed.model, evidence: tamperedEvidence },
+    reviewRecord: {
+      runId: result.runId, reviewer: "auditor@example.com", reviewedAt: new Date().toISOString(),
+      checklist, overrides: [], notes: "Tampered review", limitationsAccepted: true,
+    },
+  });
+
+  // Approval must NOW reject because the committed state has a pending gap
   await assert.rejects(
-    () => approveAudit(store, result.slug, result.runId, "approver@example.com", { model }),
+    () => approveAudit(store, result.slug, result.runId, "approver@example.com"),
     /pending/i,
   );
 });
