@@ -21,12 +21,13 @@ The report renderer preserves the canonical CSS, header shape, sticky navigation
 11. When Lighthouse succeeds after PageSpeed fails, preserve PageSpeed failure status, Lighthouse result, fallback usage, and provider provenance
 12. When both providers fail: performance module marked Not Assessed, excluded from assessed scoring weight, no zero score, no false performance finding
 13. Collect DataForSEO backlink evidence when configured
-14. Collect optional GA4 context when configured
-15. Calculate deterministic Vantage scores
-16. Render the locked Karen Leslie report with provider provenance, device, tested URL, collection time, lab/field classification, and fallback status
-17. Write `index.html`, `audit.json`, `evidence.json`, and `manifest.json`
-18. Store locally or in S3
-19. Return the report URL or artifact path
+14. Collect optional GA4 aggregated evidence (OAuth or service account) with measurement-readiness checks
+15. Collect optional GSC search analytics (OAuth or service account) with 28-day comparison windows and 100-impression sufficiency gate
+16. Calculate deterministic Vantage scores (GA4 and GSC absence never reduces readiness)
+17. Render the locked Karen Leslie report with provider provenance, device, tested URL, collection time, lab/field classification, and fallback status
+18. Write `index.html`, `audit.json`, `evidence.json`, and `manifest.json`
+19. Store locally or in S3
+20. Return the report URL or artifact path
 
 ## Required request
 
@@ -115,15 +116,52 @@ The performance collector uses PageSpeed Insights, local Lighthouse fallback thr
 
 ## Optional sources
 
-DataForSEO and GA4 do not block the core audit when credentials are absent. Their absence is recorded in the evidence manifest and does not reduce the conversion-readiness score.
+DataForSEO, GA4, and GSC do not block the core audit when credentials are absent. Their absence is recorded in the evidence manifest as `NOT_CONNECTED` and does not reduce the conversion-readiness score.
 
-## Backlink transition
+## Task 8 — GA4 and GSC OAuth Connections
 
-The original Phase 1 backlink suite included an isolation assertion requiring production scoring and audit directories not to exist. That assertion became invalid when the end-to-end worker was built. The historical suite is preserved as `backlink-adapter.legacy.js`; CI now tests the integrated production provider in `src/evidence/backlinks-provider.test.js`, including optional operation, live `target` payloads, and competitor opportunity classification.
+### GA4
 
-## n8n
+- Collects aggregated data only: sessions, engaged sessions, engagement rate, landing pages, source/medium, key events, event counts, conversion rate, device category.
+- No user-level records stored.
+- Measurement-readiness assessment identifies: missing key events, ambiguous events, duplicate events, absent source attribution, incomplete funnels, third-party conversions.
+- Auth: service account (`GOOGLE_SERVICE_ACCOUNT_JSON`) or OAuth token.
+- Read-only scope: `https://www.googleapis.com/auth/analytics.readonly`.
 
-Import `services/n8n/vantage-audit-orchestration.json`. Configure `VANTAGE_WORKER_URL` and `VANTAGE_WEBHOOK_SECRET`. n8n orchestrates only; all evidence, scoring, report generation, and storage remain in the worker.
+### GSC
+
+- Collects: clicks, impressions, CTR, average position, query, landing page, device, country.
+- Default comparison windows: most recent complete 28 days + preceding 28 days.
+- Sufficiency gate: at least 100 impressions for score-bearing findings; below threshold = directional confidence.
+- Auth: same service account as GA4 or separate OAuth token.
+- Read-only scope: `https://www.googleapis.com/auth/webmasters.readonly`.
+
+### OAuth
+
+- Tokens stored encrypted server-side using AES-256-GCM.
+- Encryption key from `VANTAGE_ENCRYPTION_KEY` (64 hex chars).
+- OAuth endpoints: `POST /connect/ga4`, `POST /connect/gsc`, `GET /oauth/callback`, `GET /connection/:provider`, `POST /disconnect/:provider`.
+- Raw tokens, client secrets, and refresh tokens are never returned in API responses.
+
+### Required environment variables
+
+| Variable | Purpose |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | OAuth redirect URI (e.g. `https://worker.example.com/oauth/callback`) |
+| `VANTAGE_ENCRYPTION_KEY` | 64-char hex key for token encryption at rest |
+| `GA4_PROPERTY_ID` | GA4 property ID (numeric) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON (alternative to OAuth) |
+
+### Google Cloud configuration
+
+1. Create a Google Cloud project with the Search Console API and Google Analytics Data API enabled.
+2. Create an OAuth 2.0 client ID (Web application type).
+3. Add the redirect URI (must match `GOOGLE_REDIRECT_URI`).
+4. Optionally, create a service account for server-to-server auth.
+5. For GSC: add the service account email as a delegated owner in Search Console.
+6. For GA4: grant the service account or OAuth user "Viewer" access on the GA4 property.
 
 ## Secrets required later
 

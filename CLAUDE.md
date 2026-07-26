@@ -12,7 +12,8 @@ Completed:
 - Task 4: Production crawling switched from legacy crawler to DataForSEO as part of PR #5
 - Task 5: V3 scoring model and module gates merged in PR #6
 - Task 6: Human review gate and approved multi-page reports merged in PR #7
-- Task 7: PageSpeed-to-Lighthouse production fallback (current)
+- Task 7: PageSpeed-to-Lighthouse production fallback merged in PR #8
+- Task 8: GA4 and GSC OAuth connections (current)
 
 Railway variables configured:
 
@@ -20,6 +21,10 @@ Railway variables configured:
 - VANTAGE_WEBHOOK_SECRET
 - DATAFORSEO_LOGIN
 - DATAFORSEO_PASSWORD
+- GOOGLE_CLIENT_ID
+- GOOGLE_CLIENT_SECRET
+- GOOGLE_REDIRECT_URI
+- VANTAGE_ENCRYPTION_KEY
 
 Current task:
 

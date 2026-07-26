@@ -20,6 +20,13 @@ export function loadConfig(env = process.env) {
     dataforseoPassword: env.DATAFORSEO_PASSWORD || "",
     ga4PropertyId: env.GA4_PROPERTY_ID || "",
     googleServiceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON || "",
+    // OAuth
+    googleClientId: env.GOOGLE_CLIENT_ID || "",
+    googleClientSecret: env.GOOGLE_CLIENT_SECRET || "",
+    googleRedirectUri: env.GOOGLE_REDIRECT_URI || "",
+    vantageEncryptionKey: env.VANTAGE_ENCRYPTION_KEY || "",
+    // GSC
+    gscSiteUrl: env.GSC_SITE_URL || "", // override GSC site URL (defaults to targetUrl)
     awsRegion: env.AWS_REGION || "ca-central-1",
     reportsBucket: env.VANTAGE_REPORTS_BUCKET || "",
     reportsPrefix: env.VANTAGE_REPORTS_PREFIX || "vantage/reports",
