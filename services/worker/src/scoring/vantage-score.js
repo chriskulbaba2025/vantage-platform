@@ -1,4 +1,5 @@
 import { clamp } from "../utils.js";
+import { SOURCE_STATUS } from "./evidence-contracts.js";
 import {
   band,
   confidenceBand,
@@ -40,15 +41,16 @@ export function scoreAudit(input, evidence) {
   scores.aiReadiness = clamp((site.schemaTypes.length ? 25 : 0) + (site.pages[0]?.headings?.h1?.length ? 15 : 0) + (site.trust.faq ? 20 : 0) + Math.min(20, site.pageCount * 3) + (site.topicKeywords.length >= 5 ? 20 : 5));
 
   // Performance evidence is binary: either we have measured data from at
-  // least one strategy or we have nothing.  When collectPerformance returns
-  // status "failed" both mobile and desktop are empty — there is no partial
-  // tier.
-  const perfEvidenceScore = performance?.status === "complete" ? 25 : 0;
+  // least one strategy or we have nothing.  AVAILABLE and PARTIAL both
+  // indicate usable data was collected.
+  const hasPerformance = performance?.sourceStatus === SOURCE_STATUS.AVAILABLE
+    || performance?.sourceStatus === SOURCE_STATUS.PARTIAL;
+  const perfEvidenceScore = hasPerformance ? 25 : 0;
   const coreEvidence = [
     site.pageCount > 0 ? 55 : 0,
     perfEvidenceScore,
-    evidence.competitors?.length ? (evidence.competitors.some((x) => x.status === "complete") ? 15 : 5) : 10,
-    evidence.backlinks?.status === "complete" ? 5 : 3,
+    evidence.competitors?.length ? (evidence.competitors.some((x) => x.status === SOURCE_STATUS.AVAILABLE) ? 15 : 5) : 10,
+    evidence.backlinks?.sourceStatus === SOURCE_STATUS.AVAILABLE ? 5 : 3,
   ];
   const evidenceConfidenceScore = clamp(coreEvidence.reduce((a, b) => a + b, 0));
   const findings = buildFindings(site, performance);

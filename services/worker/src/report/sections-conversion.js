@@ -1,4 +1,5 @@
 import { e, severityClass, scoreCard, section, table } from "./html-helpers.js";
+import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 
 function scorecard(model) {
   const { scores, bands, evidenceConfidenceScore, rootCause, evidence } = model;
@@ -16,7 +17,7 @@ ${scoreCard(scores.conversionPathways, "Conversion Pathways")}
 <p><strong>Strong:</strong> ${e(site.pageCount)} page(s) were captured with page-level metadata, headings, links, forms, trust signals, schema, images, and response-header evidence.</p>
 <p style="margin-top:6px"><strong>Performance:</strong> ${e(evidence.performance?.mobile?.source || "No performance source")} supplied mobile data and ${e(evidence.performance?.desktop?.source || "no performance source")} supplied desktop data.</p>
 <p style="margin-top:6px"><strong>Competitors:</strong> ${e(model.competitors.length)} supplied competitor site(s) produced comparable on-page evidence.</p>
-<p style="margin-top:6px"><strong>Optional analytics:</strong> ${e(evidence.ga4?.status === "complete" ? "GA4 data was included as context." : "GA4 was not connected; the audit completed without analytics and no score was reduced.")}</p>
+<p style="margin-top:6px"><strong>Optional analytics:</strong> ${e(evidence.ga4?.sourceStatus === SOURCE_STATUS.AVAILABLE ? "GA4 data was included as context." : "GA4 was not connected; the audit completed without analytics and no score was reduced.")}</p>
 <p style="margin-top:6px"><strong>Confidence score:</strong> ${e(evidenceConfidenceScore)}/100.</p></div>
 <h3>Root Cause</h3><p>${e(rootCause)}</p>
 <h3>Funnel-Stage Readiness</h3>

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stableHash, withTimeout } from "../utils.js";
+import { SOURCE_STATUS, ERROR_CATEGORY, buildSourceStatus, EVIDENCE_ENVELOPE_VERSION } from "../scoring/evidence-contracts.js";
 
 function cachePath(cacheDir, url) {
   return resolve(cacheDir, `${stableHash(url)}.json`);
@@ -29,7 +30,7 @@ function normalizeLighthouse(lhr, source, strategy) {
   const audits = lhr?.audits || {};
   const score = (key) => categories[key]?.score == null ? null : Math.round(categories[key].score * 100);
   return {
-    status: "complete",
+    status: SOURCE_STATUS.AVAILABLE,
     source,
     strategy,
     fetchedAt: new Date().toISOString(),
@@ -69,6 +70,10 @@ async function callPsi(url, strategy, apiKey, fetchImpl) {
     const body = await response.text().catch(() => "");
     const error = new Error(`PageSpeed ${strategy} failed (${response.status}): ${body.slice(0, 300)}`);
     error.status = response.status;
+    // Attach error category so callers can distinguish rate-limit from other failures.
+    error.errorCategory = response.status === 429 ? ERROR_CATEGORY.RATE_LIMIT
+      : response.status === 403 || response.status === 401 ? ERROR_CATEGORY.AUTH
+      : null;
     throw error;
   }
   const body = await response.json();
@@ -107,17 +112,17 @@ async function runLocalLighthouse(url, strategy) {
 }
 
 async function queryCrux(url, apiKey, formFactor, fetchImpl) {
-  if (!apiKey) return { status: "not_configured", formFactor, metrics: null };
+  if (!apiKey) return { status: SOURCE_STATUS.NOT_CONNECTED, formFactor, metrics: null };
   const endpoint = `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${encodeURIComponent(apiKey)}`;
   const response = await withTimeout(fetchImpl(endpoint, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ url, formFactor }),
   }), 30000, `CrUX ${formFactor}`);
-  if (response.status === 404) return { status: "no_data", formFactor, metrics: null };
+  if (response.status === 404) return { status: SOURCE_STATUS.UNAVAILABLE, formFactor, metrics: null };
   if (!response.ok) throw new Error(`CrUX ${formFactor} failed (${response.status})`);
   const body = await response.json();
-  return { status: "complete", formFactor, metrics: body.record?.metrics || null, collectionPeriod: body.record?.collectionPeriod || null };
+  return { status: SOURCE_STATUS.AVAILABLE, formFactor, metrics: body.record?.metrics || null, collectionPeriod: body.record?.collectionPeriod || null };
 }
 
 export async function collectPerformance(url, options = {}) {
@@ -130,19 +135,34 @@ export async function collectPerformance(url, options = {}) {
     if (cached) return { ...cached, cache: "hit" };
   }
 
+  const startedAt = new Date().toISOString();
   const limitations = [];
   const results = {};
+  const strategyErrors = {};
   for (const strategy of ["mobile", "desktop"]) {
     try {
       results[strategy] = await callPsi(url, strategy, options.apiKey || "", fetchImpl);
     } catch (psiError) {
       limitations.push(psiError.message);
+      strategyErrors[strategy] = { category: psiError.errorCategory || ERROR_CATEGORY.INTERNAL, message: psiError.message };
       try {
         const runner = options.localRunner || runLocalLighthouse;
         results[strategy] = await runner(url, strategy);
       } catch (localError) {
         limitations.push(`Local Lighthouse ${strategy} failed: ${localError.message}`);
-        results[strategy] = { status: "failed", strategy, source: "unavailable", error: localError.message, scores: {}, metrics: {}, opportunities: [] };
+        strategyErrors[strategy] = {
+          category: strategyErrors[strategy]?.category || ERROR_CATEGORY.INTERNAL,
+          message: `${psiError.message}; Local Lighthouse: ${localError.message}`,
+        };
+        results[strategy] = {
+          status: SOURCE_STATUS.FAILED,
+          strategy,
+          source: "unavailable",
+          error: localError.message,
+          scores: {},
+          metrics: {},
+          opportunities: [],
+        };
       }
     }
   }
@@ -153,18 +173,63 @@ export async function collectPerformance(url, options = {}) {
       fieldData[formFactor.toLowerCase()] = await queryCrux(url, options.cruxApiKey || "", formFactor, fetchImpl);
     } catch (error) {
       limitations.push(error.message);
-      fieldData[formFactor.toLowerCase()] = { status: "failed", formFactor, metrics: null, error: error.message };
+      fieldData[formFactor.toLowerCase()] = { status: SOURCE_STATUS.FAILED, formFactor, metrics: null, error: error.message };
     }
   }
 
+  const strategies = Object.values(results);
+  const completeCount = strategies.filter((r) => r.status === SOURCE_STATUS.AVAILABLE).length;
+  const totalStrategies = strategies.length;
+  const sourceStatus = completeCount === totalStrategies ? SOURCE_STATUS.AVAILABLE
+    : completeCount > 0 ? SOURCE_STATUS.PARTIAL
+    : SOURCE_STATUS.FAILED;
+
+  // Determine the primary source label.
+  const primarySource = strategies.some((r) => r.source === "pagespeed-insights")
+    ? "pagespeed-insights"
+    : strategies.some((r) => r.source === "lighthouse-cli-fallback")
+      ? "lighthouse-cli-fallback"
+      : "unavailable";
+
+  const completedAt = new Date().toISOString();
   const value = {
-    status: Object.values(results).some((r) => r.status === "complete") ? "complete" : "failed",
+    evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
+    source: primarySource,
+    sourceStatus,
+    status: sourceStatus, // canonical alias — consumers should use sourceStatus
     mobile: results.mobile,
     desktop: results.desktop,
     fieldData,
     limitations,
+    collectedAt: completedAt,
+    coverage: {
+      requested: totalStrategies,
+      completed: completeCount,
+      failed: totalStrategies - completeCount,
+    },
+    rawArtifactRef: null,
+    _sourceStatus: buildSourceStatus({
+      provider: primarySource,
+      adapterVersion: "1.0.0",
+      startedAt,
+      completedAt,
+      requestId: null,
+      retryCount: 0,
+      returnedRecordCount: completeCount,
+      expectedRecordCount: totalStrategies,
+      errorCategory: completeCount === 0
+        ? (Object.values(strategyErrors).some((e) => e.category === ERROR_CATEGORY.RATE_LIMIT)
+            ? ERROR_CATEGORY.RATE_LIMIT
+            : ERROR_CATEGORY.INTERNAL)
+        : completeCount < totalStrategies
+          ? (Object.values(strategyErrors).some((e) => e.category === ERROR_CATEGORY.RATE_LIMIT)
+              ? ERROR_CATEGORY.RATE_LIMIT
+              : null)
+          : null,
+      limitation: completeCount === 0 ? "No usable PageSpeed or Lighthouse result." : null,
+      rawArtifactRef: null,
+    }),
     cache: "miss",
-    collectedAt: new Date().toISOString(),
   };
   if (!options.disableCache) await writeCache(cacheDir, cacheKey, value);
   return value;

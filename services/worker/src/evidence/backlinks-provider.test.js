@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { collectBacklinks } from "./backlinks-provider.js";
+import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 
 test("collectBacklinks is optional when DataForSEO credentials are absent", async () => {
   const result = await collectBacklinks("https://example.com", [], {});
-  assert.equal(result.status, "not_configured");
+  assert.equal(result.sourceStatus, SOURCE_STATUS.NOT_CONNECTED);
   assert.equal(result.affectsCoreAudit, false);
   assert.deepEqual(result.records, []);
 });
@@ -44,7 +45,7 @@ test("collectBacklinks uses live DataForSEO target payloads and finds competitor
     },
   );
 
-  assert.equal(result.status, "complete");
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
   assert.equal(result.requestCount, 3);
   assert.equal(result.goodCount, 1);
   assert.equal(result.worthPursuingCount, 1);

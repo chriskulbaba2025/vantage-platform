@@ -1,4 +1,5 @@
 import { withTimeout, domainOf } from "../utils.js";
+import { SOURCE_STATUS, ERROR_CATEGORY, buildSourceStatus, EVIDENCE_ENVELOPE_VERSION } from "../scoring/evidence-contracts.js";
 
 const API_BASE = "https://api.dataforseo.com/v3/backlinks";
 const SPAM_DOMAIN_RE = /casino|poker|gambling|adult|porn|xxx|payday|loan|viagra|pharma|free-?links|cheap-?seo/i;
@@ -112,14 +113,17 @@ function normalize(record, context) {
   };
 }
 
-function summarize(records, summary, competitors, requestCount) {
+function summarize(records, summary, competitors, requestCount, startedAt, completedAt) {
   const byBucket = (name) => records.filter((r) => r.bucket === name);
   const good = byBucket("good");
   const bad = byBucket("bad");
   const worth = byBucket("worth_pursuing");
   const ignored = byBucket("ignore");
   return {
-    status: "complete",
+    evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
+    source: "dataforseo",
+    sourceStatus: SOURCE_STATUS.AVAILABLE,
+    status: SOURCE_STATUS.AVAILABLE, // canonical alias
     provider: "dataforseo",
     totalBacklinksReviewed: records.length,
     goodCount: good.length,
@@ -139,19 +143,55 @@ function summarize(records, summary, competitors, requestCount) {
     },
     competitors,
     requestCount,
-    collectedAt: new Date().toISOString(),
+    collectedAt: completedAt,
+    coverage: { requested: records.length, completed: records.length, failed: 0 },
+    rawArtifactRef: null,
+    _sourceStatus: buildSourceStatus({
+      provider: "dataforseo",
+      adapterVersion: "1.0.0",
+      startedAt,
+      completedAt,
+      requestId: null,
+      retryCount: 0,
+      returnedRecordCount: records.length,
+      expectedRecordCount: null,
+      errorCategory: null,
+      limitation: null,
+      rawArtifactRef: null,
+    }),
     records,
   };
 }
 
 export async function collectBacklinks(targetUrl, competitors = [], options = {}) {
+  const startedAt = new Date().toISOString();
   if (!options.login || !options.password) {
+    const completedAt = new Date().toISOString();
     return {
-      status: "not_configured",
+      evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
+      source: "dataforseo",
+      sourceStatus: SOURCE_STATUS.NOT_CONNECTED,
+      status: SOURCE_STATUS.NOT_CONNECTED,
       provider: "dataforseo",
       affectsCoreAudit: false,
       note: "DataForSEO credentials were not configured. The core website audit completed without backlink evidence.",
       records: [],
+      collectedAt: completedAt,
+      coverage: { requested: 0, completed: 0, failed: 0 },
+      rawArtifactRef: null,
+      _sourceStatus: buildSourceStatus({
+        provider: "dataforseo",
+        adapterVersion: "1.0.0",
+        startedAt,
+        completedAt,
+        requestId: null,
+        retryCount: 0,
+        returnedRecordCount: 0,
+        expectedRecordCount: null,
+        errorCategory: ERROR_CATEGORY.NOT_CONFIGURED,
+        limitation: "DataForSEO credentials were not configured.",
+        rawArtifactRef: null,
+      }),
     };
   }
   const target = domainOf(targetUrl);
@@ -183,5 +223,6 @@ export async function collectBacklinks(targetUrl, competitors = [], options = {}
     const key = `${item.page_from || ""}|${item.page_to || ""}|${item.anchor || ""}`;
     if (!dedup.has(key)) dedup.set(key, normalize(item, context));
   }
-  return summarize([...dedup.values()], firstResult(summaryBody), competitorDomains, requestCount);
+  const completedAt = new Date().toISOString();
+  return summarize([...dedup.values()], firstResult(summaryBody), competitorDomains, requestCount, startedAt, completedAt);
 }
