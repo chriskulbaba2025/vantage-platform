@@ -24,6 +24,8 @@ import {
   buildApprovalRecord,
   validateTransition,
   isReviewComplete,
+  validateCompetitorDecisions,
+  buildCompetitorOverrides,
 } from "./review-gate.js";
 import { renderApprovedReport } from "../report/render-approved-report.js";
 
@@ -480,11 +482,134 @@ export async function runAudit(rawInput, options = {}) {
  *
  * Returns the updated lifecycle record.
  */
+/**
+ * Apply competitor approval/rejection decisions from a review payload.
+ *
+ * Loads the canonical evidence + model, applies decisions, rebuilds gaps,
+ * persists updated artifacts, and appends override records.
+ *
+ * This is called by submitReview() before the review is persisted.
+ * Atomic: if evidence/model persistence fails, the review is not written.
+ *
+ * @returns {{ evidence, model }} updated evidence and model
+ */
+async function _applyCompetitorDecisions(store, slug, runId, reviewPayload, reviewer) {
+  const decisions = reviewPayload.competitorDecisions;
+  if (!Array.isArray(decisions) || decisions.length === 0) {
+    // No decisions to apply — return null
+    return null;
+  }
+
+  // Load canonical artifacts
+  let evidence;
+  let model;
+  try {
+    const evidenceRaw = await store.readFile(`${slug}/${runId}/evidence.json`);
+    evidence = JSON.parse(evidenceRaw.toString("utf8"));
+    const modelRaw = await store.readFile(`${slug}/${runId}/audit.json`);
+    model = JSON.parse(modelRaw.toString("utf8"));
+  } catch {
+    throw Object.assign(
+      new Error("Cannot apply competitor decisions — audit artifacts not found"),
+      { statusCode: 404 },
+    );
+  }
+
+  const opp = evidence.competitorOpportunities;
+  const qualifiedCandidates = opp?.candidates?.qualified || [];
+
+  // Build known candidate URL set from qualified candidates only
+  const knownCandidateUrls = new Set(qualifiedCandidates.map((c) => c.candidateUrl));
+
+  // Validate decisions against known candidates
+  const validation = validateCompetitorDecisions(decisions, knownCandidateUrls);
+  if (!validation.valid) {
+    throw Object.assign(
+      new Error(`Invalid competitor decisions: ${validation.errors.join("; ")}`),
+      { statusCode: 422, errors: validation.errors },
+    );
+  }
+
+  // Apply decisions to qualified candidates
+  const decisionMap = new Map(validation.records.map((r) => [r.candidateUrl, r.decision]));
+  for (const candidate of qualifiedCandidates) {
+    if (decisionMap.has(candidate.candidateUrl)) {
+      candidate.approvalStatus = decisionMap.get(candidate.candidateUrl);
+    }
+  }
+
+  // Rebuild gaps: only approved + all gates passed → client-facing
+  const allGaps = opp.allGaps || [];
+  const updatedAllGaps = allGaps.map((g) => {
+    const candidateDecision = decisionMap.get(g.competitorPage);
+    const newApproval = candidateDecision || g.approvalStatus || "pending";
+    return { ...g, approvalStatus: newApproval };
+  });
+
+  // Re-filter client-facing gaps
+  const updatedGaps = updatedAllGaps.filter(
+    (g) => g.approvalStatus === "approved" && g.gapPassed === true,
+  );
+
+  // Update evidence in place
+  if (opp.candidates) {
+    opp.candidates.qualified = qualifiedCandidates;
+  }
+  opp.allGaps = updatedAllGaps;
+  opp.gaps = updatedGaps;
+
+  // Update the model's competitor evidence
+  evidence.competitorOpportunities = opp;
+
+  // Re-score with updated evidence to reflect competitor decisions
+  // (scoring weights unaffected; only competitor findings/gaps change)
+  const updatedModel = scoreAudit(model.input, evidence);
+
+  // Build override records for audit history
+  const overrideRecords = buildCompetitorOverrides(validation.records, reviewer);
+
+  // Persist updated evidence and model atomically BEFORE review write
+  // (if this fails, the review won't be written — atomic safety)
+  await store.writeEvidenceAndModel(slug, runId, evidence, updatedModel);
+
+  // Return updated artifacts + override records
+  return { evidence, model: updatedModel, overrides: overrideRecords };
+}
+
+/**
+ * Submit a Principal Auditor review for an audit.
+ *
+ * Validates the review payload, applies competitor approval/rejection
+ * decisions (when provided), persists updated evidence/model, and
+ * transitions the lifecycle from draft → reviewed.
+ *
+ * Returns the updated lifecycle record.
+ */
 export async function submitReview(store, slug, runId, reviewPayload) {
-  // Validate the review payload
+  // ── Apply competitor decisions BEFORE building review record ──────────
+  const reviewer = String(reviewPayload.reviewer || "").trim();
+  let competitorOverrides = [];
+
+  try {
+    const decisionResult = await _applyCompetitorDecisions(
+      store, slug, runId, reviewPayload, reviewer,
+    );
+    if (decisionResult?.overrides) {
+      competitorOverrides = decisionResult.overrides;
+    }
+  } catch (err) {
+    // Re-throw with appropriate status code
+    throw err;
+  }
+
+  // ── Build review record ───────────────────────────────────────────────
   const { valid, record, errors } = buildReviewRecord({
     ...reviewPayload,
     runId,
+    overrides: [
+      ...(reviewPayload.overrides || []),
+      ...competitorOverrides,
+    ],
   });
 
   if (!valid) {
@@ -549,6 +674,80 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
       new Error("Audit model is required for approved report rendering"),
       { statusCode: 422 },
     );
+  }
+
+  // ── Competitor approval gate (Task 9) ─────────────────────────────────
+  // Validate: no pending or rejected competitor candidates in client-facing gaps
+  const competitorOpps = opts.model.evidence?.competitorOpportunities;
+  if (competitorOpps) {
+    const gaps = competitorOpps.gaps || [];
+    const allGaps = competitorOpps.allGaps || [];
+    const qualifiedCandidates = competitorOpps.candidates?.qualified || [];
+
+    // Check 1: no pending/rejected gaps in client-facing output
+    for (const gap of gaps) {
+      if (gap.approvalStatus !== "approved") {
+        throw Object.assign(
+          new Error(
+            `Approval rejected — client-facing competitor gap for "${gap.competitorPage}" ` +
+            `has approval status "${gap.approvalStatus}". All gaps must be approved.`,
+          ),
+          { statusCode: 422 },
+        );
+      }
+    }
+
+    // Check 2: every approved gap still passes all gates
+    for (const gap of gaps) {
+      if (!gap.gapPassed) {
+        throw Object.assign(
+          new Error(
+            `Approval rejected — competitor gap for "${gap.competitorPage}" ` +
+            `does not pass all qualified-gap checks.`,
+          ),
+          { statusCode: 422 },
+        );
+      }
+      if (!gap.qualificationPassed) {
+        throw Object.assign(
+          new Error(
+            `Approval rejected — competitor candidate "${gap.competitorPage}" ` +
+            `does not pass all qualification checks.`,
+          ),
+          { statusCode: 422 },
+        );
+      }
+    }
+
+    // Check 3: evidence and model agree on approval states
+    for (const candidate of qualifiedCandidates) {
+      if (candidate.approvalStatus === "pending") {
+        // Pending candidates are allowed as long as they have no client-facing gaps
+        const hasGap = gaps.some((g) => g.competitorPage === candidate.candidateUrl);
+        if (hasGap) {
+          throw Object.assign(
+            new Error(
+              `Approval rejected — pending candidate "${candidate.candidateUrl}" ` +
+              `has a client-facing gap. Approve or reject all competitors before approval.`,
+            ),
+            { statusCode: 422 },
+          );
+        }
+      }
+    }
+
+    // Check 4: competitor_selections checklist item must be reviewed
+    const competitorChecklistItem = lc.review?.checklist?.find(
+      (item) => item.id === "competitor_selections",
+    );
+    if (!competitorChecklistItem || !competitorChecklistItem.reviewed) {
+      throw Object.assign(
+        new Error(
+          "Approval rejected — the \"Competitor selections\" checklist item must be reviewed before approval.",
+        ),
+        { statusCode: 422 },
+      );
+    }
   }
 
   // Build approval record

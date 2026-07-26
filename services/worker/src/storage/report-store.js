@@ -107,6 +107,17 @@ export function createLocalReportStore(options = {}) {
       return readFile(full);
     },
 
+    /** Atomically persist updated evidence and model for an existing audit. */
+    async writeEvidenceAndModel(slug, runId, evidence, model) {
+      const dir = reportDir(slug, runId);
+      if (!(dir === baseDir || dir.startsWith(baseDir + sep))) throw new Error("Report output escaped base directory");
+      await mkdir(dir, { recursive: true });
+
+      // Write evidence and model atomically (temp → rename)
+      await atomicWrite(join(dir, "evidence.json"), JSON.stringify(evidence, null, 2));
+      await atomicWrite(join(dir, "audit.json"), JSON.stringify(model, null, 2));
+    },
+
     // ── Lifecycle operations ──────────────────────────────────────────
 
     /** Get full lifecycle state for an audit. */
@@ -460,6 +471,21 @@ export function createS3ReportStore(options = {}) {
         limitations: lc.limitations ?? [],
         overrides: lc.overrides ?? [],
       };
+    },
+
+    /** Atomically persist updated evidence and model (S3). */
+    async writeEvidenceAndModel(slug, runId, _evidence, _model) {
+      // S3 path: re-upload evidence.json + audit.json
+      const s3Client = resolvedS3Client;
+      if (!s3Client || !reportsBucket) {
+        throw new Error("S3 client or bucket not configured for evidence/model persistence");
+      }
+      const evidenceKey = `${reportsPrefix}/${slug}/${runId}/evidence.json`;
+      const auditKey = `${reportsPrefix}/${slug}/${runId}/audit.json`;
+      await Promise.all([
+        s3Client.send(new (await import("@aws-sdk/client-s3")).PutObjectCommand({ Bucket: reportsBucket, Key: evidenceKey, Body: JSON.stringify(_evidence, null, 2), ContentType: "application/json; charset=utf-8" })),
+        s3Client.send(new (await import("@aws-sdk/client-s3")).PutObjectCommand({ Bucket: reportsBucket, Key: auditKey, Body: JSON.stringify(_model, null, 2), ContentType: "application/json; charset=utf-8" })),
+      ]);
     },
 
     async writeReview(slug, runId, reviewRecord) {

@@ -330,6 +330,106 @@ export function buildApprovalRecord(runId, reviewRecord, approver, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Competitor decision validation (Task 9 — PRD §12)
+// ---------------------------------------------------------------------------
+
+const VALID_COMPETITOR_DECISIONS = new Set(["approved", "rejected"]);
+
+/**
+ * Validate competitor decision payload submitted with the review.
+ *
+ * Rules:
+ *  - decisions array may be omitted entirely (no competitor review performed)
+ *  - each entry requires candidateUrl, decision, and a non-empty reason
+ *  - decision must be "approved" or "rejected"
+ *  - duplicate candidate URLs are rejected
+ *  - candidate URLs must match known qualified candidates (when known set provided)
+ *
+ * @param {Array} decisions          Raw decisions from review payload
+ * @param {Set}   [knownCandidateUrls] Optional set of allowed candidate URLs
+ * @returns {{ valid: boolean, records: Array, errors: string[] }}
+ */
+export function validateCompetitorDecisions(decisions, knownCandidateUrls = null) {
+  const errors = [];
+  const records = [];
+
+  if (!Array.isArray(decisions) || decisions.length === 0) {
+    return { valid: true, records: [], errors: [] };
+  }
+
+  const seen = new Set();
+
+  for (const d of decisions) {
+    if (!d || typeof d !== "object") {
+      errors.push("Each competitor decision must be an object");
+      continue;
+    }
+
+    const candidateUrl = String(d.candidateUrl || "").trim();
+    if (!candidateUrl) {
+      errors.push("Competitor decision requires candidateUrl");
+      continue;
+    }
+
+    if (seen.has(candidateUrl)) {
+      errors.push(`Duplicate competitor decision for "${candidateUrl}"`);
+      continue;
+    }
+    seen.add(candidateUrl);
+
+    const decision = String(d.decision || "").trim().toLowerCase();
+    if (!VALID_COMPETITOR_DECISIONS.has(decision)) {
+      errors.push(`Competitor decision "${decision}" must be "approved" or "rejected" (candidate: ${candidateUrl})`);
+      continue;
+    }
+
+    const reason = String(d.reason || "").trim();
+    if (!reason) {
+      errors.push(`Competitor decision requires a non-empty reason (candidate: ${candidateUrl})`);
+      continue;
+    }
+
+    // Validate against known candidates when provided
+    if (knownCandidateUrls && !knownCandidateUrls.has(candidateUrl)) {
+      errors.push(`Unknown or excluded candidate "${candidateUrl}" — cannot approve or reject`);
+      continue;
+    }
+
+    records.push({
+      candidateUrl,
+      decision,
+      reason,
+    });
+  }
+
+  if (errors.length) {
+    return { valid: false, records: [], errors };
+  }
+
+  return { valid: true, records, errors: [] };
+}
+
+/**
+ * Build override records for competitor decisions.
+ * Uses the existing append-only override contract.
+ *
+ * @param {Array}  decisions  Validated decision records
+ * @param {string} reviewer   Reviewer identity
+ * @returns {Array} override records
+ */
+export function buildCompetitorOverrides(decisions, reviewer) {
+  const now = new Date().toISOString();
+  return decisions.map((d) => ({
+    user: reviewer,
+    timestamp: now,
+    reason: d.reason,
+    previousValue: "pending",
+    replacementValue: d.decision,
+    field: `competitor:${d.candidateUrl}`,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Review checklist factory (empty template)
 // ---------------------------------------------------------------------------
 

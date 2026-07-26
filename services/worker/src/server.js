@@ -141,6 +141,49 @@ const server = createServer(async (req, res) => {
         return send(res, 404, { error: "Audit not found", runId: auditPath.runId });
       }
 
+      // Enrich with competitor review data when available
+      if (statusResult) {
+        try {
+          // Try to load competitor candidates for auditor review
+          const evidenceRaw = await (config.reportsBucket
+            ? Promise.resolve(null)
+            : localStore.readFile(`${statusResult.slug}/${auditPath.runId}/evidence.json`).catch(() => null));
+          if (evidenceRaw) {
+            const evidence = JSON.parse(evidenceRaw.toString("utf8"));
+            const opp = evidence?.competitorOpportunities;
+            if (opp) {
+              statusResult.competitorReview = {
+                topics: opp.topics || [],
+                candidates: (opp.candidates?.qualified || []).map((c) => ({
+                  candidateUrl: c.candidateUrl,
+                  domain: c.domain,
+                  topic: c.topic,
+                  discoverySource: c.discoverySource,
+                  pageType: c.pageType,
+                  qualificationResults: c.qualificationResults,
+                  approvalStatus: c.approvalStatus || "pending",
+                  position: c.position,
+                })),
+                excludedCandidates: (opp.candidates?.excluded || []).slice(0, 20).map((c) => ({
+                  candidateUrl: c.candidateUrl,
+                  domain: c.domain,
+                  exclusionReason: c.exclusionReason,
+                })),
+                gaps: (opp.allGaps || []).map((g) => ({
+                  clientTopic: g.clientTopic,
+                  competitorPage: g.competitorPage,
+                  approvalStatus: g.approvalStatus || "pending",
+                  gapPassed: g.gapPassed,
+                  confidence: g.confidence,
+                })),
+                sources: opp.sources,
+                limitations: opp.limitations || [],
+              };
+            }
+          }
+        } catch { /* competitor data is supplementary — don't fail the request */ }
+      }
+
       return send(res, 200, statusResult);
     }
 
