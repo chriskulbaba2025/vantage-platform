@@ -15,9 +15,12 @@
  *   GSC: https://www.googleapis.com/auth/webmasters.readonly
  */
 
+import { randomBytes } from "node:crypto";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const STATE_NONCE_BYTES = 32; // 256-bit random nonce
+const STATE_TTL_MS = 10 * 60 * 1000; // 10-minute expiry for pending states
 
 export const OAUTH_SCOPES = Object.freeze({
   "google-analytics-4":    "https://www.googleapis.com/auth/analytics.readonly",
@@ -53,8 +56,24 @@ export function createOAuthService(opts = {}) {
 
   const configured = Boolean(clientId && clientSecret && redirectUri);
 
+  // ── CSRF protection: pending state nonces ────────────────────────────
+  // Map<nonce, { provider, createdAt }>
+  const _pendingStates = new Map();
+
+  // Periodic cleanup of expired pending states
+  const _cleanupInterval = setInterval(() => {
+    const cutoff = Date.now() - STATE_TTL_MS;
+    for (const [nonce, entry] of _pendingStates) {
+      if (entry.createdAt < cutoff) _pendingStates.delete(nonce);
+    }
+  }, 300_000).unref(); // every 5 min, don't keep process alive
+
   /**
    * Build the Google OAuth authorization URL for a provider.
+   *
+   * Embeds a cryptographically random nonce in the state parameter for
+   * CSRF protection.  The nonce is stored server-side and validated
+   * in the callback before token exchange.
    */
   function getAuthUrl(provider) {
     if (!configured) {
@@ -63,6 +82,9 @@ export function createOAuthService(opts = {}) {
     const scope = OAUTH_SCOPES[provider];
     if (!scope) throw new Error(`Unknown OAuth provider: ${provider}`);
 
+    const nonce = randomBytes(STATE_NONCE_BYTES).toString("hex");
+    _pendingStates.set(nonce, { provider, createdAt: Date.now() });
+
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -70,15 +92,58 @@ export function createOAuthService(opts = {}) {
       scope,
       access_type: "offline",
       prompt: "consent",
-      state: provider,
+      state: `${provider}:${nonce}`,
     });
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   }
 
   /**
+   * Validate the state parameter returned from Google's OAuth redirect.
+   *
+   * Extracts provider + nonce, verifies the nonce was issued by this
+   * server and hasn't expired.  Returns the validated provider on success,
+   * throws on invalid/missing/expired state.
+   *
+   * MUST be called before exchangeCode().
+   */
+  function validateState(rawState) {
+    if (!rawState || typeof rawState !== "string") {
+      throw new Error("Missing OAuth state parameter");
+    }
+
+    const idx = rawState.indexOf(":");
+    if (idx === -1) throw new Error("Invalid OAuth state format");
+
+    const provider = rawState.slice(0, idx);
+    const nonce = rawState.slice(idx + 1);
+
+    if (!provider || !nonce) throw new Error("Invalid OAuth state format");
+
+    const entry = _pendingStates.get(nonce);
+    if (!entry) throw new Error("OAuth state nonce not recognized — possible CSRF or replay");
+
+    if (Date.now() - entry.createdAt > STATE_TTL_MS) {
+      _pendingStates.delete(nonce);
+      throw new Error("OAuth state has expired — please re-initiate the connection");
+    }
+
+    if (entry.provider !== provider) {
+      _pendingStates.delete(nonce);
+      throw new Error("OAuth state provider mismatch");
+    }
+
+    // Consume the nonce — single-use
+    _pendingStates.delete(nonce);
+
+    return provider;
+  }
+
+  /**
    * Exchange an authorization code for tokens.  Stores encrypted tokens
    * and returns connection metadata (never raw tokens).
+   *
+   * Caller MUST validate the state parameter via validateState() first.
    */
   async function exchangeCode(code, provider) {
     if (!configured) throw new Error("OAuth not configured");
@@ -200,6 +265,7 @@ export function createOAuthService(opts = {}) {
 
   return {
     getAuthUrl,
+    validateState,
     exchangeCode,
     refreshToken,
     getAccessToken,

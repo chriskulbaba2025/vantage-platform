@@ -333,18 +333,18 @@ const server = createServer(async (req, res) => {
     // ── OAuth: Callback ──────────────────────────────────────────────────
     if (req.method === "GET" && url.pathname === "/oauth/callback") {
       const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state"); // provider name
+      const state = url.searchParams.get("state");
 
       if (!code) {
         return send(res, 400, { error: "Missing authorization code" });
       }
 
-      const provider = state === "ga4" ? "google-analytics-4"
-        : state === "gsc" ? "google-search-console"
-        : null;
-
-      if (!provider) {
-        return send(res, 400, { error: "Invalid or missing state parameter" });
+      // Validate CSRF state before exchanging code
+      let provider;
+      try {
+        provider = oauthService.validateState(state);
+      } catch (err) {
+        return send(res, 400, { error: err.message });
       }
 
       try {

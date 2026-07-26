@@ -10,7 +10,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, createHash, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, chmod } from "node:fs/promises";
 import { resolve, join } from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -103,6 +103,8 @@ export function createTokenStore(opts = {}) {
         await mkdir(storageDir, { recursive: true });
         const ciphertext = encrypt(payload, key);
         await writeFile(fp, ciphertext, "utf8");
+        // Restrict file permissions — owner read/write only (no-op on Windows)
+        try { await chmod(fp, 0o600); } catch { /* best-effort */ }
       }
     }
   }
