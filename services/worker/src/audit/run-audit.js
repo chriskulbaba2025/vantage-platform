@@ -1,6 +1,6 @@
 import { crawlSite, crawlCompetitors } from "../evidence/site-crawler.js";
 import { crawlWithDataforseo } from "../adapters/dataforseo-onpage/dataforseo-onpage-adapter.js";
-import { collectPerformance } from "../evidence/pagespeed-client.js";
+import { collectPerformance, collectPerformanceForPages } from "../evidence/pagespeed-client.js";
 import { collectBacklinks } from "../evidence/backlinks-provider.js";
 import { collectGa4 } from "../evidence/ga4-client.js";
 import { scoreAudit } from "../scoring/vantage-score.js";
@@ -209,6 +209,62 @@ function createProductionCrawlProvider(config) {
 }
 
 // ---------------------------------------------------------------------------
+// Primary conversion page discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Identify the primary conversion page from crawl data.
+ *
+ * Heuristic:
+ *  1. Page with the most forms
+ *  2. Page whose URL contains "contact", "booking", "quote", "get-started", "apply"
+ *  3. Page with the most CTAs
+ *  4. First non-homepage internal page with CTAs/forms
+ *  5. Fall back to the homepage (targetUrl)
+ */
+function findPrimaryConversionPage(site, targetUrl) {
+  const pages = site.pages || [];
+  if (pages.length === 0) return targetUrl;
+
+  const normalizedTarget = targetUrl.replace(/\/$/, "").toLowerCase();
+
+  // Pages with forms get highest priority
+  const pagesWithForms = pages.filter((p) => (p.forms?.length || 0) > 0);
+  if (pagesWithForms.length > 0) {
+    // Prefer the one that is NOT the homepage
+    const nonHomepage = pagesWithForms.find(
+      (p) => (p.url || "").replace(/\/$/, "").toLowerCase() !== normalizedTarget,
+    );
+    return nonHomepage?.url || pagesWithForms[0].url || targetUrl;
+  }
+
+  // Pages with conversion-oriented URLs
+  const conversionUrlPatterns = /contact|booking|quote|get-started|apply|pricing|services|schedule|appointment/i;
+  const conversionPages = pages.filter((p) =>
+    conversionUrlPatterns.test(p.url || "") &&
+    (p.url || "").replace(/\/$/, "").toLowerCase() !== normalizedTarget,
+  );
+  if (conversionPages.length > 0) {
+    return conversionPages[0].url || targetUrl;
+  }
+
+  // Pages with high CTA count
+  const pagesWithCtas = pages
+    .filter((p) => (p.url || "").replace(/\/$/, "").toLowerCase() !== normalizedTarget)
+    .sort((a, b) => ((b.ctas?.length || 0) + (b.externalCtas?.length || 0)) -
+                    ((a.ctas?.length || 0) + (a.externalCtas?.length || 0)));
+  if (pagesWithCtas.length > 0 && ((pagesWithCtas[0].ctas?.length || 0) > 0)) {
+    return pagesWithCtas[0].url || targetUrl;
+  }
+
+  // Fall back to first non-homepage page, or homepage
+  const nonHomepage = pages.find(
+    (p) => (p.url || "").replace(/\/$/, "").toLowerCase() !== normalizedTarget,
+  );
+  return nonHomepage?.url || targetUrl;
+}
+
+// ---------------------------------------------------------------------------
 // Main audit entry point
 // ---------------------------------------------------------------------------
 
@@ -251,8 +307,36 @@ export async function runAudit(rawInput, options = {}) {
     input.businessName = site.pages?.[0]?.title || site.domain;
   }
 
+  // ── Primary conversion page discovery ────────────────────────────────
+  const conversionPageUrl = findPrimaryConversionPage(site, input.targetUrl);
+  const perfUrls = conversionPageUrl && conversionPageUrl !== input.targetUrl
+    ? [input.targetUrl, conversionPageUrl]
+    : [input.targetUrl];
+
+  // Use multi-page collector when available; fall back to single-page for
+  // backward compatibility with tests that inject collectPerformance directly.
+  let effectivePerformanceCollector;
+  if (options.collectPerformance) {
+    // Test override: use the injected collector directly (single-URL compat)
+    effectivePerformanceCollector = async (urls, opts) => {
+      const result = await options.collectPerformance(urls[0], opts);
+      // Wrap single-URL result in multi-page shape when needed
+      if (urls.length > 1) {
+        return {
+          ...result,
+          pageResults: [result],
+          testedUrls: urls,
+          coverage: { ...result.coverage, pagesTested: 1 },
+        };
+      }
+      return result;
+    };
+  } else {
+    effectivePerformanceCollector = collectPerformanceForPages;
+  }
+
   const [performance, competitors, backlinks, ga4] = await Promise.all([
-    performanceCollector(input.targetUrl, {
+    performanceCollector(perfUrls, {
       apiKey: config.pagespeedApiKey,
       cruxApiKey: config.cruxApiKey,
       cacheDir: options.cacheDir,
