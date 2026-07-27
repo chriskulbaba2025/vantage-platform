@@ -38,11 +38,26 @@ The report renderer preserves the canonical CSS, header shape, sticky navigation
   "location": "London, Ontario, Canada",
   "language": "en-CA",
   "primaryGoal": "Generate qualified enquiries",
-  "competitors": ["https://competitor-one.example", "https://competitor-two.example"]
+  "competitors": ["https://competitor-one.example", "https://competitor-two.example"],
+  "ga4": {
+    "propertyId": "123456789"
+  },
+  "gsc": {
+    "siteUrl": "https://example.com/"
+  }
 }
 ```
 
-Only `targetUrl` is required.
+Only `targetUrl` is required. `ga4.propertyId` and `gsc.siteUrl` are optional per-audit overrides.
+
+## Per-audit Google property selection
+
+One dedicated agency Google account may be granted access to multiple client GA4 and GSC properties. Each audit selects the required client properties:
+
+- **`ga4.propertyId`** (optional): GA4 property ID for this specific audit. Must contain digits only. Falls back to `GA4_PROPERTY_ID` environment variable when not supplied.
+- **`gsc.siteUrl`** (optional): GSC property for this specific audit. Accepts HTTPS URL-prefix properties (`https://example.com/`) or sc-domain properties (`sc-domain:example.com`). Falls back to `GSC_SITE_URL` environment variable, then to `targetUrl`.
+
+Do not pass credentials, tokens, or secrets in the audit body. OAuth is managed server-side.
 
 ## Local commands
 

@@ -42,6 +42,30 @@ function validateInput(raw) {
   const competitors = Array.isArray(raw.competitors)
     ? raw.competitors.filter(Boolean).slice(0, 3).map(normalizeUrl)
     : [];
+
+  // ── GA4 validation ───────────────────────────────────────────────────
+  const ga4 = raw.ga4 && typeof raw.ga4 === "object" ? { ...raw.ga4 } : {};
+  if (ga4.propertyId !== undefined && ga4.propertyId !== null && ga4.propertyId !== "") {
+    if (!/^\d+$/.test(String(ga4.propertyId))) {
+      throw new Error("ga4.propertyId must contain digits only");
+    }
+  }
+
+  // ── GSC validation ───────────────────────────────────────────────────
+  const gsc = raw.gsc && typeof raw.gsc === "object" ? { ...raw.gsc } : {};
+  if (gsc.siteUrl !== undefined && gsc.siteUrl !== null && gsc.siteUrl !== "") {
+    const url = String(gsc.siteUrl).trim();
+    // Accept HTTPS URL-prefix or sc-domain:
+    if (/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(url)) {
+      // URL-prefix property — valid
+    } else if (/^sc-domain:[a-z0-9.-]+\.[a-z]{2,}$/i.test(url)) {
+      // sc-domain property — valid
+    } else {
+      throw new Error(`gsc.siteUrl must be an HTTPS URL-prefix or sc-domain property (e.g. "https://example.com/" or "sc-domain:example.com"), got: ${url}`);
+    }
+    gsc.siteUrl = url;
+  }
+
   return {
     targetUrl,
     businessName: String(raw.businessName || "").trim(),
@@ -49,7 +73,8 @@ function validateInput(raw) {
     language: String(raw.language || "en-CA").trim(),
     competitors,
     primaryGoal: String(raw.primaryGoal || "Generate qualified enquiries").trim(),
-    ga4: raw.ga4 && typeof raw.ga4 === "object" ? raw.ga4 : {},
+    ga4,
+    gsc,
   };
 }
 
@@ -378,7 +403,7 @@ export async function runAudit(rawInput, options = {}) {
       fetchImpl: options.fetchImpl,
       oauthService: options.oauthService || null,
     }),
-    gscCollector(input.targetUrl, {
+    gscCollector(input.gsc.siteUrl || config.gscSiteUrl || input.targetUrl, {
       serviceAccountJson: config.googleServiceAccountJson,
       fetchImpl: options.fetchImpl,
       oauthService: options.oauthService || null,
@@ -450,6 +475,11 @@ export async function runAudit(rawInput, options = {}) {
       backlinks: validatedBacklinks.sourceStatus,
       ga4: validatedGa4.sourceStatus,
       gsc: validatedGsc.sourceStatus,
+    },
+    selectedProperties: {
+      ga4PropertyId: input.ga4.propertyId || config.ga4PropertyId || null,
+      gscSiteUrl: input.gsc.siteUrl || config.gscSiteUrl || null,
+      competitors: input.competitors,
     },
     files: ["index.html", "audit.json", "evidence.json", "manifest.json"],
   };

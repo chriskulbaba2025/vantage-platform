@@ -15,7 +15,8 @@ Completed:
 - Task 7: PageSpeed-to-Lighthouse production fallback merged in PR #8
 - Task 8: GA4 and GSC OAuth connections merged in PR #9
 - Task 9: V3 competitor opportunity layer merged in PR #10
-- Task 10: V3 internal-link opportunity module (current)
+- Task 10: V3 internal-link opportunity module merged in PR #11
+- feat/per-audit-google-properties: per-audit GA4/GSC property selection (current)
 
 Railway variables configured:
 
