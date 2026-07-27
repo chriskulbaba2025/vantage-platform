@@ -17,6 +17,7 @@ import {
   EVIDENCE_ENVELOPE_VERSION,
   validateEvidenceEnvelope,
   downgradeToFailed,
+  normalizeCompetitorApprovalState,
 } from "../scoring/evidence-contracts.js";
 import {
   LIFECYCLE_STATUS,
@@ -524,6 +525,12 @@ export async function submitReview(store, slug, runId, reviewPayload) {
       );
     }
 
+    // Capture current approval states BEFORE applying decisions
+    const previousStates = new Map();
+    for (const candidate of qualifiedCandidates) {
+      previousStates.set(candidate.candidateUrl, candidate.approvalStatus || "pending");
+    }
+
     // Apply decisions (in-memory only — no files touched yet)
     const decisionMap = new Map(validation.records.map((r) => [r.candidateUrl, r.decision]));
     for (const candidate of qualifiedCandidates) {
@@ -546,8 +553,8 @@ export async function submitReview(store, slug, runId, reviewPayload) {
     // Re-score with updated evidence
     model = scoreAudit(model.input, evidence);
 
-    // Build override records
-    competitorOverrides = buildCompetitorOverrides(validation.records, reviewer);
+    // Build override records with actual previous values
+    competitorOverrides = buildCompetitorOverrides(validation.records, previousStates, reviewer);
   }
 
   // ── Phase 3: Build and validate complete review record ────────────────
@@ -669,37 +676,17 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
 
   const model = committed.model;
 
-  // ── Evidence/model competitor agreement ──────────────────────────────
+  // ── Evidence/model competitor agreement (full structural comparison) ──
   const evOpp = committed.evidence.competitorOpportunities;
   const mdOpp = model.evidence?.competitorOpportunities;
   if (evOpp || mdOpp) {
-    // Qualified candidate URLs must match
-    const evUrls = (evOpp?.candidates?.qualified || []).map((c) => c.candidateUrl).sort().join(",");
-    const mdUrls = (mdOpp?.candidates?.qualified || []).map((c) => c.candidateUrl).sort().join(",");
-    if (evUrls !== mdUrls) {
+    const evNorm = normalizeCompetitorApprovalState(evOpp);
+    const mdNorm = normalizeCompetitorApprovalState(mdOpp);
+    const evJson = JSON.stringify(evNorm);
+    const mdJson = JSON.stringify(mdNorm);
+    if (evJson !== mdJson) {
       throw Object.assign(
-        new Error("Approval rejected — evidence and model competitor candidates disagree"),
-        { statusCode: 422 },
-      );
-    }
-
-    // Approval statuses must match
-    for (const evCand of (evOpp?.candidates?.qualified || [])) {
-      const mdCand = (mdOpp?.candidates?.qualified || []).find((c) => c.candidateUrl === evCand.candidateUrl);
-      if (mdCand && evCand.approvalStatus !== mdCand.approvalStatus) {
-        throw Object.assign(
-          new Error(`Approval rejected — evidence/model approval status mismatch for "${evCand.candidateUrl}": evidence=${evCand.approvalStatus}, model=${mdCand.approvalStatus}`),
-          { statusCode: 422 },
-        );
-      }
-    }
-
-    // Client-facing gap count must match
-    const evGapCount = (evOpp?.gaps || []).length;
-    const mdGapCount = (mdOpp?.gaps || []).length;
-    if (evGapCount !== mdGapCount) {
-      throw Object.assign(
-        new Error(`Approval rejected — evidence/model gap count mismatch: evidence=${evGapCount}, model=${mdGapCount}`),
+        new Error("Approval rejected — evidence and model competitor approval states disagree"),
         { statusCode: 422 },
       );
     }

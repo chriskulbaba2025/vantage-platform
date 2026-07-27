@@ -775,19 +775,26 @@ export function createS3ReportStore(options = {}) {
           let parsedReview;
           try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
 
-          // Full lifecycle agreement
+          // Full lifecycle agreement (null-safe, shared with local store)
+          const nil = (v) => (v === undefined || v === null) ? null : v;
           if (lc.review) {
             if (parsedReview.reviewer !== lc.review.reviewer) return null;
             if (parsedReview.reviewedAt !== lc.review.reviewedAt) return null;
-            if (parsedReview.notes !== lc.review.notes) return null;
-            if (parsedReview.limitationsAccepted !== lc.review.limitationsAccepted) return null;
-            if (parsedReview.findingsReviewed !== lc.review.findingsReviewed) return null;
+            if (nil(parsedReview.notes) !== nil(lc.review.notes)) return null;
+            if (!!parsedReview.limitationsAccepted !== !!lc.review.limitationsAccepted) return null;
+            if (nil(parsedReview.findingsReviewed) !== nil(lc.review.findingsReviewed)) return null;
             const txChecklist = (parsedReview.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
             const lcChecklist = (lc.review.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
             if (txChecklist !== lcChecklist) return null;
-            const txOverrideCount = (parsedReview.overrides || []).length;
-            const lcOverrideCount = (lc.overrides || []).length;
-            if (txOverrideCount !== lcOverrideCount) return null;
+            // Lifecycle overrides must include all review overrides (review = subset of lifecycle)
+            const reviewOverrides = parsedReview.overrides || [];
+            const lcOverrides = lc.overrides || [];
+            for (const ro of reviewOverrides) {
+              const found = lcOverrides.some((lo) =>
+                lo.user === ro.user && lo.field === ro.field &&
+                lo.replacementValue === ro.replacementValue && lo.timestamp === ro.timestamp);
+              if (!found) return null;
+            }
           }
 
           return { evidence: JSON.parse(evidenceRaw), model: JSON.parse(modelRaw), reviewRecord: parsedReview, txId };

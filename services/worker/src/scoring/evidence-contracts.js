@@ -211,3 +211,63 @@ export function downgradeToFailed(shape, validationErrors, label) {
     }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Competitor approval state normalizer (Task 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Produce a deterministic, sort-stable representation of the competitor
+ * approval state for structural comparison between evidence and model.
+ *
+ * Returns null when no competitor opportunities exist.
+ * Sorts all arrays by a stable key to prevent insertion-order mismatch.
+ */
+export function normalizeCompetitorApprovalState(opportunities) {
+  if (!opportunities) return null;
+
+  const qualified = (opportunities.candidates?.qualified || []).map((c) => ({
+    candidateUrl: c.candidateUrl || "",
+    topic: c.topic || "",
+    qualificationPassed: !!c.qualificationPassed,
+    qualificationResults: { ...(c.qualificationResults || {}) },
+    approvalStatus: c.approvalStatus || "pending",
+    domain: c.domain || "",
+  })).sort((a, b) => a.candidateUrl.localeCompare(b.candidateUrl));
+
+  const allGaps = (opportunities.allGaps || []).map((g) => ({
+    clientTopic: g.clientTopic || "",
+    competitorPage: g.competitorPage || "",
+    approvalStatus: g.approvalStatus || "pending",
+    gapPassed: !!g.gapPassed,
+    gapResults: { ...(g.gapResults || {}) },
+    qualificationPassed: !!g.qualificationPassed,
+    qualificationResults: { ...(g.qualificationResults || {}) },
+    recommendation: g.recommendation || null,
+    confidence: g.confidence || "",
+    limitationStatement: g.limitationStatement || "",
+  })).sort((a, b) => a.competitorPage.localeCompare(b.competitorPage) || a.clientTopic.localeCompare(b.clientTopic));
+
+  const gaps = (opportunities.gaps || []).map((g) => ({
+    clientTopic: g.clientTopic || "",
+    competitorPage: g.competitorPage || "",
+    approvalStatus: g.approvalStatus || "approved",
+    gapPassed: !!g.gapPassed,
+    qualificationPassed: !!g.qualificationPassed,
+    recommendation: g.recommendation || null,
+    confidence: g.confidence || "",
+    limitationStatement: g.limitationStatement || "",
+  })).sort((a, b) => a.competitorPage.localeCompare(b.competitorPage) || a.clientTopic.localeCompare(b.clientTopic));
+
+  const sources = opportunities.sources
+    ? {
+        dataforseoSerp: opportunities.sources.dataforseoSerp?.status || null,
+        supplied: opportunities.sources.supplied?.status || null,
+      }
+    : null;
+
+  const sourceStatus = opportunities.sourceStatus || null;
+  const limitations = [...(opportunities.limitations || [])].sort();
+
+  return { qualified, allGaps, gaps, sources, sourceStatus, limitations };
+}

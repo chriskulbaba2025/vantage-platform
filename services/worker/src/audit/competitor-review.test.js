@@ -207,19 +207,33 @@ test("T9-REVIEW-02e: invalid decision value is rejected", () => {
 // T9-REVIEW-03: override records are built correctly
 // ---------------------------------------------------------------------------
 
-test("T9-REVIEW-03: buildCompetitorOverrides produces append-only override records", () => {
+test("T9-REVIEW-03: buildCompetitorOverrides produces append-only override records with actual previous state", () => {
   const decisions = [
     { candidateUrl: "https://c1.example", decision: "approved", reason: "Relevant" },
     { candidateUrl: "https://c2.example", decision: "rejected", reason: "Directory site" },
   ];
-  const overrides = buildCompetitorOverrides(decisions, "auditor@example.com");
+  const previousStates = new Map([
+    ["https://c1.example", "pending"],
+    ["https://c2.example", "approved"],
+  ]);
+  const overrides = buildCompetitorOverrides(decisions, previousStates, "auditor@example.com");
   assert.equal(overrides.length, 2);
   assert.equal(overrides[0].user, "auditor@example.com");
   assert.equal(overrides[0].previousValue, "pending");
   assert.equal(overrides[0].replacementValue, "approved");
   assert.equal(overrides[0].field, "competitor:https://c1.example");
   assert.ok(overrides[0].timestamp);
+  assert.equal(overrides[1].previousValue, "approved");
   assert.equal(overrides[1].replacementValue, "rejected");
+});
+
+test("T9-REVIEW-03b: unchanged decision is skipped (no-op)", () => {
+  const decisions = [
+    { candidateUrl: "https://c1.example", decision: "approved", reason: "Already approved" },
+  ];
+  const previousStates = new Map([["https://c1.example", "approved"]]);
+  const overrides = buildCompetitorOverrides(decisions, previousStates, "auditor@example.com");
+  assert.equal(overrides.length, 0, "Unchanged decision should produce no override");
 });
 
 // ---------------------------------------------------------------------------

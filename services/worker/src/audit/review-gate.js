@@ -413,20 +413,35 @@ export function validateCompetitorDecisions(decisions, knownCandidateUrls = null
  * Build override records for competitor decisions.
  * Uses the existing append-only override contract.
  *
- * @param {Array}  decisions  Validated decision records
- * @param {string} reviewer   Reviewer identity
+ * Each override records the actual previous state of the candidate,
+ * not a hardcoded "pending".  This correctly captures transitions
+ * such as pending→approved, approved→rejected, and rejected→approved.
+ *
+ * Unchanged decisions (same previous and replacement value) are skipped
+ * rather than creating no-op override records.
+ *
+ * @param {Array}   decisions           Validated decision records
+ * @param {Map}     previousStates      Map of candidateUrl → current approvalStatus
+ * @param {string}  reviewer            Reviewer identity
  * @returns {Array} override records
  */
-export function buildCompetitorOverrides(decisions, reviewer) {
+export function buildCompetitorOverrides(decisions, previousStates, reviewer) {
   const now = new Date().toISOString();
-  return decisions.map((d) => ({
-    user: reviewer,
-    timestamp: now,
-    reason: d.reason,
-    previousValue: "pending",
-    replacementValue: d.decision,
-    field: `competitor:${d.candidateUrl}`,
-  }));
+  const records = [];
+  for (const d of decisions) {
+    const previousValue = (previousStates && previousStates.get(d.candidateUrl)) || "pending";
+    // Skip unchanged decisions — no override needed
+    if (previousValue === d.decision) continue;
+    records.push({
+      user: reviewer,
+      timestamp: now,
+      reason: d.reason,
+      previousValue,
+      replacementValue: d.decision,
+      field: `competitor:${d.candidateUrl}`,
+    });
+  }
+  return records;
 }
 
 // ---------------------------------------------------------------------------

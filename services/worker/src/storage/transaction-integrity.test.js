@@ -206,7 +206,7 @@ test("T9-INT-08: evidence/model competitor approval mismatch blocks approval", a
 
   await assert.rejects(
     () => approveAudit(store, result.slug, result.runId, "approver@example.com"),
-    /approval status mismatch/i,
+    /competitor approval states disagree/i,
   );
 });
 
