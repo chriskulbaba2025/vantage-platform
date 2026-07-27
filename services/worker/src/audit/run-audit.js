@@ -42,6 +42,46 @@ function validateInput(raw) {
   const competitors = Array.isArray(raw.competitors)
     ? raw.competitors.filter(Boolean).slice(0, 3).map(normalizeUrl)
     : [];
+
+  // ── GA4 validation (strict allowlist — only propertyId) ───────────────
+  const GA4_ALLOWED = new Set(["propertyId"]);
+  const ga4 = {};
+  if (raw.ga4 && typeof raw.ga4 === "object") {
+    for (const key of Object.keys(raw.ga4)) {
+      if (!GA4_ALLOWED.has(key)) {
+        throw new Error(`ga4.${key} is not allowed — only ga4.propertyId is accepted`);
+      }
+    }
+    if (raw.ga4.propertyId !== undefined && raw.ga4.propertyId !== null && raw.ga4.propertyId !== "") {
+      if (!/^\d+$/.test(String(raw.ga4.propertyId))) {
+        throw new Error("ga4.propertyId must contain digits only");
+      }
+      ga4.propertyId = String(raw.ga4.propertyId);
+    }
+  }
+
+  // ── GSC validation (strict allowlist — only siteUrl) ──────────────────
+  const GSC_ALLOWED = new Set(["siteUrl"]);
+  const gsc = {};
+  if (raw.gsc && typeof raw.gsc === "object") {
+    for (const key of Object.keys(raw.gsc)) {
+      if (!GSC_ALLOWED.has(key)) {
+        throw new Error(`gsc.${key} is not allowed — only gsc.siteUrl is accepted`);
+      }
+    }
+    if (raw.gsc.siteUrl !== undefined && raw.gsc.siteUrl !== null && raw.gsc.siteUrl !== "") {
+      const url = String(raw.gsc.siteUrl).trim();
+      if (/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(url)) {
+        // URL-prefix — valid
+      } else if (/^sc-domain:[a-z0-9.-]+\.[a-z]{2,}$/i.test(url)) {
+        // sc-domain — valid
+      } else {
+        throw new Error(`gsc.siteUrl must be an HTTPS URL-prefix or sc-domain property, got: ${url}`);
+      }
+      gsc.siteUrl = url;
+    }
+  }
+
   return {
     targetUrl,
     businessName: String(raw.businessName || "").trim(),
@@ -49,7 +89,8 @@ function validateInput(raw) {
     language: String(raw.language || "en-CA").trim(),
     competitors,
     primaryGoal: String(raw.primaryGoal || "Generate qualified enquiries").trim(),
-    ga4: raw.ga4 && typeof raw.ga4 === "object" ? raw.ga4 : {},
+    ga4,
+    gsc,
   };
 }
 
@@ -280,6 +321,10 @@ export async function runAudit(rawInput, options = {}) {
   const runId = options.runId || createRunId();
   const startedAt = new Date().toISOString();
 
+  // ── Effective properties (calculated once, used for collection + manifest) ──
+  const effectiveGa4PropertyId = input.ga4.propertyId || config.ga4PropertyId || null;
+  const effectiveGscSiteUrl = input.gsc.siteUrl || config.gscSiteUrl || input.targetUrl;
+
   // ── Crawl provider ──────────────────────────────────────────────────
   // Production path: DataForSEO On-Page adapter (PRD v3.0 §8.1, §8.2).
   // Tests override via options.crawlSite for isolation.
@@ -372,13 +417,12 @@ export async function runAudit(rawInput, options = {}) {
       fetchImpl: options.fetchImpl,
     }),
     ga4Collector({
-      propertyId: input.ga4.propertyId || config.ga4PropertyId,
-      serviceAccountJson:
-        input.ga4.serviceAccountJson || config.googleServiceAccountJson,
+      propertyId: effectiveGa4PropertyId,
+      serviceAccountJson: config.googleServiceAccountJson,
       fetchImpl: options.fetchImpl,
       oauthService: options.oauthService || null,
     }),
-    gscCollector(input.targetUrl, {
+    gscCollector(effectiveGscSiteUrl, {
       serviceAccountJson: config.googleServiceAccountJson,
       fetchImpl: options.fetchImpl,
       oauthService: options.oauthService || null,
@@ -450,6 +494,11 @@ export async function runAudit(rawInput, options = {}) {
       backlinks: validatedBacklinks.sourceStatus,
       ga4: validatedGa4.sourceStatus,
       gsc: validatedGsc.sourceStatus,
+    },
+    selectedProperties: {
+      ga4PropertyId: effectiveGa4PropertyId,
+      gscSiteUrl: effectiveGscSiteUrl,
+      competitors: input.competitors,
     },
     files: ["index.html", "audit.json", "evidence.json", "manifest.json"],
   };
