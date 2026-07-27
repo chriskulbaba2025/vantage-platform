@@ -5,6 +5,7 @@ import { collectBacklinks } from "../evidence/backlinks-provider.js";
 import { collectGa4 } from "../evidence/ga4-client.js";
 import { collectGsc } from "../evidence/gsc-client.js";
 import { collectCompetitorOpportunities } from "../evidence/competitor-opportunity-layer.js";
+import { generateInternalLinkOpportunities } from "../evidence/internal-link-opportunity.js";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReport } from "../report/render-report.js";
 import { createReportStore } from "../storage/report-store.js";
@@ -384,6 +385,9 @@ export async function runAudit(rawInput, options = {}) {
     }),
   ]);
 
+  // ── Internal-link opportunities (runs after crawl) ────────────────────
+  const internalLinkOpportunities = generateInternalLinkOpportunities(site, input);
+
   // ── Competitor opportunity layer (runs after crawl + supplied competitors) ──
   const competitorOpportunities = await competitorOpportunityCollector(site, input, {
     dataforseoLogin: config.dataforseoLogin,
@@ -415,6 +419,7 @@ export async function runAudit(rawInput, options = {}) {
     backlinks: validatedBacklinks,
     ga4: validatedGa4,
     gsc: validatedGsc,
+    internalLinkOpportunities,
   };
 
   // ── Score ───────────────────────────────────────────────────────────

@@ -11,7 +11,8 @@
     "test:backlinks": "node --test src/evidence/backlinks-provider.test.js",
     "check:template": "node src/report/verify-template.js",
     "acceptance:task7": "node scripts/acceptance-task7.js",
-    "acceptance:task9": "node scripts/acceptance-task9.js"
+    "acceptance:task9": "node scripts/acceptance-task9.js",
+    "acceptance:task10": "node scripts/acceptance-task10.js"
   },
   "engines": {
     "node": ">=20.0.0"

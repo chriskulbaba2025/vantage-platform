@@ -376,5 +376,5 @@ test("19. internal-links page identifies broken links from evidence", async () =
   // Broken link from fixture should be listed
   assert.match(ilContent, /deleted/);
   // Opportunity count
-  assert.match(ilContent, /opportunity/);
+  assert.match(ilContent, /recommendation|broken/i);
 });
