@@ -1,88 +1,69 @@
-import { e, severityClass, table } from "./html-helpers.js";
+import { e, section, table } from "./html-helpers.js";
 
-/**
- * Internal-Link Opportunities section — PRD v3.0 §13, §17.2 §13.
- *
- * Generates implementation-ready internal-link recommendations from
- * crawl-visible evidence.
- */
+function formatReason(reason) {
+  const map = {
+    source_content_supports_related_service_page: "Content supports related service",
+    informational_content_progresses_to_commercial_page: "Info content → commercial",
+    consideration_content_progresses_to_conversion_page: "Consideration → conversion",
+    pages_belong_to_same_topic_hierarchy: "Same topic hierarchy",
+    source_content_references_target_service: "References target service",
+    source_content_clarifies_referenced_topic: "Clarifies referenced topic",
+    high_value_page_is_weakly_linked: "High-value page weakly linked",
+  };
+  return map[reason] || reason;
+}
+
 export function internalLinks(model) {
-  const site = model.evidence.site;
-  const brokenCount = site.brokenInternalLinks?.length || 0;
-  const totalLinks = site.internalLinkCount || 0;
+  const opp = model.evidence?.internalLinkOpportunities;
 
-  // Build link-opportunity rows from crawl evidence
-  const opportunities = [];
-
-  // Broken links are high priority
-  for (const broken of (site.brokenInternalLinks || []).slice(0, 10)) {
-    opportunities.push({
-      source: broken.source || "unknown",
-      target: broken.url || broken.target || "unknown",
-      anchor: "—",
-      reason: "Broken internal link — returns error status",
-      funnel: "—",
-      confidence: "Deterministic",
-      priority: "H",
-    });
+  if (!opp) {
+    return section("internal-link-opportunities", "13", "Internal-Link Opportunities",
+      '<div class="note"><strong>Not available:</strong> Internal-link opportunities were not computed for this audit.</div>');
   }
 
-  // Orphan-recovery signals: pages with low inlink count
-  for (const page of (site.pages || []).slice(0, 5)) {
-    const inlinks = page.internalInlinks ?? page.inlinkCount ?? 0;
-    if (inlinks === 0 && page.url) {
-      opportunities.push({
-        source: site.domain,
-        target: page.url,
-        anchor: page.title || page.url,
-        reason: "Potential orphan — no detected internal inlinks",
-        funnel: "Contextual discovery",
-        confidence: "Supported",
-        priority: "M",
-      });
-    }
-  }
+  const opportunities = opp.opportunities || [];
+  const excluded = opp.excludedCandidates || [];
+  const orphans = opp.orphans || [];
+  const limitations = opp.limitations || [];
 
-  // Service-to-service contextual linking
-  const services = site.services || [];
-  for (let i = 0; i < Math.min(services.length, 4); i++) {
-    for (let j = i + 1; j < Math.min(services.length, 4); j++) {
-      if (services[i] && services[j]) {
-        opportunities.push({
-          source: `${services[i]} page`,
-          target: `${services[j]} page`,
-          anchor: services[j],
-          reason: "Cross-link related services for topic hierarchy",
-          funnel: "Consideration",
-          confidence: "Directional",
-          priority: "M",
-        });
-      }
-    }
-  }
+  // Also show broken internal links from crawl evidence
+  const brokenLinks = model.evidence.site.brokenInternalLinks || [];
+  const totalLinks = model.evidence.site.internalLinkCount || 0;
 
-  const oppSlice = opportunities.slice(0, 20);
+  const recSection = opportunities.length > 0
+    ? `<h3>Implementation-Ready Recommendations (${opportunities.length})</h3>
+<p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">High- and medium-confidence recommendations traceable to crawled source and target page content.</p>
+${table(
+  ["Source", "Target", "Anchor", "Context", "Reason", "Stage", "Conf", "Warning"],
+  opportunities.slice(0, 25).map((o) => [
+    `<a href="${e(o.sourceUrl)}" target="_blank" rel="noopener">${e((o.sourceUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a>`,
+    `<a href="${e(o.targetUrl)}" target="_blank" rel="noopener">${e((o.targetUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a>`,
+    e(o.proposedAnchor),
+    e((o.relevantSurroundingText || "").slice(0, 70)),
+    e(formatReason(o.reasonForLink)),
+    e(o.funnelStage),
+    `<span class="${o.confidence === "high" ? "path-clear" : "path-weak"}">${e(o.confidence)}</span>`,
+    o.duplicateAnchorWarning ? `<span style="color:var(--orange,#c7521a)" title="${e(o.duplicateAnchorWarning)}">⚠</span>` : "—",
+  ]),
+)}`
+    : '<div class="note"><strong>No implementation-ready recommendations:</strong> No high- or medium-confidence opportunities were identified from crawl evidence.</div>';
 
-  const body = oppSlice.length
-    ? table(
-        ["Source", "Target", "Proposed Anchor", "Reason", "Funnel Stage", "Confidence", "Pri"],
-        oppSlice.map((o) => [
-          e(o.source),
-          e(o.target),
-          e(o.anchor),
-          e(o.reason),
-          e(o.funnel),
-          e(o.confidence),
-          `<span class="${severityClass(o.priority)}">${e(o.priority)}</span>`,
-        ]),
-      )
-    : `<p>No internal-link opportunities were identified from crawl evidence.</p>`;
+  const brokenSection = brokenLinks.length > 0
+    ? `<h3>Broken Internal Links (${brokenLinks.length})</h3>
+${table(["Source", "Target"], brokenLinks.slice(0, 10).map((b) => [e(b.source || "unknown"), e(b.url || b.target || "unknown")]))}`
+    : "";
 
-  return `<section id="internal-link-opportunities">
-<h2><span class="sec-num">13 /</span> Internal-Link Opportunities</h2>
-<p style="font-size:.85rem;color:var(--muted);margin-bottom:16px">Implementation-ready link recommendations to improve topic hierarchy, service discovery, and conversion progression. Generated from crawl-visible evidence only.</p>
-<div class="note"><strong>Summary:</strong> ${e(totalLinks)} total internal links detected. ${e(brokenCount)} broken. ${e(oppSlice.length)} opportunity(s) identified.</div>
-${body}
-<p style="font-size:.8rem;color:var(--muted);margin-top:12px">Recommendations are directional. Verify page existence and relevance before implementing. Anchor text should use natural, descriptive language — not keyword repetition.</p>
-</section>`;
+  const lowSection = ""; // Low-confidence excluded from client-facing report
+
+  const orphanSection = orphans.length > 0 && opp.coverage?.crawlComplete !== false
+    ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>
+${table(["URL", "Title"], orphans.slice(0, 15).map((o) => [e((o.url || "").slice(0, 60)), e(o.title || "—")]))}`
+    : (opp.coverage?.crawlComplete === false
+      ? `<div class="note"><strong>Orphan analysis:</strong> Crawl coverage is incomplete — definitive orphan claims cannot be made.</div>`
+      : "");
+
+  const stats = `<p style="font-size:.8rem;color:var(--muted);margin-top:12px"><strong>Summary:</strong> ${e(totalLinks)} total internal links, ${e(brokenLinks.length)} broken. ${e(opp.coverage?.pagesEvaluated || 0)} pages evaluated. ${e(opportunities.length)} recommendations, ${e(excluded.length)} excluded, ${e((opp.lowConfidenceCandidates || []).length)} low-confidence,${e(orphans.length)} orphan(s).</p>`;
+
+  return section("internal-link-opportunities", "13", "Internal-Link Opportunities",
+    `${stats}${recSection}${brokenSection}${lowSection}${orphanSection}${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}`);
 }

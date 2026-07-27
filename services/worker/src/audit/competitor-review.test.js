@@ -279,7 +279,7 @@ test("T9-REVIEW-04: submitReview applies approved competitor decisions to canoni
     { id: "score_eligibility", reviewed: true },
     { id: "limitations", reviewed: true },
     { id: "causal_language", reviewed: true },
-    { id: "implementation_feasibility", reviewed: true },
+    { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
   ];
 
   const updated = await submitReview(store, result.slug, result.runId, {
@@ -339,7 +339,7 @@ test("T9-REVIEW-05: rejected competitor decisions produce no client-facing gaps"
       { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
       { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
       { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-      { id: "implementation_feasibility", reviewed: true },
+      { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
     ],
     competitorDecisions: qualifiedUrls.map((url) => ({
       candidateUrl: url, decision: "rejected", reason: "Not a direct service competitor",
@@ -394,7 +394,7 @@ test("T9-REVIEW-06: approval fails when competitor_selections not reviewed", asy
       { id: "competitor_selections", reviewed: false }, // NOT reviewed
       { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
       { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-      { id: "implementation_feasibility", reviewed: true },
+      { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
     ],
     competitorDecisions: qualifiedUrls.map((url) => ({
       candidateUrl: url, decision: "approved", reason: "Relevant competitor",
@@ -458,7 +458,7 @@ test("T9-REVIEW-07: approval fails when committed evidence has a pending gap in 
     { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
     { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
     { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-    { id: "implementation_feasibility", reviewed: true },
+    { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
   ];
 
   await store.commitCompetitorReview({

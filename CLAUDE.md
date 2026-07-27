@@ -14,7 +14,8 @@ Completed:
 - Task 6: Human review gate and approved multi-page reports merged in PR #7
 - Task 7: PageSpeed-to-Lighthouse production fallback merged in PR #8
 - Task 8: GA4 and GSC OAuth connections merged in PR #9
-- Task 9: V3 competitor opportunity layer (current)
+- Task 9: V3 competitor opportunity layer merged in PR #10
+- Task 10: V3 internal-link opportunity module (current)
 
 Railway variables configured:
 

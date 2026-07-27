@@ -218,7 +218,7 @@ test("4. complete review payload is accepted and persisted", async () => {
 
   assert.equal(updated.status, "reviewed");
   assert.equal(updated.review.reviewer, "principal-auditor@example.com");
-  assert.equal(updated.review.checklist.length, 9);
+  assert.equal(updated.review.checklist.length, 10);
   assert.ok(updated.review.checklist.every((c) => c.reviewed));
   assert.equal(updated.overrides.length, 1);
   assert.equal(updated.review.limitationsAccepted, true);
@@ -232,7 +232,7 @@ test("4. complete review payload is accepted and persisted", async () => {
 test("5. incomplete checklist is rejected", async () => {
   const { result, store } = await createAudit();
 
-  // Only submit 3 of 9 checklist items
+  // Only submit 3 of 10 checklist items
   const checklist = REVIEW_CHECKLIST_ITEMS.slice(0, 3).map((item) => ({
     id: item.id,
     reviewed: true,
@@ -549,9 +549,9 @@ test("28. isReviewComplete: null returns false", () => {
   assert.equal(isReviewComplete(null), false);
 });
 
-test("29. emptyChecklist produces all 9 items unreviewed", () => {
+test("29. emptyChecklist produces all 10 items unreviewed", () => {
   const cl = emptyChecklist();
-  assert.equal(cl.length, 9);
+  assert.equal(cl.length, 10);
   assert.ok(cl.every((item) => item.reviewed === false));
   assert.ok(cl.every((item) => item.note === null));
 });

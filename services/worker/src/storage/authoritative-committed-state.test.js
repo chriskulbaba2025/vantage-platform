@@ -55,7 +55,7 @@ const FULL_CHECKLIST = [
   { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
   { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
   { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-  { id: "implementation_feasibility", reviewed: true },
+  { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
 ];
 
 // ---------------------------------------------------------------------------
