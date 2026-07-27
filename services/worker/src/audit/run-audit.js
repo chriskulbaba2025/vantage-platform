@@ -652,17 +652,58 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     );
   }
 
-  // Verify committed review agrees with lifecycle review
-  if (committed.reviewRecord && lc.review) {
-    if (committed.reviewRecord.reviewer !== lc.review.reviewer) {
+  // When an active transaction exists, the review record is mandatory
+  if (lc.activeReviewTxId && !committed.reviewRecord) {
+    throw Object.assign(
+      new Error("Approval rejected — active transaction is missing the review record"),
+      { statusCode: 422 },
+    );
+  }
+
+  if (!committed.evidence) {
+    throw Object.assign(
+      new Error("Approval rejected — committed evidence not found"),
+      { statusCode: 422 },
+    );
+  }
+
+  const model = committed.model;
+
+  // ── Evidence/model competitor agreement ──────────────────────────────
+  const evOpp = committed.evidence.competitorOpportunities;
+  const mdOpp = model.evidence?.competitorOpportunities;
+  if (evOpp || mdOpp) {
+    // Qualified candidate URLs must match
+    const evUrls = (evOpp?.candidates?.qualified || []).map((c) => c.candidateUrl).sort().join(",");
+    const mdUrls = (mdOpp?.candidates?.qualified || []).map((c) => c.candidateUrl).sort().join(",");
+    if (evUrls !== mdUrls) {
       throw Object.assign(
-        new Error("Approval rejected — committed review and lifecycle review disagree"),
+        new Error("Approval rejected — evidence and model competitor candidates disagree"),
+        { statusCode: 422 },
+      );
+    }
+
+    // Approval statuses must match
+    for (const evCand of (evOpp?.candidates?.qualified || [])) {
+      const mdCand = (mdOpp?.candidates?.qualified || []).find((c) => c.candidateUrl === evCand.candidateUrl);
+      if (mdCand && evCand.approvalStatus !== mdCand.approvalStatus) {
+        throw Object.assign(
+          new Error(`Approval rejected — evidence/model approval status mismatch for "${evCand.candidateUrl}": evidence=${evCand.approvalStatus}, model=${mdCand.approvalStatus}`),
+          { statusCode: 422 },
+        );
+      }
+    }
+
+    // Client-facing gap count must match
+    const evGapCount = (evOpp?.gaps || []).length;
+    const mdGapCount = (mdOpp?.gaps || []).length;
+    if (evGapCount !== mdGapCount) {
+      throw Object.assign(
+        new Error(`Approval rejected — evidence/model gap count mismatch: evidence=${evGapCount}, model=${mdGapCount}`),
         { statusCode: 422 },
       );
     }
   }
-
-  const model = committed.model;
 
   // ── Competitor approval gate (Task 9) ─────────────────────────────────
   const competitorOpps = model.evidence?.competitorOpportunities;

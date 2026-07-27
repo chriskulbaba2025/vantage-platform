@@ -224,32 +224,54 @@ export function createLocalReportStore(options = {}) {
       const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
 
       if (txId) {
-        // ── Transaction path: verify checksums ──────────────────────────
+        // ── Transaction path: all four artifacts are mandatory ──────────
         const txnDir = join(dir, ".txn", txId);
         try {
-          // Read and validate tx-meta first
+          // Read tx-meta
           const metaRaw = await readFile(join(txnDir, "tx-meta.json"), "utf8");
           const meta = JSON.parse(metaRaw);
-
-          // Verify transaction ID matches
           if (meta.txId !== txId) return null;
 
-          // Read all artifacts
+          // All three checksums are mandatory for active transactions
+          if (!meta.checksums?.evidence || !meta.checksums?.model || !meta.checksums?.review) return null;
+
+          // Read all three artifacts — review-record.json is MANDATORY
           const [evidenceRaw, modelRaw, reviewRaw] = await Promise.all([
             readFile(join(txnDir, "evidence.json"), "utf8"),
             readFile(join(txnDir, "audit.json"), "utf8"),
-            readFile(join(txnDir, "review-record.json"), "utf8").catch(() => null),
+            readFile(join(txnDir, "review-record.json"), "utf8"),
           ]);
 
-          // Verify checksums
-          if (sha256(evidenceRaw) !== meta.checksums?.evidence) return null;
-          if (sha256(modelRaw) !== meta.checksums?.model) return null;
-          if (reviewRaw && meta.checksums?.review && sha256(reviewRaw) !== meta.checksums.review) return null;
+          // Verify all three checksums
+          if (sha256(evidenceRaw) !== meta.checksums.evidence) return null;
+          if (sha256(modelRaw) !== meta.checksums.model) return null;
+          if (sha256(reviewRaw) !== meta.checksums.review) return null;
 
-          // Verify review record agrees with lifecycle
-          const parsedReview = reviewRaw ? JSON.parse(reviewRaw) : null;
-          if (parsedReview && lc.review) {
+          // Parse review — must be valid JSON
+          let parsedReview;
+          try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
+
+          // Full lifecycle agreement (all fields, null-safe)
+          const nil = (v) => (v === undefined || v === null) ? null : v;
+          if (lc.review) {
             if (parsedReview.reviewer !== lc.review.reviewer) return null;
+            if (parsedReview.reviewedAt !== lc.review.reviewedAt) return null;
+            if (nil(parsedReview.notes) !== nil(lc.review.notes)) return null;
+            if (!!parsedReview.limitationsAccepted !== !!lc.review.limitationsAccepted) return null;
+            if (nil(parsedReview.findingsReviewed) !== nil(lc.review.findingsReviewed)) return null;
+            // Checklist: same IDs and reviewed values
+            const txChecklist = (parsedReview.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
+            const lcChecklist = (lc.review.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
+            if (txChecklist !== lcChecklist) return null;
+            // Lifecycle overrides must include all review overrides (review = subset)
+            const reviewOverrides = parsedReview.overrides || [];
+            const lcOverrides = lc.overrides || [];
+            for (const ro of reviewOverrides) {
+              const found = lcOverrides.some((lo) =>
+                lo.user === ro.user && lo.field === ro.field &&
+                lo.replacementValue === ro.replacementValue && lo.timestamp === ro.timestamp);
+              if (!found) return null;
+            }
           }
 
           return {
@@ -731,25 +753,44 @@ export function createS3ReportStore(options = {}) {
 
       if (txId) {
         try {
-          const [metaResp, evResp, mdResp] = await Promise.all([
+          // All four artifacts mandatory for active transactions
+          const [metaResp, evResp, mdResp, revResp] = await Promise.all([
             s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("tx-meta.json") })),
             s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("evidence.json") })),
             s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("audit.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("review-record.json") })),
           ]);
           const metaRaw = await metaResp.Body.transformToString("utf8");
           const meta = JSON.parse(metaRaw);
           if (meta.txId !== txId) return null;
-          const [evidenceRaw, modelRaw] = await Promise.all([evResp.Body.transformToString("utf8"), mdResp.Body.transformToString("utf8")]);
-          if (sha256(evidenceRaw) !== meta.checksums?.evidence) return null;
-          if (sha256(modelRaw) !== meta.checksums?.model) return null;
-          let reviewRecord = null;
-          try {
-            const revResp = await s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("review-record.json") }));
-            const reviewRaw = await revResp.Body.transformToString("utf8");
-            if (meta.checksums?.review && sha256(reviewRaw) !== meta.checksums.review) return null;
-            reviewRecord = JSON.parse(reviewRaw);
-          } catch { /* review optional */ }
-          return { evidence: JSON.parse(evidenceRaw), model: JSON.parse(modelRaw), reviewRecord, txId };
+          if (!meta.checksums?.evidence || !meta.checksums?.model || !meta.checksums?.review) return null;
+
+          const [evidenceRaw, modelRaw, reviewRaw] = await Promise.all([
+            evResp.Body.transformToString("utf8"), mdResp.Body.transformToString("utf8"), revResp.Body.transformToString("utf8"),
+          ]);
+          if (sha256(evidenceRaw) !== meta.checksums.evidence) return null;
+          if (sha256(modelRaw) !== meta.checksums.model) return null;
+          if (sha256(reviewRaw) !== meta.checksums.review) return null;
+
+          let parsedReview;
+          try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
+
+          // Full lifecycle agreement
+          if (lc.review) {
+            if (parsedReview.reviewer !== lc.review.reviewer) return null;
+            if (parsedReview.reviewedAt !== lc.review.reviewedAt) return null;
+            if (parsedReview.notes !== lc.review.notes) return null;
+            if (parsedReview.limitationsAccepted !== lc.review.limitationsAccepted) return null;
+            if (parsedReview.findingsReviewed !== lc.review.findingsReviewed) return null;
+            const txChecklist = (parsedReview.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
+            const lcChecklist = (lc.review.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
+            if (txChecklist !== lcChecklist) return null;
+            const txOverrideCount = (parsedReview.overrides || []).length;
+            const lcOverrideCount = (lc.overrides || []).length;
+            if (txOverrideCount !== lcOverrideCount) return null;
+          }
+
+          return { evidence: JSON.parse(evidenceRaw), model: JSON.parse(modelRaw), reviewRecord: parsedReview, txId };
         } catch { return null; }
       }
 
