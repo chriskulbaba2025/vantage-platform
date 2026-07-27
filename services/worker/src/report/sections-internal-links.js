@@ -22,8 +22,6 @@ export function internalLinks(model) {
   }
 
   const opportunities = opp.opportunities || [];
-  const allOpps = opp.allOpportunities || [];
-  const lowConf = allOpps.filter((o) => o.confidence === "low");
   const excluded = opp.excludedCandidates || [];
   const orphans = opp.orphans || [];
   const limitations = opp.limitations || [];
@@ -55,17 +53,16 @@ ${table(
 ${table(["Source", "Target"], brokenLinks.slice(0, 10).map((b) => [e(b.source || "unknown"), e(b.url || b.target || "unknown")]))}`
     : "";
 
-  const lowSection = lowConf.length > 0
-    ? `<h3>Low-Confidence Candidates (${lowConf.length} — Auditor Review)</h3>${table(["Source", "Target", "Anchor", "Reason"], lowConf.slice(0, 10).map((o) => [e((o.sourceUrl || "").slice(0, 50)), e((o.targetUrl || "").slice(0, 50)), e(o.proposedAnchor), e(formatReason(o.reasonForLink))]))}`
-    : "";
+  const lowSection = ""; // Low-confidence excluded from client-facing report
 
-  const orphanSection = orphans.length > 0
+  const orphanSection = orphans.length > 0 && opp.coverage?.crawlComplete !== false
     ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>
-<p style="font-size:.8rem;color:var(--muted)">${opp.coverage?.totalPages < opp.coverage?.pagesEvaluated ? "<strong>Crawl coverage incomplete — definitive orphan claims cannot be made.</strong>" : ""}</p>
 ${table(["URL", "Title"], orphans.slice(0, 15).map((o) => [e((o.url || "").slice(0, 60)), e(o.title || "—")]))}`
-    : "";
+    : (opp.coverage?.crawlComplete === false
+      ? `<div class="note"><strong>Orphan analysis:</strong> Crawl coverage is incomplete — definitive orphan claims cannot be made.</div>`
+      : "");
 
-  const stats = `<p style="font-size:.8rem;color:var(--muted);margin-top:12px"><strong>Summary:</strong> ${e(totalLinks)} total internal links, ${e(brokenLinks.length)} broken. ${e(opp.coverage?.pagesEvaluated || 0)} pages evaluated. ${e(opportunities.length)} recommendations, ${e(excluded.length)} excluded, ${e(lowConf.length)} low-confidence, ${e(orphans.length)} orphan(s).</p>`;
+  const stats = `<p style="font-size:.8rem;color:var(--muted);margin-top:12px"><strong>Summary:</strong> ${e(totalLinks)} total internal links, ${e(brokenLinks.length)} broken. ${e(opp.coverage?.pagesEvaluated || 0)} pages evaluated. ${e(opportunities.length)} recommendations, ${e(excluded.length)} excluded, ${e((opp.lowConfidenceCandidates || []).length)} low-confidence,${e(orphans.length)} orphan(s).</p>`;
 
   return section("internal-link-opportunities", "13", "Internal-Link Opportunities",
     `${stats}${recSection}${brokenSection}${lowSection}${orphanSection}${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}`);

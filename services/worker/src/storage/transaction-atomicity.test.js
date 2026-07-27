@@ -234,7 +234,7 @@ test("T9-ATOM-03: successful commit atomically updates lifecycle, evidence, and 
     { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
     { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
     { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-    { id: "implementation_feasibility", reviewed: true },
+    { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
   ];
 
   const updatedLc = await store.commitCompetitorReview({
@@ -302,7 +302,7 @@ test("T9-ATOM-04: reads resolve through active transaction only", async () => {
     { id: "high_severity", reviewed: true }, { id: "competitor_selections", reviewed: true },
     { id: "root_cause", reviewed: true }, { id: "score_eligibility", reviewed: true },
     { id: "limitations", reviewed: true }, { id: "causal_language", reviewed: true },
-    { id: "implementation_feasibility", reviewed: true },
+    { id: "internal_link_recommendations", reviewed: true }, { id: "implementation_feasibility", reviewed: true },
   ];
 
   await store.commitCompetitorReview({

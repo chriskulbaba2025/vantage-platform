@@ -45,6 +45,7 @@ export const REVIEW_CHECKLIST_ITEMS = Object.freeze([
   { id: "top_ten_findings",     label: "Top ten findings" },
   { id: "high_severity",        label: "All high-severity findings" },
   { id: "competitor_selections",label: "Competitor selections" },
+  { id: "internal_link_recommendations", label: "Internal-link recommendations are evidence-backed, contextually valid, feasible, non-duplicate, and not based solely on topic mentions" },
   { id: "root_cause",           label: "Root-cause statement" },
   { id: "score_eligibility",    label: "Score eligibility" },
   { id: "limitations",          label: "Limitations" },

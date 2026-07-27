@@ -765,6 +765,21 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     }
   }
 
+  // ── Internal-link checklist gate ──────────────────────────────────────
+  if (model.evidence?.internalLinkOpportunities) {
+    const ilChecklistItem = lc.review?.checklist?.find(
+      (item) => item.id === "internal_link_recommendations",
+    );
+    if (!ilChecklistItem || !ilChecklistItem.reviewed) {
+      throw Object.assign(
+        new Error(
+          "Approval rejected — the \"Internal-link recommendations\" checklist item must be reviewed.",
+        ),
+        { statusCode: 422 },
+      );
+    }
+  }
+
   // Build approval record
   const { valid, record: approvalRecord, errors } = buildApprovalRecord(
     runId,
