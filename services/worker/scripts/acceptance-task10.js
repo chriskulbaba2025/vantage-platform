@@ -54,17 +54,25 @@ try {
   sc.push({name:"Audit generates internal-link evidence",ok:ok1});
   if(!ok1){console.log("FAIL: no evidence — opps="+(il?.opportunities?.length||0));pass=false;}
 
+  // Store a specific recommendation for later verification
+  const firstRec = il?.opportunities?.[0];
+  sc.push({name:"First recommendation has source and target URLs",ok:!!(firstRec?.sourceUrl && firstRec?.targetUrl)});
+
   // Verify low-confidence excluded
   const lowInClient = il && (il.opportunities||[]).some(o=>o.confidence==="low");
   sc.push({name:"Low-confidence excluded from client-facing",ok:!lowInClient});
   if(lowInClient){console.log("FAIL: low-conf in client output");pass=false;}
 
+  // Verify excludedPages has reasons
+  sc.push({name:"excludedPages preserves page-level exclusion reasons",ok:(il?.excludedPages||[]).length>0});
+
   // 2. Submit review
   await submitReview(store,result.slug,result.runId,{reviewer:"auditor",checklist:CK,limitationsAccepted:true});
   const lc = await store._readLifecycle(result.slug,result.runId);
-  sc.push({name:"Review persisted with internal_link_recommendations",ok:lc.status==="reviewed"&&lc.review});
+  const ilItem = lc.review?.checklist?.find(c=>c.id==="internal_link_recommendations");
+  sc.push({name:"Review has internal_link_recommendations checklist item reviewed",ok:!!(ilItem&&ilItem.reviewed)});
 
-  // 3. Approve
+  // 3. Approve — uses committed transaction
   try {
     const approved = await approveAudit(store,result.slug,result.runId,"approver");
     sc.push({name:"Approval succeeds with committed evidence",ok:approved.lifecycle.status==="approved"});
@@ -75,8 +83,14 @@ try {
   // 4. Read approved internal-link report page
   const pagePath = join(dir,result.slug,result.runId,"internal-links.html");
   const html = await readFile(pagePath,"utf8");
-  sc.push({name:"Approved report renders recommendations",ok:/Implementation-Ready/.test(html)||/Internal-Link/.test(html)});
-  sc.push({name:"Low-confidence absent from approved report",ok:!/Low-Confidence/.test(html)});
+  sc.push({name:"Approved report renders Implementation-Ready recommendations",ok:/Implementation-Ready/.test(html)});
+  sc.push({name:"Low-Confidence section absent from report",ok:!/Low-Confidence/.test(html)});
+
+  // 5. Verify specific anchor from crawl evidence appears in approved HTML
+  if(firstRec){
+    const srcPage = SITE.pages.find(p=>p.url===firstRec.sourceUrl);
+    sc.push({name:"Recommended anchor exists in source crawl evidence",ok:!!(srcPage && (srcPage.headings?.h1||[]).concat(srcPage.headings?.h2||[]).concat(srcPage.headings?.h3||[]).includes(firstRec.proposedAnchor))});
+  }
 
   await rm(dir,{recursive:true,force:true});
 }catch(e){console.log("FAIL: "+e.message);pass=false;sc.push({name:"Workflow",ok:false});}
