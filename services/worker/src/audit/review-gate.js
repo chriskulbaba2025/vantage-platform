@@ -330,6 +330,121 @@ export function buildApprovalRecord(runId, reviewRecord, approver, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Competitor decision validation (Task 9 — PRD §12)
+// ---------------------------------------------------------------------------
+
+const VALID_COMPETITOR_DECISIONS = new Set(["approved", "rejected"]);
+
+/**
+ * Validate competitor decision payload submitted with the review.
+ *
+ * Rules:
+ *  - decisions array may be omitted entirely (no competitor review performed)
+ *  - each entry requires candidateUrl, decision, and a non-empty reason
+ *  - decision must be "approved" or "rejected"
+ *  - duplicate candidate URLs are rejected
+ *  - candidate URLs must match known qualified candidates (when known set provided)
+ *
+ * @param {Array} decisions          Raw decisions from review payload
+ * @param {Set}   [knownCandidateUrls] Optional set of allowed candidate URLs
+ * @returns {{ valid: boolean, records: Array, errors: string[] }}
+ */
+export function validateCompetitorDecisions(decisions, knownCandidateUrls = null) {
+  const errors = [];
+  const records = [];
+
+  if (!Array.isArray(decisions) || decisions.length === 0) {
+    return { valid: true, records: [], errors: [] };
+  }
+
+  const seen = new Set();
+
+  for (const d of decisions) {
+    if (!d || typeof d !== "object") {
+      errors.push("Each competitor decision must be an object");
+      continue;
+    }
+
+    const candidateUrl = String(d.candidateUrl || "").trim();
+    if (!candidateUrl) {
+      errors.push("Competitor decision requires candidateUrl");
+      continue;
+    }
+
+    if (seen.has(candidateUrl)) {
+      errors.push(`Duplicate competitor decision for "${candidateUrl}"`);
+      continue;
+    }
+    seen.add(candidateUrl);
+
+    const decision = String(d.decision || "").trim().toLowerCase();
+    if (!VALID_COMPETITOR_DECISIONS.has(decision)) {
+      errors.push(`Competitor decision "${decision}" must be "approved" or "rejected" (candidate: ${candidateUrl})`);
+      continue;
+    }
+
+    const reason = String(d.reason || "").trim();
+    if (!reason) {
+      errors.push(`Competitor decision requires a non-empty reason (candidate: ${candidateUrl})`);
+      continue;
+    }
+
+    // Validate against known candidates when provided
+    if (knownCandidateUrls && !knownCandidateUrls.has(candidateUrl)) {
+      errors.push(`Unknown or excluded candidate "${candidateUrl}" — cannot approve or reject`);
+      continue;
+    }
+
+    records.push({
+      candidateUrl,
+      decision,
+      reason,
+    });
+  }
+
+  if (errors.length) {
+    return { valid: false, records: [], errors };
+  }
+
+  return { valid: true, records, errors: [] };
+}
+
+/**
+ * Build override records for competitor decisions.
+ * Uses the existing append-only override contract.
+ *
+ * Each override records the actual previous state of the candidate,
+ * not a hardcoded "pending".  This correctly captures transitions
+ * such as pending→approved, approved→rejected, and rejected→approved.
+ *
+ * Unchanged decisions (same previous and replacement value) are skipped
+ * rather than creating no-op override records.
+ *
+ * @param {Array}   decisions           Validated decision records
+ * @param {Map}     previousStates      Map of candidateUrl → current approvalStatus
+ * @param {string}  reviewer            Reviewer identity
+ * @returns {Array} override records
+ */
+export function buildCompetitorOverrides(decisions, previousStates, reviewer) {
+  const now = new Date().toISOString();
+  const records = [];
+  for (const d of decisions) {
+    const previousValue = (previousStates && previousStates.get(d.candidateUrl)) || "pending";
+    // Skip unchanged decisions — no override needed
+    if (previousValue === d.decision) continue;
+    records.push({
+      user: reviewer,
+      timestamp: now,
+      reason: d.reason,
+      previousValue,
+      replacementValue: d.decision,
+      field: `competitor:${d.candidateUrl}`,
+    });
+  }
+  return records;
+}
+
+// ---------------------------------------------------------------------------
 // Review checklist factory (empty template)
 // ---------------------------------------------------------------------------
 

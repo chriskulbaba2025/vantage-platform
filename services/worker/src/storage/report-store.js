@@ -1,6 +1,11 @@
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { resolve, join, normalize, sep, dirname } from "node:path";
 import { slugify } from "../utils.js";
+import {
+  createTransactionId,
+  sha256,
+  committedReviewAgreesWithLifecycle,
+} from "./transaction-helpers.js";
 
 function safeSegment(value) {
   const segment = slugify(value);
@@ -105,6 +110,171 @@ export function createLocalReportStore(options = {}) {
       const full = resolve(baseDir, normalize(relativePath));
       if (!(full === baseDir || full.startsWith(baseDir + sep))) throw new Error("Requested report path escaped base directory");
       return readFile(full);
+    },
+
+    /**
+     * Atomic competitor-review transaction.
+     *
+     * Stages updated evidence, model, and review record, then commits by
+     * atomically writing the lifecycle.  If any stage fails, the lifecycle
+     * is not updated and the previous state remains fully active.
+     *
+     * Post-commit, staged artifacts are copied to canonical paths
+     * (best-effort — the transaction directory is canonical if copies fail).
+     */
+    async commitCompetitorReview({ slug, runId, evidence, model, reviewRecord }) {
+      const dir = reportDir(slug, runId);
+      if (!(dir === baseDir || dir.startsWith(baseDir + sep))) throw new Error("Report output escaped base directory");
+
+      // Load current lifecycle (must exist)
+      const currentLc = await readLifecycle(slug, runId);
+      if (!currentLc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+      if (currentLc.status !== "draft" && currentLc.status !== "reviewed") {
+        throw Object.assign(new Error(`Cannot review audit in "${currentLc.status}" status`), { statusCode: 409 });
+      }
+
+      const txId = createTransactionId();
+      const txnDir = join(dir, ".txn", txId);
+      const evidenceBody = JSON.stringify(evidence, null, 2);
+      const modelBody = JSON.stringify(model, null, 2);
+      const reviewBody = JSON.stringify(reviewRecord, null, 2);
+
+      // ── Stage all artifacts ──────────────────────────────────────────
+      try {
+        await mkdir(txnDir, { recursive: true });
+        await writeFile(join(txnDir, "evidence.json"), evidenceBody, "utf8");
+        await writeFile(join(txnDir, "audit.json"), modelBody, "utf8");
+        await writeFile(join(txnDir, "review-record.json"), reviewBody, "utf8");
+
+        const meta = {
+          txId,
+          createdAt: new Date().toISOString(),
+          checksums: {
+            evidence: sha256(evidenceBody),
+            model: sha256(modelBody),
+            review: sha256(reviewBody),
+          },
+        };
+        await writeFile(join(txnDir, "tx-meta.json"), JSON.stringify(meta, null, 2), "utf8");
+
+        // Verify all staged files exist and match checksums
+        const verifyEvidence = await readFile(join(txnDir, "evidence.json"), "utf8");
+        const verifyModel = await readFile(join(txnDir, "audit.json"), "utf8");
+        const verifyReview = await readFile(join(txnDir, "review-record.json"), "utf8");
+        if (sha256(verifyEvidence) !== meta.checksums.evidence) throw new Error("Staged evidence checksum mismatch");
+        if (sha256(verifyModel) !== meta.checksums.model) throw new Error("Staged model checksum mismatch");
+        if (sha256(verifyReview) !== meta.checksums.review) throw new Error("Staged review checksum mismatch");
+      } catch (stageErr) {
+        // Clean up staging — but don't touch active state
+        try { await rm(txnDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+        throw stageErr;
+      }
+
+      // ── Commit: atomically write lifecycle (this IS the commit barrier) ──
+      const existingOverrides = Array.isArray(currentLc.overrides) ? currentLc.overrides : [];
+      const newOverrides = Array.isArray(reviewRecord.overrides) ? reviewRecord.overrides : [];
+
+      const updatedLc = {
+        ...currentLc,
+        status: "reviewed",
+        activeReviewTxId: txId,
+        review: {
+          reviewer: reviewRecord.reviewer,
+          reviewedAt: reviewRecord.reviewedAt,
+          checklist: reviewRecord.checklist,
+          findingsReviewed: reviewRecord.findingsReviewed ?? null,
+          notes: reviewRecord.notes ?? null,
+          limitationsAccepted: reviewRecord.limitationsAccepted ?? false,
+        },
+        overrides: [...existingOverrides, ...newOverrides],
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await atomicWrite(lifecyclePath(slug, runId), JSON.stringify(updatedLc, null, 2));
+      } catch (commitErr) {
+        // Lifecycle write failed — clean staging but leave active state intact
+        try { await rm(txnDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+        throw commitErr;
+      }
+
+      // ── Post-commit: copy staged to canonical paths (best-effort) ──
+      try {
+        await atomicWrite(join(dir, "evidence.json"), evidenceBody);
+        await atomicWrite(join(dir, "audit.json"), modelBody);
+      } catch { /* canonical copies are best-effort — txn dir is authoritative */ }
+
+      return updatedLc;
+    },
+
+    /**
+     * Read evidence.json and audit.json for the active committed state.
+     * Resolves through the lifecycle's activeReviewTxId, falling back to
+     * canonical paths.
+     */
+    async readCommittedArtifacts(slug, runId) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) return null;
+
+      const dir = reportDir(slug, runId);
+      const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
+
+      if (txId) {
+        // ── Transaction path: all four artifacts are mandatory ──────────
+        const txnDir = join(dir, ".txn", txId);
+        try {
+          // Read tx-meta
+          const metaRaw = await readFile(join(txnDir, "tx-meta.json"), "utf8");
+          const meta = JSON.parse(metaRaw);
+          if (meta.txId !== txId) return null;
+
+          // All three checksums are mandatory for active transactions
+          if (!meta.checksums?.evidence || !meta.checksums?.model || !meta.checksums?.review) return null;
+
+          // Read all three artifacts — review-record.json is MANDATORY
+          const [evidenceRaw, modelRaw, reviewRaw] = await Promise.all([
+            readFile(join(txnDir, "evidence.json"), "utf8"),
+            readFile(join(txnDir, "audit.json"), "utf8"),
+            readFile(join(txnDir, "review-record.json"), "utf8"),
+          ]);
+
+          // Verify all three checksums
+          if (sha256(evidenceRaw) !== meta.checksums.evidence) return null;
+          if (sha256(modelRaw) !== meta.checksums.model) return null;
+          if (sha256(reviewRaw) !== meta.checksums.review) return null;
+
+          // Parse review — must be valid JSON
+          let parsedReview;
+          try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
+
+          if (!committedReviewAgreesWithLifecycle(parsedReview, lc)) return null;
+
+          return {
+            evidence: JSON.parse(evidenceRaw),
+            model: JSON.parse(modelRaw),
+            reviewRecord: parsedReview,
+            txId,
+          };
+        } catch {
+          return null;
+        }
+      }
+
+      // ── Pre-transaction path: read canonical files ────────────────────
+      try {
+        const [evidenceRaw, modelRaw] = await Promise.all([
+          readFile(join(dir, "evidence.json"), "utf8"),
+          readFile(join(dir, "audit.json"), "utf8"),
+        ]);
+        return {
+          evidence: JSON.parse(evidenceRaw),
+          model: JSON.parse(modelRaw),
+          reviewRecord: null,
+          txId: null,
+        };
+      } catch {
+        return null;
+      }
     },
 
     // ── Lifecycle operations ──────────────────────────────────────────
@@ -460,6 +630,141 @@ export function createS3ReportStore(options = {}) {
         limitations: lc.limitations ?? [],
         overrides: lc.overrides ?? [],
       };
+    },
+
+    /**
+     * Atomic competitor-review transaction (S3).
+     *
+     * Stages to versioned prefix, verifies all writes, then commits
+     * by writing the lifecycle.  The lifecycle's activeReviewTxId is
+     * the sole commit pointer.  Orphaned staged objects are safe.
+     */
+    async commitCompetitorReview({ slug, runId, evidence, model, reviewRecord }) {
+      const s3Client = client;
+      if (!s3Client || !bucket) {
+        throw new Error("S3 client or bucket not configured");
+      }
+
+      const currentLc = await readLifecycle(slug, runId);
+      if (!currentLc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+      if (currentLc.status !== "draft" && currentLc.status !== "reviewed") {
+        throw Object.assign(new Error(`Cannot review audit in "${currentLc.status}" status`), { statusCode: 409 });
+      }
+
+      const { PutObjectCommand } = await aws();
+      const txId = createTransactionId();
+      const txnPrefix = `${prefix}/${slug}/${runId}/.txn/${txId}`;
+      const evidenceBody = JSON.stringify(evidence, null, 2);
+      const modelBody = JSON.stringify(model, null, 2);
+      const reviewBody = JSON.stringify(reviewRecord, null, 2);
+
+      const putOpts = { Bucket: bucket, ContentType: "application/json; charset=utf-8", CacheControl: "no-cache" };
+
+      // ── Stage all artifacts ──────────────────────────────────────────
+      const stageResults = await Promise.allSettled([
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/evidence.json`, Body: evidenceBody })),
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/audit.json`, Body: modelBody })),
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/review-record.json`, Body: reviewBody })),
+        s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${txnPrefix}/tx-meta.json`, Body: JSON.stringify({
+          txId, createdAt: new Date().toISOString(),
+          checksums: { evidence: sha256(evidenceBody), model: sha256(modelBody), review: sha256(reviewBody) },
+        }) })),
+      ]);
+
+      const failed = stageResults.filter((r) => r.status === "rejected");
+      if (failed.length > 0) {
+        throw new Error(`S3 staging failed: ${failed.map((f) => f.reason?.message).join("; ")}`);
+      }
+
+      // ── Commit: write lifecycle (the commit barrier) ──
+      const existingOverrides = Array.isArray(currentLc.overrides) ? currentLc.overrides : [];
+      const newOverrides = Array.isArray(reviewRecord.overrides) ? reviewRecord.overrides : [];
+      const updatedLc = {
+        ...currentLc, status: "reviewed", activeReviewTxId: txId,
+        review: {
+          reviewer: reviewRecord.reviewer, reviewedAt: reviewRecord.reviewedAt,
+          checklist: reviewRecord.checklist, findingsReviewed: reviewRecord.findingsReviewed ?? null,
+          notes: reviewRecord.notes ?? null, limitationsAccepted: reviewRecord.limitationsAccepted ?? false,
+        },
+        overrides: [...existingOverrides, ...newOverrides],
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await s3Client.send(new PutObjectCommand({
+          ...putOpts, Key: lifecycleKey(slug, runId),
+          Body: JSON.stringify(updatedLc, null, 2),
+        }));
+      } catch (commitErr) {
+        throw commitErr; // lifecycle unchanged → staged objects are orphaned but harmless
+      }
+
+      // Post-commit canonical copies (best-effort)
+      try {
+        await Promise.allSettled([
+          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${prefix}/${slug}/${runId}/evidence.json`, Body: evidenceBody })),
+          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${prefix}/${slug}/${runId}/audit.json`, Body: modelBody })),
+        ]);
+      } catch { /* canonical copies are best-effort */ }
+
+      return updatedLc;
+    },
+
+    /**
+     * Read committed artifacts for the active transaction.
+     */
+    async readCommittedArtifacts(slug, runId) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) return null;
+      const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
+      const { GetObjectCommand } = await aws();
+      const s3Client = client;
+      if (!s3Client) return null;
+
+      const getKey = (filename) => {
+        if (txId) return `${prefix}/${slug}/${runId}/.txn/${txId}/${filename}`;
+        return `${prefix}/${slug}/${runId}/${filename}`;
+      };
+
+      if (txId) {
+        try {
+          // All four artifacts mandatory for active transactions
+          const [metaResp, evResp, mdResp, revResp] = await Promise.all([
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("tx-meta.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("evidence.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("audit.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("review-record.json") })),
+          ]);
+          const metaRaw = await metaResp.Body.transformToString("utf8");
+          const meta = JSON.parse(metaRaw);
+          if (meta.txId !== txId) return null;
+          if (!meta.checksums?.evidence || !meta.checksums?.model || !meta.checksums?.review) return null;
+
+          const [evidenceRaw, modelRaw, reviewRaw] = await Promise.all([
+            evResp.Body.transformToString("utf8"), mdResp.Body.transformToString("utf8"), revResp.Body.transformToString("utf8"),
+          ]);
+          if (sha256(evidenceRaw) !== meta.checksums.evidence) return null;
+          if (sha256(modelRaw) !== meta.checksums.model) return null;
+          if (sha256(reviewRaw) !== meta.checksums.review) return null;
+
+          let parsedReview;
+          try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
+
+          if (!committedReviewAgreesWithLifecycle(parsedReview, lc)) return null;
+
+          return { evidence: JSON.parse(evidenceRaw), model: JSON.parse(modelRaw), reviewRecord: parsedReview, txId };
+        } catch { return null; }
+      }
+
+      try {
+        const [evResp, mdResp] = await Promise.all([
+          s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("evidence.json") })),
+          s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("audit.json") })),
+        ]);
+        const evidence = JSON.parse(await evResp.Body.transformToString("utf8"));
+        const model = JSON.parse(await mdResp.Body.transformToString("utf8"));
+        return { evidence, model, txId: null, reviewRecord: null };
+      } catch { return null; }
     },
 
     async writeReview(slug, runId, reviewRecord) {

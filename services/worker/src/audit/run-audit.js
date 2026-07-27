@@ -4,6 +4,7 @@ import { collectPerformance, collectPerformanceForPages } from "../evidence/page
 import { collectBacklinks } from "../evidence/backlinks-provider.js";
 import { collectGa4 } from "../evidence/ga4-client.js";
 import { collectGsc } from "../evidence/gsc-client.js";
+import { collectCompetitorOpportunities } from "../evidence/competitor-opportunity-layer.js";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReport } from "../report/render-report.js";
 import { createReportStore } from "../storage/report-store.js";
@@ -16,6 +17,7 @@ import {
   EVIDENCE_ENVELOPE_VERSION,
   validateEvidenceEnvelope,
   downgradeToFailed,
+  normalizeCompetitorApprovalState,
 } from "../scoring/evidence-contracts.js";
 import {
   LIFECYCLE_STATUS,
@@ -23,6 +25,8 @@ import {
   buildApprovalRecord,
   validateTransition,
   isReviewComplete,
+  validateCompetitorDecisions,
+  buildCompetitorOverrides,
 } from "./review-gate.js";
 import { renderApprovedReport } from "../report/render-approved-report.js";
 
@@ -284,6 +288,11 @@ export async function runAudit(rawInput, options = {}) {
   const competitorCrawler =
     options.crawlCompetitors || crawlCompetitors;
 
+  const competitorOpportunityCollector = safeResult(
+    options.collectCompetitorOpportunities || collectCompetitorOpportunities,
+    "Competitor opportunity collection failed",
+  );
+
   const performanceCollector = safeResult(
     options.collectPerformance || collectPerformance,
     "Performance collection failed",
@@ -375,6 +384,14 @@ export async function runAudit(rawInput, options = {}) {
     }),
   ]);
 
+  // ── Competitor opportunity layer (runs after crawl + supplied competitors) ──
+  const competitorOpportunities = await competitorOpportunityCollector(site, input, {
+    dataforseoLogin: config.dataforseoLogin,
+    dataforseoPassword: config.dataforseoPassword,
+    suppliedCompetitors: competitors,
+    fetchImpl: options.fetchImpl,
+  });
+
   // ── Boundary validation ─────────────────────────────────────────────
   function validateAndDowngrade(shape, label) {
     const result = validateEvidenceEnvelope(shape, label);
@@ -394,6 +411,7 @@ export async function runAudit(rawInput, options = {}) {
     site: validatedSite,
     performance: validatedPerformance,
     competitors,
+    competitorOpportunities,
     backlinks: validatedBacklinks,
     ga4: validatedGa4,
     gsc: validatedGsc,
@@ -465,22 +483,108 @@ export async function runAudit(rawInput, options = {}) {
  *
  * Returns the updated lifecycle record.
  */
+/**
+ * Submit a Principal Auditor review for an audit.
+ *
+ * ALL validation happens in memory BEFORE any persistent mutation.
+ * Competitor decisions are applied, evidence + model recalculated,
+ * override records built, and the complete review record validated.
+ * Only then is the atomic transaction committed via the store.
+ *
+ * Atomic: if any stage fails (validation, staging, or commit), the
+ * previous evidence, model, review, and lifecycle remain fully active.
+ */
 export async function submitReview(store, slug, runId, reviewPayload) {
-  // Validate the review payload
-  const { valid, record, errors } = buildReviewRecord({
+  const reviewer = String(reviewPayload.reviewer || "").trim();
+  const decisions = reviewPayload.competitorDecisions;
+
+  // ── Phase 1: Load current committed state ─────────────────────────────
+  const committed = await store.readCommittedArtifacts(slug, runId);
+  if (!committed) {
+    throw Object.assign(
+      new Error("Cannot review — audit artifacts not found"),
+      { statusCode: 404 },
+    );
+  }
+
+  let evidence = committed.evidence;
+  let model = committed.model;
+  let competitorOverrides = [];
+
+  // ── Phase 2: Validate and apply competitor decisions (in memory) ──────
+  if (Array.isArray(decisions) && decisions.length > 0) {
+    const opp = evidence.competitorOpportunities;
+    const qualifiedCandidates = opp?.candidates?.qualified || [];
+    const knownCandidateUrls = new Set(qualifiedCandidates.map((c) => c.candidateUrl));
+
+    const validation = validateCompetitorDecisions(decisions, knownCandidateUrls);
+    if (!validation.valid) {
+      throw Object.assign(
+        new Error(`Invalid competitor decisions: ${validation.errors.join("; ")}`),
+        { statusCode: 422, errors: validation.errors },
+      );
+    }
+
+    // Capture current approval states BEFORE applying decisions
+    const previousStates = new Map();
+    for (const candidate of qualifiedCandidates) {
+      previousStates.set(candidate.candidateUrl, candidate.approvalStatus || "pending");
+    }
+
+    // Apply decisions (in-memory only — no files touched yet)
+    const decisionMap = new Map(validation.records.map((r) => [r.candidateUrl, r.decision]));
+    for (const candidate of qualifiedCandidates) {
+      if (decisionMap.has(candidate.candidateUrl)) {
+        candidate.approvalStatus = decisionMap.get(candidate.candidateUrl);
+      }
+    }
+
+    const allGaps = opp.allGaps || [];
+    const updatedAllGaps = allGaps.map((g) => {
+      const candidateDecision = decisionMap.get(g.competitorPage);
+      return { ...g, approvalStatus: candidateDecision || g.approvalStatus || "pending" };
+    });
+
+    opp.allGaps = updatedAllGaps;
+    opp.gaps = updatedAllGaps.filter((g) => g.approvalStatus === "approved" && g.gapPassed === true);
+    if (opp.candidates) opp.candidates.qualified = qualifiedCandidates;
+    evidence.competitorOpportunities = opp;
+
+    // Re-score with updated evidence
+    model = scoreAudit(model.input, evidence);
+
+    // Build override records with actual previous values
+    competitorOverrides = buildCompetitorOverrides(validation.records, previousStates, reviewer);
+  }
+
+  // ── Phase 3: Build and validate complete review record ────────────────
+  const { valid, record: reviewRecord, errors } = buildReviewRecord({
     ...reviewPayload,
     runId,
+    overrides: [
+      ...(reviewPayload.overrides || []),
+      ...competitorOverrides,
+    ],
   });
 
   if (!valid) {
+    // NO persistent mutation occurred — evidence/model changes were in-memory only
     throw Object.assign(
       new Error(`Invalid review: ${errors.join("; ")}`),
       { statusCode: 422, errors },
     );
   }
 
-  // Persist
-  const updated = await store.writeReview(slug, runId, record);
+  // ── Phase 4: Atomic transaction commit ────────────────────────────────
+  // All-or-nothing: if this fails, nothing was changed on disk
+  const updated = await store.commitCompetitorReview({
+    slug,
+    runId,
+    evidence,
+    model,
+    reviewRecord,
+  });
+
   return updated;
 }
 
@@ -528,12 +632,132 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     );
   }
 
-  // Require model for multi-page rendering
-  if (!opts.model) {
+  // ── Load committed artifacts (authoritative — never accept stale model) ──
+  const committed = await store.readCommittedArtifacts(slug, runId);
+
+  // When lifecycle has an active transaction but committed artifacts are missing
+  // or mismatched, block approval.
+  if (lc.activeReviewTxId) {
+    if (!committed) {
+      throw Object.assign(
+        new Error(`Approval rejected — lifecycle references transaction "${lc.activeReviewTxId}" but committed artifacts could not be read`),
+        { statusCode: 422 },
+      );
+    }
+    if (committed.txId !== lc.activeReviewTxId) {
+      throw Object.assign(
+        new Error(`Approval rejected — transaction ID mismatch: lifecycle has "${lc.activeReviewTxId}", committed artifacts have "${committed.txId}"`),
+        { statusCode: 422 },
+      );
+    }
+  }
+
+  if (!committed || !committed.model) {
     throw Object.assign(
-      new Error("Audit model is required for approved report rendering"),
+      new Error("Audit model is required for approved report rendering — committed artifacts not found"),
       { statusCode: 422 },
     );
+  }
+
+  // When an active transaction exists, the review record is mandatory
+  if (lc.activeReviewTxId && !committed.reviewRecord) {
+    throw Object.assign(
+      new Error("Approval rejected — active transaction is missing the review record"),
+      { statusCode: 422 },
+    );
+  }
+
+  if (!committed.evidence) {
+    throw Object.assign(
+      new Error("Approval rejected — committed evidence not found"),
+      { statusCode: 422 },
+    );
+  }
+
+  const model = committed.model;
+
+  // ── Evidence/model competitor agreement (full structural comparison) ──
+  const evOpp = committed.evidence.competitorOpportunities;
+  const mdOpp = model.evidence?.competitorOpportunities;
+  if (evOpp || mdOpp) {
+    const evNorm = normalizeCompetitorApprovalState(evOpp);
+    const mdNorm = normalizeCompetitorApprovalState(mdOpp);
+    const evJson = JSON.stringify(evNorm);
+    const mdJson = JSON.stringify(mdNorm);
+    if (evJson !== mdJson) {
+      throw Object.assign(
+        new Error("Approval rejected — evidence and model competitor approval states disagree"),
+        { statusCode: 422 },
+      );
+    }
+  }
+
+  // ── Competitor approval gate (Task 9) ─────────────────────────────────
+  const competitorOpps = model.evidence?.competitorOpportunities;
+  if (competitorOpps) {
+    const gaps = competitorOpps.gaps || [];
+    const qualifiedCandidates = competitorOpps.candidates?.qualified || [];
+
+    // Check 1: no pending/rejected gaps in client-facing output
+    for (const gap of gaps) {
+      if (gap.approvalStatus !== "approved") {
+        throw Object.assign(
+          new Error(
+            `Approval rejected — client-facing competitor gap for "${gap.competitorPage}" ` +
+            `has approval status "${gap.approvalStatus}". All gaps must be approved.`,
+          ),
+          { statusCode: 422 },
+        );
+      }
+    }
+
+    // Check 2: every approved gap still passes all gates
+    for (const gap of gaps) {
+      if (!gap.gapPassed) {
+        throw Object.assign(
+          new Error(
+            `Approval rejected — competitor gap for "${gap.competitorPage}" does not pass all qualified-gap checks.`,
+          ),
+          { statusCode: 422 },
+        );
+      }
+      if (!gap.qualificationPassed) {
+        throw Object.assign(
+          new Error(
+            `Approval rejected — competitor candidate "${gap.competitorPage}" does not pass all qualification checks.`,
+          ),
+          { statusCode: 422 },
+        );
+      }
+    }
+
+    // Check 3: evidence and model agree on approval states
+    for (const candidate of qualifiedCandidates) {
+      if (candidate.approvalStatus === "pending") {
+        const hasGap = gaps.some((g) => g.competitorPage === candidate.candidateUrl);
+        if (hasGap) {
+          throw Object.assign(
+            new Error(
+              `Approval rejected — pending candidate "${candidate.candidateUrl}" has a client-facing gap.`,
+            ),
+            { statusCode: 422 },
+          );
+        }
+      }
+    }
+
+    // Check 4: competitor_selections checklist item must be reviewed
+    const competitorChecklistItem = lc.review?.checklist?.find(
+      (item) => item.id === "competitor_selections",
+    );
+    if (!competitorChecklistItem || !competitorChecklistItem.reviewed) {
+      throw Object.assign(
+        new Error(
+          "Approval rejected — the \"Competitor selections\" checklist item must be reviewed.",
+        ),
+        { statusCode: 422 },
+      );
+    }
   }
 
   // Build approval record
@@ -554,7 +778,7 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
   // Render approved multi-page report (all-or-nothing)
   let approvedPages;
   try {
-    const result = renderApprovedReport(opts.model);
+    const result = renderApprovedReport(model);
     approvedPages = result.pages; // Map<filename, html>
   } catch (renderErr) {
     await store.addLimitation(
