@@ -1,15 +1,11 @@
 import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { resolve, join, normalize, sep, dirname } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
 import { slugify } from "../utils.js";
-
-function createTransactionId() {
-  return `txn-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-}
-
-function sha256(content) {
-  return createHash("sha256").update(content).digest("hex");
-}
+import {
+  createTransactionId,
+  sha256,
+  committedReviewAgreesWithLifecycle,
+} from "./transaction-helpers.js";
 
 function safeSegment(value) {
   const segment = slugify(value);
@@ -251,28 +247,7 @@ export function createLocalReportStore(options = {}) {
           let parsedReview;
           try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
 
-          // Full lifecycle agreement (all fields, null-safe)
-          const nil = (v) => (v === undefined || v === null) ? null : v;
-          if (lc.review) {
-            if (parsedReview.reviewer !== lc.review.reviewer) return null;
-            if (parsedReview.reviewedAt !== lc.review.reviewedAt) return null;
-            if (nil(parsedReview.notes) !== nil(lc.review.notes)) return null;
-            if (!!parsedReview.limitationsAccepted !== !!lc.review.limitationsAccepted) return null;
-            if (nil(parsedReview.findingsReviewed) !== nil(lc.review.findingsReviewed)) return null;
-            // Checklist: same IDs and reviewed values
-            const txChecklist = (parsedReview.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
-            const lcChecklist = (lc.review.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
-            if (txChecklist !== lcChecklist) return null;
-            // Lifecycle overrides must include all review overrides (review = subset)
-            const reviewOverrides = parsedReview.overrides || [];
-            const lcOverrides = lc.overrides || [];
-            for (const ro of reviewOverrides) {
-              const found = lcOverrides.some((lo) =>
-                lo.user === ro.user && lo.field === ro.field &&
-                lo.replacementValue === ro.replacementValue && lo.timestamp === ro.timestamp);
-              if (!found) return null;
-            }
-          }
+          if (!committedReviewAgreesWithLifecycle(parsedReview, lc)) return null;
 
           return {
             evidence: JSON.parse(evidenceRaw),
@@ -665,8 +640,8 @@ export function createS3ReportStore(options = {}) {
      * the sole commit pointer.  Orphaned staged objects are safe.
      */
     async commitCompetitorReview({ slug, runId, evidence, model, reviewRecord }) {
-      const s3Client = resolvedS3Client;
-      if (!s3Client || !reportsBucket) {
+      const s3Client = client;
+      if (!s3Client || !bucket) {
         throw new Error("S3 client or bucket not configured");
       }
 
@@ -676,14 +651,14 @@ export function createS3ReportStore(options = {}) {
         throw Object.assign(new Error(`Cannot review audit in "${currentLc.status}" status`), { statusCode: 409 });
       }
 
-      const { S3Client: _S3, PutObjectCommand } = await import("@aws-sdk/client-s3");
+      const { PutObjectCommand } = await aws();
       const txId = createTransactionId();
-      const txnPrefix = `${reportsPrefix}/${slug}/${runId}/.txn/${txId}`;
+      const txnPrefix = `${prefix}/${slug}/${runId}/.txn/${txId}`;
       const evidenceBody = JSON.stringify(evidence, null, 2);
       const modelBody = JSON.stringify(model, null, 2);
       const reviewBody = JSON.stringify(reviewRecord, null, 2);
 
-      const putOpts = { Bucket: reportsBucket, ContentType: "application/json; charset=utf-8", CacheControl: "no-cache" };
+      const putOpts = { Bucket: bucket, ContentType: "application/json; charset=utf-8", CacheControl: "no-cache" };
 
       // ── Stage all artifacts ──────────────────────────────────────────
       const stageResults = await Promise.allSettled([
@@ -727,8 +702,8 @@ export function createS3ReportStore(options = {}) {
       // Post-commit canonical copies (best-effort)
       try {
         await Promise.allSettled([
-          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${reportsPrefix}/${slug}/${runId}/evidence.json`, Body: evidenceBody })),
-          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${reportsPrefix}/${slug}/${runId}/audit.json`, Body: modelBody })),
+          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${prefix}/${slug}/${runId}/evidence.json`, Body: evidenceBody })),
+          s3Client.send(new PutObjectCommand({ ...putOpts, Key: `${prefix}/${slug}/${runId}/audit.json`, Body: modelBody })),
         ]);
       } catch { /* canonical copies are best-effort */ }
 
@@ -742,23 +717,23 @@ export function createS3ReportStore(options = {}) {
       const lc = await readLifecycle(slug, runId);
       if (!lc) return null;
       const txId = lc.activeReviewTxId || lc.activeApprovalTxId || null;
-      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-      const s3Client = resolvedS3Client;
+      const { GetObjectCommand } = await aws();
+      const s3Client = client;
       if (!s3Client) return null;
 
       const getKey = (filename) => {
-        if (txId) return `${reportsPrefix}/${slug}/${runId}/.txn/${txId}/${filename}`;
-        return `${reportsPrefix}/${slug}/${runId}/${filename}`;
+        if (txId) return `${prefix}/${slug}/${runId}/.txn/${txId}/${filename}`;
+        return `${prefix}/${slug}/${runId}/${filename}`;
       };
 
       if (txId) {
         try {
           // All four artifacts mandatory for active transactions
           const [metaResp, evResp, mdResp, revResp] = await Promise.all([
-            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("tx-meta.json") })),
-            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("evidence.json") })),
-            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("audit.json") })),
-            s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("review-record.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("tx-meta.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("evidence.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("audit.json") })),
+            s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("review-record.json") })),
           ]);
           const metaRaw = await metaResp.Body.transformToString("utf8");
           const meta = JSON.parse(metaRaw);
@@ -775,27 +750,7 @@ export function createS3ReportStore(options = {}) {
           let parsedReview;
           try { parsedReview = JSON.parse(reviewRaw); } catch { return null; }
 
-          // Full lifecycle agreement (null-safe, shared with local store)
-          const nil = (v) => (v === undefined || v === null) ? null : v;
-          if (lc.review) {
-            if (parsedReview.reviewer !== lc.review.reviewer) return null;
-            if (parsedReview.reviewedAt !== lc.review.reviewedAt) return null;
-            if (nil(parsedReview.notes) !== nil(lc.review.notes)) return null;
-            if (!!parsedReview.limitationsAccepted !== !!lc.review.limitationsAccepted) return null;
-            if (nil(parsedReview.findingsReviewed) !== nil(lc.review.findingsReviewed)) return null;
-            const txChecklist = (parsedReview.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
-            const lcChecklist = (lc.review.checklist || []).map((c) => `${c.id}:${c.reviewed}`).sort().join(",");
-            if (txChecklist !== lcChecklist) return null;
-            // Lifecycle overrides must include all review overrides (review = subset of lifecycle)
-            const reviewOverrides = parsedReview.overrides || [];
-            const lcOverrides = lc.overrides || [];
-            for (const ro of reviewOverrides) {
-              const found = lcOverrides.some((lo) =>
-                lo.user === ro.user && lo.field === ro.field &&
-                lo.replacementValue === ro.replacementValue && lo.timestamp === ro.timestamp);
-              if (!found) return null;
-            }
-          }
+          if (!committedReviewAgreesWithLifecycle(parsedReview, lc)) return null;
 
           return { evidence: JSON.parse(evidenceRaw), model: JSON.parse(modelRaw), reviewRecord: parsedReview, txId };
         } catch { return null; }
@@ -803,8 +758,8 @@ export function createS3ReportStore(options = {}) {
 
       try {
         const [evResp, mdResp] = await Promise.all([
-          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("evidence.json") })),
-          s3Client.send(new GetObjectCommand({ Bucket: reportsBucket, Key: getKey("audit.json") })),
+          s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("evidence.json") })),
+          s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: getKey("audit.json") })),
         ]);
         const evidence = JSON.parse(await evResp.Body.transformToString("utf8"));
         const model = JSON.parse(await mdResp.Body.transformToString("utf8"));
