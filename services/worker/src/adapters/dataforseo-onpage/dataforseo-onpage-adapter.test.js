@@ -962,3 +962,74 @@ test("trust signals are detected from page body text", async () => {
   assert.equal(result.trust.caseStudies, true);
   assert.equal(result.trust.pricing, true);
 });
+
+// ---------------------------------------------------------------------------
+// Regression: 20100 "Task Created" accepted only for task_post
+// ---------------------------------------------------------------------------
+
+import { parseDataforseoResponse, extractTaskResult } from "./dataforseo-onpage-client.js";
+
+// parseDataforseoResponse: root status_code still only accepts 20000
+test("parseDataforseoResponse rejects root status_code 20100", () => {
+  assert.throws(
+    () => parseDataforseoResponse({ status_code: 20100, status_message: "Ok." }, "/on_page/task_post"),
+    /status_code=20100/,
+  );
+});
+
+test("parseDataforseoResponse accepts root status_code 20000", () => {
+  const body = { status_code: 20000, status_message: "Ok.", tasks: [{ status_code: 20000, result: [{ id: "task-root-ok" }] }] };
+  const result = parseDataforseoResponse(body, "/on_page/summary");
+  assert.equal(result.tasks[0].result[0].id, "task-root-ok");
+});
+
+// extractTaskResult: with [20000, 20100] allows task_post 20100
+test("extractTaskResult with allowed [20000,20100] extracts 20100 task ID", () => {
+  const response = { status_code: 20000, tasks: [{ status_code: 20100, result: [{ id: "task-abc-123" }] }] };
+  const result = extractTaskResult(response, "/on_page/task_post", [20000, 20100]);
+  assert.ok(result, "Should extract result when 20100 is allowed");
+  assert.equal(result.id, "task-abc-123");
+});
+
+// extractTaskResult: default [20000] rejects 20100
+test("extractTaskResult with default allowed rejects 20100 for summary endpoint", () => {
+  const response = { status_code: 20000, tasks: [{ status_code: 20100, status_message: "Task Created" }] };
+  assert.throws(
+    () => extractTaskResult(response, "/on_page/summary"),
+    /status_code=20100/,
+  );
+});
+
+// extractTaskResult: default [20000] still works
+test("extractTaskResult with default allowed extracts 20000 result", () => {
+  const response = { status_code: 20000, tasks: [{ status_code: 20000, result: [{ id: "task-summary-ok" }] }] };
+  const result = extractTaskResult(response, "/on_page/summary");
+  assert.equal(result.id, "task-summary-ok");
+});
+
+// extractTaskResult: still rejects unexpected statuses
+test("extractTaskResult still rejects unexpected task status_code", () => {
+  const response = { status_code: 20000, tasks: [{ status_code: 40005, status_message: "Forbidden" }] };
+  assert.throws(
+    () => extractTaskResult(response, "/on_page/summary"),
+    /status_code=40005/,
+  );
+});
+
+// 20100 invalid for pages
+test("extractTaskResult rejects 20100 for pages endpoint", () => {
+  const response = { status_code: 20000, tasks: [{ status_code: 20100, status_message: "Task Created" }] };
+  assert.throws(
+    () => extractTaskResult(response, "/on_page/pages"),
+    /status_code=20100/,
+  );
+});
+
+// 20100 invalid for links
+test("extractTaskResult rejects 20100 for links endpoint", () => {
+  const response = { status_code: 20000, tasks: [{ status_code: 20100, status_message: "Task Created" }] };
+  assert.throws(
+    () => extractTaskResult(response, "/on_page/links"),
+    /status_code=20100/,
+  );
+});

@@ -109,7 +109,7 @@ export function parseDataforseoResponse(body, endpoint) {
  * @param {string} endpoint - API endpoint label for error messages.
  * @returns {object} The first result object: response.tasks[0].result[0].
  */
-export function extractTaskResult(response, endpoint) {
+export function extractTaskResult(response, endpoint, allowedStatusCodes = [20000]) {
   if (
     !response ||
     !response.tasks ||
@@ -125,7 +125,7 @@ export function extractTaskResult(response, endpoint) {
 
   if (
     task.status_code != null &&
-    task.status_code !== 20000
+    !allowedStatusCodes.includes(task.status_code)
   ) {
     throw new Error(
       `DataForSEO ${endpoint}: task error ` +
@@ -357,7 +357,8 @@ export function createDataforseoOnpageClient(opts = {}) {
       });
 
     const response = await withRetry(submitFn, 2, 1000);
-    const result = extractTaskResult(response, "/on_page/task_post");
+    // task_post may return 20100 ("Task Created") in addition to 20000
+    const result = extractTaskResult(response, "/on_page/task_post", [20000, 20100]);
 
     if (!result || !result.id) {
       throw new Error(
