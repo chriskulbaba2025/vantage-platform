@@ -1033,3 +1033,280 @@ test("extractTaskResult rejects 20100 for links endpoint", () => {
     /status_code=20100/,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Regression: taskPost reads task ID from tasks[0].id for 20100 responses
+// ---------------------------------------------------------------------------
+
+test("taskPost live-mode accepts 20100 with result:null and ID at tasks[0].id", async () => {
+  setTestCredentials();
+  try {
+    // Real DataForSEO 20100 shape: root status_code 20000, task status_code
+    // 20100, result: null, and the task ID only at tasks[0].id.
+    const fetchImpl = async (url) => {
+      if (String(url).includes("task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [
+              {
+                id: "20100-task-id-from-tasks-array",
+                status_code: 20100,
+                status_message: "Task Created.",
+                result: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // Non-task_post calls return ready summary data so the crawl completes
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [{ status_code: 20000, result: [{ items: buildSuccessfulFixtures(3).pages.items }] }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      pollIntervalMs: 100,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+    assert.equal(result.pageCount, 3);
+    // The task ID from tasks[0].id was preserved through the pipeline
+    assert.equal(result._sourceStatus.requestId, "20100-task-id-from-tasks-array");
+    assert.equal(result._raw.taskId, "20100-task-id-from-tasks-array");
+  } finally {
+    restoreCredentials();
+  }
+});
+
+test("taskPost live-mode still accepts 20000 with ID at tasks[0].result[0].id", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (url) => {
+      if (String(url).includes("task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [
+              {
+                status_code: 20000,
+                result: [{ id: "20000-task-id-from-result", crawl_status: "pending" }],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [{ status_code: 20000, result: [{ items: buildSuccessfulFixtures(2).pages.items }] }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      pollIntervalMs: 100,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+    assert.equal(result.pageCount, 2);
+    assert.equal(result._sourceStatus.requestId, "20000-task-id-from-result");
+  } finally {
+    restoreCredentials();
+  }
+});
+
+test("taskPost live-mode fails when both result and tasks[0].id are missing", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (_url, _init) => {
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          status_message: "Ok.",
+          tasks: [
+            {
+              status_code: 20000,
+              // No id field, no result array — should throw
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.ok(
+      result.limitations.some((l) => /no task ID/i.test(l)),
+      `Expected "no task ID" limitation, got: ${JSON.stringify(result.limitations)}`,
+    );
+  } finally {
+    restoreCredentials();
+  }
+});
+
+test("taskPost live-mode fails when tasks array is empty", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (_url, _init) => {
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          status_message: "Ok.",
+          tasks: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// Other endpoints (summary, pages, links, duplicate_tags, duplicate_content)
+// must still reject 20100 — only task_post accepts it.
+
+test("summary endpoint rejects 20100 in live mode", async () => {
+  setTestCredentials();
+  try {
+    const fetchImpl = async (url) => {
+      if (String(url).includes("task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{ status_code: 20000, result: [{ id: "summary-20100-task" }] }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // summary returns 20100 — should be rejected
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [{ status_code: 20100, status_message: "Task Created" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 200,
+      pollIntervalMs: 50,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    // The adapter catches errors during result retrieval and builds a FAILED envelope
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+test("polling continues on 20100 and eventually succeeds when task is ready", async () => {
+  setTestCredentials();
+  try {
+    let pollCalls = 0;
+    const fetchImpl = async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes("task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [
+              {
+                id: "poll-20100-task",
+                status_code: 20100,
+                status_message: "Task Created.",
+                result: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // First two poll calls return 20100 (still processing), third returns ready data
+      pollCalls++;
+      if (pollCalls <= 2) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            tasks: [{ status_code: 20100, status_message: "Task is processing" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [{ status_code: 20000, result: [{ items: buildSuccessfulFixtures(2).pages.items }] }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 1000,
+      pollIntervalMs: 50,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+    assert.equal(result.pageCount, 2);
+    assert.equal(result._raw.taskId, "poll-20100-task");
+    // Should have polled at least 3 times (2 processing + 1 success)
+    assert.ok(pollCalls >= 3, `Expected >=3 poll calls, got ${pollCalls}`);
+  } finally {
+    restoreCredentials();
+  }
+});

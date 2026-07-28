@@ -357,18 +357,25 @@ export function createDataforseoOnpageClient(opts = {}) {
       });
 
     const response = await withRetry(submitFn, 2, 1000);
-    // task_post may return 20100 ("Task Created") in addition to 20000
+    // task_post may return 20100 ("Task Created") in addition to 20000.
+    // When status_code is 20100, result is null and the task ID lives at
+    // response.tasks[0].id.  When status_code is 20000, the full task
+    // object (including the id) is inside tasks[0].result[0].
     const result = extractTaskResult(response, "/on_page/task_post", [20000, 20100]);
 
-    if (!result || !result.id) {
+    // Prefer the ID inside the result object; fall back to tasks[0].id
+    // for 20100 "Task Created" responses where result is null.
+    const taskId = result?.id || response?.tasks?.[0]?.id;
+
+    if (!taskId) {
       throw new Error(
         "DataForSEO /on_page/task_post: no task ID in response",
       );
     }
 
     return {
-      taskId: result.id,
-      rawTask: result,
+      taskId,
+      rawTask: result || response?.tasks?.[0] || { id: taskId },
     };
   }
 
