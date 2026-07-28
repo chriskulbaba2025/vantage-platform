@@ -223,6 +223,50 @@ async function dataforseoPost(endpoint, body, { login, password, fetchImpl }) {
   return parseDataforseoResponse(rawText, endpoint);
 }
 
+/**
+ * GET a DataForSEO endpoint. Returns parsed JSON or throws on failure.
+ */
+async function dataforseoGet(endpoint, { login, password, fetchImpl }) {
+  const url = `${DATAFORSEO_BASE}${endpoint}`;
+  const fetcher = fetchImpl || globalThis.fetch;
+  const response = await fetcher(url, {
+    method: "GET",
+    headers: {
+      Authorization: basicAuth(login, password),
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "unknown error");
+
+    if (response.status === 429) {
+      const err = new Error(
+        `DataForSEO quota exhausted (429) for ${endpoint}`,
+      );
+      err.category = "rate_limit";
+      err.httpStatus = 429;
+      throw err;
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      const err = new Error(
+        `DataForSEO authentication error (${response.status}) for ${endpoint}`,
+      );
+      err.category = "auth";
+      err.httpStatus = response.status;
+      throw err;
+    }
+
+    throw new Error(
+      `DataForSEO API error (${response.status}) for ${endpoint}: ${errorText.slice(0, 500)}`,
+    );
+  }
+
+  const rawText = await response.text();
+  return parseDataforseoResponse(rawText, endpoint);
+}
+
 // ---------------------------------------------------------------------------
 // Retry with exponential backoff
 // ---------------------------------------------------------------------------
@@ -382,7 +426,7 @@ export function createDataforseoOnpageClient(opts = {}) {
   /**
    * Poll task status until complete or timeout.
    *
-   * Uses POST /v3/on_page/summary to check if results are available.
+   * Uses GET /v3/on_page/summary/{taskId} to check crawl progress.
    *
    * @param {string} taskId - Task ID from task_post.
    * @param {object} [options]
@@ -408,15 +452,21 @@ export function createDataforseoOnpageClient(opts = {}) {
 
     while (Date.now() - startedAt < timeoutMs) {
       try {
-        const response = await dataforseoPost(
-          "/on_page/summary",
-          [{ id: taskId }],
+        const endpoint = `/on_page/summary/${encodeURIComponent(taskId)}`;
+        const response = await dataforseoGet(
+          endpoint,
           { login, password, fetchImpl: opts.fetchImpl },
         );
 
-        const result = extractTaskResult(response, "/on_page/summary");
+        const result = extractTaskResult(response, endpoint);
+        const crawlProgress = result?.crawl_progress;
 
-        if (result) {
+        if (crawlProgress === "finished") {
+          return { status: "ready", taskId };
+        }
+
+        // Preserve compatibility with fixtures that omit crawl_progress.
+        if (result && crawlProgress == null) {
           return { status: "ready", taskId };
         }
 
@@ -458,7 +508,7 @@ export function createDataforseoOnpageClient(opts = {}) {
   /**
    * Fetch summary results for a completed task.
    *
-   * POST /v3/on_page/summary
+   * GET /v3/on_page/summary/{taskId}
    *
    * @param {string} taskId - Task ID.
    * @returns {Promise<object>} Summary result.
@@ -471,16 +521,16 @@ export function createDataforseoOnpageClient(opts = {}) {
     }
 
     const { login, password } = getCredentials();
-    const response = await dataforseoPost(
-      "/on_page/summary",
-      [{ id: taskId }],
+    const endpoint = `/on_page/summary/${encodeURIComponent(taskId)}`;
+    const response = await dataforseoGet(
+      endpoint,
       { login, password, fetchImpl: opts.fetchImpl },
     );
 
-    const result = extractTaskResult(response, "/on_page/summary");
+    const result = extractTaskResult(response, endpoint);
     if (!result) {
       throw new Error(
-        `DataForSEO /on_page/summary: no result for task ${taskId}`,
+        `DataForSEO ${endpoint}: no result for task ${taskId}`,
       );
     }
     return result;

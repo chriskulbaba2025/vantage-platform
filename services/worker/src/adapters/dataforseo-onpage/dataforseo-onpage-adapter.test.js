@@ -1310,3 +1310,117 @@ test("polling continues on 20100 and eventually succeeds when task is ready", as
     restoreCredentials();
   }
 });
+
+
+test("summary uses GET with task ID in URL and waits for finished", async () => {
+  setTestCredentials();
+  try {
+    const requests = [];
+    let summaryCalls = 0;
+
+    const fetchImpl = async (url, init = {}) => {
+      const urlStr = String(url);
+
+      requests.push({
+        url: urlStr,
+        method: init.method,
+        body: init.body,
+      });
+
+      if (urlStr.includes("/on_page/task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              id: "summary-get-task",
+              status_code: 20100,
+              status_message: "Task Created.",
+              result: null,
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (urlStr.endsWith("/on_page/summary/summary-get-task")) {
+        summaryCalls++;
+
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              status_code: 20000,
+              status_message: "Ok.",
+              result: [{
+                crawl_progress: summaryCalls === 1
+                  ? "in_progress"
+                  : "finished",
+                total_pages: 2,
+                crawl_status: {
+                  pages_crawled: summaryCalls === 1 ? 1 : 2,
+                  pages_in_queue: summaryCalls === 1 ? 1 : 0,
+                },
+              }],
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      const fixtures = buildSuccessfulFixtures(2);
+      const result = urlStr.includes("/on_page/pages")
+        ? {
+            items: fixtures.pages.items,
+            total_count: fixtures.pages.items.length,
+          }
+        : {
+            items: [],
+            total_count: 0,
+          };
+
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          status_message: "Ok.",
+          tasks: [{
+            status_code: 20000,
+            status_message: "Ok.",
+            result: [result],
+          }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 3,
+      pollTimeoutMs: 1000,
+      pollIntervalMs: 10,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    const summaryRequests = requests.filter((request) =>
+      request.url.includes("/on_page/summary/"),
+    );
+
+    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+    assert.equal(result.pageCount, 2);
+    assert.ok(summaryCalls >= 3);
+    assert.ok(summaryRequests.every((request) =>
+      request.method === "GET",
+    ));
+    assert.ok(summaryRequests.every((request) =>
+      request.body === undefined,
+    ));
+    assert.ok(summaryRequests.every((request) =>
+      request.url.endsWith("/on_page/summary/summary-get-task"),
+    ));
+  } finally {
+    restoreCredentials();
+  }
+});
