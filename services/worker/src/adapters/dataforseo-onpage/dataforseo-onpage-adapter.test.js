@@ -1424,3 +1424,213 @@ test("summary uses GET with task ID in URL and waits for finished", async () => 
     restoreCredentials();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Regression: 40602 "Task In Queue" is treated as a pending state, not fatal
+// ---------------------------------------------------------------------------
+
+test("40602 Task In Queue is treated as pending — exact production sequence", async () => {
+  setTestCredentials();
+  try {
+    let summaryCalls = 0;
+
+    const fetchImpl = async (url, init = {}) => {
+      const urlStr = String(url);
+
+      // Step 1: task_post returns 20100 with task ID at tasks[0].id
+      if (urlStr.includes("/on_page/task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              id: "07290112-1281-0216-0000-931625a290d3",
+              status_code: 20100,
+              status_message: "Task Created.",
+              result: null,
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      // Step 2-4: summary polls via GET with task ID in URL
+      if (urlStr.includes("/on_page/summary/")) {
+        summaryCalls++;
+
+        // First poll: 40602 "Task In Queue." — must not throw
+        if (summaryCalls === 1) {
+          return new Response(
+            JSON.stringify({
+              status_code: 20000,
+              status_message: "Ok.",
+              tasks: [{
+                status_code: 40602,
+                status_message: "Task In Queue.",
+                result: null,
+              }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        // Second poll: 20000 with crawl_progress "in_progress"
+        if (summaryCalls === 2) {
+          return new Response(
+            JSON.stringify({
+              status_code: 20000,
+              status_message: "Ok.",
+              tasks: [{
+                status_code: 20000,
+                status_message: "Ok.",
+                result: [{
+                  crawl_progress: "in_progress",
+                  total_pages: 3,
+                }],
+              }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        // Third poll: 20000 with crawl_progress "finished"
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              status_code: 20000,
+              status_message: "Ok.",
+              result: [{
+                crawl_progress: "finished",
+                total_pages: 3,
+                pages_crawled: 3,
+              }],
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      // Pages retrieval — succeeds with fixture data
+      const fixtures = buildSuccessfulFixtures(3);
+      if (urlStr.includes("/on_page/pages")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              status_code: 20000,
+              status_message: "Ok.",
+              result: [{ items: fixtures.pages.items, total_count: 3 }],
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      // Links / other endpoints
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          status_message: "Ok.",
+          tasks: [{
+            status_code: 20000,
+            status_message: "Ok.",
+            result: [{ items: [], total_count: 0 }],
+          }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 5000,
+      pollIntervalMs: 10,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    // Final crawl must be AVAILABLE — 40602 did not cause a failure
+    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+    assert.equal(result.pageCount, 3);
+    // Production task ID preserved through the pipeline
+    assert.equal(result._sourceStatus.requestId, "07290112-1281-0216-0000-931625a290d3");
+    // Summary was polled at least 3 times (40602 → in_progress → finished)
+    assert.ok(summaryCalls >= 3, `Expected >=3 summary calls, got ${summaryCalls}`);
+  } finally {
+    restoreCredentials();
+  }
+});
+
+// Unknown non-success task status must still throw
+test("unknown task status_code throws — not treated as pending", async () => {
+  setTestCredentials();
+  try {
+    let summaryCalls = 0;
+
+    const fetchImpl = async (url, init = {}) => {
+      const urlStr = String(url);
+
+      if (urlStr.includes("/on_page/task_post")) {
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              id: "unknown-error-task",
+              status_code: 20100,
+              status_message: "Task Created.",
+              result: null,
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (urlStr.includes("/on_page/summary/")) {
+        summaryCalls++;
+        // Return a genuinely unknown error: 40701 is not in the allowed set
+        return new Response(
+          JSON.stringify({
+            status_code: 20000,
+            status_message: "Ok.",
+            tasks: [{
+              status_code: 40701,
+              status_message: "Internal Error. Something went wrong.",
+              result: null,
+            }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          status_code: 20000,
+          tasks: [{ status_code: 20000, result: [{ items: [] }] }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 500,
+      pollTimeoutMs: 500,
+      pollIntervalMs: 50,
+      clientOptions: {
+        mode: "live",
+        fetchImpl,
+      },
+    });
+
+    // Unknown error must still cause a FAILED crawl
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(summaryCalls, 1);
+  } finally {
+    restoreCredentials();
+  }
+});
