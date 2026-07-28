@@ -458,7 +458,7 @@ export function createDataforseoOnpageClient(opts = {}) {
           { login, password, fetchImpl: opts.fetchImpl },
         );
 
-        const result = extractTaskResult(response, endpoint);
+        const result = extractTaskResult(response, endpoint, [20000, 20100, 40602]);
         const crawlProgress = result?.crawl_progress;
 
         if (crawlProgress === "finished") {
@@ -475,8 +475,8 @@ export function createDataforseoOnpageClient(opts = {}) {
         const statusCode = task?.status_code;
         const statusMessage = task?.status_message || "";
 
-        if (statusCode === 20100) {
-          // Task is still processing
+        if (statusCode === 20100 || statusCode === 40602) {
+          // Task is still processing / queued
           // continue polling
         } else if (statusCode && statusCode !== 20000) {
           throw new Error(
@@ -488,6 +488,7 @@ export function createDataforseoOnpageClient(opts = {}) {
         if (
           error.message &&
           (error.message.includes("20100") ||
+           error.message.includes("40602") ||
            error.message.includes("Not all the tasks") ||
            error.message.includes("processing"))
         ) {
