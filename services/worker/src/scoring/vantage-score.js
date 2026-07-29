@@ -459,10 +459,15 @@ export function scoreAudit(input, evidence) {
     : null;
 
   // ── Root cause ─────────────────────────────────────────────────────
-  const topFindings = findings.slice(0, 3).map((f) => f.title.toLowerCase());
-  const rootCause = topFindings.length
-    ? `The site's main conversion constraint is ${topFindings.join(", ")}. These gaps prevent visitors from moving from initial interest to a confident next step.`
-    : "The site has a functional conversion foundation. The main opportunity is to strengthen evidence depth and make each offer easier to evaluate.";
+  // Select the single highest-priority score-bearing finding as the
+  // primary constraint.  Avoid comma-separated defect lists — the root
+  // cause must describe ONE business constraint in plain client language.
+  const primaryFinding = findings.find((f) => f.scoreBearing);
+  const rootCause = primaryFinding
+    ? `The most impactful opportunity is ${primaryFinding.title.toLowerCase()}. ${primaryFinding.businessImpact || "Addressing this will improve visitor confidence and readiness to convert."}`
+    : findings.length > 0
+      ? "Several technical opportunities were identified, but evidence depth was insufficient to isolate a single primary constraint. Strengthening crawl or analytics evidence will produce more targeted recommendations."
+      : "The site has a functional foundation. The main opportunity is to strengthen evidence depth and make each offer easier to evaluate.";
 
   // ── Module eligibility map ─────────────────────────────────────────
   const moduleEligibility = {};

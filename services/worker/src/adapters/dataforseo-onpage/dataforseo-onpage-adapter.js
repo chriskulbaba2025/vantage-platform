@@ -434,7 +434,28 @@ function summarizeSite({
   const allSchema = new Set(pages.flatMap((p) => p.schemaTypes));
   const allServices = new Set(pages.flatMap((p) => p.serviceCandidates));
 
-  // Build topic keywords from validated services, titles, and H1s
+  // Build topic keywords from validated services, titles, and H1s.
+  //
+  // Domain-stripping: page titles commonly include the site name/domain
+  // (e.g. "Home :: maycrawford.com").  After cleaning, this becomes
+  // "home maycrawfordcom" — the domain fragment must be removed.
+  const domainFragment = domain.replace(/\./g, "").toLowerCase();
+  const domainAltFragment = domain.replace(/^www\./, "").replace(/\./g, "").toLowerCase();
+
+  // Navigation/utility page labels that should never become topics.
+  const UTILITY_LABELS = new Set([
+    "home", "about", "about us", "blog", "news", "contact", "connect",
+    "login", "sign in", "register", "sign up", "call scheduler",
+    "scheduler", "book now", "schedule", "appointment", "get started",
+    "welcome", "resources", "privacy policy", "terms of service",
+    "terms and conditions", "faq", "frequently asked questions",
+    "search", "search results", "404", "page not found", "sitemap",
+    "accessibility", "cookies", "cookie policy", "refund policy",
+    "shipping", "returns", "careers", "jobs", "press", "media",
+    "subscribe", "newsletter", "vip club", "gold goal card",
+    "vision board", "keynote speaking",
+  ]);
+
   const phraseCounts = new Map();
   function addPhrase(phrase) {
     const cleaned = phrase
@@ -442,13 +463,47 @@ function summarizeSite({
       .replace(/[^a-z0-9\s-]/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    const words = cleaned.split(/\s+/).filter(Boolean);
+
+    // Strip domain fragments that survived cleaning (e.g. "maycrawfordcom")
+    let stripped = cleaned;
+    if (domainFragment.length > 3) {
+      stripped = stripped.replace(new RegExp(`\\b${domainFragment}\\b`, "g"), "").trim();
+      if (domainAltFragment !== domainFragment && domainAltFragment.length > 3) {
+        stripped = stripped.replace(new RegExp(`\\b${domainAltFragment}\\b`, "g"), "").trim();
+      }
+    }
+    // Also strip standalone "com" that results from partial domain removal
+    stripped = stripped.replace(/\bcom\b/g, "").replace(/\s+/g, " ").trim();
+
+    if (!stripped || stripped.length < 3) return;
+
+    const words = stripped.split(/\s+/).filter(Boolean);
     if (words.length < 1 || words.length > 5) return;
     if (words.length === 1) {
       const w = words[0].replace(/-/g, "");
       if (w.length < 5) return;
     }
-    phraseCounts.set(cleaned, (phraseCounts.get(cleaned) || 0) + 1);
+
+    // Reject known utility/navigation labels
+    if (UTILITY_LABELS.has(stripped)) return;
+
+    // Reject malformed mailto/URL fragments
+    if (/\bmailto\b|\binfo@|\bwww\.|\bhttp/.test(stripped)) return;
+
+    // Reject phrases that are just a single generic word
+    const GENERIC_SINGLE = new Set([
+      "about", "contact", "services", "service", "learn", "more", "home",
+      "welcome", "assessment", "solution", "solutions", "page", "online",
+      "better", "right", "good", "great", "professional", "quality",
+      "expert", "experts", "dedicated", "comprehensive", "complete",
+      "custom", "personal", "individual", "unique", "innovative",
+      "advanced", "modern", "proven", "trusted", "leading", "premier",
+      "premium", "affordable", "effective", "efficient", "reliable",
+      "convenient", "flexible", "login", "register", "blog", "news",
+    ]);
+    if (words.length === 1 && GENERIC_SINGLE.has(words[0])) return;
+
+    phraseCounts.set(stripped, (phraseCounts.get(stripped) || 0) + 1);
   }
 
   for (const svc of allServices) addPhrase(svc);

@@ -339,8 +339,17 @@ export async function runAudit(rawInput, options = {}) {
     "Competitor opportunity collection failed",
   );
 
+  // Performance collection: when a test supplies a single-URL collector,
+  // wrap it for multi-URL compatibility.  In production, always use the
+  // multi-page collector directly so every URL is tested independently
+  // (never string-coerced or comma-joined).
   const performanceCollector = safeResult(
-    options.collectPerformance || collectPerformance,
+    options.collectPerformance
+      ? (urls, opts) => {
+          // Legacy single-URL test override — run for first URL only
+          return options.collectPerformance(urls[0], opts);
+        }
+      : (urls, opts) => collectPerformanceForPages(urls, opts),
     "Performance collection failed",
   );
   const backlinksCollector = safeResult(
@@ -372,28 +381,6 @@ export async function runAudit(rawInput, options = {}) {
   const perfUrls = conversionPageUrl && conversionPageUrl !== input.targetUrl
     ? [input.targetUrl, conversionPageUrl]
     : [input.targetUrl];
-
-  // Use multi-page collector when available; fall back to single-page for
-  // backward compatibility with tests that inject collectPerformance directly.
-  let effectivePerformanceCollector;
-  if (options.collectPerformance) {
-    // Test override: use the injected collector directly (single-URL compat)
-    effectivePerformanceCollector = async (urls, opts) => {
-      const result = await options.collectPerformance(urls[0], opts);
-      // Wrap single-URL result in multi-page shape when needed
-      if (urls.length > 1) {
-        return {
-          ...result,
-          pageResults: [result],
-          testedUrls: urls,
-          coverage: { ...result.coverage, pagesTested: 1 },
-        };
-      }
-      return result;
-    };
-  } else {
-    effectivePerformanceCollector = collectPerformanceForPages;
-  }
 
   const [performance, competitors, backlinks, ga4, gsc] = await Promise.all([
     performanceCollector(perfUrls, {

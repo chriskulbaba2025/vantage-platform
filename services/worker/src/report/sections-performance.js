@@ -118,7 +118,16 @@ function appendix(model) {
   const ev = model.evidence;
   const perfAvailable = ev.performance?.sourceStatus === SOURCE_STATUS.AVAILABLE
     || ev.performance?.sourceStatus === SOURCE_STATUS.PARTIAL;
-  const perfGate = perfAvailable ? "PASS" : "UNAVAILABLE";
+  // Source-status based gate labels — never hardcode PASS.
+  function sourceGate(sourceStatus, availableLabel, fallbackLabel) {
+    if (!sourceStatus) return fallbackLabel || "NOT CONFIGURED";
+    return sourceStatus;
+  }
+  function siteGate(site) {
+    if (!site?.sourceStatus) return "NOT CONFIGURED";
+    return site.sourceStatus;
+  }
+  const perfGate = sourceGate(ev.performance?.sourceStatus, `PASS — ${ev.performance?.coverage?.completed || 0}/${ev.performance?.coverage?.requested || 0} runs`, "UNAVAILABLE");
   const backlinksAvailable = ev.backlinks?.sourceStatus === SOURCE_STATUS.AVAILABLE;
   const ga4Available = ev.ga4?.sourceStatus === SOURCE_STATUS.AVAILABLE;
   const gscAvailable = ev.gsc?.sourceStatus === SOURCE_STATUS.AVAILABLE;
@@ -132,13 +141,14 @@ function appendix(model) {
     : "";
   const perfSourceLabel = `${e(perfActual)}${perfFallbackNote}`;
 
+  const competitorCount = (model.competitors || []).length;
   const sourceRows = [
-    ["Website Capture", `Custom bounded crawler${ev.site.pages.some((p) => p.rendered) ? " + Playwright rendering" : ""}`, `PASS — ${ev.site.pageCount} page(s)`],
+    ["Website Capture", `Custom bounded crawler${ev.site.pages.some((p) => p.rendered) ? " + Playwright rendering" : ""}`, `${siteGate(ev.site)} — ${ev.site.pageCount} page(s)`],
     ["Performance", perfSourceLabel, perfGate],
-    ["Platform", "Metadata, scripts, headers, and asset signals", `PASS — ${ev.site.platform}`],
-    ["E-E-A-T Trust", "On-site captured evidence", "PASS"],
-    ["Technical Hygiene", "Crawler + performance evidence", "PASS"],
-    ["Competitor Benchmark", `${model.competitors.length} supplied URL(s)`, model.competitors.length ? "PASS" : "NOT SUPPLIED"],
+    ["Platform", "Metadata, scripts, headers, and asset signals", `${ev.site.platform ? "DETECTED" : "UNKNOWN"} — ${ev.site.platform || "Not detected"}`],
+    ["E-E-A-T Trust", "On-site captured evidence", ev.site._contentEvidenceAvailable !== false ? "CAPTURED" : "UNAVAILABLE"],
+    ["Technical Hygiene", "Crawler + performance evidence", ev.site.sourceStatus === "AVAILABLE" ? "CAPTURED" : ev.site.sourceStatus || "PARTIAL"],
+    ["Competitor Benchmark", `${competitorCount} supplied URL(s)`, competitorCount > 0 ? `${competitorCount} SUPPLIED` : "NOT SUPPLIED"],
     ["Backlinks", "DataForSEO", backlinksAvailable ? `PASS — ${ev.backlinks.totalBacklinksReviewed} reviewed` : "NOT CONFIGURED"],
     ["GA4", "Google Analytics Data API", ga4Available ? "PASS — contextual only" : "NOT CONFIGURED — no score impact"],
     ["Search Console", "Google Search Console API", gscAvailable ? `PASS — ${ev.gsc?.totals?.impressions || 0} impressions` : "NOT CONFIGURED — no score impact"],

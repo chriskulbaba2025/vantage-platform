@@ -40,9 +40,9 @@ ${scoreCard(scores.conversionPathways, "Conversion Pathways")}
 <p>Vantage Phase 1 Audit of <strong>${e(site.domain)}</strong>, a ${e(site.pageCount)}-page crawlable website detected as ${e(site.platform)}.</p>
 ${statusBanner}${legacyReadiness}
 <div class="confidence-note"><h3>Evidence Confidence — ${e(bands.evidenceConfidence)}</h3>
-<p><strong>Strong:</strong> ${e(site.pageCount)} page(s) were captured with page-level metadata, headings, links, forms, trust signals, schema, images, and response-header evidence.</p>
-<p style="margin-top:6px"><strong>Performance:</strong> ${e(evidence.performance?.mobile?.source || "No performance source")} supplied mobile data and ${e(evidence.performance?.desktop?.source || "no performance source")} supplied desktop data.</p>
-<p style="margin-top:6px"><strong>Competitors:</strong> ${e(model.competitors.length)} supplied competitor site(s) produced comparable on-page evidence.</p>
+<p><strong>Website crawl:</strong> ${e(site.pageCount)} page(s) captured. Source status: ${e(site.sourceStatus)}. ${site._contentEvidenceAvailable !== false ? "Page-level headings, links, forms, trust signals, schema, images, and headers were extracted." : "Page body content, CTAs, forms, trust signals, and structured data are not available from this provider."}</p>
+<p style="margin-top:6px"><strong>Performance:</strong> ${e(evidence.performance?.sourceStatus || "No performance source")}${evidence.performance?.testedUrls ? " — " + e(evidence.performance.testedUrls.length) + " URL(s) tested" : ""}. ${evidence.performance?.fallbackUsed === true ? "Lighthouse CLI fallback was used for some strategies." : ""}</p>
+<p style="margin-top:6px"><strong>Competitors:</strong> ${e((model.competitors || []).length)} supplied competitor site(s) produced comparable on-page evidence.</p>
 <p style="margin-top:6px"><strong>Optional analytics:</strong> ${e(evidence.ga4?.sourceStatus === SOURCE_STATUS.AVAILABLE ? "GA4 data was included as context." : "GA4 was not connected; the audit completed without analytics and no score was reduced.")}</p>
 <p style="margin-top:6px"><strong>Confidence score:</strong> ${e(evidenceConfidenceScore)}/100.</p>
 <p style="margin-top:6px"><strong>Assessed weight:</strong> ${e(assessedWeight)}% of intended dimensions.</p></div>
@@ -53,7 +53,15 @@ ${statusBanner}${legacyReadiness}
 }
 
 function priorityFixes(model) {
-  return section("priority-fixes", "02", "Priority Fixes", `<p style="margin-bottom:16px">Ranked by conversion impact. Each fix is tied to captured website or performance evidence.</p>${table(["#", "Sev", "Problem", "Evidence", "Conversion Impact", "Fix", "Effort"], model.findings.map((f, i) => [e(i + 1), `<span class="${severityClass(f.severity)}">${e(f.severity)}</span>`, e(f.problem), e(f.evidence), e(f.impact), e(f.fix), e(f.effort)]))}`);
+  // Render evidence as readable text — never raw object coercion.
+  function renderEvidence(f) {
+    if (f.evidenceText) return e(f.evidenceText);
+    if (Array.isArray(f.evidence)) {
+      return e(f.evidence.map((er) => `${er.field}: ${er.observedValue ?? "unavailable"}`).join("; "));
+    }
+    return e(String(f.evidence || ""));
+  }
+  return section("priority-fixes", "02", "Priority Fixes", `<p style="margin-bottom:16px">Ranked by conversion impact. Each fix is tied to captured website or performance evidence.</p>${table(["#", "Sev", "Problem", "Evidence", "Conversion Impact", "Fix", "Effort"], model.findings.map((f, i) => [e(i + 1), `<span class="${severityClass(f.severity)}">${e(f.severity)}</span>`, e(f.problem), renderEvidence(f), e(f.impact), e(f.fix), e(f.effort)]))}`);
 }
 
 function conversionPaths(model) {
