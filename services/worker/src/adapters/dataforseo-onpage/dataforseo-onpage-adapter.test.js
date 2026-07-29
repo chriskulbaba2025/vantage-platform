@@ -1634,3 +1634,531 @@ test("unknown task status_code throws — not treated as pending", async () => {
     restoreCredentials();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Regression: real DataForSEO API response format
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a page fixture matching the ACTUAL DataForSEO /on_page/pages
+ * response format (headings under meta.htags, word count under
+ * meta.content.plain_text_word_count, counts only — no link/image arrays).
+ */
+function buildRealisticDfPage(index, overrides = {}) {
+  return {
+    resource_type: "html",
+    url: hasOwn(overrides, "url")
+      ? overrides.url
+      : `https://example.com/page-${index}`,
+    status_code: hasOwn(overrides, "status_code")
+      ? overrides.status_code
+      : 200,
+    meta: {
+      title: hasOwn(overrides, "title")
+        ? overrides.title
+        : `Page ${index} Title`,
+      description: hasOwn(overrides, "description")
+        ? overrides.description
+        : `Meta description for page ${index}`,
+      canonical: hasOwn(overrides, "canonical")
+        ? overrides.canonical
+        : `https://example.com/page-${index}`,
+      htags: {
+        h1: hasOwn(overrides, "h1")
+          ? overrides.h1
+          : [`Heading 1 - Page ${index}`],
+        h2: hasOwn(overrides, "h2")
+          ? overrides.h2
+          : [`Subheading for page ${index}`],
+        h3: hasOwn(overrides, "h3") ? overrides.h3 : [],
+        h4: hasOwn(overrides, "h4") ? overrides.h4 : [],
+        h5: hasOwn(overrides, "h5") ? overrides.h5 : [],
+        h6: hasOwn(overrides, "h6") ? overrides.h6 : [],
+      },
+      content: {
+        plain_text_word_count: hasOwn(overrides, "word_count")
+          ? overrides.word_count
+          : 500 + index * 100,
+        plain_text_size: 2500 + index * 500,
+        plain_text_rate: 0.15,
+      },
+      content_language: hasOwn(overrides, "language")
+        ? overrides.language
+        : "en",
+      generator: hasOwn(overrides, "generator")
+        ? overrides.generator
+        : "WordPress",
+      internal_links_count: 10,
+      external_links_count: 3,
+      images_count: 5 + index,
+      // No plain_text — body text is NOT available from pages endpoint
+      // No links array — only counts
+      // No images array — only counts
+      // No structured_data — only counts
+    },
+    // No links array at root — links come from separate /on_page/links endpoint
+    // No images array at root
+    // No structured_data at root
+    page_timing: { time_to_interactive: 500 },
+    load_time: 500,
+    crawl_depth: index,
+    checks: {},
+    ...(overrides.extra || {}),
+  };
+}
+
+/**
+ * Build a summary fixture matching the real DataForSEO summary format
+ * with page_metrics at the root.
+ */
+function buildRealisticDfSummary(overrides = {}) {
+  return {
+    crawl_progress: "finished",
+    crawl_status: {
+      max_crawl_pages: overrides.maxPages ?? 30,
+      pages_in_queue: 0,
+      pages_crawled: overrides.pageCount ?? 30,
+    },
+    crawl_stop_reason: overrides.crawlStopReason ?? "limit_exceeded",
+    domain_info: {
+      name: "example.com",
+      cms: overrides.cms ?? "WordPress",
+      total_pages: overrides.totalSitePages ?? (overrides.pageCount ?? 30),
+    },
+    page_metrics: {
+      links_external: overrides.linksExternal ?? 129,
+      links_internal: overrides.linksInternal ?? 584,
+      broken_links: overrides.brokenLinks ?? 5,
+      onpage_score: overrides.onpageScore ?? 81.36,
+      checks: {
+        no_h1_tag: overrides.noH1Tag ?? 3,
+        no_description: overrides.noDescription ?? 5,
+        no_image_alt: overrides.noImageAlt ?? 12,
+        no_image_title: overrides.noImageTitle ?? 12,
+        no_title: overrides.noTitle ?? 1,
+        is_4xx_code: overrides.is4xx ?? 2,
+        is_broken: overrides.isBroken ?? 2,
+        broken_links: 5,
+        ...(overrides.extraChecks || {}),
+      },
+    },
+  };
+}
+
+/**
+ * Build link items matching the real /on_page/links endpoint format
+ * (link_to / link_from — not url / href).
+ */
+function buildRealisticDfLinks(baseCount = 50) {
+  const items = [];
+  for (let i = 0; i < baseCount; i++) {
+    items.push({
+      type: "link",
+      link_from: `https://example.com/page-${i % 10}`,
+      link_to: i < baseCount - 10
+        ? `https://example.com/internal-page-${i}`
+        : `https://other-example.com/external-${i}`,
+      domain_from: "example.com",
+      domain_to: i < baseCount - 10 ? "example.com" : "other-example.com",
+    });
+  }
+  return { items, total_count: items.length };
+}
+
+// Regression: headings extracted from meta.htags path (real API format)
+test("headings extracted from meta.htags.h1 path (real DataForSEO format)", async () => {
+  const pages = [
+    buildRealisticDfPage(0, { h1: ["Main Heading", "Second H1"] }),
+    buildRealisticDfPage(1, { h1: [] }),
+    buildRealisticDfPage(2, { h1: ["Only Heading"] }),
+  ];
+
+  const fixtures = {
+    taskPost: { taskId: "htags-test", rawTask: { id: "htags-test" } },
+    pollTask: { status: "ready", taskId: "htags-test" },
+    summary: buildRealisticDfSummary({ pageCount: 3, totalSitePages: 3 }),
+    pages: { items: pages, total_count: 3 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  assert.equal(result.pageCount, 3);
+  // Page 0 should have 2 H1s
+  assert.equal(result.pages[0].headings.h1.length, 2);
+  assert.equal(result.pages[0].headings.h1[0], "Main Heading");
+  // Page 1 should have 0 H1s
+  assert.equal(result.pages[1].headings.h1.length, 0);
+  // Page 2 should have 1 H1
+  assert.equal(result.pages[2].headings.h1.length, 1);
+});
+
+// Regression: word count from meta.content.plain_text_word_count
+test("word count uses meta.content.plain_text_word_count (real DataForSEO format)", async () => {
+  const pages = [
+    buildRealisticDfPage(0, { word_count: 750 }),
+    buildRealisticDfPage(1, { word_count: 1200 }),
+  ];
+
+  const fixtures = {
+    taskPost: { taskId: "wordcount-test", rawTask: { id: "wordcount-test" } },
+    pollTask: { status: "ready", taskId: "wordcount-test" },
+    summary: buildRealisticDfSummary({ pageCount: 2, totalSitePages: 2 }),
+    pages: { items: pages, total_count: 2 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  assert.equal(result.pages[0].words, 750);
+  assert.equal(result.pages[1].words, 1200);
+  assert.equal(result.totalWords, 750 + 1200);
+  assert.equal(result.averageWords, Math.round((750 + 1200) / 2));
+});
+
+// Regression: internalLinkCount from page_metrics.links_internal
+test("internalLinkCount uses page_metrics.links_internal when link arrays unavailable", async () => {
+  const pages = [buildRealisticDfPage(0)];
+
+  const fixtures = {
+    taskPost: { taskId: "links-test", rawTask: { id: "links-test" } },
+    pollTask: { status: "ready", taskId: "links-test" },
+    summary: buildRealisticDfSummary({
+      pageCount: 1,
+      totalSitePages: 1,
+      linksInternal: 584,
+      linksExternal: 129,
+    }),
+    pages: { items: pages, total_count: 1 },
+    links: { items: [], total_count: 0 }, // No link arrays from endpoint
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  assert.equal(result.internalLinkCount, 584);
+});
+
+// Regression: h1Missing from page_metrics.checks.no_h1_tag
+test("h1Missing uses page_metrics.checks.no_h1_tag when heading data unavailable", async () => {
+  // Pages with empty h1 arrays (DataForSEO pages endpoint doesn't return
+  // extracted headings — only counts via page_metrics).
+  const pages = [
+    buildRealisticDfPage(0, { h1: [] }),
+    buildRealisticDfPage(1, { h1: [] }),
+    buildRealisticDfPage(2, { h1: [] }),
+  ];
+
+  const fixtures = {
+    taskPost: { taskId: "h1missing-test", rawTask: { id: "h1missing-test" } },
+    pollTask: { status: "ready", taskId: "h1missing-test" },
+    summary: buildRealisticDfSummary({
+      pageCount: 3,
+      totalSitePages: 3,
+      noH1Tag: 21,
+    }),
+    pages: { items: pages, total_count: 3 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  // When no pages have heading data extracted, h1Missing comes from
+  // page_metrics.checks.no_h1_tag (21), not from page-level counts.
+  assert.equal(result.h1Missing, 21);
+});
+
+// Regression: missingDescriptions from page_metrics.checks.no_description
+test("missingDescriptions uses page_metrics.checks.no_description", async () => {
+  // Pages with empty descriptions (DataForSEO pages endpoint may not
+  // always return per-page description data).
+  const pages = [
+    buildRealisticDfPage(0, { description: "" }),
+    buildRealisticDfPage(1, { description: "" }),
+    buildRealisticDfPage(2, { description: "" }),
+  ];
+
+  const fixtures = {
+    taskPost: { taskId: "nodesc-test", rawTask: { id: "nodesc-test" } },
+    pollTask: { status: "ready", taskId: "nodesc-test" },
+    summary: buildRealisticDfSummary({
+      pageCount: 3,
+      totalSitePages: 3,
+      noDescription: 16,
+    }),
+    pages: { items: pages, total_count: 3 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  // When no pages have descriptions, value comes from page_metrics
+  assert.equal(result.missingDescriptions, 16);
+});
+
+// Regression: imagesMissingAlt from page_metrics.checks.no_image_alt
+test("imagesMissingAlt uses page_metrics.checks.no_image_alt when image arrays unavailable", async () => {
+  const pages = [buildRealisticDfPage(0)];
+
+  const fixtures = {
+    taskPost: { taskId: "imgalt-test", rawTask: { id: "imgalt-test" } },
+    pollTask: { status: "ready", taskId: "imgalt-test" },
+    summary: buildRealisticDfSummary({
+      pageCount: 1,
+      totalSitePages: 1,
+      noImageAlt: 26,
+    }),
+    pages: { items: pages, total_count: 1 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  assert.equal(result.imagesMissingAlt, 26);
+});
+
+// Regression: 404 pages excluded from content-quality counts
+test("404 pages are excluded from content-quality counts", async () => {
+  const pages = [
+    buildRealisticDfPage(0, { status_code: 404, title: "", description: "", h1: [] }),
+    buildRealisticDfPage(0, { status_code: 404, title: "", description: "", h1: [] }),
+    buildRealisticDfPage(0, { status_code: 404, title: "", description: "", h1: [] }),
+    // These three have content
+    buildRealisticDfPage(1, { h1: ["Has H1"] }),
+    buildRealisticDfPage(2, { h1: [] }),
+    buildRealisticDfPage(3, { h1: ["Also Has H1"] }),
+  ];
+
+  const fixtures = {
+    taskPost: { taskId: "404-test", rawTask: { id: "404-test" } },
+    pollTask: { status: "ready", taskId: "404-test" },
+    summary: buildRealisticDfSummary({
+      pageCount: 6, totalSitePages: 6,
+      is4xx: 3, isBroken: 3,
+      noH1Tag: 1, // only page 2 lacks H1 among content pages
+    }),
+    pages: { items: pages, total_count: 6 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  // Total pageCount still includes all
+  assert.equal(result.pageCount, 6);
+  // 404 pages in brokenInternalLinks
+  assert.equal(result.brokenInternalLinks.length, 3);
+  // Content-quality counts use only non-404 pages (3 content pages)
+  // Since no page-level heading data was extracted, h1Missing uses
+  // page_metrics.checks.no_h1_tag (1)
+  assert.equal(result.h1Missing, 1);
+  // missingTitles comes from content pages (non-404) only
+  // All 3 content pages have titles, so 0 missing
+  assert.equal(result.missingTitles, 0);
+});
+
+// Regression: link field mapping handles link_to format
+test("link field mapping handles link_to format from DataForSEO links endpoint", async () => {
+  const pages = [buildRealisticDfPage(0)];
+
+  const linksData = buildRealisticDfLinks(50);
+  // 40 internal, 10 external
+
+  const fixtures = {
+    taskPost: { taskId: "linkmap-test", rawTask: { id: "linkmap-test" } },
+    pollTask: { status: "ready", taskId: "linkmap-test" },
+    summary: buildRealisticDfSummary({
+      pageCount: 1,
+      totalSitePages: 1,
+      linksInternal: 40,
+    }),
+    pages: { items: pages, total_count: 1 },
+    links: linksData,
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  // With link arrays available, internalLinkCount is derived from the
+  // actual links data, not page_metrics
+  assert.equal(result.internalLinkCount, 40);
+});
+
+// Regression: contentEvidenceAvailable is false when no body text extracted
+test("_contentEvidenceAvailable is false when DataForSEO pages lack body text", async () => {
+  const pages = [
+    buildRealisticDfPage(0),
+    buildRealisticDfPage(1),
+  ];
+
+  const fixtures = {
+    taskPost: { taskId: "contentavail-test", rawTask: { id: "contentavail-test" } },
+    pollTask: { status: "ready", taskId: "contentavail-test" },
+    summary: buildRealisticDfSummary({ pageCount: 2, totalSitePages: 2 }),
+    pages: { items: pages, total_count: 2 },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { maxPages: 10 }),
+  );
+
+  assert.equal(result._contentEvidenceAvailable, false);
+  // Trust signals are false (not null — backward compatible with scoring)
+  assert.equal(result.trust.testimonials, false);
+  assert.equal(result.trust.credentials, false);
+  // Limitations mention unavailable content
+  assert.ok(
+    result.limitations.some((l) => /body content/i.test(l)),
+    `Expected body content limitation, got: ${JSON.stringify(result.limitations)}`,
+  );
+  // Source status is PARTIAL because content evidence is unavailable
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
+});
+
+// Regression: page_metrics used for aggregate counts in production-like scenario
+test("production regression: matches expected values from page_metrics", async () => {
+  // Simulate a realistic production scenario matching the may-crawford audit.
+  // KEY INSIGHT: DataForSEO /on_page/pages returns meta.title and
+  // meta.description but does NOT return extracted headings, links,
+  // images, or body text.  Those aggregate counts live only in the
+  // summary's page_metrics.checks.
+  const pages = [];
+  // 3 x 404 pages (no title, no description)
+  for (let i = 0; i < 3; i++) {
+    pages.push(buildRealisticDfPage(i, {
+      status_code: 404,
+      title: "",
+      description: "",
+      h1: [], h2: [], h3: [], h4: [], h5: [], h6: [],
+      url: `https://maycrawford.com/404-page-${i}`,
+    }));
+  }
+  // 27 x 200 pages — have titles but NO extracted headings,
+  // descriptions, or body text (simulating the real DataForSEO
+  // pages endpoint which returns meta.title but limited other fields).
+  for (let i = 0; i < 27; i++) {
+    pages.push(buildRealisticDfPage(i + 3, {
+      h1: [], h2: [], h3: [], h4: [], h5: [], h6: [],
+      description: "",
+      generator: "concrete5",
+      url: `https://maycrawford.com/page-${i + 3}`,
+    }));
+  }
+
+  const fixtures = {
+    taskPost: {
+      taskId: "07290216-1281-0216-0000-372ec45e2f2a",
+      rawTask: { id: "07290216-1281-0216-0000-372ec45e2f2a" },
+    },
+    pollTask: {
+      status: "ready",
+      taskId: "07290216-1281-0216-0000-372ec45e2f2a",
+    },
+    summary: buildRealisticDfSummary({
+      pageCount: 30,
+      totalSitePages: 30,
+      linksInternal: 584,
+      linksExternal: 129,
+      brokenLinks: 5,
+      noH1Tag: 21,
+      noDescription: 16,
+      noImageAlt: 26,
+      is4xx: 3,
+      isBroken: 3,
+      cms: "concrete5",
+    }),
+    pages: { items: pages, total_count: 30 },
+    links: { items: [], total_count: 0 }, // No link arrays — use page_metrics
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+  };
+
+  const result = await crawlWithDataforseo(
+    "https://maycrawford.com",
+    crawlOpts(fixtures, { maxPages: 30 }),
+  );
+
+  // Required assertions matching production defect report
+  assert.equal(result.pageCount, 30);
+  assert.equal(result.internalLinkCount, 584,
+    "internalLinkCount must match page_metrics.links_internal");
+  assert.equal(result.h1Missing, 21,
+    "h1Missing must match page_metrics.checks.no_h1_tag");
+  assert.equal(result.missingDescriptions, 16,
+    "missingDescriptions must match page_metrics.checks.no_description");
+  assert.equal(result.imagesMissingAlt, 26,
+    "imagesMissingAlt must match page_metrics.checks.no_image_alt");
+  assert.equal(result.brokenLinksCount, 5,
+    "brokenLinksCount must match page_metrics.broken_links");
+
+  // 404 pages excluded from content-quality counts
+  assert.equal(result.missingTitles, 0,
+    "404 pages excluded from missingTitles (content pages have titles)");
+
+  // Content evidence is unavailable (no body text from DataForSEO)
+  assert.equal(result._contentEvidenceAvailable, false);
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
+
+  // Limitations mention unavailable content fields
+  assert.ok(
+    result.limitations.some((l) => /body content/i.test(l)),
+    "Must have limitation about unavailable body content",
+  );
+
+  // Platform from domain_info
+  assert.equal(result.platform, "concrete5");
+
+  // Task ID preserved
+  assert.equal(
+    result._sourceStatus.requestId,
+    "07290216-1281-0216-0000-372ec45e2f2a",
+  );
+
+  // No false content signals (trust is false, not a confirmed absence)
+  assert.equal(result.trust.testimonials, false);
+  assert.equal(result.trust.contact, false);
+
+  // imageCount is null (not available from pages endpoint)
+  assert.equal(result.imageCount, null);
+});

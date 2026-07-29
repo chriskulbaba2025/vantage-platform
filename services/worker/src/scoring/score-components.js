@@ -637,6 +637,18 @@ const RULE_VERSION = SCORING_VERSION;
 export function buildFindings(site, performance, gsc) {
   const findings = [];
 
+  // When page body content was not extracted (DataForSEO pages endpoint
+  // returns metadata only), content-dependent findings MUST be suppressed
+  // because false/empty/null values represent "not available" rather than
+  // "confirmed absent".  This gate prevents false-positive findings for
+  // trust signals, CTAs, forms, structured data, and body-content rules
+  // that depend on extracted page text (PRD v3.0 §8.6).
+  const contentEvidenceAvailable = site._contentEvidenceAvailable !== false;
+  // Response headers (x-frame-options, CSP, etc.) are not returned by the
+  // DataForSEO pages endpoint.  Findings that depend on them must be
+  // suppressed when they were not actually collected.
+  const responseHeadersAvailable = site._responseHeadersAvailable !== false;
+
   const add = (opts) => {
     const evidenceRecords = (opts.evidence || []).map((er) => ({
       provider: er.provider || "dataforseo_onpage",
@@ -705,7 +717,7 @@ export function buildFindings(site, performance, gsc) {
 
   // ── Crawl-dependent findings ──────────────────────────────────────
 
-  if (!site.trust.testimonials && !site.trust.caseStudies && !site.trust.credentials) {
+  if (!site.trust.testimonials && !site.trust.caseStudies && !site.trust.credentials && contentEvidenceAvailable) {
     add({
       ruleId: "VAN-TRUST-001",
       dimension: "trust_eeat",
@@ -758,7 +770,7 @@ export function buildFindings(site, performance, gsc) {
     });
   }
 
-  if (!site.schemaTypes.length) {
+  if (!site.schemaTypes.length && contentEvidenceAvailable) {
     add({
       ruleId: "VAN-SCHEMA-001",
       dimension: "entity_schema_ai",
@@ -873,7 +885,7 @@ export function buildFindings(site, performance, gsc) {
   const missingSecurity = Object.entries(site.securityHeaders)
     .filter(([, present]) => !present)
     .map(([name]) => name);
-  if (missingSecurity.length) {
+  if (missingSecurity.length && responseHeadersAvailable) {
     add({
       ruleId: "VAN-TECH-003",
       dimension: "technical_performance",
@@ -898,7 +910,7 @@ export function buildFindings(site, performance, gsc) {
     });
   }
 
-  if (!site.trust.faq) {
+  if (!site.trust.faq && contentEvidenceAvailable) {
     add({
       ruleId: "VAN-CONTENT-002",
       dimension: "content_funnel",
@@ -923,7 +935,7 @@ export function buildFindings(site, performance, gsc) {
     });
   }
 
-  if (!site.trust.pricing) {
+  if (!site.trust.pricing && contentEvidenceAvailable) {
     add({
       ruleId: "VAN-TRUST-002",
       dimension: "trust_eeat",

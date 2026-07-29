@@ -70,25 +70,31 @@ function normalizePage(raw, context = {}) {
   const statusCode = raw.status_code || 0;
   const rendered = Boolean(raw.enable_javascript || raw.enable_browser_rendering);
 
-  // Headings
+  // Headings: DataForSEO nests under meta.htags.{h1…h6} (PRD v3.0 §8).
+  // Fall back to meta.h1 (legacy fixture format) for test compatibility.
+  const htags = raw.meta?.htags || {};
   const headings = {
-    h1: raw.meta?.h1 || [],
-    h2: raw.meta?.h2 || [],
-    h3: raw.meta?.h3 || [],
-    h4: raw.meta?.h4 || [],
-    h5: raw.meta?.h5 || [],
-    h6: raw.meta?.h6 || [],
+    h1: htags.h1 || raw.meta?.h1 || [],
+    h2: htags.h2 || raw.meta?.h2 || [],
+    h3: htags.h3 || raw.meta?.h3 || [],
+    h4: htags.h4 || raw.meta?.h4 || [],
+    h5: htags.h5 || raw.meta?.h5 || [],
+    h6: htags.h6 || raw.meta?.h6 || [],
   };
 
-  // Links: extract from raw page
+  // Links: the /on_page/pages endpoint returns counts (meta.internal_links_count,
+  // meta.external_links_count), not arrays.  When a link array is supplied
+  // (fixture tests or the separate /on_page/links endpoint), normalise it.
+  // Otherwise leave the array empty — real link data comes via the links endpoint.
   const rawLinks = raw.links || [];
   const links = rawLinks.map((link) => ({
-    url: link.url || link.href || "",
+    url: link.url || link.href || link.link_to || "",
     text: link.text || link.anchor || "",
     target: link.target || "",
   }));
 
-  // Images
+  // Images: the pages endpoint returns meta.images_count (integer), not arrays.
+  // Fixture tests may supply arrays under .images or .resources.images.
   const rawImages = raw.images || raw.resources?.images || [];
   const images = rawImages.map((img) => ({
     src: img.url || img.src || "",
@@ -98,10 +104,14 @@ function normalizePage(raw, context = {}) {
     loading: img.loading || null,
   }));
 
-  // Schema types from structured data
+  // Schema types from structured data (not available from pages endpoint;
+  // falls back to empty for real API, uses test fixtures when present).
   const schemaTypes = extractSchemaTypes(raw);
 
-  // Trust signals extracted from page content
+  // Body text: NOT available from the /on_page/pages endpoint — it returns
+  // meta.content.plain_text_size (integer) and meta.content.plain_text_word_count
+  // (float), but never the actual text.  Trust signals therefore cannot be
+  // detected from page body content when using DataForSEO.
   const bodyText = raw.content?.plain_text || raw.meta?.plain_text || "";
   const title = raw.meta?.title || "";
   const description = raw.meta?.description || "";
@@ -110,6 +120,12 @@ function normalizePage(raw, context = {}) {
 
   // Service candidates from headings and schema
   const serviceCandidates = extractServiceCandidates(raw);
+
+  // Content availability: true only when actual body text was extracted.
+  // DataForSEO pages endpoint does not provide body text, so this will be
+  // false in production.  The legacy crawler (page-extractor.js) always
+  // sets this to true because it parses full HTML.
+  const contentAvailable = bodyText.length > 0;
 
   return {
     url: raw.url || "",
@@ -121,7 +137,12 @@ function normalizePage(raw, context = {}) {
     language: raw.meta?.content_language || raw.language || "",
     generator: raw.meta?.generator || raw.technologies?.cms || "",
     platform: detectPlatform(raw),
-    words: raw.meta?.word_count || raw.content?.word_count || 0,
+    // Word count: DataForSEO uses meta.content.plain_text_word_count (float).
+    // Fall back to meta.word_count (legacy fixture format) then content.word_count.
+    words: raw.meta?.content?.plain_text_word_count
+      ?? raw.meta?.word_count
+      ?? raw.content?.word_count
+      ?? 0,
     headings,
     schemaTypes,
     links,
@@ -142,7 +163,14 @@ function normalizePage(raw, context = {}) {
       sizeBytes: raw.size || raw.page_size || null,
       crawlDepth: raw.crawl_depth ?? null,
       sitemapUrl: raw.sitemap_url || null,
+      metaInternalLinksCount: raw.meta?.internal_links_count ?? null,
+      metaExternalLinksCount: raw.meta?.external_links_count ?? null,
+      metaImagesCount: raw.meta?.images_count ?? null,
     },
+    // Content-availability marker — downstream consumers read this to
+    // decide whether content-dependent signals (trust, CTA, forms) are
+    // based on real extracted text or are unavailable.
+    _contentAvailable: contentAvailable,
   };
 }
 
@@ -386,6 +414,23 @@ function summarizeSite({
   loginBlocked,
 }) {
   const domain = domainOf(targetUrl);
+
+  // ── Pages used for content-quality counts ────────────────────────────
+  // 404 and other error pages should not count toward missing-title,
+  // missing-description, h1-missing, etc. — those pages are excluded from
+  // content-quality assessment.  Site-level metrics (pageCount, statusCounts)
+  // still include all pages.
+  const contentPages = pages.filter((p) => p.status >= 200 && p.status < 400);
+
+  // ── Content evidence availability ─────────────────────────────────────
+  // DataForSEO /on_page/pages endpoint returns metadata only (no body text,
+  // no link/image arrays, no structured_data).  When every content-page has
+  // _contentAvailable === false, content-dependent signals (trust, CTAs,
+  // forms) were not extracted from real page text and must be treated as
+  // unavailable rather than confirmed-absent.
+  const contentEvidenceAvailable = contentPages.length > 0
+    && contentPages.some((p) => p._contentAvailable === true);
+
   const allSchema = new Set(pages.flatMap((p) => p.schemaTypes));
   const allServices = new Set(pages.flatMap((p) => p.serviceCandidates));
 
@@ -417,16 +462,23 @@ function summarizeSite({
     .slice(0, 20)
     .map(([phrase]) => phrase);
 
-  // Internal links (within target domain)
+  // ── Internal links ──────────────────────────────────────────────────
+  // DataForSEO /on_page/links endpoint returns items with link_to/link_from
+  // (not url/href).  The legacy crawler and fixture tests use url/href.
+  // Accept both formats and resolve to the best available destination URL.
+  function linkDestinationUrl(l) {
+    return l.link_to || l.url || l.href || "";
+  }
+
   const internalLinks = links.filter((l) => {
     try {
-      return domainOf(l.url || l.href || "") === domain;
+      return domainOf(linkDestinationUrl(l)) === domain;
     } catch {
       return false;
     }
   });
 
-  // External CTAs
+  // ── Page-level content aggregates ────────────────────────────────────
   const allCtas = pages.flatMap((p) => p.ctas);
   const externalCtas = allCtas.filter((cta) => {
     try {
@@ -436,8 +488,12 @@ function summarizeSite({
     }
   });
 
-  // Security headers from first page's response headers
+  // Security headers from first page's response headers.
+  // DataForSEO /on_page/pages endpoint does not return response headers,
+  // so this will be {} in production.  The legacy crawler (page-extractor.js)
+  // sets real headers because it performs HTTP fetches directly.
   const firstPageHeaders = pages[0]?.responseHeaders || {};
+  const responseHeadersAvailable = Object.keys(firstPageHeaders).length > 0;
   const securityHeaders = {
     xFrameOptions: Boolean(firstPageHeaders["x-frame-options"]),
     xContentTypeOptions: Boolean(firstPageHeaders["x-content-type-options"]),
@@ -480,14 +536,109 @@ function summarizeSite({
     .filter((p) => p.status >= 400)
     .map((p) => p.url);
 
-  // Determine source status based on crawl conditions
+  // ── Aggregate metrics from DataForSEO summary page_metrics ──────────
+  // When page_metrics is present it contains authoritative provider-side
+  // counts (links_internal, checks.no_h1_tag, etc.).  These are preferred
+  // over page-derived counts when the pages endpoint doesn't provide
+  // content-level data.
+  const pageMetrics = rawSummary?.page_metrics;
+  const metricChecks = pageMetrics?.checks || {};
+
+  // imageCount: use page_metrics-derived estimate when image arrays aren't
+  // available from individual pages.
+  const hasPageImageData = allImages.length > 0;
+  const imageCount = hasPageImageData
+    ? allImages.length
+    : null; // unavailable from DataForSEO — returned as null
+
+  // h1Missing: prefer page_metrics.checks.no_h1_tag when page-level
+  // headings were not extracted from body content.
+  const hasPageHeadingData = pages.some((p) => p.headings.h1.length > 0);
+  const h1Missing = hasPageHeadingData
+    ? contentPages.filter((p) => p.headings.h1.length === 0).length
+    : (metricChecks.no_h1_tag ?? null);
+
+  const h1Multiple = hasPageHeadingData
+    ? contentPages.filter((p) => p.headings.h1.length > 1).length
+    : null;
+
+  // missingDescriptions: prefer page_metrics.checks.no_description
+  const hasPageDescriptionData = pages.some((p) => p.description);
+  const missingDescriptions = hasPageDescriptionData
+    ? contentPages.filter((p) => !p.description).length
+    : (metricChecks.no_description ?? null);
+
+  // imagesMissingAlt: prefer page_metrics.checks.no_image_alt
+  const imagesMissingAlt = hasPageImageData
+    ? allImages.filter((img) => !img.alt).length
+    : (metricChecks.no_image_alt ?? null);
+
+  const imagesMissingDimensions = hasPageImageData
+    ? allImages.filter((img) => !img.width || !img.height).length
+    : null;
+
+  // missingTitles and missingCanonicals: page-level only from DataForSEO
+  // (the summary doesn't have authoritative count fields for these).
+  const missingTitles = contentPages.filter((p) => !p.title).length;
+  const missingCanonicals = contentPages.filter((p) => !p.canonical).length;
+
+  // internalLinkCount: use page_metrics.links_internal when link arrays
+  // were not extracted from page content.
+  const hasLinkArrayData = links.length > 0;
+  const internalLinkCount = hasLinkArrayData
+    ? internalLinks.length
+    : (pageMetrics?.links_internal ?? null);
+
+  // totalWords / averageWords: sum from page-level word counts
+  const totalWords = contentPages.reduce((sum, p) => sum + (p.words || 0), 0);
+  const averageWords = contentPages.length
+    ? Math.round(totalWords / contentPages.length)
+    : null;
+
+  // broken_links count from summary
+  const brokenLinksCount = pageMetrics?.broken_links ?? null;
+
+  // ── Trust signals ────────────────────────────────────────────────────
+  // When content evidence is not available (DataForSEO pages endpoint
+  // doesn't return body text), trust signals are reported as false with
+  // a clear content-availability marker.  Downstream consumers should
+  // check _contentEvidenceAvailable before treating false as "confirmed
+  // absent".
+  const trust = {
+    testimonials: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.testimonials)
+      : false,
+    credentials: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.credentials)
+      : false,
+    caseStudies: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.caseStudies)
+      : false,
+    faq: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.faq)
+      : false,
+    pricing: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.pricing)
+      : false,
+    policies: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.policies)
+      : false,
+    contact: contentEvidenceAvailable
+      ? pages.some((p) => p.signals.contact)
+      : false,
+  };
+
+  // ── Source status ────────────────────────────────────────────────────
   let sourceStatus = SOURCE_STATUS.AVAILABLE;
 
   if (robotsBlocked || loginBlocked) {
     sourceStatus = SOURCE_STATUS.BLOCKED;
   } else if (!pages.length) {
     sourceStatus = SOURCE_STATUS.FAILED;
-  } else if (cappedPages || jsContentMissing) {
+  } else if (cappedPages || jsContentMissing || !contentEvidenceAvailable) {
+    // PARTIAL when: page ceiling hit, JS content missing, OR content
+    // evidence (body text, link/images arrays, structured data) is
+    // unavailable from the provider.
     sourceStatus = SOURCE_STATUS.PARTIAL;
   }
 
@@ -516,6 +667,20 @@ function summarizeSite({
   if (loginBlocked) {
     allLimitations.push("Site requires authentication (login wall)");
   }
+  if (!contentEvidenceAvailable && pages.length > 0) {
+    allLimitations.push(
+      "Page body content, link arrays, image arrays, CTAs, forms, " +
+      "and structured data are not extracted by the DataForSEO On-Page " +
+      "pages endpoint. Content-dependent signals (trust, CTAs, forms, " +
+      "schemas) are reported as unavailable rather than confirmed absent.",
+    );
+  }
+  if (hasPageHeadingData === false && pages.length > 0) {
+    allLimitations.push(
+      "Per-page heading data was not extracted from page content; " +
+      "heading counts are sourced from the DataForSEO summary page_metrics.",
+    );
+  }
 
   // Error category
   let errorCategory = null;
@@ -537,44 +702,41 @@ function summarizeSite({
     robotsText: "", // DataForSEO handles robots internally
     sitemapUrls: rawSummary?.sitemap?.urls || [],
     statusCounts,
-    totalWords: pages.reduce((sum, p) => sum + (p.words || 0), 0),
-    averageWords: pages.length
-      ? Math.round(pages.reduce((sum, p) => sum + (p.words || 0), 0) / pages.length)
-      : 0,
-    missingTitles: pages.filter((p) => !p.title).length,
-    missingDescriptions: pages.filter((p) => !p.description).length,
-    missingCanonicals: pages.filter((p) => !p.canonical).length,
-    h1Missing: pages.filter((p) => p.headings.h1.length === 0).length,
-    h1Multiple: pages.filter((p) => p.headings.h1.length > 1).length,
-    imageCount: allImages.length,
-    imagesMissingAlt: allImages.filter((img) => !img.alt).length,
-    imagesMissingDimensions: allImages.filter(
-      (img) => !img.width || !img.height,
-    ).length,
+    totalWords,
+    averageWords,
+    missingTitles,
+    missingDescriptions,
+    missingCanonicals,
+    h1Missing,
+    h1Multiple,
+    imageCount,
+    imagesMissingAlt,
+    imagesMissingDimensions,
     schemaTypes: [...allSchema],
     forms: allForms,
     ctas: allCtas,
     externalCtas,
     socialLinks: allSocialLinks,
-    internalLinkCount: internalLinks.length,
+    internalLinkCount,
     brokenInternalLinks,
+    brokenLinksCount,
     platform: dominantPlatform,
     services: [...allServices].slice(0, 12),
     topicKeywords,
-    trust: {
-      testimonials: pages.some((p) => p.signals.testimonials),
-      credentials: pages.some((p) => p.signals.credentials),
-      caseStudies: pages.some((p) => p.signals.caseStudies),
-      faq: pages.some((p) => p.signals.faq),
-      pricing: pages.some((p) => p.signals.pricing),
-      policies: pages.some((p) => p.signals.policies),
-      contact: pages.some((p) => p.signals.contact),
-    },
+    trust,
     securityHeaders,
     limitations: allLimitations,
     collectedAt: completedAt,
     coverage,
     rawArtifactRef: rawTaskId ? `dataforseo://on_page/${rawTaskId}` : null,
+    // Content-availability flag for downstream scoring/reporting.
+    // When false, content-dependent signals were not extracted from
+    // real page text and should be treated as unavailable.
+    _contentEvidenceAvailable: contentEvidenceAvailable,
+    // Response-headers availability flag.  DataForSEO does not return
+    // HTTP response headers; findings that depend on them (e.g. security
+    // headers) should be suppressed when this is false.
+    _responseHeadersAvailable: responseHeadersAvailable,
     _sourceStatus: buildSourceStatus({
       provider: "dataforseo-onpage",
       adapterVersion: ADAPTER_VERSION,
@@ -754,7 +916,24 @@ export async function crawlWithDataforseo(target, options = {}) {
         loginBlocked = true;
       }
 
-      totalCrawlPages = rawSummary.total_pages || rawSummary.pages_crawled || maxPages;
+      // DataForSEO summary nests total/crawled page counts under
+      // crawl_status and domain_info (not at the root).  Also fall back
+      // to the old-format root-level fields for test compatibility.
+      //
+      // Priority: domain_info.total_pages (total pages on site, new
+      // format) > rawSummary.total_pages (old format root-level) >
+      // crawl_status.pages_crawled (pages actually crawled) >
+      // rawSummary.pages_crawled (old format) > maxPages.
+      const crawlStatusObj = rawSummary.crawl_status;
+      const domainInfo = rawSummary.domain_info || {};
+      totalCrawlPages =
+        domainInfo.total_pages ||           // new format: total pages on site
+        rawSummary.total_pages ||           // old-format fallback
+        (crawlStatusObj && typeof crawlStatusObj === "object"
+          ? crawlStatusObj.pages_crawled    // pages actually crawled
+          : null) ||
+        rawSummary.pages_crawled ||         // old-format fallback
+        maxPages;
     }
 
     // If blocked, return early with no pages
@@ -790,6 +969,7 @@ export async function crawlWithDataforseo(target, options = {}) {
         socialLinks: [],
         internalLinkCount: 0,
         brokenInternalLinks: [],
+        brokenLinksCount: null,
         platform: "Unknown",
         services: [],
         topicKeywords: [],
@@ -816,6 +996,8 @@ export async function crawlWithDataforseo(target, options = {}) {
         collectedAt: completedAt,
         coverage: { requested: maxPages, completed: 0, failed: maxPages },
         rawArtifactRef: `dataforseo://on_page/${rawTaskId}`,
+        _contentEvidenceAvailable: false,
+        _responseHeadersAvailable: false,
         _sourceStatus: buildSourceStatus({
           provider: "dataforseo-onpage",
           adapterVersion: ADAPTER_VERSION,
@@ -838,8 +1020,11 @@ export async function crawlWithDataforseo(target, options = {}) {
     // 3b. Retrieve pages (paginated)
     rawPages = await client.getAllPages(rawTaskId, { maxPages });
 
-    // Page ceiling detection
-    if (rawPages.length >= maxPages) {
+    // Page ceiling detection: only report capped when more pages
+    // existed than were actually retrieved (i.e. we hit a genuine
+    // ceiling where the provider stopped short of the full site).
+    const morePagesExistBeyondRetrieved = totalCrawlPages > rawPages.length;
+    if (rawPages.length >= maxPages && morePagesExistBeyondRetrieved) {
       cappedPages = true;
       limitations.push(
         `Page ceiling reached: ${rawPages.length} pages crawled (limit ${maxPages})`,
@@ -977,6 +1162,7 @@ function buildFailedEnvelope({
     socialLinks: [],
     internalLinkCount: 0,
     brokenInternalLinks: [],
+    brokenLinksCount: null,
     platform: "Unknown",
     services: [],
     topicKeywords: [],
@@ -1001,6 +1187,8 @@ function buildFailedEnvelope({
     rawArtifactRef: rawTaskId
       ? `dataforseo://on_page/${rawTaskId}`
       : null,
+    _contentEvidenceAvailable: false,
+    _responseHeadersAvailable: false,
     _sourceStatus: buildSourceStatus({
       provider: "dataforseo-onpage",
       adapterVersion: ADAPTER_VERSION,
