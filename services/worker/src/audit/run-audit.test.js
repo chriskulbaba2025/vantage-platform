@@ -223,6 +223,53 @@ test("runAudit completes without API secrets and writes the full report artifact
   assert.equal(result.manifest.sources.ga4, SOURCE_STATUS.NOT_CONNECTED);
 });
 
+test("multi-page: full audit pipeline produces draft report with single-section display, Previous/Next, hash navigation, and booking CTA", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vantage-test-"));
+  const store = createLocalReportStore({ baseDir: dir });
+  const result = await runAudit(
+    { targetUrl: "example.com", businessName: "Example" },
+    {
+      config: baseConfig({ artifactDir: dir }),
+      crawlSite: async () => AVAILABLE_SITE,
+      crawlCompetitors: async () => [],
+      collectPerformance: async () => AVAILABLE_PERF,
+      collectBacklinks: async () => NOT_CONNECTED_BACKLINKS,
+      collectGa4: async () => NOT_CONNECTED_GA4,
+      store,
+      runId: "20260730-multi-page-001",
+    },
+  );
+  assert.equal(result.status, "draft");
+  const html = await readFile(result.storage.indexPath, "utf8");
+
+  // Single-section display CSS
+  assert.match(html, /section\{display:none\}/, "CSS must hide all sections by default");
+  assert.match(html, /section\.active\{display:block\}/, "CSS must show only .active section");
+
+  // Previous/Next controls in script
+  const script = (html.match(/<script>[\s\S]*?<\/script>/) || [""])[0];
+  assert.match(script, /← Previous/, "Must have Previous button markup");
+  assert.match(script, /Next →/, "Must have Next button markup");
+  assert.match(script, /Section.*of/, "Must have Section X of Y position indicator");
+
+  // Hash-based navigation in script
+  assert.match(script, /history\.pushState/, "Must use pushState for URL hash updates");
+  assert.match(script, /popstate/, "Must handle browser back/forward");
+
+  // Keyboard navigation
+  assert.match(script, /ArrowLeft/, "Must support Left arrow key");
+  assert.match(script, /ArrowRight/, "Must support Right arrow key");
+
+  // aria-current for accessibility
+  assert.match(script, /aria-current/, "Must manage aria-current on nav links");
+
+  // Booking CTA and next action in footer
+  assert.match(html, /implementation scoping session/, "Must include next action CTA");
+
+  // No old anchor-only navigation
+  assert.doesNotMatch(html, /nav-toggle/, "Must not have old nav-toggle button");
+});
+
 // ---------------------------------------------------------------------------
 // 2. Existing: performance FAILED
 // ---------------------------------------------------------------------------

@@ -72,3 +72,85 @@ test("draft report HTML resolves all template tokens", async () => {
   const html = await renderReport(model(), { isApproved: false });
   assert.doesNotMatch(html, /\{\{[A-Z_]+\}\}/);
 });
+
+// ---------------------------------------------------------------------------
+// Multi-page navigation integration tests
+// ---------------------------------------------------------------------------
+
+test("multi-page: single-section display logic is present in rendered HTML", async () => {
+  const html = await renderReport(model());
+  // CSS must hide all sections by default, show only .active
+  assert.match(html, /section\{display:none\}/);
+  assert.match(html, /section\.active\{display:block\}/);
+});
+
+test("multi-page: navigation JavaScript sets active section and aria-current", async () => {
+  const html = await renderReport(model());
+  // JS must include aria-current management
+  assert.match(html, /aria-current/);
+  // JS must include classList.add('active')
+  assert.match(html, /classList\.add\('active'\)/);
+  // JS must include history.pushState for hash updates
+  assert.match(html, /history\.pushState/);
+  // JS must handle popstate for back/forward
+  assert.match(html, /popstate/);
+});
+
+test("multi-page: Previous/Next controls are present", async () => {
+  const html = await renderReport(model());
+  // The script tag injects Previous/Next buttons and position text at runtime
+  const script = (html.match(/<script>[\s\S]*?<\/script>/) || [""])[0];
+  assert.match(script, /section-nav/);
+  assert.match(script, /← Previous/);
+  assert.match(script, /Next →/);
+  assert.match(script, /Section.*of/);
+});
+
+test("multi-page: Section X of Y indicator is present", async () => {
+  const html = await renderReport(model());
+  const script = (html.match(/<script>[\s\S]*?<\/script>/) || [""])[0];
+  // Position text like "Section " + (i+1) + " of " + total
+  assert.match(script, /Section.*\+.*\+.*of/);
+});
+
+test("multi-page: print CSS shows all sections with page breaks", async () => {
+  const html = await renderReport(model());
+  // Print mode shows all sections
+  assert.match(html, /section\{display:block!important/);
+  // Page break before each section after the first
+  assert.match(html, /section:not\(:first-of-type\)\{page-break-before:always\}/);
+  // Print hides nav and section-nav
+  assert.match(html, /\.top-nav,\.section-nav,\.print-button-container,footer button,\.no-print\{display:none!important\}/);
+});
+
+test("multi-page: no old anchor-only navigation remains", async () => {
+  const html = await renderReport(model());
+  const script = (html.match(/<script>[\s\S]*?<\/script>/) || [""])[0];
+  // Old nav toggle button must not exist in HTML
+  assert.doesNotMatch(html, /nav-toggle/);
+  // Must use history.pushState (modern), not anchor-only scroll
+  assert.match(script, /history\.pushState/);
+  // Must use popstate for back/forward
+  assert.match(script, /popstate/);
+});
+
+test("multi-page: booking CTA and next action appear in footer", async () => {
+  const modelWithGate = model();
+  modelWithGate._gate = {
+    passed: true,
+    bookingCta: { text: "Book an implementation scoping session for Test Business", action: "schedule", visible: true, placement: "report-footer" },
+    nextAction: "Book an implementation scoping session to determine whether targeted remediation or a full redesign is the better investment.",
+    commercialRecommendation: "Targeted technical and content remediation is recommended.",
+  };
+  const html = await renderReport(modelWithGate);
+  assert.match(html, /implementation scoping session/);
+  assert.match(html, /targeted remediation or a full redesign/);
+  assert.match(html, /Book an implementation scoping session for Test Business/);
+});
+
+test("multi-page: keyboard navigation supports Left/Right arrows", async () => {
+  const html = await renderReport(model());
+  // JS must include ArrowLeft/ArrowRight keyboard handlers
+  assert.match(html, /ArrowLeft/);
+  assert.match(html, /ArrowRight/);
+});
