@@ -1,5 +1,7 @@
 import { e, fmtSec, scoreCard, section, table } from "./html-helpers.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
+import { DIAGNOSTIC_CATEGORY } from "../scoring/diagnostic-contracts.js";
+import { readScreenshotAsDataUri, isValidPortableRef } from "../evidence/screenshot-artifact.js";
 
 function perfMetricTable(data) {
   return table(
@@ -61,8 +63,38 @@ function pageResultBlock(pageResult, index) {
 </div>`;
 }
 
-function performance(model) {
+/**
+ * Resolve a portable screenshot reference through the storage abstraction
+ * and return an HTML <img> tag with inline data URI.
+ *
+ * NEVER reads arbitrary filesystem paths from canonical evidence.
+ * Always validates the portable reference before resolution.
+ * Does NOT embed base64 in canonical JSON — only in the rendered HTML report.
+ */
+function _renderScreenshotImg(screenshotArtifactRef, artifactRoot) {
+  if (!screenshotArtifactRef) return "";
+
+  // Validate the reference is portable, not an absolute OS path
+  const validation = isValidPortableRef(screenshotArtifactRef);
+  if (!validation.valid) {
+    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot reference rejected: ${validation.error}</p>`;
+  }
+
+  try {
+    const root = artifactRoot || "artifacts";
+    const { dataUri, error } = readScreenshotAsDataUri(screenshotArtifactRef, root);
+    if (!dataUri || error) {
+      return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot not available: ${error || "unknown error"}</p>`;
+    }
+    return `<div style="margin:8px 0;max-width:320px"><img src="${dataUri}" alt="Final screenshot from automated test" style="width:100%;border:1px solid var(--border,#ddd);border-radius:4px" loading="lazy" /><p style="font-size:.7rem;color:var(--muted);margin:2px 0 0">Final screenshot captured during the automated test. May not reflect all visitor experiences.</p></div>`;
+  } catch (err) {
+    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot artifact not available: ${err.message}</p>`;
+  }
+}
+
+function performance(model, renderOpts = {}) {
   const perf = model.evidence.performance;
+  const artifactRoot = renderOpts.artifactRoot || "artifacts";
   const perfUnavailable = perf?.sourceStatus !== SOURCE_STATUS.AVAILABLE
     && perf?.sourceStatus !== SOURCE_STATUS.PARTIAL;
 
@@ -106,15 +138,51 @@ ${perf.pageResults.map((pr, i) => pageResultBlock(pr, i)).join("")}`
     ? `<p style="font-size:.78rem;color:var(--muted);margin:4px 0">Coverage: ${e(perf.coverage.completed)} of ${e(perf.coverage.requested)} strategies completed across ${e(perf.coverage.pagesTested)} page(s)</p>`
     : "";
 
+  // Rendering-integrity diagnostics
+  const diagnostics = model.renderingDiagnostics || [];
+  const siteDiags = diagnostics.filter((d) => d.diagnosticCategory === DIAGNOSTIC_CATEGORY.SITE_RENDERING);
+  const providerDiags = diagnostics.filter((d) => d.diagnosticCategory === DIAGNOSTIC_CATEGORY.PROVIDER || d.diagnosticCategory === DIAGNOSTIC_CATEGORY.INFRASTRUCTURE);
+
+  let diagnosticHtml = "";
+  if (diagnostics.length > 0) {
+    diagnosticHtml = `<div style="margin-top:16px;padding:12px;border:1px solid var(--border,#ddd);border-radius:6px">`;
+    diagnosticHtml += `<h3 style="margin:0 0 8px">Rendering Integrity</h3>`;
+
+    if (siteDiags.length > 0) {
+      diagnosticHtml += `<h4 style="margin:8px 0 4px;color:var(--red,#b22222)">Site Rendering Issues</h4>`;
+      for (const d of siteDiags) {
+        diagnosticHtml += `<div style="margin:8px 0;padding:8px;background:var(--bg-secondary,#f9f9f9);border-left:4px solid var(--orange,#c7521a);border-radius:4px">`;
+        diagnosticHtml += `<p style="margin:0 0 4px"><strong>${e(d.diagnosticCode)}</strong> — Confidence: ${Math.round(d.confidence * 100)}%</p>`;
+        diagnosticHtml += `<p style="margin:0 0 4px;font-size:.9rem">${e(d.clientExplanation)}</p>`;
+        if (d.affectedUrl) diagnosticHtml += `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">URL: ${e(d.affectedUrl)} &middot; Device: ${e(d.requestedDevice.join(", "))} &middot; Provider: ${e(d.provider)}</p>`;
+        if (d.missingMetrics.length) diagnosticHtml += `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Missing metrics: ${e(d.missingMetrics.join(", "))}</p>`;
+        // Render screenshot when available
+        const screenshotHtml = _renderScreenshotImg(d.screenshotArtifactRef, artifactRoot);
+        if (screenshotHtml) diagnosticHtml += screenshotHtml;
+        diagnosticHtml += `</div>`;
+      }
+    }
+
+    if (providerDiags.length > 0) {
+      diagnosticHtml += `<h4 style="margin:8px 0 4px;color:var(--muted)">Provider &amp; Infrastructure Status</h4>`;
+      for (const d of providerDiags) {
+        diagnosticHtml += `<div style="margin:8px 0;padding:8px;background:var(--bg-secondary,#f9f9f9);border-left:4px solid var(--muted,#999);border-radius:4px">`;
+        diagnosticHtml += `<p style="margin:0"><strong>${e(d.diagnosticCode)}</strong> — ${e(d.clientExplanation)}</p>`;
+        diagnosticHtml += `</div>`;
+      }
+    }
+    diagnosticHtml += `</div>`;
+  }
+
   return section(
     "experience-and-performance",
     "12",
     "Experience and Performance",
-    `${unavailableNote}${fallbackAlert}<div class="note"><strong>Source:</strong> ${sourceNoteParts.join(" &middot; ")}</div>${coverageNote}<div class="two-col">${deviceCard("Mobile", perf?.mobile, fallbackUsed)}${deviceCard("Desktop", perf?.desktop, fallbackUsed)}</div>${multiPageSection}<h3 style="margin-top:20px">AI Search Readiness</h3>${table(["Dimension", "Score"], [["Structured Data", `${model.evidence.site.schemaTypes.length ? 25 : 0}/25`], ["Entity Clarity", `${model.evidence.site.pages[0]?.headings?.h1?.length ? 15 : 5}/25`], ["Answer-First Copy", `${model.evidence.site.averageWords >= 300 ? 15 : 5}/25`], ["FAQ Coverage", `${model.evidence.site.trust.faq ? 20 : 0}/25`], ["Topic Authority", `${Math.min(25, model.evidence.site.pageCount * 4)}/25`], ["Local SEO", `${model.evidence.site.schemaTypes.some((x) => /localbusiness/i.test(x)) ? 25 : 0}/25`]].map((r) => r.map(e)))}<p style="margin-top:8px"><strong>AI Readiness: ${e(model.scores.aiReadiness !== null ? `${model.scores.aiReadiness}/100` : "Not Assessed")}.</strong></p>`,
+    `${unavailableNote}${fallbackAlert}<div class="note"><strong>Source:</strong> ${sourceNoteParts.join(" &middot; ")}</div>${coverageNote}${diagnosticHtml}<div class="two-col">${deviceCard("Mobile", perf?.mobile, fallbackUsed)}${deviceCard("Desktop", perf?.desktop, fallbackUsed)}</div>${multiPageSection}<h3 style="margin-top:20px">AI Search Readiness</h3>${table(["Dimension", "Score"], [["Structured Data", `${model.evidence.site.schemaTypes.length ? 25 : 0}/25`], ["Entity Clarity", `${model.evidence.site.pages[0]?.headings?.h1?.length ? 15 : 5}/25`], ["Answer-First Copy", `${model.evidence.site.averageWords >= 300 ? 15 : 5}/25`], ["FAQ Coverage", `${model.evidence.site.trust.faq ? 20 : 0}/25`], ["Topic Authority", `${Math.min(25, model.evidence.site.pageCount * 4)}/25`], ["Local SEO", `${model.evidence.site.schemaTypes.some((x) => /localbusiness/i.test(x)) ? 25 : 0}/25`]].map((r) => r.map(e)))}<p style="margin-top:8px"><strong>AI Readiness: ${e(model.scores.aiReadiness !== null ? `${model.scores.aiReadiness}/100` : "Not Assessed")}.</strong></p>`,
   );
 }
 
-function appendix(model) {
+function appendix(model, renderOpts = {}) {
   const ev = model.evidence;
   const perfAvailable = ev.performance?.sourceStatus === SOURCE_STATUS.AVAILABLE
     || ev.performance?.sourceStatus === SOURCE_STATUS.PARTIAL;
@@ -178,6 +246,22 @@ function appendix(model) {
     limitations.push(`Performance tested ${testedUrls.length} URL(s): ${testedUrls.join(", ")}`);
   }
 
+  // Rendering-integrity diagnostics table
+  const allDiagnostics = model.renderingDiagnostics || [];
+  let diagTableHtml = "";
+  if (allDiagnostics.length > 0) {
+    const diagRows = allDiagnostics.map((d) => [
+      d.diagnosticCode,
+      d.diagnosticCategory,
+      d.affectedUrl || ev.performance?.url || "",
+      d.requestedDevice.join(", "),
+      d.provider || "",
+      d.clientExplanation.slice(0, 150),
+      `${Math.round(d.confidence * 100)}%`,
+    ].map((c) => e(String(c ?? ""))));
+    diagTableHtml = `<h3>Rendering Integrity Diagnostics</h3>${table(["Code", "Category", "URL", "Device", "Provider", "Explanation", "Confidence"], diagRows)}`;
+  }
+
   return section(
     "evidence-appendix",
     "13",
@@ -187,6 +271,7 @@ function appendix(model) {
 <p><strong>Overall: ${e(model.bands.evidenceConfidence)}.</strong> Findings are traceable to the normalized evidence package produced during this audit. Optional sources do not reduce the conversion-readiness score when they are not configured.</p>
 <h3>Limitations</h3>
 <ul>${limitations.length ? limitations.map((x) => `<li>${e(x)}</li>`).join("") : "<li>No material collection limitation was recorded.</li>"}</ul>
+${diagTableHtml}
 <h3>Gate Results</h3>
 ${table(["Gate", "Result"], [
   ["Website capture", `PASS — ${ev.site.pageCount} page(s)`],

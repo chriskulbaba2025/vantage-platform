@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { crawlSite, crawlCompetitors } from "../evidence/site-crawler.js";
 import { crawlWithDataforseo } from "../adapters/dataforseo-onpage/dataforseo-onpage-adapter.js";
 import { collectPerformance, collectPerformanceForPages } from "../evidence/pagespeed-client.js";
@@ -319,6 +320,8 @@ export async function runAudit(rawInput, options = {}) {
   const config = options.config || loadConfig();
   const input = validateInput(rawInput);
   const runId = options.runId || createRunId();
+  const slug = slugify(input.businessName || domainOf(input.targetUrl));
+  const artifactRoot = resolve(config.artifactDir, "..");
   const startedAt = new Date().toISOString();
 
   // ── Effective properties (calculated once, used for collection + manifest) ──
@@ -390,6 +393,7 @@ export async function runAudit(rawInput, options = {}) {
       fetchImpl: options.fetchImpl,
       localRunner: options.localLighthouseRunner,
       disableCache: options.disableCache,
+      screenshotMeta: { runId, slug, artifactRoot },
     }),
     competitorCrawler(input.competitors, {
       maxPages: Math.min(config.maxPages, 8),
@@ -456,9 +460,12 @@ export async function runAudit(rawInput, options = {}) {
   // ── Score ───────────────────────────────────────────────────────────
   const model = scoreAudit(input, evidence);
 
+  if (model.renderingDiagnostics && model.renderingDiagnostics.length > 0) {
+    evidence.performance.renderingDiagnostics = model.renderingDiagnostics;
+  }
+
   // ── Render ──────────────────────────────────────────────────────────
-  const html = await (options.renderReport || renderReport)(model);
-  const slug = slugify(input.businessName || domainOf(input.targetUrl));
+  const html = await (options.renderReport || renderReport)(model, { artifactRoot });
   const completedAt = new Date().toISOString();
 
   const manifest = {

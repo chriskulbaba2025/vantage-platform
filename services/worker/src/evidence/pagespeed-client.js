@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stableHash, withTimeout } from "../utils.js";
 import { SOURCE_STATUS, ERROR_CATEGORY, buildSourceStatus, EVIDENCE_ENVELOPE_VERSION } from "../scoring/evidence-contracts.js";
+import { persistScreenshot } from "./screenshot-artifact.js";
 
 // ---------------------------------------------------------------------------
 // Cache helpers
@@ -95,6 +96,15 @@ function normalizeLighthouse(lhr, source, strategy, opts = {}) {
   const audits = lhr?.audits || {};
   const score = (key) => categories[key]?.score == null ? null : Math.round(categories[key].score * 100);
 
+  // Diagnostic evidence enrichment (optional, non-breaking)
+  const captureDiagnostic = opts.captureDiagnosticEvidence !== false;
+  const screenshot = captureDiagnostic ? _extractScreenshot(lhr) : null;
+  const networkRecords = captureDiagnostic ? _extractNetworkRecords(lhr) : [];
+  const consoleEntries = captureDiagnostic ? _extractConsoleEntries(lhr) : [];
+  const runtimeError = captureDiagnostic ? _extractRuntimeError(lhr) : null;
+  const finalDisplayedUrl = lhr?.finalDisplayedUrl || lhr?.finalUrl || opts.url || null;
+  const httpStatus = captureDiagnostic ? _resolveHttpStatus(networkRecords, opts.url) : null;
+
   return {
     status: SOURCE_STATUS.AVAILABLE,
     source,
@@ -127,7 +137,114 @@ function normalizeLighthouse(lhr, source, strategy, opts = {}) {
       .slice(0, 10)
       .map((item) => ({ id: item.id, title: item.title, savingsMs: item.numericValue || 0 })),
     rawArtifactRef: opts.rawArtifactRef || null,
+    // Diagnostic enrichment fields (null/[] when evidence not captured)
+    screenshot,
+    networkRecords,
+    consoleEntries,
+    runtimeError,
+    finalDisplayedUrl,
+    httpStatus,
+    diagnosticAudits: captureDiagnostic
+      ? {
+          errorsInConsole: audits["errors-in-console"] || null,
+          networkRequests: audits["network-requests"] || null,
+        }
+      : {},
   };
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic evidence extractors
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract final screenshot from Lighthouse result.
+ * Returns { format, data, ref } or null.
+ */
+function _extractScreenshot(lhr) {
+  const audit = lhr?.audits?.["final-screenshot"];
+  if (!audit?.details?.data) return null;
+  return {
+    format: "jpeg",
+    data: typeof audit.details.data === "string" ? audit.details.data : null,
+    ref: "lighthouse://screenshot/final",
+  };
+}
+
+/**
+ * Extract network records from Lighthouse result.
+ * Returns array of { url, status, mimeType, failed, blocked }.
+ */
+function _extractNetworkRecords(lhr) {
+  const items = lhr?.audits?.["network-requests"]?.details?.items;
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    url: item.url || "",
+    status: item.statusCode || 0,
+    mimeType: item.mimeType || "",
+    failed: item.failed === true || (item.statusCode && item.statusCode >= 400),
+    blocked: item.blocked === true || item.statusCode === 0,
+  }));
+}
+
+/**
+ * Extract console entries from Lighthouse result.
+ * Returns array of { level, text, source }.
+ */
+function _extractConsoleEntries(lhr) {
+  const items = lhr?.audits?.["errors-in-console"]?.details?.items;
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    level: item.level || "error",
+    text: item.description || item.text || "",
+    source: item.source || "",
+  }));
+}
+
+/**
+ * Extract runtime error from Lighthouse result.
+ * Returns { code, message } or null.
+ */
+function _extractRuntimeError(lhr) {
+  if (!lhr?.runtimeError) return null;
+  return {
+    code: lhr.runtimeError.code || null,
+    message: lhr.runtimeError.message || null,
+  };
+}
+
+/**
+ * Resolve HTTP status from network records for the main document.
+ */
+function _resolveHttpStatus(networkRecords, targetUrl) {
+  if (!Array.isArray(networkRecords) || networkRecords.length === 0) return null;
+  // Find the main document request
+  const mainDoc = networkRecords.find(
+    (r) => r.url === targetUrl || (r.mimeType && r.mimeType.includes("html")),
+  );
+  return mainDoc?.status || null;
+}
+
+/**
+ * Extract a runtime error code and message from an error message string.
+ * Used when a strategy fails and we don't have a structured runtimeError.
+ */
+function _extractErrorFromMessage(message) {
+  if (!message) return null;
+  const lower = message.toLowerCase();
+  if (lower.includes("navigation timeout") || lower.includes("protocol timeout")) {
+    return { code: "NAVIGATION_TIMEOUT", message: message.slice(0, 200) };
+  }
+  if (lower.includes("page load timeout")) {
+    return { code: "PAGE_LOAD_TIMEOUT", message: message.slice(0, 200) };
+  }
+  if (lower.includes("certificate") || lower.includes("tls") || lower.includes("ssl") || lower.includes("dns")) {
+    return { code: "TLS_DNS_FAILURE", message: message.slice(0, 200) };
+  }
+  if (lower.includes("browser") && (lower.includes("crash") || lower.includes("disconnect"))) {
+    return { code: "BROWSER_CRASH", message: message.slice(0, 200) };
+  }
+  return { code: null, message: message.slice(0, 200) };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +411,7 @@ export async function collectPerformance(url, options = {}) {
         url,
         fallbackUsed: false,
         rawArtifactRef: psiResult.rawArtifactRef,
+        captureDiagnosticEvidence: options.captureDiagnosticEvidence !== false,
       });
       // Attach CrUX data from the same PageSpeed response when available
       if (psiResult.cruxData?.metrics) {
@@ -353,7 +471,64 @@ export async function collectPerformance(url, options = {}) {
           metrics: {},
           opportunities: [],
           rawArtifactRef: null,
+          // Diagnostic fields (null — no evidence from failed strategy)
+          screenshot: null,
+          networkRecords: [],
+          consoleEntries: [],
+          runtimeError: _extractErrorFromMessage(localError.message),
+          finalDisplayedUrl: null,
+          httpStatus: null,
+          diagnosticAudits: {},
         };
+      }
+    }
+  }
+
+  // ── Persist screenshots for each strategy ──────────────────────────
+  const screenshotMeta = options.screenshotMeta || {};
+  for (const strategy of ["mobile", "desktop"]) {
+    const result = results[strategy];
+    if (!result || result.status === SOURCE_STATUS.FAILED) continue;
+
+    try {
+      // Get screenshot data — may be in normalized result or raw LHR spread
+      let screenshotData = result.screenshot?.data || null;
+      if (!screenshotData && result.audits?.["final-screenshot"]?.details?.data) {
+        // Raw LHR was spread from Lighthouse fallback — extract directly
+        screenshotData = result.audits["final-screenshot"].details.data;
+      }
+
+      if (screenshotData && typeof screenshotData === "string") {
+        const persisted = await persistScreenshot(screenshotData, {
+          url: result.url || url,
+          finalUrl: result.finalDisplayedUrl || result.url || url,
+          strategy,
+          provider: result.source || "unknown",
+          runId: screenshotMeta.runId || null,
+          slug: screenshotMeta.slug || null,
+          diagnosticCode: screenshotMeta.diagnosticCode || null,
+        }, {
+          artifactRoot: screenshotMeta.artifactRoot || resolve("artifacts"),
+          objectStore: options.objectStore || null,
+        });
+
+        if (persisted.persisted && persisted.portableRef) {
+          result.screenshot = {
+            format: "jpeg",
+            portableRef: persisted.portableRef,
+            checksum: persisted.checksum,
+            sizeBytes: persisted.sizeBytes,
+            persisted: true,
+          };
+        } else {
+          limitations.push(`Screenshot persistence failed for ${strategy}: ${persisted.error || "unknown error"}`);
+          result.screenshot = { format: "jpeg", portableRef: null, persisted: false, error: persisted.error };
+        }
+      }
+    } catch (screenshotError) {
+      limitations.push(`Screenshot artifact write failed for ${strategy}: ${screenshotError.message}`);
+      if (result.screenshot?.data) {
+        result.screenshot = { format: "jpeg", portableRef: null, persisted: false, error: screenshotError.message };
       }
     }
   }
