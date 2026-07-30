@@ -49,7 +49,8 @@ function renderPrintButton(model, isApproved) {
 export async function renderReport(model, options = {}) {
   const template = await readFile(options.templatePath || resolve(here, "karen-leslie-template.html"), "utf8");
   const date = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "long", day: "numeric", timeZone: "America/Toronto" }).format(new Date(model.generatedAt));
-  const sections = [scorecard(model), priorityFixes(model), conversionPaths(model), readinessMap(model), contentIdeas(model), competitorBenchmark(model), eeat(model), cms(model), technical(model), headings(model), schema(model), performance(model), appendix(model)].join("\n");
+  const renderOpts = { artifactRoot: options.artifactRoot || resolve("artifacts") };
+  const sections = [scorecard(model), priorityFixes(model), conversionPaths(model), readinessMap(model), contentIdeas(model), competitorBenchmark(model), eeat(model), cms(model), technical(model), headings(model), schema(model), performance(model, renderOpts), appendix(model, renderOpts)].join("\n");
   const title = `Vantage Phase 1 Audit — Conversion Readiness | ${model.input.businessName || model.evidence.site.domain}`;
   const isApproved = options.isApproved === true;
 

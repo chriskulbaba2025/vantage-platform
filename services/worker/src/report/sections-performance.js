@@ -77,23 +77,24 @@ function _renderScreenshotImg(screenshotArtifactRef, artifactRoot) {
   // Validate the reference is portable, not an absolute OS path
   const validation = isValidPortableRef(screenshotArtifactRef);
   if (!validation.valid) {
-    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot reference rejected: ${validation.error}</p>`;
+    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot reference rejected: ${e(validation.error)}</p>`;
   }
 
   try {
     const root = artifactRoot || "artifacts";
     const { dataUri, error } = readScreenshotAsDataUri(screenshotArtifactRef, root);
     if (!dataUri || error) {
-      return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot not available: ${error || "unknown error"}</p>`;
+      return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot not available: ${e(error || "unknown error")}</p>`;
     }
     return `<div style="margin:8px 0;max-width:320px"><img src="${dataUri}" alt="Final screenshot from automated test" style="width:100%;border:1px solid var(--border,#ddd);border-radius:4px" loading="lazy" /><p style="font-size:.7rem;color:var(--muted);margin:2px 0 0">Final screenshot captured during the automated test. May not reflect all visitor experiences.</p></div>`;
   } catch (err) {
-    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot artifact not available: ${err.message}</p>`;
+    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot artifact not available: ${e(err.message)}</p>`;
   }
 }
 
-function performance(model) {
+function performance(model, renderOpts = {}) {
   const perf = model.evidence.performance;
+  const artifactRoot = renderOpts.artifactRoot || "artifacts";
   const perfUnavailable = perf?.sourceStatus !== SOURCE_STATUS.AVAILABLE
     && perf?.sourceStatus !== SOURCE_STATUS.PARTIAL;
 
@@ -156,7 +157,7 @@ ${perf.pageResults.map((pr, i) => pageResultBlock(pr, i)).join("")}`
         if (d.affectedUrl) diagnosticHtml += `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">URL: ${e(d.affectedUrl)} &middot; Device: ${e(d.requestedDevice.join(", "))} &middot; Provider: ${e(d.provider)}</p>`;
         if (d.missingMetrics.length) diagnosticHtml += `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Missing metrics: ${e(d.missingMetrics.join(", "))}</p>`;
         // Render screenshot when available
-        const screenshotHtml = _renderScreenshotImg(d.screenshotArtifactRef, model.evidence?.performance?._screenshotRoot || "artifacts");
+        const screenshotHtml = _renderScreenshotImg(d.screenshotArtifactRef, artifactRoot);
         if (screenshotHtml) diagnosticHtml += screenshotHtml;
         diagnosticHtml += `</div>`;
       }
@@ -181,7 +182,7 @@ ${perf.pageResults.map((pr, i) => pageResultBlock(pr, i)).join("")}`
   );
 }
 
-function appendix(model) {
+function appendix(model, renderOpts = {}) {
   const ev = model.evidence;
   const perfAvailable = ev.performance?.sourceStatus === SOURCE_STATUS.AVAILABLE
     || ev.performance?.sourceStatus === SOURCE_STATUS.PARTIAL;
