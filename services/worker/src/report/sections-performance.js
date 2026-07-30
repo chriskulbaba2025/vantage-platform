@@ -77,18 +77,18 @@ function _renderScreenshotImg(screenshotArtifactRef, artifactRoot) {
   // Validate the reference is portable, not an absolute OS path
   const validation = isValidPortableRef(screenshotArtifactRef);
   if (!validation.valid) {
-    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot reference rejected: ${validation.error}</p>`;
+    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot reference rejected: ${e(validation.error)}</p>`;
   }
 
   try {
     const root = artifactRoot || "artifacts";
     const { dataUri, error } = readScreenshotAsDataUri(screenshotArtifactRef, root);
     if (!dataUri || error) {
-      return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot not available: ${error || "unknown error"}</p>`;
+      return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot not available: ${e(error || "unknown error")}</p>`;
     }
     return `<div style="margin:8px 0;max-width:320px"><img src="${dataUri}" alt="Final screenshot from automated test" style="width:100%;border:1px solid var(--border,#ddd);border-radius:4px" loading="lazy" /><p style="font-size:.7rem;color:var(--muted);margin:2px 0 0">Final screenshot captured during the automated test. May not reflect all visitor experiences.</p></div>`;
   } catch (err) {
-    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot artifact not available: ${err.message}</p>`;
+    return `<p style="font-size:.78rem;color:var(--muted);margin:2px 0">Screenshot artifact not available: ${e(err.message)}</p>`;
   }
 }
 

@@ -22,8 +22,8 @@
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
-import { readFileSync, existsSync } from "node:fs";
-import { resolve, normalize, sep, basename } from "node:path";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
+import { resolve, normalize, sep, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { stableHash } from "../utils.js";
 
@@ -153,9 +153,38 @@ export function resolvePortableRef(portableRef, artifactRoot) {
   const root = resolve(artifactRoot);
   const joined = resolve(root, ...portableRef.split("/"));
 
-  // Verify resolved path is within artifact root
-  const normalizedRoot = normalize(root) + sep;
-  const normalizedJoined = normalize(joined) + sep;
+  // Resolve the artifact root to its real path (following symlinks) to
+  // prevent symlink-based path traversal.  A symlink inside the artifact
+  // directory that points outside it must not bypass containment.
+  let realRoot;
+  try {
+    realRoot = existsSync(root) ? realpathSync(root) : root;
+  } catch {
+    return { resolvedPath: null, error: `Failed to resolve artifact root: ${artifactRoot}` };
+  }
+
+  // For the joined path, walk up to find the deepest existing ancestor
+  // and resolve it through realpathSync.  This catches symlinks at any
+  // level of the directory hierarchy.
+  let resolvedJoined;
+  try {
+    let cursor = joined;
+    while (cursor && cursor !== sep && cursor !== dirname(cursor)) {
+      if (existsSync(cursor)) {
+        const real = realpathSync(cursor);
+        const relative = joined.slice(cursor.length);
+        resolvedJoined = real + relative;
+        break;
+      }
+      cursor = dirname(cursor);
+    }
+    if (!resolvedJoined) resolvedJoined = joined;
+  } catch {
+    return { resolvedPath: null, error: `Failed to resolve real path for: ${portableRef}` };
+  }
+
+  const normalizedRoot = normalize(realRoot) + sep;
+  const normalizedJoined = normalize(resolvedJoined) + sep;
   if (!normalizedJoined.startsWith(normalizedRoot)) {
     return { resolvedPath: null, error: `Resolved path escapes artifact root: ${portableRef}` };
   }
@@ -275,7 +304,7 @@ export async function persistScreenshot(base64Data, metadata, opts = {}) {
         return { portableRef: null, persisted: false, sizeBytes: binary.length, checksum, error: "Failed to resolve portable reference for local write" };
       }
       await mkdir(resolve(resolvedPath, ".."), { recursive: true });
-      await writeFile(resolvedPath, binary);
+      await writeFile(resolvedPath, binary, { mode: 0o640 });
     }
 
     // ── Write companion metadata JSON ──────────────────────────────────
@@ -306,7 +335,7 @@ export async function persistScreenshot(base64Data, metadata, opts = {}) {
       const { resolvedPath: metaPath } = resolvePortableRef(metaRef, artifactRoot);
       if (metaPath) {
         await mkdir(resolve(metaPath, ".."), { recursive: true });
-        await writeFile(metaPath, JSON.stringify(metaRecord, null, 2), "utf-8");
+        await writeFile(metaPath, JSON.stringify(metaRecord, null, 2), { encoding: "utf-8", mode: 0o640 });
       }
     }
 
