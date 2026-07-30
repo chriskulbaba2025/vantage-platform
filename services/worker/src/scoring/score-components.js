@@ -1144,3 +1144,115 @@ function _defaultPracticality(effort) {
   if (effort === "M") return 55;
   return 30; // "H"
 }
+
+// ---------------------------------------------------------------------------
+// Rendering-diagnostic findings builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert rendering-integrity diagnostic records into the standard finding
+ * shape for inclusion in Priority Fixes.
+ *
+ * Only material client-visible SITE_RENDERING defects with confidence >= 0.6
+ * are converted. Provider and infrastructure failures are excluded from
+ * Priority Fixes but appear in the Evidence Appendix.
+ *
+ * All diagnostic findings are `scoreBearing: false`.
+ */
+export function buildRenderingDiagnosticFindings(diagnostics, site) {
+  if (!diagnostics || !Array.isArray(diagnostics)) return [];
+
+  const findings = [];
+  const materialCodes = new Set([
+    "NO_FCP", "NO_LCP", "PAGE_BLANK", "INCOMPLETE_ABOVE_FOLD",
+    "MEDIA_FAILED", "LOADING_SCREEN_STUCK", "JS_EXECUTION_FAILURE",
+    "REDIRECT_LOOP", "AUTH_WALL", "ACCESS_BLOCKED", "HTTP_ERROR_PAGE",
+    "UNSUPPORTED_CONTENT", "NULL_PERF_HTTP200",
+  ]);
+
+  for (const d of diagnostics) {
+    // Only material rendering defects, not provider/infrastructure failures
+    if (d.diagnosticCategory !== "SITE_RENDERING") continue;
+    if (!materialCodes.has(d.diagnosticCode)) continue;
+    if (d.confidence < 0.60) continue;
+
+    const severity =
+      d.diagnosticCode === "PAGE_BLANK" || d.diagnosticCode === "JS_EXECUTION_FAILURE" ? "High"
+      : d.diagnosticCode === "NO_LCP" || d.diagnosticCode === "NO_FCP" || d.diagnosticCode === "MEDIA_FAILED" ? "Medium"
+      : "Medium";
+
+    const ruleId = _diagnosticRuleId(d.diagnosticCode);
+    const priority = calculateFindingPriority({
+      conversionImpact: _diagImpact(severity),
+      gapSeverity: _diagGapSeverity(severity),
+      businessRelevance: 60,
+      competitiveSignal: 20,
+      implementationPracticality: 40,
+      confidence: CONFIDENCE_LEVELS.SUPPORTED,
+    });
+
+    const affectedUrls = d.affectedUrl ? [d.affectedUrl] : [site?.targetUrl || site?.domain].filter(Boolean);
+    const evidenceRecords = [
+      { provider: d.provider || "pagespeed-insights", sourceStatus: d.providerStatus || SOURCE_STATUS.AVAILABLE, field: "diagnostic", observedValue: d.diagnosticCode, artifactRef: null },
+    ];
+
+    findings.push({
+      findingId: generateFindingId(ruleId, affectedUrls, evidenceRecords),
+      ruleId,
+      ruleVersion: "1.0.0",
+      dimension: "technical_performance",
+      module: "performance",
+      title: `Rendering issue detected: ${d.clientExplanation.slice(0, 120)}`,
+      affectedUrls,
+      evidence: evidenceRecords,
+      confidence: CONFIDENCE_LEVELS.SUPPORTED,
+      businessImpact: d.businessImpact || "Page rendering issues affect visitor experience and conversion capability.",
+      recommendation: d.recommendation || "Investigate the rendering failure using the diagnostic evidence and re-test.",
+      implementationEffort: "M",
+      verificationMethod: d.verificationMethod || "Re-run performance testing and confirm rendering succeeds.",
+      scoreBearing: false,
+      rawPriority: priority.raw,
+      finalPriority: priority.final,
+      severity,
+      problem: `Rendering issue: ${d.diagnosticCode}`,
+      impact: d.businessImpact || "",
+      fix: d.recommendation || "",
+      effort: "M",
+      key: "rendering",
+      evidenceText: d.clientExplanation.slice(0, 200),
+    });
+  }
+
+  return findings;
+}
+
+function _diagnosticRuleId(code) {
+  const map = {
+    NO_FCP: "VAN-DIAG-001",
+    NO_LCP: "VAN-DIAG-002",
+    PAGE_BLANK: "VAN-DIAG-003",
+    INCOMPLETE_ABOVE_FOLD: "VAN-DIAG-004",
+    MEDIA_FAILED: "VAN-DIAG-005",
+    LOADING_SCREEN_STUCK: "VAN-DIAG-006",
+    JS_EXECUTION_FAILURE: "VAN-DIAG-007",
+    REDIRECT_LOOP: "VAN-DIAG-008",
+    AUTH_WALL: "VAN-DIAG-009",
+    ACCESS_BLOCKED: "VAN-DIAG-010",
+    HTTP_ERROR_PAGE: "VAN-DIAG-011",
+    UNSUPPORTED_CONTENT: "VAN-DIAG-012",
+    NULL_PERF_HTTP200: "VAN-DIAG-013",
+  };
+  return map[code] || "VAN-DIAG-000";
+}
+
+function _diagImpact(severity) {
+  if (severity === "High") return 75;
+  if (severity === "Medium") return 50;
+  return 25;
+}
+
+function _diagGapSeverity(severity) {
+  if (severity === "High") return 70;
+  if (severity === "Medium") return 40;
+  return 20;
+}
