@@ -3,8 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stableHash } from "../utils.js";
 
-const EXPECTED_CSS_HASH = "cdb85a48290033f4c71b09154570369b5054441f7a080df14372a2b20ba4bdaa";
-const EXPECTED_SCRIPT_HASH = "54826b80ba2b60a95730136b24ca3b1992772dbab37cc7aa6168f92dd2cef6c5";
+const EXPECTED_CSS_HASH = "3d1a86d9e20900b6b76de3e703311af5cdb7b8b1bef67f66ed869b101a0a9c92";
+const EXPECTED_SCRIPT_HASH = "35d219d6a1d37627c6d1ac96dc4641923c2c8ee9db1316a293e04afcc535142b";
 const here = dirname(fileURLToPath(import.meta.url));
 const template = await readFile(resolve(here, "karen-leslie-template.html"), "utf8");
 const style = (template.match(/<style>[\s\S]*?<\/style>/)?.[0] || "").replace(/\r\n/g, "\n");

@@ -8,6 +8,7 @@ import { collectGsc } from "../evidence/gsc-client.js";
 import { collectCompetitorOpportunities } from "../evidence/competitor-opportunity-layer.js";
 import { generateInternalLinkOpportunities } from "../evidence/internal-link-opportunity.js";
 import { scoreAudit } from "../scoring/vantage-score.js";
+import { runFinalizationGate } from "../scoring/report-finalization-gate.js";
 import { renderReport } from "../report/render-report.js";
 import { createReportStore } from "../storage/report-store.js";
 import { createRunId, domainOf, normalizeUrl, slugify } from "../utils.js";
@@ -464,21 +465,33 @@ export async function runAudit(rawInput, options = {}) {
     evidence.performance.renderingDiagnostics = model.renderingDiagnostics;
   }
 
+  // ── Finalization gate ───────────────────────────────────────────────
+  // Must run after scoring + diagnostics, before rendering.
+  // Block renders with contradictory or incomplete evidence.
+  const gate = runFinalizationGate(model, evidence);
+  const gatedModel = gate.model;
+
   // ── Render ──────────────────────────────────────────────────────────
-  const html = await (options.renderReport || renderReport)(model, { artifactRoot });
+  if (!gate.passed) {
+    // Audit stays in draft; structured errors attached to model for auditor review
+    gatedModel._renderBlocked = true;
+  }
+  const html = gate.passed
+    ? await (options.renderReport || renderReport)(gatedModel, { artifactRoot })
+    : "";
   const completedAt = new Date().toISOString();
 
   const manifest = {
     artifactVersion: "1.0.0",
-    reportVersion: model.reportVersion,
+    reportVersion: gatedModel.reportVersion,
     runId,
     slug,
     targetUrl: input.targetUrl,
     targetDomain: site.domain,
     startedAt,
     completedAt,
-    status: "draft",
-    scores: model.scores,
+    status: gate.passed ? "draft" : "draft",
+    scores: gatedModel.scores,
     sources: {
       website: validatedSite.sourceStatus,
       performance: validatedPerformance.sourceStatus,
@@ -494,7 +507,9 @@ export async function runAudit(rawInput, options = {}) {
       gscSiteUrl: effectiveGscSiteUrl,
       competitors: input.competitors,
     },
-    files: ["index.html", "audit.json", "evidence.json", "manifest.json"],
+    files: gate.passed
+      ? ["index.html", "audit.json", "evidence.json", "manifest.json"]
+      : ["audit.json", "evidence.json", "manifest.json"],
   };
 
   const store =
@@ -502,8 +517,8 @@ export async function runAudit(rawInput, options = {}) {
   const storage = await store.writeReport({
     slug,
     runId,
-    html,
-    model,
+    html: gate.passed ? html : "",
+    model: gatedModel,
     manifest,
   });
 
@@ -512,10 +527,12 @@ export async function runAudit(rawInput, options = {}) {
     slug,
     status: "draft",
     lifecycleStatus: LIFECYCLE_STATUS.DRAFT,
-    model,
+    model: gatedModel,
     manifest,
     storage,
     html: options.includeHtml ? html : undefined,
+    _gateBlocked: !gate.passed,
+    _gateErrors: gate.errors,
   };
 }
 

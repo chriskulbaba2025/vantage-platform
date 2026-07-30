@@ -5,7 +5,7 @@ import { scoreAudit } from "../scoring/vantage-score.js";
 import { stableHash } from "../utils.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 
-const EXPECTED_CSS_HASH = "cdb85a48290033f4c71b09154570369b5054441f7a080df14372a2b20ba4bdaa";
+const EXPECTED_CSS_HASH = "3d1a86d9e20900b6b76de3e703311af5cdb7b8b1bef67f66ed869b101a0a9c92";
 const norm = (s) => s.replace(/\r\n/g, "\n");
 const style = (html) => norm(html.match(/<style>[\s\S]*?<\/style>/)?.[0] || "");
 
@@ -47,8 +47,8 @@ test("print button has no-print class so it hides during printing", async () => 
 
 test("print CSS hides navigation and controls", async () => {
   const html = await renderReport(model());
-  // @media print rules hide nav and print controls
-  assert.match(html, /\.top-nav,\.nav-toggle,\.print-button-container,footer button,\.no-print\{display:none!important\}/);
+  // @media print rules hide nav, section-nav, and print controls
+  assert.match(html, /\.top-nav,\.section-nav,\.print-button-container,footer button,\.no-print\{display:none!important\}/);
 });
 
 test("print CSS preserves content with sensible page breaks", async () => {
