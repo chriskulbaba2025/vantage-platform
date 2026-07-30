@@ -18,7 +18,17 @@ function renderHeader(model, date) {
 function renderFooter(model, date) {
   const site = model.evidence.site;
   const business = model.input.businessName || site.pages[0]?.title || site.domain;
-  return `<footer><p>Vantage Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence</p></footer>`;
+  const gate = model._gate;
+  let ctaHtml = "";
+  if (gate && gate.bookingCta && gate.bookingCta.visible) {
+    ctaHtml = `<div style="margin:16px 0;padding:16px;background:linear-gradient(135deg,#123a72 0%,#2563eb 100%);color:#fff;border-radius:8px;text-align:center">
+      <p style="font-size:1.1rem;font-weight:600;margin:0 0 8px">Next Step</p>
+      <p style="margin:0 0 4px">${e(gate.nextAction || "")}</p>
+      ${gate.commercialRecommendation ? `<p style="font-size:.85rem;opacity:.85;margin:8px 0 0">${e(gate.commercialRecommendation)}</p>` : ""}
+      <p style="font-size:.85rem;opacity:.85;margin:4px 0 0">${e(gate.bookingCta.text)}</p>
+    </div>`;
+  }
+  return `<footer>${ctaHtml}<p>Vantage Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence</p></footer>`;
 }
 
 /**
