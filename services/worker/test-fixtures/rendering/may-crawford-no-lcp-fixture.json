@@ -1,0 +1,98 @@
+{
+  "_description": "May Crawford NO_LCP case — PageSpeed Insights returns HTTP 200 with FCP=1432ms but LCP=null. All other metrics present. Performance category scored at 67. This is one fixture among many, NOT the rule design.",
+  "_expectedDiagnosticCode": "NO_LCP",
+  "_expectedCategory": "SITE_RENDERING",
+  "_expectedConfidence": 0.85,
+  "_isEdgeCase": false,
+  "_notes": "FCP fires normally (~1432ms) but the largest contentful paint never fires. TBT, CLS, and Speed Index all have values. No provider error. Source status is AVAILABLE. This represents the real May Crawford scenario where the page renders partially but the LCP candidate is indeterminate.",
+  "performanceEnvelope": {
+    "evidenceVersion": "1.0.0",
+    "source": "pagespeed-insights",
+    "intendedProvider": "pagespeed-insights",
+    "sourceStatus": "AVAILABLE",
+    "status": "AVAILABLE",
+    "url": "https://maycrawford.com/",
+    "mobile": {
+      "status": "AVAILABLE",
+      "source": "pagespeed-insights",
+      "strategy": "mobile",
+      "url": "https://maycrawford.com/",
+      "runTime": "2026-01-15T12:00:00.000Z",
+      "dataType": "lab",
+      "isLabData": true,
+      "isFieldData": false,
+      "fallbackUsed": false,
+      "psiFailure": null,
+      "fetchedAt": "2026-01-15T12:00:00.000Z",
+      "scores": {
+        "performance": 67,
+        "accessibility": 88,
+        "bestPractices": 92,
+        "seo": 85
+      },
+      "metrics": {
+        "fcpMs": 1432,
+        "lcpMs": null,
+        "cls": 0.08,
+        "tbtMs": 245,
+        "speedIndexMs": 3200,
+        "inpMs": null
+      },
+      "opportunities": [],
+      "rawArtifactRef": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https%3A%2F%2Fmaycrawford.com%2F&strategy=mobile"
+    },
+    "desktop": {
+      "status": "AVAILABLE",
+      "source": "pagespeed-insights",
+      "strategy": "desktop",
+      "url": "https://maycrawford.com/",
+      "runTime": "2026-01-15T12:00:01.000Z",
+      "dataType": "lab",
+      "isLabData": true,
+      "isFieldData": false,
+      "fallbackUsed": false,
+      "psiFailure": null,
+      "fetchedAt": "2026-01-15T12:00:01.000Z",
+      "scores": {
+        "performance": 72,
+        "accessibility": 90,
+        "bestPractices": 94,
+        "seo": 87
+      },
+      "metrics": {
+        "fcpMs": 980,
+        "lcpMs": null,
+        "cls": 0.03,
+        "tbtMs": 110,
+        "speedIndexMs": 2100,
+        "inpMs": null
+      },
+      "opportunities": [],
+      "rawArtifactRef": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https%3A%2F%2Fmaycrawford.com%2F&strategy=desktop"
+    },
+    "fieldData": {},
+    "fallbackUsed": false,
+    "limitations": [],
+    "collectedAt": "2026-01-15T12:00:02.000Z",
+    "coverage": {
+      "requested": 2,
+      "completed": 2,
+      "failed": 0
+    },
+    "rawArtifactRef": null,
+    "_sourceStatus": {
+      "provider": "pagespeed-insights",
+      "intendedProvider": "pagespeed-insights",
+      "adapterVersion": "1.0.0",
+      "startedAt": "2026-01-15T12:00:00.000Z",
+      "completedAt": "2026-01-15T12:00:02.000Z",
+      "requestId": null,
+      "retryCount": 0,
+      "returnedRecordCount": 2,
+      "expectedRecordCount": 2,
+      "errorCategory": null,
+      "limitation": null,
+      "rawArtifactRef": null
+    }
+  }
+}

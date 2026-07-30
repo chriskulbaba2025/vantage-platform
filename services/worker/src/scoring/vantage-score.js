@@ -16,6 +16,7 @@ import {
   calculateEvidenceConfidence,
   calculateFindingPriority,
   CONFIDENCE_LEVELS,
+  buildRenderingDiagnosticFindings,
 } from "./score-components.js";
 import {
   buildConversionPaths,
@@ -23,6 +24,7 @@ import {
   contentIdeas,
   competitorComparison,
 } from "./report-model.js";
+import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
 
 // ---------------------------------------------------------------------------
 // Source gate helpers (PRD v3.0 §8.6, §15.2)
@@ -307,6 +309,7 @@ function determineReadinessStatus(assessedWeight, conversionReadiness) {
 
 function buildNotAssessedModel(input, evidence) {
   const perfScore = scorePerformance(evidence.performance);
+  const renderingDiagnostics = classifyRenderingDiagnostics(evidence.performance);
 
   const hasPerformance = isPerformanceViable(evidence.performance);
   const perfEvidenceScore = hasPerformance ? 25 : 0;
@@ -405,6 +408,7 @@ function buildNotAssessedModel(input, evidence) {
     competitors: competitorComparison(evidence.competitors || [], evidence.competitorOpportunities),
     competitorOpportunities: evidence.competitorOpportunities,
     evidence,
+    renderingDiagnostics: renderingDiagnostics.diagnostics,
     _crawlSuppressed: true,
   };
 }
@@ -440,9 +444,23 @@ export function scoreAudit(input, evidence) {
   // ── Funnel-stage scores ────────────────────────────────────────────
   const funnelScores = computeFunnelScores(site, dimensionScores);
 
+  // ── Rendering-integrity diagnostics ─────────────────────────────────
+  const renderingDiagnostics = classifyRenderingDiagnostics(performance);
+
   // ── Build findings ─────────────────────────────────────────────────
   const gsc = evidence.gsc;
   const findings = buildFindings(site, performance, gsc);
+
+  // Append rendering-diagnostic findings for material site-rendering defects
+  const diagnosticFindings = buildRenderingDiagnosticFindings(
+    renderingDiagnostics.diagnostics,
+    site,
+  );
+  for (const df of diagnosticFindings) {
+    findings.push(df);
+  }
+  // Re-sort after adding diagnostic findings
+  findings.sort((a, b) => b.finalPriority - a.finalPriority);
 
   // ── Evidence confidence ────────────────────────────────────────────
   const evidenceConfidence = calculateEvidenceConfidence(evidence, findings);
@@ -554,6 +572,7 @@ export function scoreAudit(input, evidence) {
     competitors: competitorComparison(evidence.competitors || [], evidence.competitorOpportunities),
     competitorOpportunities: evidence.competitorOpportunities,
     evidence,
+    renderingDiagnostics: renderingDiagnostics.diagnostics,
   };
 }
 
