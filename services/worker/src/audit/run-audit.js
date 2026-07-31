@@ -518,6 +518,7 @@ export async function runAudit(rawInput, options = {}) {
     slug,
     runId,
     html: gate.passed ? html : "",
+    includeIndexHtml: gate.passed,
     model: gatedModel,
     manifest,
   });

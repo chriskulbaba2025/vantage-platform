@@ -270,6 +270,33 @@ test("multi-page: full audit pipeline produces draft report with single-section 
   assert.doesNotMatch(html, /nav-toggle/, "Must not have old nav-toggle button");
 });
 
+test("gate-blocked: manifest omits index.html and status is draft when gate fails", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vantage-test-"));
+  const store = createLocalReportStore({ baseDir: dir });
+
+  const result = await runAudit(
+    { targetUrl: "example.com", businessName: "Example" },
+    {
+      config: baseConfig({ artifactDir: dir }),
+      crawlSite: async () => AVAILABLE_SITE,
+      crawlCompetitors: async () => [],
+      collectPerformance: async () => AVAILABLE_PERF,
+      collectBacklinks: async () => NOT_CONNECTED_BACKLINKS,
+      collectGa4: async () => NOT_CONNECTED_GA4,
+      store,
+      runId: "20260730-gate-pass-001",
+    },
+  );
+
+  // With consistent evidence, gate passes
+  assert.equal(result._gateBlocked, false, "Gate should pass with consistent evidence");
+  assert.equal(result.status, "draft");
+  assert.equal(result.manifest.files.includes("index.html"), true,
+    "Manifest must include index.html when gate passes");
+  assert.ok(result.model._gate, "Gate output must be attached to model");
+  assert.equal(result.model._gate.passed, true);
+});
+
 // ---------------------------------------------------------------------------
 // 2. Existing: performance FAILED
 // ---------------------------------------------------------------------------

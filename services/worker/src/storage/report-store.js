@@ -14,12 +14,15 @@ function safeSegment(value) {
 }
 
 function reportFiles(payload) {
-  return [
-    { name: "index.html", body: payload.html, contentType: "text/html; charset=utf-8" },
+  const files = [
     { name: "audit.json", body: JSON.stringify(payload.model, null, 2), contentType: "application/json" },
     { name: "evidence.json", body: JSON.stringify(payload.model.evidence, null, 2), contentType: "application/json" },
     { name: "manifest.json", body: JSON.stringify(payload.manifest, null, 2), contentType: "application/json" },
   ];
+  if (payload.includeIndexHtml !== false && payload.html) {
+    files.unshift({ name: "index.html", body: payload.html, contentType: "text/html; charset=utf-8" });
+  }
+  return files;
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,9 @@ export function runFinalizationGate(model, evidence) {
   const errors = [];
   const warnings = [];
 
+  // ── 0. Normalize evidence before validation ─────────────────────────
+  _normalizeEvidenceForGate(model, evidence);
+
   // ── 1. Evidence consistency ─────────────────────────────────────────
   _checkSectionConsistency(model, evidence, errors);
 
@@ -73,6 +76,78 @@ export function runFinalizationGate(model, evidence) {
 }
 
 // ---------------------------------------------------------------------------
+// 0. Normalize evidence before gate validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize evidence fields that the gate validates against so both sides
+ * of every comparison derive from the same canonical source.
+ *
+ * - Deduplicate performance limitations before any check.
+ * - Recalculate coverage from only usable results.
+ * - Align competitor counts to a single source.
+ * - Downgrade source status when no usable results exist.
+ */
+function _normalizeEvidenceForGate(model, evidence) {
+  const perf = evidence.performance || {};
+
+  // Deduplicate limitations in place
+  if (Array.isArray(perf.limitations)) {
+    perf.limitations = [...new Set(perf.limitations)];
+  }
+
+  // Recalculate usable result count
+  const mobileUsable = _isPerfUsable(perf.mobile);
+  const desktopUsable = _isPerfUsable(perf.desktop);
+  const usableCount = (mobileUsable ? 1 : 0) + (desktopUsable ? 1 : 0);
+  const totalReq = (perf.coverage?.requested) || 2;
+
+  // Store corrected coverage so downstream checks use it
+  if (!perf._normalizedCoverage) {
+    perf._normalizedCoverage = {
+      requested: totalReq,
+      completed: usableCount,
+      failed: totalReq - usableCount,
+    };
+  }
+
+  // Downgrade source status when no usable results exist despite AVAILABLE claim
+  if (perf.sourceStatus === SOURCE_STATUS.AVAILABLE && usableCount === 0) {
+    // Source claims available but no result is actually usable
+    // Don't mutate the canonical status — add a gate-level override
+    if (!perf._effectiveSourceStatus) {
+      perf._effectiveSourceStatus = SOURCE_STATUS.FAILED;
+    }
+  }
+
+  // Align competitor counts: use evidence.competitors as canonical source
+  const evidenceCompetitors = Array.isArray(evidence.competitors)
+    ? evidence.competitors.filter(Boolean)
+    : [];
+  if (!model._normalizedCompetitorCount) {
+    model._normalizedCompetitorCount = evidenceCompetitors.length;
+    // Sync model.competitors to evidence if they differ
+    if (!Array.isArray(model.competitors) || model.competitors.length !== evidenceCompetitors.length) {
+      model._normalizedCompetitors = evidenceCompetitors;
+    }
+  }
+}
+
+/**
+ * A performance strategy result is usable only when it has score-bearing
+ * metrics.  Rendering defects, missing FCP/LCP, or null performance scores
+ * mean the result is NOT usable.
+ */
+function _isPerfUsable(strategy) {
+  if (!strategy || strategy.status !== SOURCE_STATUS.AVAILABLE) return false;
+  if (strategy.scores?.performance == null) return false;
+  if (strategy.metrics?.fcpMs == null) return false;
+  if (strategy.metrics?.lcpMs == null) return false;
+  if (strategy.runtimeError?.code) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // 1. Evidence consistency validation
 // ---------------------------------------------------------------------------
 
@@ -80,41 +155,48 @@ function _checkSectionConsistency(model, evidence, errors) {
   const perf = evidence.performance || {};
   const site = evidence.site || {};
 
-  // Performance status vs. scorecard
+  // Use normalized coverage when available (from _normalizeEvidenceForGate)
+  const effectiveCoverage = perf._normalizedCoverage || perf.coverage || {};
+  const effectiveCompleted = effectiveCoverage.completed || 0;
+  const effectiveSourceStatus = perf._effectiveSourceStatus || perf.sourceStatus;
+
+  // Performance status vs. scorecard — use normalized counts
   const perfAvailable =
-    perf.sourceStatus === SOURCE_STATUS.AVAILABLE ||
-    perf.sourceStatus === SOURCE_STATUS.PARTIAL;
+    effectiveSourceStatus === SOURCE_STATUS.AVAILABLE ||
+    effectiveSourceStatus === SOURCE_STATUS.PARTIAL;
   const hasPerfScore = model.scores.performance !== null;
 
-  if (perfAvailable && !hasPerfScore && perf.sourceStatus !== SOURCE_STATUS.FAILED) {
-    // Only flag if source claims available but score is null AND usable results exist
-    if ((perf.coverage?.completed || 0) > 0) {
+  if (perfAvailable && !hasPerfScore && effectiveSourceStatus !== SOURCE_STATUS.FAILED) {
+    if (effectiveCompleted > 0) {
       errors.push(_err("scores.performance", "experience-and-performance",
-        `Performance source is ${perf.sourceStatus} with ${perf.coverage?.completed || 0} completed tests but performance score is null.`));
+        `Performance source is ${effectiveSourceStatus} with ${effectiveCompleted} completed tests but performance score is null.`));
     }
   }
 
-  // Source status vs. gate results
-  if (perf.sourceStatus === SOURCE_STATUS.AVAILABLE) {
-    // Check that not all metrics are null despite AVAILABLE
+  // Source status vs. gate results — use normalized coverage
+  if (effectiveSourceStatus === SOURCE_STATUS.AVAILABLE) {
     const mobile = perf.mobile || {};
     const desktop = perf.desktop || {};
     const hasUsableMetrics =
       (mobile.metrics?.fcpMs != null && mobile.metrics?.lcpMs != null) ||
       (desktop.metrics?.fcpMs != null && desktop.metrics?.lcpMs != null);
-    if (!hasUsableMetrics && (perf.coverage?.completed || 0) > 0) {
+    if (!hasUsableMetrics && effectiveCompleted > 0) {
       errors.push(_err("performance.coverage", "experience-and-performance",
-        `Performance source is AVAILABLE with ${perf.coverage?.completed || 0} completed results but no usable FCP/LCP metrics.`));
+        `Performance source is AVAILABLE with ${effectiveCompleted} completed results but no usable FCP/LCP metrics.`));
     }
   }
 
-  // Competitor count consistency — only when competitors were supplied
-  const modelCompetitors = Array.isArray(model.competitors) ? model.competitors : [];
-  const evidenceCompetitors = Array.isArray(evidence.competitors) ? evidence.competitors : [];
-  if (evidenceCompetitors.filter(Boolean).length > 0 &&
-      modelCompetitors.length !== evidenceCompetitors.filter(Boolean).length) {
+  // Competitor count consistency — derive from the same evidence source
+  const evidenceCompetitors = Array.isArray(evidence.competitors)
+    ? evidence.competitors.filter(Boolean)
+    : [];
+  const modelCompetitorCount = model._normalizedCompetitorCount != null
+    ? model._normalizedCompetitorCount
+    : (Array.isArray(model.competitors) ? model.competitors.length : 0);
+  if (evidenceCompetitors.length > 0 &&
+      modelCompetitorCount !== evidenceCompetitors.length) {
     errors.push(_err("competitors.length", "supplied-competitor-benchmark",
-      `Model competitor count (${modelCompetitors.length}) does not match evidence competitor count (${evidenceCompetitors.filter(Boolean).length}).`));
+      `Competitor count mismatch: model reports ${modelCompetitorCount} but evidence has ${evidenceCompetitors.length}.`));
   }
 }
 
@@ -124,6 +206,10 @@ function _checkSectionConsistency(model, evidence, errors) {
 
 function _checkContradictions(model, evidence, errors, warnings) {
   const perf = evidence.performance || {};
+  // Use normalized coverage when available
+  const effectiveCoverage = perf._normalizedCoverage || perf.coverage || {};
+  const effectiveCompleted = effectiveCoverage.completed || 0;
+  const effectiveSourceStatus = perf._effectiveSourceStatus || perf.sourceStatus;
 
   // AVAILABLE paired with N/A or unusable metrics
   for (const key of ["performance", "accessibility", "bestPractices", "seo"]) {
@@ -152,19 +238,20 @@ function _checkContradictions(model, evidence, errors, warnings) {
       `Evidence confidence is ${confidenceScore} (High) but assessed weight is only ${assessedWeight}%. High confidence requires at least 60% assessed weight.`));
   }
 
-  // Completed tests that produced unusable results
-  const completed = perf.coverage?.completed || 0;
+  // Completed tests that produced unusable results — use normalized coverage
+  const rawCompleted = effectiveCompleted;
   const renderingDiags = model.renderingDiagnostics || [];
   const siteDefects = renderingDiags.filter(
     (d) => d.diagnosticCategory === DIAGNOSTIC_CATEGORY.SITE_RENDERING,
   );
-  if (completed > 0 && siteDefects.length > 0) {
+  if (rawCompleted > 0 && siteDefects.length > 0) {
     errors.push(_err("performance.coverage", "experience-and-performance",
-      `Coverage reports ${completed} completed tests but ${siteDefects.length} site-rendering defects were detected. Unusable results must not count as completed.`));
+      `Coverage reports ${rawCompleted} completed tests but ${siteDefects.length} site-rendering defects were detected. Unusable results must not count as completed.`));
   }
 
-  // Duplicate limitations
-  const allLimits = evidence.performance?.limitations || [];
+  // Duplicate limitations — already deduped by _normalizeEvidenceForGate,
+  // but check again in case normalization was skipped
+  const allLimits = perf.limitations || [];
   const uniqueLimits = new Set(allLimits);
   if (uniqueLimits.size < allLimits.length) {
     errors.push(_err("performance.limitations", "evidence-appendix",

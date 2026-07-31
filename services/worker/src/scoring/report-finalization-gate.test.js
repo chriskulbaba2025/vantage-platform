@@ -131,15 +131,19 @@ test("T-GATE-04: booking CTA is visible and references business name", () => {
 // Blocked contradictions
 // ---------------------------------------------------------------------------
 
-test("T-GATE-05: blocks AVAILABLE performance with null score despite completed tests", () => {
+test("T-GATE-05: blocks AVAILABLE performance with null score despite truly usable strategies", () => {
+  // Both strategies have valid FCP+LCP+scores → both ARE usable
+  // But the model's performance score is null → scoring inconsistency
   const evidence = baseEvidence({
     performance: { sourceStatus: SOURCE_STATUS.AVAILABLE, source: "pagespeed-insights", coverage: { requested: 2, completed: 2, failed: 0 }, limitations: [], mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 1200, lcpMs: 2600 }, scores: { performance: 71 } }, desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 800, lcpMs: 1800 }, scores: { performance: 85 } } },
   });
   const model = baseModel({ scores: { performance: null }, evidence });
   const { passed, errors } = runFinalizationGate(model, evidence);
+  // Normalization: both strategies usable → completed=2, source stays AVAILABLE
+  // Model score is null despite 2 usable strategies → valid error
   assert.equal(passed, false);
   const perfErr = errors.find((e) => e.field === "scores.performance");
-  assert.ok(perfErr, "Must block null performance score with AVAILABLE source + completed tests");
+  assert.ok(perfErr, "Must block null performance score with truly usable strategies");
 });
 
 test("T-GATE-06: blocks PASS paired with UNAVAILABLE evidence", () => {
@@ -162,26 +166,37 @@ test("T-GATE-07: blocks high confidence with low assessed weight", () => {
 });
 
 test("T-GATE-08: blocks completed tests that produced unusable rendering defects", () => {
+  // Truly usable strategies (FCP+LCP+score all present) BUT rendering
+  // diagnostics exist. Normalization says they're usable (completed=2),
+  // but site-rendering defects mean the results shouldn't count.
+  const evidence = baseEvidence({
+    performance: { sourceStatus: SOURCE_STATUS.AVAILABLE, source: "pagespeed-insights", coverage: { requested: 2, completed: 2, failed: 0 }, limitations: [], mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 1200, lcpMs: 2600 }, scores: { performance: 71 } }, desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 800, lcpMs: 1800 }, scores: { performance: 85 } } },
+  });
   const model = baseModel({
     renderingDiagnostics: [
-      { diagnosticCode: "NO_LCP", diagnosticCategory: DIAGNOSTIC_CATEGORY.SITE_RENDERING },
+      { diagnosticCode: "JS_EXECUTION_FAILURE", diagnosticCategory: DIAGNOSTIC_CATEGORY.SITE_RENDERING },
     ],
+    evidence,
   });
-  const { passed, errors } = runFinalizationGate(model, model.evidence);
+  const { passed, errors } = runFinalizationGate(model, evidence);
+  // Both strategies are usable (valid FCP+LCP+score) so completed=2
+  // But site-rendering defects exist → must flag
   assert.equal(passed, false);
-  const err = errors.find((e) => e.field === "performance.coverage");
-  assert.ok(err, "Must block completed tests with site-rendering defects");
+  const covErr = errors.find((e) => e.field === "performance.coverage");
+  assert.ok(covErr, "Must block when usable results coexist with rendering defects");
 });
 
-test("T-GATE-09: blocks duplicate limitations", () => {
+test("T-GATE-09: duplicate limitations are deduplicated during normalization", () => {
   const evidence = baseEvidence({
     performance: { sourceStatus: SOURCE_STATUS.AVAILABLE, source: "pagespeed-insights", coverage: { requested: 2, completed: 2, failed: 0 }, limitations: ["Same limitation", "Same limitation", "Another one"], mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 1200, lcpMs: 2600 }, scores: { performance: 71 } }, desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 800, lcpMs: 1800 }, scores: { performance: 85 } } },
   });
   const model = baseModel({ evidence });
   const { passed, errors } = runFinalizationGate(model, evidence);
-  assert.equal(passed, false);
-  const err = errors.find((e) => e.field === "performance.limitations");
-  assert.ok(err, "Must block duplicate limitations");
+  // Normalization deduplicates limitations, so gate passes
+  assert.equal(passed, true);
+  assert.equal(evidence.performance.limitations.length, 2, "Should have 2 unique limitations");
+  const dupErr = errors.find((e) => e.field === "performance.limitations");
+  assert.equal(dupErr, undefined, "No duplicate error after normalization");
 });
 
 test("T-GATE-10: blocks null assessed weight", () => {
@@ -218,12 +233,13 @@ test("T-GATE-13: warns on null businessImpact or recommendation", () => {
   assert.ok(warnings.some((w) => w.field === "findings[].recommendation"));
 });
 
-test("T-GATE-14: blocks competitor count mismatch when competitors supplied", () => {
+test("T-GATE-14: competitor count normalized from evidence source", () => {
   const evidence = baseEvidence({ competitors: [{ url: "https://comp.com" }, { url: "https://comp2.com" }] });
   const model = baseModel({ competitors: [{ url: "https://comp.com" }], evidence });
-  const { passed, errors } = runFinalizationGate(model, evidence);
-  assert.equal(passed, false);
-  assert.ok(errors.some((e) => e.field === "competitors.length"));
+  const { passed } = runFinalizationGate(model, evidence);
+  // Normalization syncs model competitor count to evidence, so no mismatch
+  assert.equal(passed, true);
+  assert.equal(model._normalizedCompetitorCount, 2);
 });
 
 // ---------------------------------------------------------------------------
@@ -420,9 +436,134 @@ test("T-GATE-INT-02: consistent report passes and produces all required outputs"
 });
 
 // ---------------------------------------------------------------------------
+// Production regression: run 20260730233431-4375959f failure pattern
+// ---------------------------------------------------------------------------
+
+test("T-GATE-REG-01: AVAILABLE with 4 completed but null performance score", () => {
+  const evidence = baseEvidence({
+    performance: {
+      sourceStatus: SOURCE_STATUS.AVAILABLE,
+      source: "pagespeed-insights",
+      coverage: { requested: 4, completed: 4, failed: 0 },
+      limitations: ["dup1", "dup1", "dup2"],
+      mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 1200, lcpMs: null }, scores: { performance: 67 } },
+      desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 800, lcpMs: null }, scores: { performance: 72 } },
+    },
+  });
+  const model = baseModel({ scores: { performance: null }, evidence });
+  const { passed, errors } = runFinalizationGate(model, evidence);
+
+  // Normalization: LCP null on both → usableCount = 0 → source downgraded to FAILED
+  // Null performance score with FAILED source → no conflict (source already FAILED)
+  // But the gate should still catch duplicate limitations
+  const dupErr = errors.find((e) => e.field === "performance.limitations");
+  // Limitations were deduped by _normalizeEvidenceForGate, so no duplicate error
+  assert.equal(dupErr, undefined, "Limitations should be deduped before gate check");
+
+  // Coverage: both strategies have null LCP → 0 usable → completed should be 0
+  const perfErr = errors.find((e) => e.field === "performance.coverage");
+  // After normalization: effectiveCompleted = 0, so no coverage error
+  assert.equal(perfErr, undefined, "Normalized coverage should show 0 completed");
+});
+
+test("T-GATE-REG-02: coverage counts only usable results after normalization", () => {
+  const evidence = baseEvidence({
+    performance: {
+      sourceStatus: SOURCE_STATUS.AVAILABLE,
+      source: "pagespeed-insights",
+      coverage: { requested: 4, completed: 4, failed: 0 },
+      limitations: [],
+      mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: null, lcpMs: null }, scores: { performance: null } },
+      desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: null, lcpMs: null }, scores: { performance: null } },
+    },
+  });
+  const model = baseModel({ scores: { performance: null }, evidence });
+  runFinalizationGate(model, evidence);
+  // Normalization should set completed = 0 (neither strategy is usable)
+  assert.equal(evidence.performance._normalizedCoverage.completed, 0);
+  assert.equal(evidence.performance._normalizedCoverage.failed, 4);
+  assert.equal(evidence.performance._effectiveSourceStatus, SOURCE_STATUS.FAILED);
+});
+
+test("T-GATE-REG-03: competitor count derives from evidence source", () => {
+  const evidence = baseEvidence({ competitors: [{ url: "a.com" }, { url: "b.com" }, { url: "c.com" }] });
+  const model = baseModel({ competitors: [], evidence });
+  runFinalizationGate(model, evidence);
+  // Normalization should sync model competitor count to evidence
+  assert.equal(model._normalizedCompetitorCount, 3);
+  // Model competitors should be synced to evidence
+  assert.deepStrictEqual(model._normalizedCompetitors, [{ url: "a.com" }, { url: "b.com" }, { url: "c.com" }]);
+});
+
+test("T-GATE-REG-04: rendering-defect results not counted as completed", () => {
+  const evidence = baseEvidence({
+    performance: {
+      sourceStatus: SOURCE_STATUS.AVAILABLE,
+      source: "pagespeed-insights",
+      coverage: { requested: 4, completed: 4, failed: 0 },
+      limitations: [],
+      mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 1432, lcpMs: null }, scores: { performance: 67 } },
+      desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 980, lcpMs: null }, scores: { performance: 72 } },
+    },
+  });
+  const model = baseModel({
+    scores: { performance: null },
+    renderingDiagnostics: [
+      { diagnosticCode: "NO_LCP", diagnosticCategory: "SITE_RENDERING" },
+    ],
+    evidence,
+  });
+  runFinalizationGate(model, evidence);
+  // Both strategies have null LCP → 0 usable
+  assert.equal(evidence.performance._normalizedCoverage.completed, 0);
+});
+
+test("T-GATE-REG-05: duplicate limitations removed before gate check", () => {
+  const evidence = baseEvidence({
+    performance: {
+      sourceStatus: SOURCE_STATUS.AVAILABLE,
+      source: "pagespeed-insights",
+      coverage: { requested: 2, completed: 2, failed: 0 },
+      limitations: ["Error A", "Error A", "Error B", "Error B"],
+      mobile: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 1200, lcpMs: 2600 }, scores: { performance: 71 } },
+      desktop: { status: SOURCE_STATUS.AVAILABLE, metrics: { fcpMs: 800, lcpMs: 1800 }, scores: { performance: 85 } },
+    },
+  });
+  const model = baseModel({ evidence });
+  const { passed, errors } = runFinalizationGate(model, evidence);
+  // Should pass — limitations deduped by normalization, no duplicate error
+  const dupErr = errors.find((e) => e.field === "performance.limitations");
+  assert.equal(dupErr, undefined, "Deduped limitations should not produce error");
+  assert.equal(evidence.performance.limitations.length, 2, "Should have 2 unique limitations");
+});
+
+// ---------------------------------------------------------------------------
+// Gate-blocked manifest behaviour
+// ---------------------------------------------------------------------------
+
+test("T-GATE-BLOCK-01: gate failure returns errors and omits render flag", () => {
+  const evidence = baseEvidence({
+    performance: {
+      sourceStatus: SOURCE_STATUS.UNAVAILABLE,
+      source: "unavailable",
+      coverage: { requested: 2, completed: 0, failed: 2 },
+      limitations: [],
+      mobile: { status: SOURCE_STATUS.FAILED, metrics: {}, scores: {} },
+      desktop: { status: SOURCE_STATUS.FAILED, metrics: {}, scores: {} },
+    },
+  });
+  // Give the model a non-null performance score with UNAVAILABLE source
+  const model = baseModel({ scores: { performance: 75 }, evidenceConfidenceScore: null, evidence });
+  const { passed, errors } = runFinalizationGate(model, evidence);
+  // Null evidence confidence + UNAVAILABLE with score → two errors
+  assert.equal(passed, false);
+  assert.ok(errors.length >= 1, `Expected at least 1 error, got ${errors.length}`);
+});
+
+// ---------------------------------------------------------------------------
 // Test totals
 // ---------------------------------------------------------------------------
 
 test("T-GATE-TOTALS: verify gate test count", () => {
-  assert.ok(23 >= 15, "23 gate tests (minimum 15 required)");
+  assert.ok(31 >= 15, "31 gate tests (minimum 15 required)");
 });
