@@ -374,13 +374,15 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
 
   // ── Source statuses ───────────────────────────────────────────────────
   // Distinguish task failures from genuine empty results:
-  //   - FAILED: one or more SERP tasks returned an error status_code
-  //   - AVAILABLE: at least one candidate found
+  //   - FAILED: all SERP tasks returned an error status_code (no usable evidence)
+  //   - PARTIAL: at least one task succeeded with usable candidates, but one
+  //     or more other tasks failed
+  //   - AVAILABLE: at least one candidate found, no task errors
   //   - UNAVAILABLE: tasks succeeded but returned zero organic results
   //   - NOT_CONNECTED: no DataForSEO credentials
   const serpStatus = hasDfsCredentials
     ? (serpTaskErrors.length > 0
-        ? SOURCE_STATUS.FAILED
+        ? (serpCandidates.length > 0 ? SOURCE_STATUS.PARTIAL : SOURCE_STATUS.FAILED)
         : (serpCandidates.length > 0 ? SOURCE_STATUS.AVAILABLE : SOURCE_STATUS.UNAVAILABLE))
     : SOURCE_STATUS.NOT_CONNECTED;
 
@@ -446,7 +448,7 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
       retryCount: 0,
       returnedRecordCount: qualified.length,
       expectedRecordCount: topics.length * 20 + suppliedCandidates.length,
-      errorCategory: serpStatus === SOURCE_STATUS.FAILED ? ERROR_CATEGORY.INTERNAL : null,
+      errorCategory: (serpStatus === SOURCE_STATUS.FAILED || serpStatus === SOURCE_STATUS.PARTIAL) ? ERROR_CATEGORY.INTERNAL : null,
       limitation: limitations.length > 0 ? limitations.join("; ") : null,
       rawArtifactRef: serpTaskIds.length > 0 ? serpTaskIds.join(",") : null,
       // Preserve locale/location context for audit trail

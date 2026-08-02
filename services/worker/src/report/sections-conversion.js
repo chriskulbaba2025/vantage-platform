@@ -124,6 +124,7 @@ function competitorBenchmark(model) {
   const serpSource = sources.dataforseoSerp?.status || "NOT_CONNECTED";
   const suppliedSource = sources.supplied?.status || "NOT_APPLICABLE";
   const serpFailed = serpSource === "FAILED";
+  const serpPartial = serpSource === "PARTIAL";
   const serpUnavailable = serpSource === "UNAVAILABLE";
 
   // ── SERP source limitation notice ────────────────────────────────────
@@ -136,6 +137,18 @@ function competitorBenchmark(model) {
     serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP could not collect localized competitor evidence. ` +
       `The search provider returned a task error: ${taskDetail}. ` +
       `Competitor analysis continues with supplied-competitor evidence only. ` +
+      `Original market: ${e(sources.dataforseoSerp?.originalLocation || "not specified")}. ` +
+      `Normalized location: ${e(sources.dataforseoSerp?.normalizedLocation || "unresolved")}.</div>`;
+  } else if (serpPartial) {
+    const taskErrors = sources.dataforseoSerp?.taskErrors || [];
+    const failedTopics = taskErrors.length > 0
+      ? taskErrors.map((te) => `"${e(te.topic)}"`).join("; ")
+      : "unknown topic";
+    const candidateCount = sources.dataforseoSerp?.candidateCount || 0;
+    const taskCount = sources.dataforseoSerp?.taskIds?.length || 0;
+    serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP collected partial localized competitor evidence. ` +
+      `${candidateCount} candidate(s) returned across ${taskCount} task(s), but SERP data could not be retrieved for: ${failedTopics}. ` +
+      `Competitor analysis continues with the available SERP evidence plus any supplied-competitor evidence. ` +
       `Original market: ${e(sources.dataforseoSerp?.originalLocation || "not specified")}. ` +
       `Normalized location: ${e(sources.dataforseoSerp?.normalizedLocation || "unresolved")}.</div>`;
   } else if (serpUnavailable) {
