@@ -283,7 +283,7 @@ ${table(["Gate", "Result"], [
   ["Template Lock", "PASS — canonical CSS, navigation, sections, and JavaScript preserved"],
 ].map((r) => r.map(e)))}
 ${model.readinessStatus && model.readinessStatus !== "Complete" ? `<p style="margin-top:8px"><strong>Readiness Status:</strong> ${e(model.readinessStatus)}. Assessed weight: ${e(model.assessedWeight ?? "N/A")}%.</p>` : ""}
-<p style="margin-top:8px;font-size:.8rem;color:var(--muted)">Template v0.7 locked. Vantage worker ${e(model.reportVersion)}. Scoring version ${e(model.scoringVersion || model.reportVersion)}. Conversion Readiness: ${e(model.scores.conversionReadiness !== null ? `${model.scores.conversionReadiness}/100` : "Insufficient Evidence")}. Phase 1.</p>`,
+<p style="margin-top:8px;font-size:.8rem;color:var(--muted)">Template v0.7 locked. Prysm worker ${e(model.reportVersion)}. Scoring version ${e(model.scoringVersion || model.reportVersion)}. Conversion Readiness: ${e(model.scores.conversionReadiness !== null ? `${model.scores.conversionReadiness}/100` : "Insufficient Evidence")}. Phase 1.</p>`,
   );
 }
 

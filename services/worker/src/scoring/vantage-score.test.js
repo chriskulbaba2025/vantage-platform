@@ -9,7 +9,7 @@ function evidence(overrides = {}) {
   return {
     site: {
       evidenceVersion: "1.0.0",
-      source: "vantage-crawler",
+      source: "prysm-crawler",
       sourceStatus: SOURCE_STATUS.AVAILABLE,
       targetUrl: "https://example.com/",
       domain: "example.com",
@@ -64,7 +64,7 @@ function evidence(overrides = {}) {
       coverage: { requested: 2, completed: 2, failed: 0 },
       rawArtifactRef: null,
       _sourceStatus: {
-        provider: "vantage-crawler",
+        provider: "prysm-crawler",
         adapterVersion: "1.0.0",
         startedAt: null,
         completedAt: new Date().toISOString(),
@@ -535,7 +535,7 @@ test("scoreAudit renders report with FAILED crawl without crashing", async () =>
   // Verify model doesn't crash rendering
   const html = await renderReport(model);
   assert.ok(html.length > 0);
-  assert.match(html, /Vantage Phase 1 Audit/);
+  assert.match(html, /Prysm Phase 1 Audit/);
   // Report should indicate crawl issues without crashing
   assert.ok(typeof html === "string");
 });
@@ -1410,7 +1410,7 @@ test("renderReport with provisional model does not crash", async () => {
 
   const html = await renderReport(model);
   assert.ok(html.length > 0);
-  assert.match(html, /Vantage Phase 1 Audit/);
+  assert.match(html, /Prysm Phase 1 Audit/);
   assert.match(html, /Scoring version/);
 });
 

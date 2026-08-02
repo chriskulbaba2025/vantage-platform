@@ -116,7 +116,7 @@ function renderPrintButton() {
 function renderApprovedFooter(model, date) {
   const site = model.evidence.site;
   const business = model.input.businessName || site.pages[0]?.title || site.domain;
-  return `<footer><p>Vantage Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence &middot; Approved for client delivery</p></footer>`;
+  return `<footer><p>Prysm Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence &middot; Approved for client delivery</p></footer>`;
 }
 
 function renderNav(currentPageId) {
@@ -170,7 +170,7 @@ section{background:var(--card);border:1px solid var(--border);border-radius:var(
  */
 function buildApprovedPage(model, pageDef, date) {
   const sectionHtml = pageDef.render(model);
-  const title = `Vantage Phase 1 — ${pageDef.title} | ${model.input.businessName || model.evidence.site.domain}`;
+  const title = `Prysm Phase 1 —${pageDef.title} | ${model.input.businessName || model.evidence.site.domain}`;
 
   // Validate the rendered section includes the expected id
   if (!sectionHtml.includes(`id="${pageDef.sectionId}"`)) {
@@ -205,7 +205,7 @@ function buildIndexPage(model, date) {
   const site = model.evidence.site;
   const business = model.input.businessName || site.pages[0]?.title || site.domain;
   const readiness = model.scores.conversionReadiness !== null ? `${model.scores.conversionReadiness}/100` : "—";
-  const title = `Vantage Phase 1 Audit — Approved Report | ${business}`;
+  const title = `Prysm Phase 1 Audit — Approved Report | ${business}`;
 
   const pageLinks = APPROVED_PAGES.map((p) =>
     `<li style="margin-bottom:8px"><a href="${e(p.pageId)}.html" style="font-weight:600;font-size:1rem">${e(p.secNum)}. ${e(p.title)}</a></li>`,
@@ -227,7 +227,7 @@ function buildIndexPage(model, date) {
 </style>
 </head>
 <body>
-<header><div class="container"><div><span class="badge badge-warn" style="margin-bottom:10px">APPROVED CLIENT REPORT</span><h1>Vantage Phase 1 Audit — Conversion Readiness</h1><p class="subtitle">${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p></div><div><span class="badge badge-warn">Readiness: ${e(readiness)}</span><p class="subtitle" style="margin-top:4px">Scoring v${e(model.scoringVersion || model.reportVersion)} &middot; Approved</p></div></div></header>
+<header><div class="container"><div><span class="badge badge-warn" style="margin-bottom:10px">APPROVED CLIENT REPORT</span><h1>Prysm Phase 1 Audit — Conversion Readiness</h1><p class="subtitle">${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p></div><div><span class="badge badge-warn">Readiness: ${e(readiness)}</span><p class="subtitle" style="margin-top:4px">Scoring v${e(model.scoringVersion || model.reportVersion)} &middot; Approved</p></div></div></header>
 
 <div class="print-button-container no-print" style="text-align:right;padding:0 20px;margin-top:-8px;margin-bottom:12px">
 <button class="print-page-btn no-print" onclick="window.print()" style="display:inline-flex;align-items:center;gap:8px;padding:10px 22px;font-size:.88rem;font-weight:600;color:#fff;background:linear-gradient(135deg,#123a72 0%,#2563eb 100%);border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,.25)">
@@ -247,7 +247,7 @@ Print or save this page as PDF
 </section>
 </div>
 
-<footer><p>Vantage Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence &middot; Approved for client delivery</p></footer>
+<footer><p>Prysm Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence &middot; Approved for client delivery</p></footer>
 </body>
 </html>`;
 }

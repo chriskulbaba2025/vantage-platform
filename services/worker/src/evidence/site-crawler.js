@@ -107,7 +107,7 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
   const collectedAt = new Date().toISOString();
   return {
     evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
-    source: "vantage-crawler",
+    source: "prysm-crawler",
     sourceStatus: SOURCE_STATUS.AVAILABLE,
     targetUrl,
     domain,
@@ -152,7 +152,7 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
     coverage: { requested: pages.length, completed: pages.length, failed: 0 },
     rawArtifactRef: null,
     _sourceStatus: buildSourceStatus({
-      provider: "vantage-crawler",
+      provider: "prysm-crawler",
       adapterVersion: "1.0.0",
       startedAt: null, // set by caller crawlSite
       completedAt: collectedAt,

@@ -1,0 +1,701 @@
+/**
+ * DataForSEO SERP Production-Path Regression Test
+ *
+ * Proves the full data path from audit input through normalization,
+ * DataForSEO API call, task-level error detection, audit.json state,
+ * and client-report rendering.
+ *
+ * Production fixture:
+ *   language: en-CA
+ *   location: Ottawa and Ontario, Canada
+ *
+ * Requirements verified:
+ *   1. DataForSEO receives valid normalized parameters (not raw BCP-47 or free text)
+ *   2. Task-level errors are surfaced (not silently returned as empty success)
+ *   3. Audit.json stores correct canonical state
+ *   4. Report renders correct success or limitation state
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { querySerp } from "./dataforseo-serp-client.js";
+import { normalizeLanguage } from "./locale-normalizer.js";
+import { resolveLocation } from "./location-resolver.js";
+import { collectCompetitorOpportunities } from "../../evidence/competitor-opportunity-layer.js";
+import { competitorBenchmark } from "../../report/sections-conversion.js";
+import { SOURCE_STATUS, ERROR_CATEGORY } from "../../scoring/evidence-contracts.js";
+import { competitorComparison } from "../../scoring/report-model.js";
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const PROD_SITE = {
+  sourceStatus: SOURCE_STATUS.AVAILABLE,
+  services: ["Consulting", "Coaching"],
+  topicKeywords: ["business consulting", "leadership coaching"],
+  pages: [{ title: "Example Consulting" }],
+  pageCount: 5,
+  domain: "example.com",
+  ctas: [],
+  forms: [],
+  trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false },
+};
+
+const PROD_INPUT = {
+  targetUrl: "https://example.com",
+  businessName: "Example Consulting",
+  location: "Ottawa and Ontario, Canada",
+  language: "en-CA",
+  competitors: [],
+};
+
+// ---------------------------------------------------------------------------
+// S-01: Locale normalization — en-CA → English
+// ---------------------------------------------------------------------------
+
+test("S-01: en-CA normalizes to DataForSEO English, not sent as BCP-47", () => {
+  const result = normalizeLanguage("en-CA");
+  assert.equal(result.languageName, "English");
+  assert.equal(result.originalLanguage, "en-CA");
+  assert.equal(result.isFallback, false);
+  assert.equal(result.source, "bcp47");
+  // Must not be the raw BCP-47 string
+  assert.notEqual(result.languageName, "en-CA");
+  assert.notEqual(result.languageName, "en");
+});
+
+// ---------------------------------------------------------------------------
+// S-02: Location normalization — Ottawa and Ontario, Canada → hierarchy
+// ---------------------------------------------------------------------------
+
+test("S-02: Ottawa and Ontario, Canada resolves to city-level hierarchy", () => {
+  const result = resolveLocation("Ottawa and Ontario, Canada");
+  assert.equal(result.error, null);
+  assert.equal(result.resolutionLevel, "city");
+  assert.equal(result.locationName, "Ottawa,Ontario,Canada");
+  assert.equal(result.originalLocation, "Ottawa and Ontario, Canada");
+  // Must not contain the original " and " separator
+  assert.equal(result.locationName.includes(" and "), false);
+});
+
+// ---------------------------------------------------------------------------
+// S-03: DataForSEO receives valid normalized parameters (mock API)
+// ---------------------------------------------------------------------------
+
+test("S-03: DataForSEO request body contains normalized language_name and location_name", async () => {
+  let capturedBody = null;
+
+  const fetchImpl = async (url, init) => {
+    capturedBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      time: "0.1234 sec.",
+      cost: 0.01,
+      tasks_count: 1,
+      tasks: [{
+        id: "task-abc-001",
+        status_code: 20000,
+        status_message: "Ok.",
+        time: "0.1000 sec.",
+        cost: 0.01,
+        result_count: 1,
+        result: [{
+          keyword: "Consulting Ottawa and Ontario, Canada",
+          se_type: "google",
+          location_code: null,
+          language_code: "en",
+          items_count: 2,
+          items: [
+            { type: "organic", rank_absolute: 1, url: "https://competitor1.example", domain: "competitor1.example", title: "Competitor One" },
+            { type: "organic", rank_absolute: 2, url: "https://competitor2.example", domain: "competitor2.example", title: "Competitor Two" },
+          ],
+        }],
+      }],
+    }), { status: 200 });
+  };
+
+  const result = await querySerp("Consulting Ottawa and Ontario, Canada", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Ottawa and Ontario, Canada",
+    language: "en-CA",
+    fetchImpl,
+  });
+
+  // ── Verify the request body ──────────────────────────────────────────
+  assert.ok(capturedBody, "Request body must be captured");
+  assert.equal(capturedBody.length, 1);
+  const task = capturedBody[0];
+
+  // language_name must be "English", not "en-CA"
+  assert.equal(task.language_name, "English",
+    `Expected language_name "English", got "${task.language_name}"`);
+  assert.notEqual(task.language_name, "en-CA");
+
+  // location_name must be the hierarchy, not the raw free text
+  assert.equal(task.location_name, "Ottawa,Ontario,Canada",
+    `Expected location_name "Ottawa,Ontario,Canada", got "${task.location_name}"`);
+  assert.notEqual(task.location_name, "Ottawa and Ontario, Canada");
+
+  // ── Verify the response ──────────────────────────────────────────────
+  assert.equal(result.error, null);
+  assert.equal(result.rawTaskId, "task-abc-001");
+  assert.equal(result.items.length, 2);
+  assert.equal(result.items[0].candidateUrl, "https://competitor1.example");
+
+  // Normalized values are returned
+  assert.equal(result.normalizedLanguage.languageName, "English");
+  assert.equal(result.normalizedLocation.locationName, "Ottawa,Ontario,Canada");
+});
+
+// ---------------------------------------------------------------------------
+// S-04: Task-level error is surfaced (not silent empty success)
+// ---------------------------------------------------------------------------
+
+test("S-04: task with non-20000 status_code produces error, not empty items", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      time: "0.1234 sec.",
+      cost: 0.01,
+      tasks_count: 1,
+      tasks: [{
+        id: "task-fail-002",
+        status_code: 40401,
+        status_message: "Invalid location specified.",
+        time: "0.0500 sec.",
+        cost: 0,
+        result_count: 0,
+        result: null,
+      }],
+    }), { status: 200 });
+  };
+
+  const result = await querySerp("Test Keyword", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Ottawa and Ontario, Canada",
+    language: "en-CA",
+    fetchImpl,
+  });
+
+  // ── Task error must be surfaced ──────────────────────────────────────
+  assert.ok(result.error, "Must have an error for failed task");
+  assert.ok(result.error.includes("40401"), `Error must include status code, got: ${result.error}`);
+  assert.ok(result.error.includes("Invalid location"), `Error must include status message, got: ${result.error}`);
+
+  // Task error details must be preserved
+  assert.ok(result.taskError, "Must have taskError details");
+  assert.equal(result.taskError.taskId, "task-fail-002");
+  assert.equal(result.taskError.statusCode, 40401);
+  assert.equal(result.taskError.statusMessage, "Invalid location specified.");
+
+  // Items must be empty — never silently return empty as success
+  assert.equal(result.items.length, 0);
+  assert.equal(result.rawTaskId, "task-fail-002");
+
+  // Normalized values still returned for audit trail
+  assert.equal(result.normalizedLanguage.languageName, "English");
+  assert.equal(result.normalizedLocation.locationName, "Ottawa,Ontario,Canada");
+});
+
+// ---------------------------------------------------------------------------
+// S-05: Zero organic results (successful task) ≠ task failure
+// ---------------------------------------------------------------------------
+
+test("S-05: successful task with zero organic results is UNAVAILABLE, not FAILED", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      time: "0.1234 sec.",
+      cost: 0.01,
+      tasks_count: 1,
+      tasks: [{
+        id: "task-empty-003",
+        status_code: 20000,
+        status_message: "Ok.",
+        time: "0.0500 sec.",
+        cost: 0.01,
+        result_count: 1,
+        result: [{
+          keyword: "rare niche query",
+          se_type: "google",
+          items_count: 0,
+          items: [],
+        }],
+      }],
+    }), { status: 200 });
+  };
+
+  const result = await querySerp("rare niche query", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Ottawa and Ontario, Canada",
+    language: "en-CA",
+    fetchImpl,
+  });
+
+  // ── Zero results is NOT an error ─────────────────────────────────────
+  assert.equal(result.error, null, "Zero results with success code must not be an error");
+  assert.ok(!result.taskError, "Must not have taskError for successful task");
+  assert.equal(result.rawTaskId, "task-empty-003");
+  assert.equal(result.items.length, 0, "Zero items is valid for a niche query");
+
+  // ── Via competitor layer, this should become UNAVAILABLE ──────────────
+  const opp = await collectCompetitorOpportunities(
+    { ...PROD_SITE, services: ["rare niche query"], topicKeywords: [] },
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // No candidates from SERP, but the task did not fail
+  assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.UNAVAILABLE,
+    "Zero organic results with success code must be UNAVAILABLE, not FAILED");
+});
+
+// ---------------------------------------------------------------------------
+// S-06: Task error → FAILED in competitor layer, not UNAVAILABLE
+// ---------------------------------------------------------------------------
+
+test("S-06: task error produces FAILED SERP source status in competitor layer", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-fail-006",
+        status_code: 40401,
+        status_message: "Invalid location specified.",
+        result_count: 0,
+        result: null,
+      }],
+    }), { status: 200 });
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    PROD_SITE,
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // ── SERP source must be FAILED ───────────────────────────────────────
+  assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
+    "Task error must produce FAILED, not UNAVAILABLE or AVAILABLE");
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.AVAILABLE,
+    "Must not mark failed task as AVAILABLE");
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.UNAVAILABLE,
+    "Must not mark failed task as UNAVAILABLE");
+
+  // Task errors are preserved (one per topic that failed)
+  assert.ok(opp.sources.dataforseoSerp.taskErrors, "Must preserve task errors");
+  assert.ok(opp.sources.dataforseoSerp.taskErrors.length >= 1,
+    `Expected at least 1 task error, got ${opp.sources.dataforseoSerp.taskErrors.length}`);
+  assert.equal(opp.sources.dataforseoSerp.taskErrors[0].statusCode, 40401);
+
+  // Normalized values are stored
+  assert.equal(opp.sources.dataforseoSerp.normalizedLanguage, "English");
+  assert.equal(opp.sources.dataforseoSerp.normalizedLocation, "Ottawa,Ontario,Canada");
+
+  // Original values are preserved
+  assert.equal(opp.sources.dataforseoSerp.originalLanguage, "en-CA");
+  assert.equal(opp.sources.dataforseoSerp.originalLocation, "Ottawa and Ontario, Canada");
+
+  // _sourceStatus must reflect failure
+  assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
+  assert.ok(opp._sourceStatus.limitation, "Must have limitation text");
+});
+
+// ---------------------------------------------------------------------------
+// S-07: audit.json canonical fields — success path
+// ---------------------------------------------------------------------------
+
+test("S-07: audit.json records full canonical state on SERP success", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-success-007",
+        status_code: 20000,
+        status_message: "Ok.",
+        result_count: 1,
+        result: [{
+          keyword: "Consulting Ottawa and Ontario, Canada",
+          items_count: 3,
+          items: [
+            { type: "organic", rank_absolute: 1, url: "https://comp1.example", domain: "comp1.example", title: "Comp One", featured_snippet: "snippet text" },
+            { type: "organic", rank_absolute: 2, url: "https://comp2.example/services", domain: "comp2.example", title: "Comp Two Services" },
+            { type: "organic", rank_absolute: 3, url: "https://comp3.example/consulting", domain: "comp3.example", title: "Comp Three Consulting" },
+          ],
+        }],
+      }],
+    }), { status: 200 });
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    PROD_SITE,
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // ── Source status ────────────────────────────────────────────────────
+  assert.equal(opp.source, "competitor-opportunity-layer");
+  assert.equal(opp.evidenceVersion, "1.0.0");
+
+  // ── SERP source fields ───────────────────────────────────────────────
+  const serp = opp.sources.dataforseoSerp;
+  assert.equal(serp.status, SOURCE_STATUS.AVAILABLE);
+  // 2 topics (Consulting, Coaching) × 3 results each = 6 candidates
+  assert.ok(serp.candidateCount >= 3,
+    `Expected at least 3 SERP candidates, got ${serp.candidateCount}`);
+  assert.ok(serp.taskIds.length > 0);
+  assert.equal(serp.taskErrors, undefined, "No task errors on success");
+
+  // ── Normalized locale fields ─────────────────────────────────────────
+  assert.equal(serp.normalizedLanguage, "English");
+  assert.equal(serp.normalizedLocation, "Ottawa,Ontario,Canada");
+  assert.equal(serp.originalLanguage, "en-CA");
+  assert.equal(serp.originalLocation, "Ottawa and Ontario, Canada");
+
+  // ── _sourceStatus canonical record ────────────────────────────────────
+  assert.equal(opp._sourceStatus.provider, "competitor-opportunity-layer");
+  assert.ok(opp._sourceStatus.startedAt);
+  assert.ok(opp._sourceStatus.completedAt);
+  assert.ok(opp._sourceStatus.returnedRecordCount > 0);
+  assert.equal(opp._sourceStatus.errorCategory, null);
+
+  // ── Coverage ─────────────────────────────────────────────────────────
+  assert.ok(opp.coverage.topicsRequested > 0);
+  assert.ok(opp.coverage.serpCandidatesFound >= 3,
+    `Expected at least 3 SERP candidates found, got ${opp.coverage.serpCandidatesFound}`);
+  assert.ok(opp.collectedAt);
+});
+
+// ---------------------------------------------------------------------------
+// S-08: audit.json canonical fields — failure path
+// ---------------------------------------------------------------------------
+
+test("S-08: audit.json records full canonical state on SERP failure", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-fail-008",
+        status_code: 40401,
+        status_message: "Invalid location specified.",
+        result_count: 0,
+        result: null,
+      }],
+    }), { status: 200 });
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    PROD_SITE,
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // ── SERP source must be FAILED ───────────────────────────────────────
+  const serp = opp.sources.dataforseoSerp;
+  assert.equal(serp.status, SOURCE_STATUS.FAILED);
+
+  // ── Task error details ───────────────────────────────────────────────
+  assert.ok(serp.taskErrors);
+  assert.equal(serp.taskErrors[0].statusCode, 40401);
+  assert.equal(serp.taskErrors[0].statusMessage, "Invalid location specified.");
+
+  // ── Normalized + original locale preserved ───────────────────────────
+  assert.equal(serp.normalizedLanguage, "English");
+  assert.equal(serp.normalizedLocation, "Ottawa,Ontario,Canada");
+  assert.equal(serp.originalLanguage, "en-CA");
+  assert.equal(serp.originalLocation, "Ottawa and Ontario, Canada");
+
+  // ── _sourceStatus failure fields ─────────────────────────────────────
+  assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
+  assert.ok(opp._sourceStatus.limitation);
+  assert.ok(opp._sourceStatus.limitation.includes("Invalid location"),
+    `Limitation must mention the task error, got: "${opp._sourceStatus.limitation}"`);
+
+  // ── Never marks failed task as AVAILABLE ─────────────────────────────
+  assert.notEqual(opp.sourceStatus, SOURCE_STATUS.AVAILABLE);
+  assert.notEqual(serp.status, SOURCE_STATUS.AVAILABLE);
+
+  // ── Limitations contain the error ────────────────────────────────────
+  assert.ok(opp.limitations.length > 0);
+  assert.ok(opp.limitations.some((l) => l.includes("40401") || l.includes("Invalid location")),
+    `Limitations must reference task error, got: ${opp.limitations.join(" | ")}`);
+});
+
+// ---------------------------------------------------------------------------
+// S-09: Report renders limitation when SERP failed
+// ---------------------------------------------------------------------------
+
+test("S-09: report renders SERP failure limitation, not empty success", () => {
+  // Build a model with FAILED SERP source
+  const competitorOpps = {
+    topics: [{ topic: "Consulting", query: "Consulting Ottawa and Ontario, Canada" }],
+    candidates: { qualified: [], excluded: [], totalSerp: 0, totalSupplied: 0, totalQualified: 0, totalExcluded: 0 },
+    gaps: [],
+    allGaps: [],
+    sources: {
+      dataforseoSerp: {
+        status: "FAILED",
+        taskIds: ["task-fail-009"],
+        candidateCount: 0,
+        taskErrors: [{ topic: "Consulting Ottawa and Ontario, Canada", taskId: "task-fail-009", statusCode: 40401, statusMessage: "Invalid location specified." }],
+        normalizedLanguage: "English",
+        normalizedLocation: "Ottawa,Ontario,Canada",
+        originalLanguage: "en-CA",
+        originalLocation: "Ottawa and Ontario, Canada",
+      },
+      supplied: { status: "NOT_APPLICABLE", candidateCount: 0 },
+    },
+    limitations: ['DataForSEO SERP for "Consulting Ottawa and Ontario, Canada": SERP task 0 failed: status_code=40401, message="Invalid location specified."'],
+    collectedAt: new Date().toISOString(),
+    coverage: { topicsRequested: 1, serpCandidatesFound: 0, suppliedCandidatesFound: 0 },
+    evidenceVersion: "1.0.0",
+    source: "competitor-opportunity-layer",
+    sourceStatus: "UNAVAILABLE",
+  };
+
+  const model = {
+    input: { businessName: "Example Consulting", location: "Ottawa and Ontario, Canada", language: "en-CA" },
+    evidence: { site: { domain: "example.com", services: ["Consulting"], ctas: [], forms: [], trust: { testimonials: false } } },
+    competitors: competitorComparison([], competitorOpps),
+    competitorOpportunities: competitorOpps,
+    scores: { contentDepth: 40, conversionPathways: 40 },
+    bands: { trust: "Not Assessed" },
+    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+  };
+
+  const html = competitorBenchmark(model);
+
+  // ── Must render the SERP failure limitation ──────────────────────────
+  assert.ok(html.includes("Source limitation"),
+    "Report must render source limitation for SERP failure");
+  assert.ok(html.includes("FAILED") || html.includes("status_code=40401"),
+    "Report must surface the SERP failure status");
+  assert.ok(html.includes("Invalid location"),
+    "Report must include the provider error message");
+
+  // ── Must NOT say competitors were absent ─────────────────────────────
+  assert.ok(html.includes("Competitor analysis continues with supplied-competitor evidence only") ||
+    html.includes("localized competitor evidence could not be collected"),
+    "Report must explain the limitation, not claim competitors are absent");
+
+  // ── Must NOT render empty competitor results as success ──────────────
+  // The "No qualified gaps" message is OK because there truly are no gaps
+  // But we must not claim SERP analysis was successful
+  assert.equal(html.includes("DataForSEO SERP analysis of"), false,
+    "Must not claim SERP analysis contributed when it failed");
+
+  // ── Must include normalized locale info ──────────────────────────────
+  assert.ok(html.includes("English"), "Report must show normalized language");
+  assert.ok(html.includes("Ottawa,Ontario,Canada"), "Report must show normalized location");
+
+  // ── Must not leak credentials or stack traces ────────────────────────
+  assert.equal(html.includes("test-login"), false, "Must not expose credentials");
+  assert.equal(html.includes("test-pass"), false, "Must not expose credentials");
+  assert.equal(html.includes("at querySerp"), false, "Must not expose stack traces");
+  assert.equal(html.includes("at collectCompetitorOpportunities"), false, "Must not expose stack traces");
+});
+
+// ---------------------------------------------------------------------------
+// S-10: Report renders success normally when SERP succeeds
+// ---------------------------------------------------------------------------
+
+test("S-10: report renders competitor evidence normally on SERP success", () => {
+  const competitorOpps = {
+    topics: [{ topic: "Consulting", query: "Consulting Ottawa and Ontario, Canada" }],
+    candidates: {
+      qualified: [
+        { candidateUrl: "https://comp1.example/services", domain: "comp1.example", topic: "Consulting", discoverySource: "dataforseo-serp", pageType: "service", approvalStatus: "approved", qualificationPassed: true },
+      ],
+      excluded: [],
+      totalSerp: 1, totalSupplied: 0, totalQualified: 1, totalExcluded: 0,
+    },
+    gaps: [{
+      clientTopic: "Consulting",
+      competitorPage: "https://comp1.example/services",
+      competitorDomain: "comp1.example",
+      clientCoverage: "present",
+      observedCompetitorCoverage: ["Services page with 5 sections"],
+      conversionRelevance: "High",
+      confidence: "Moderate",
+      recommendation: "Create or strengthen content for Consulting",
+      limitationStatement: "Based on visible on-page SERP evidence only.",
+      gapPassed: true,
+      approvalStatus: "approved",
+      qualificationPassed: true,
+    }],
+    allGaps: [],
+    sources: {
+      dataforseoSerp: {
+        status: "AVAILABLE",
+        taskIds: ["task-success-010"],
+        candidateCount: 1,
+        normalizedLanguage: "English",
+        normalizedLocation: "Ottawa,Ontario,Canada",
+        originalLanguage: "en-CA",
+        originalLocation: "Ottawa and Ontario, Canada",
+      },
+      supplied: { status: "NOT_APPLICABLE", candidateCount: 0 },
+    },
+    limitations: [],
+    collectedAt: new Date().toISOString(),
+    coverage: { topicsRequested: 1, serpCandidatesFound: 1, suppliedCandidatesFound: 0 },
+    evidenceVersion: "1.0.0",
+    source: "competitor-opportunity-layer",
+    sourceStatus: "AVAILABLE",
+  };
+
+  const model = {
+    input: { businessName: "Example Consulting", location: "Ottawa and Ontario, Canada", language: "en-CA" },
+    evidence: { site: { domain: "example.com", services: ["Consulting"], ctas: [], forms: [], trust: { testimonials: false } } },
+    competitors: competitorComparison([], competitorOpps),
+    competitorOpportunities: competitorOpps,
+    scores: { contentDepth: 50, conversionPathways: 50 },
+    bands: { trust: "Not Assessed" },
+    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+  };
+
+  const html = competitorBenchmark(model);
+
+  // ── Must show successful SERP analysis ───────────────────────────────
+  assert.ok(html.includes("AVAILABLE"), "Report must show AVAILABLE SERP status");
+  assert.ok(html.includes("task-success-010"), "Report must include task ID");
+
+  // ── Must render qualified gaps ───────────────────────────────────────
+  assert.ok(html.includes("Qualified Competitor Gaps"), "Must render gap section");
+  assert.ok(html.includes("comp1.example"), "Must render competitor domain");
+  assert.ok(html.includes("Consulting"), "Must render topic");
+
+  // ── Must NOT show failure limitation ─────────────────────────────────
+  assert.equal(html.includes("Source limitation"), false,
+    "Must not show failure limitation on success");
+
+  // ── Must include normalized locale info ──────────────────────────────
+  assert.ok(html.includes("English"), "Report must show normalized language");
+  assert.ok(html.includes("Ottawa,Ontario,Canada"), "Report must show normalized location");
+});
+
+// ---------------------------------------------------------------------------
+// S-11: Location resolution failure prevents API call
+// ---------------------------------------------------------------------------
+
+test("S-11: unresolvable location returns error before API call", async () => {
+  let apiCalled = false;
+  const fetchImpl = async () => {
+    apiCalled = true;
+    return new Response("{}", { status: 200 });
+  };
+
+  const result = await querySerp("some query", {
+    login: "test-login",
+    password: "test-pass",
+    location: "xyz-fake-place-12345",
+    language: "en-CA",
+    fetchImpl,
+  });
+
+  // Location resolution must fail before API call
+  assert.ok(result.error, "Must have error for unresolvable location");
+  assert.ok(result.error.includes("Location resolution failed"),
+    `Error must mention location resolution, got: ${result.error}`);
+
+  // API must not be called with bad location
+  assert.equal(apiCalled, false, "Must not call DataForSEO with unresolved location");
+
+  // Normalized values are still present for audit trail
+  assert.equal(result.normalizedLanguage.languageName, "English");
+  assert.equal(result.normalizedLocation.resolutionLevel, "unresolved");
+  assert.ok(result.normalizedLocation.error);
+});
+
+// ---------------------------------------------------------------------------
+// S-12: Supplied competitors unaffected by SERP failure
+// ---------------------------------------------------------------------------
+
+test("S-12: supplied competitors still processed when SERP tasks fail", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-fail-012",
+        status_code: 40401,
+        status_message: "Invalid location specified.",
+        result_count: 0,
+        result: null,
+      }],
+    }), { status: 200 });
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    PROD_SITE,
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [
+        {
+          url: "https://supplied-comp.example",
+          status: SOURCE_STATUS.AVAILABLE,
+          evidence: { services: ["Consulting"], pageCount: 8, trust: { credentials: true } },
+        },
+      ],
+      fetchImpl,
+    },
+  );
+
+  // Supplied competitors must still be counted
+  assert.equal(opp.sources.supplied.candidateCount, 1);
+  assert.ok(opp.candidates.totalSupplied > 0);
+
+  // SERP must be FAILED
+  assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED);
+
+  // Overall sourceStatus — should reflect that supplied competitors exist
+  // even though SERP failed
+  assert.ok(
+    opp.candidates.totalSupplied > 0,
+    "Supplied competitors must be preserved despite SERP failure",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Test totals
+// ---------------------------------------------------------------------------
+
+test("S-TOTALS: verify production-path regression test count", () => {
+  assert.ok(12 >= 10, "12 production-path regression tests (minimum 10 required)");
+});

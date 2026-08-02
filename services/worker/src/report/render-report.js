@@ -12,7 +12,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 function renderHeader(model, date) {
   const site = model.evidence.site;
   const business = model.input.businessName || site.pages[0]?.title || site.domain;
-  return `<header><div class="container"><div><span class="badge badge-warn" style="margin-bottom:10px">OFFLINE STRATEGIC REPORT DASHBOARD</span><h1>Vantage Phase 1 Audit — Conversion Readiness</h1><p class="subtitle">${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p></div><div><span class="badge badge-warn">Conversion Readiness: ${e(model.scores.conversionReadiness)}/100</span><p class="subtitle" style="margin-top:4px">${e(model.input.location || "Location not supplied")} &middot; ${e(model.input.language || site.pages[0]?.language || "en-CA")}</p></div></div></header>`;
+  return `<header><div class="container"><div><span class="badge badge-warn" style="margin-bottom:10px">OFFLINE STRATEGIC REPORT DASHBOARD</span><h1>Prysm Phase 1 Audit — Conversion Readiness</h1><p class="subtitle">${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p></div><div><span class="badge badge-warn">Conversion Readiness: ${e(model.scores.conversionReadiness)}/100</span><p class="subtitle" style="margin-top:4px">${e(model.input.location || "Location not supplied")} &middot; ${e(model.input.language || site.pages[0]?.language || "en-CA")}</p></div></div></header>`;
 }
 
 function renderFooter(model, date) {
@@ -28,7 +28,7 @@ function renderFooter(model, date) {
       <p style="font-size:.85rem;opacity:.85;margin:4px 0 0">${e(gate.bookingCta.text)}</p>
     </div>`;
   }
-  return `<footer>${ctaHtml}<p>Vantage Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence</p></footer>`;
+  return `<footer>${ctaHtml}<p>Prysm Phase 1 Audit — Conversion Readiness</p><p>${e(business)} &middot; ${e(site.domain)} &middot; ${e(date)}</p><p style="margin-top:8px">Report by Omnipressence</p></footer>`;
 }
 
 /**
@@ -61,7 +61,7 @@ export async function renderReport(model, options = {}) {
   const date = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "long", day: "numeric", timeZone: "America/Toronto" }).format(new Date(model.generatedAt));
   const renderOpts = { artifactRoot: options.artifactRoot || resolve("artifacts") };
   const sections = [scorecard(model), priorityFixes(model), conversionPaths(model), readinessMap(model), contentIdeas(model), competitorBenchmark(model), eeat(model), cms(model), technical(model), headings(model), schema(model), performance(model, renderOpts), appendix(model, renderOpts)].join("\n");
-  const title = `Vantage Phase 1 Audit — Conversion Readiness | ${model.input.businessName || model.evidence.site.domain}`;
+  const title = `Prysm Phase 1 Audit — Conversion Readiness | ${model.input.businessName || model.evidence.site.domain}`;
   const isApproved = options.isApproved === true;
 
   const html = template
