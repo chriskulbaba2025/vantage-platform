@@ -169,11 +169,14 @@ function validateApiResponse(data) {
     return { valid: false, error: "SERP API returned non-object response" };
   }
 
-  // Top-level status
-  if (data.status_code !== undefined && data.status_code !== API_SUCCESS_CODE) {
+  // Top-level status — must be exactly 20000. Missing, null, or any
+  // other value is a structured API failure.
+  if (data.status_code !== API_SUCCESS_CODE) {
+    const code = data.status_code;
+    const msg = data.status_message || "missing top-level status code";
     return {
       valid: false,
-      error: `SERP API top-level status ${data.status_code}: ${data.status_message || "unknown error"}`,
+      error: `SERP API top-level status ${code != null ? code : "missing"}: ${msg}`,
     };
   }
 
@@ -182,11 +185,25 @@ function validateApiResponse(data) {
     return { valid: false, error: "SERP API returned no tasks" };
   }
 
-  // Task-level status — every task must be successful
+  // Task-level status — every task must explicitly report 20000.
+  // Missing, null, or any non-success status_code is a structured failure.
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
     const taskCode = task.status_code;
-    if (taskCode !== undefined && !TASK_SUCCESS_CODES.has(taskCode)) {
+    if (taskCode == null) {
+      const fallbackMsg = "missing task status code";
+      return {
+        valid: false,
+        error: `SERP task ${i} failed: ${fallbackMsg}`,
+        taskError: {
+          taskId: task.id || null,
+          statusCode: null,
+          statusMessage: fallbackMsg,
+          endpoint: SERP_ENDPOINT,
+        },
+      };
+    }
+    if (!TASK_SUCCESS_CODES.has(taskCode)) {
       const taskMsg = task.status_message || "unknown task error";
       return {
         valid: false,

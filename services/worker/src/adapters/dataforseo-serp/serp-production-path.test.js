@@ -693,9 +693,200 @@ test("S-12: supplied competitors still processed when SERP tasks fail", async ()
 });
 
 // ---------------------------------------------------------------------------
+// S-13: Missing top-level status_code → structured API failure
+// ---------------------------------------------------------------------------
+
+test("S-13: missing top-level status_code produces error, not empty success", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-missing-top-013",
+        status_code: 20000,
+        status_message: "Ok.",
+        result_count: 1,
+        result: [{ items_count: 1, items: [{ type: "organic", rank_absolute: 1, url: "https://example.com", domain: "example.com", title: "Test" }] }],
+      }],
+    }), { status: 200 });
+    // NOTE: top-level status_code is absent from the response body
+  };
+
+  const result = await querySerp("test query", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Ottawa and Ontario, Canada",
+    language: "en-CA",
+    fetchImpl,
+  });
+
+  // Must return an error
+  assert.ok(result.error, "Must return error for missing top-level status_code");
+  assert.ok(result.error.includes("missing"), "Error must indicate missing status");
+
+  // Must not emit items as successful
+  assert.equal(result.items.length, 0, "Must not return items on validation failure");
+
+  // Normalized values still preserved for audit trail
+  assert.equal(result.normalizedLanguage.languageName, "English");
+  assert.equal(result.normalizedLocation.locationName, "Ottawa,Ontario,Canada");
+});
+
+// ---------------------------------------------------------------------------
+// S-14: Null top-level status_code → structured API failure
+// ---------------------------------------------------------------------------
+
+test("S-14: null top-level status_code produces error, not empty success", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: null,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-null-top-014",
+        status_code: 20000,
+        status_message: "Ok.",
+        result_count: 1,
+        result: [{ items_count: 1, items: [{ type: "organic", rank_absolute: 1, url: "https://example.com", domain: "example.com", title: "Test" }] }],
+      }],
+    }), { status: 200 });
+  };
+
+  const result = await querySerp("test query", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Canada",
+    language: "en",
+    fetchImpl,
+  });
+
+  assert.ok(result.error, "Must return error for null top-level status_code");
+  assert.ok(result.error.includes("missing"), "Error must indicate null/missing status");
+  assert.equal(result.items.length, 0, "Must not return items on null status_code");
+});
+
+// ---------------------------------------------------------------------------
+// S-15: Missing task-level status_code → FAILED source, report limitation
+// ---------------------------------------------------------------------------
+
+test("S-15: missing task-level status_code becomes FAILED source and renders limitation", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-missing-code-015",
+        status_message: "Ok.",
+        result_count: 1,
+        result: [{ items_count: 1, items: [{ type: "organic", rank_absolute: 1, url: "https://example.com", domain: "example.com", title: "Test" }] }],
+        // NOTE: task-level status_code is absent
+      }],
+    }), { status: 200 });
+  };
+
+  // ── querySerp must return an error ───────────────────────────────────
+  const result = await querySerp("test query", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Ottawa and Ontario, Canada",
+    language: "en-CA",
+    fetchImpl,
+  });
+
+  assert.ok(result.error, "Must return error for missing task status_code");
+  assert.ok(result.error.includes("missing task status code"), "Error must mention missing task status code");
+  assert.ok(result.taskError, "Must preserve taskError details");
+  assert.equal(result.taskError.statusCode, null);
+  assert.equal(result.taskError.statusMessage, "missing task status code");
+  assert.equal(result.items.length, 0, "Must not return items");
+
+  // ── Competitor layer must report FAILED ──────────────────────────────
+  const opp = await collectCompetitorOpportunities(
+    { sourceStatus: "AVAILABLE", services: ["Consulting"], topicKeywords: [], pages: [{ title: "Test" }], pageCount: 1, domain: "test.com", ctas: [], forms: [], trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false } },
+    { targetUrl: "https://test.com", businessName: "Test", location: "Ottawa and Ontario, Canada", language: "en-CA", competitors: [] },
+    { dataforseoLogin: "test-login", dataforseoPassword: "test-pass", suppliedCompetitors: [], fetchImpl },
+  );
+
+  assert.equal(opp.sources.dataforseoSerp.status, "FAILED",
+    "Missing task status_code must produce FAILED, not AVAILABLE or UNAVAILABLE");
+  assert.notEqual(opp.sources.dataforseoSerp.status, "AVAILABLE");
+  assert.notEqual(opp.sources.dataforseoSerp.status, "UNAVAILABLE");
+
+  // ── Report must render source limitation ─────────────────────────────
+  const { competitorBenchmark } = await import("../../report/sections-conversion.js");
+  const { competitorComparison } = await import("../../scoring/report-model.js");
+  const model = {
+    input: { businessName: "Test", location: "Ottawa and Ontario, Canada", language: "en-CA" },
+    evidence: { site: { domain: "test.com", services: ["Consulting"], ctas: [], forms: [], trust: { testimonials: false } } },
+    competitors: competitorComparison([], opp),
+    competitorOpportunities: opp,
+    scores: { contentDepth: 40, conversionPathways: 40 },
+    bands: { trust: "Not Assessed" },
+    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+  };
+  const html = competitorBenchmark(model);
+  assert.ok(html.includes("Source limitation"), "Report must render source limitation");
+  assert.ok(html.includes("FAILED"), "Report must show FAILED status");
+});
+
+// ---------------------------------------------------------------------------
+// S-16: Null task-level status_code → FAILED source, no empty success
+// ---------------------------------------------------------------------------
+
+test("S-16: null task-level status_code becomes FAILED source, not empty success", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-null-code-016",
+        status_code: null,
+        status_message: "Ok.",
+        result_count: 1,
+        result: [{ items_count: 1, items: [{ type: "organic", rank_absolute: 1, url: "https://example.com", domain: "example.com", title: "Test" }] }],
+      }],
+    }), { status: 200 });
+  };
+
+  // ── querySerp must return an error ───────────────────────────────────
+  const result = await querySerp("test query", {
+    login: "test-login",
+    password: "test-pass",
+    location: "Canada",
+    language: "en",
+    fetchImpl,
+  });
+
+  assert.ok(result.error, "Must return error for null task status_code");
+  assert.ok(result.error.includes("missing task status code"), "Error must mention missing task status code");
+  assert.ok(result.taskError, "Must preserve taskError");
+  assert.equal(result.taskError.statusCode, null);
+  assert.equal(result.items.length, 0);
+
+  // ── Competitor layer must report FAILED ──────────────────────────────
+  const opp = await collectCompetitorOpportunities(
+    { sourceStatus: "AVAILABLE", services: ["Consulting"], topicKeywords: [], pages: [{ title: "Test" }], pageCount: 1, domain: "test.com", ctas: [], forms: [], trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false } },
+    { targetUrl: "https://test.com", businessName: "Test", location: "Canada", language: "en", competitors: [] },
+    { dataforseoLogin: "test-login", dataforseoPassword: "test-pass", suppliedCompetitors: [], fetchImpl },
+  );
+
+  assert.equal(opp.sources.dataforseoSerp.status, "FAILED",
+    "Null task status_code must produce FAILED, got " + opp.sources.dataforseoSerp.status);
+  assert.equal(opp.sources.dataforseoSerp.candidateCount, 0, "Must have zero candidates");
+  assert.ok(opp.sources.dataforseoSerp.taskErrors, "Must preserve task errors");
+  assert.equal(opp.sources.dataforseoSerp.taskErrors[0].statusCode, null);
+
+  // Preserve locale context
+  assert.equal(opp.sources.dataforseoSerp.originalLanguage, "en");
+  assert.equal(opp.sources.dataforseoSerp.originalLocation, "Canada");
+});
+
+// ---------------------------------------------------------------------------
 // Test totals
 // ---------------------------------------------------------------------------
 
 test("S-TOTALS: verify production-path regression test count", () => {
-  assert.ok(12 >= 10, "12 production-path regression tests (minimum 10 required)");
+  assert.ok(16 >= 10, "16 production-path regression tests (minimum 10 required)");
 });
