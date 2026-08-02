@@ -884,9 +884,264 @@ test("S-16: null task-level status_code becomes FAILED source, not empty success
 });
 
 // ---------------------------------------------------------------------------
+// S-17: Two successful tasks + one failed task → PARTIAL
+// ---------------------------------------------------------------------------
+
+test("S-17: two successful tasks plus one failed task produces PARTIAL, not FAILED", async () => {
+  let callCount = 0;
+  const fetchImpl = async () => {
+    callCount++;
+    if (callCount <= 2) {
+      // First two calls succeed with organic results
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        status_message: "Ok.",
+        tasks_count: 1,
+        tasks: [{
+          id: `task-success-017-${callCount}`,
+          status_code: 20000,
+          status_message: "Ok.",
+          result_count: 1,
+          result: [{
+            keyword: `topic ${callCount}`,
+            se_type: "google",
+            items_count: 2,
+            items: [
+              { type: "organic", rank_absolute: 1, url: `https://comp${callCount}-1.example`, domain: `comp${callCount}-1.example`, title: `Competitor ${callCount}-1` },
+              { type: "organic", rank_absolute: 2, url: `https://comp${callCount}-2.example`, domain: `comp${callCount}-2.example`, title: `Competitor ${callCount}-2` },
+            ],
+          }],
+        }],
+      }), { status: 200 });
+    }
+    // Third call fails with internal server error
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-fail-017-3",
+        status_code: 40101,
+        status_message: "Internal SE Server Error.",
+        result_count: 0,
+        result: null,
+      }],
+    }), { status: 200 });
+  };
+
+  // Use a site with 3 topics to exercise the partial scenario
+  const siteWith3Topics = {
+    sourceStatus: SOURCE_STATUS.AVAILABLE,
+    services: ["Consulting", "Coaching", "Training"],
+    topicKeywords: [],
+    pages: [{ title: "Example Consulting" }],
+    pageCount: 5,
+    domain: "example.com",
+    ctas: [],
+    forms: [],
+    trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false },
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    siteWith3Topics,
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // ── SERP source must be PARTIAL, not FAILED ───────────────────────────
+  assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.PARTIAL,
+    `Two successful + one failed task must produce PARTIAL, got ${opp.sources.dataforseoSerp.status}`);
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
+    "Must not mark partial success as FAILED");
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.AVAILABLE,
+    "Must not mark partial success as AVAILABLE");
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.UNAVAILABLE,
+    "Must not mark partial success as UNAVAILABLE");
+
+  // ── Candidates from successful tasks are preserved ─────────────────────
+  assert.ok(opp.sources.dataforseoSerp.candidateCount >= 4,
+    `Expected at least 4 SERP candidates (2 topics × 2 results each), got ${opp.sources.dataforseoSerp.candidateCount}`);
+
+  // ── Task errors are preserved ──────────────────────────────────────────
+  assert.ok(opp.sources.dataforseoSerp.taskErrors, "Must preserve task errors");
+  assert.equal(opp.sources.dataforseoSerp.taskErrors.length, 1,
+    `Expected 1 task error, got ${opp.sources.dataforseoSerp.taskErrors.length}`);
+  assert.equal(opp.sources.dataforseoSerp.taskErrors[0].statusCode, 40101);
+  assert.ok(opp.sources.dataforseoSerp.taskErrors[0].statusMessage.includes("Internal SE Server Error"),
+    "Must preserve original error message");
+
+  // ── Task IDs from all tasks are preserved ──────────────────────────────
+  assert.equal(opp.sources.dataforseoSerp.taskIds.length, 3,
+    `Expected 3 task IDs (2 success + 1 failed), got ${opp.sources.dataforseoSerp.taskIds.length}`);
+
+  // ── Normalized locale/location preserved ───────────────────────────────
+  assert.equal(opp.sources.dataforseoSerp.normalizedLanguage, "English");
+  assert.equal(opp.sources.dataforseoSerp.normalizedLocation, "Ottawa,Ontario,Canada");
+  assert.equal(opp.sources.dataforseoSerp.originalLanguage, "en-CA");
+  assert.equal(opp.sources.dataforseoSerp.originalLocation, "Ottawa and Ontario, Canada");
+
+  // ── _sourceStatus must reflect partial with error category ─────────────
+  assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
+  assert.ok(opp._sourceStatus.limitation, "Must have limitation text for PARTIAL status");
+
+  // ── Limitations mention the failed topic without stack traces ──────────
+  assert.ok(opp.limitations.length > 0, "Must have limitations");
+  const serpLimitation = opp.limitations.find((l) => l.includes("40101"));
+  assert.ok(serpLimitation, "Must have a limitation referencing the 40101 error");
+  assert.ok(serpLimitation.includes("40101") || serpLimitation.includes("Internal SE Server Error"),
+    "Limitation must identify the failed task");
+  assert.equal(serpLimitation.includes("at querySerp"), false, "Must not expose stack traces");
+  assert.equal(serpLimitation.includes("at collectCompetitorOpportunities"), false, "Must not expose stack traces");
+
+  // ── Supplied competitor source is unaffected ───────────────────────────
+  assert.equal(opp.sources.supplied.status, SOURCE_STATUS.NOT_APPLICABLE);
+});
+
+// ---------------------------------------------------------------------------
+// S-18: All tasks failed → FAILED
+// ---------------------------------------------------------------------------
+
+test("S-18: all SERP tasks failed produces FAILED, not PARTIAL", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-fail-018",
+        status_code: 40101,
+        status_message: "Internal SE Server Error.",
+        result_count: 0,
+        result: null,
+      }],
+    }), { status: 200 });
+  };
+
+  // Use a site with 2 topics — both will fail
+  const siteWith2Topics = {
+    sourceStatus: SOURCE_STATUS.AVAILABLE,
+    services: ["Consulting", "Coaching"],
+    topicKeywords: [],
+    pages: [{ title: "Example Consulting" }],
+    pageCount: 5,
+    domain: "example.com",
+    ctas: [],
+    forms: [],
+    trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false },
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    siteWith2Topics,
+    PROD_INPUT,
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // ── SERP source must be FAILED when all tasks fail ─────────────────────
+  assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
+    `All tasks failed must produce FAILED, got ${opp.sources.dataforseoSerp.status}`);
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.PARTIAL,
+    "Must not produce PARTIAL when no tasks succeed");
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.AVAILABLE,
+    "Must not produce AVAILABLE when all tasks fail");
+
+  // ── Zero candidates ────────────────────────────────────────────────────
+  assert.equal(opp.sources.dataforseoSerp.candidateCount, 0,
+    "Must have zero candidates when all tasks fail");
+
+  // ── Task errors for all topics ─────────────────────────────────────────
+  assert.ok(opp.sources.dataforseoSerp.taskErrors, "Must preserve task errors");
+  assert.equal(opp.sources.dataforseoSerp.taskErrors.length, 2,
+    `Expected 2 task errors, got ${opp.sources.dataforseoSerp.taskErrors.length}`);
+
+  // ── _sourceStatus error category ───────────────────────────────────────
+  assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
+});
+
+// ---------------------------------------------------------------------------
+// S-19: All tasks successful with zero results → UNAVAILABLE
+// ---------------------------------------------------------------------------
+
+test("S-19: all tasks successful with zero organic results produces UNAVAILABLE", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      status_message: "Ok.",
+      tasks_count: 1,
+      tasks: [{
+        id: "task-empty-019",
+        status_code: 20000,
+        status_message: "Ok.",
+        result_count: 1,
+        result: [{
+          keyword: "rare niche query",
+          se_type: "google",
+          items_count: 0,
+          items: [],
+        }],
+      }],
+    }), { status: 200 });
+  };
+
+  // Use a site with a single niche topic
+  const nicheSite = {
+    sourceStatus: SOURCE_STATUS.AVAILABLE,
+    services: ["Rare Niche Service"],
+    topicKeywords: [],
+    pages: [{ title: "Niche Site" }],
+    pageCount: 1,
+    domain: "niche.example",
+    ctas: [],
+    forms: [],
+    trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false },
+  };
+
+  const opp = await collectCompetitorOpportunities(
+    nicheSite,
+    { ...PROD_INPUT, businessName: "Niche Co" },
+    {
+      dataforseoLogin: "test-login",
+      dataforseoPassword: "test-pass",
+      suppliedCompetitors: [],
+      fetchImpl,
+    },
+  );
+
+  // ── SERP source must be UNAVAILABLE for zero organic results ───────────
+  assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.UNAVAILABLE,
+    `Zero organic results with success must be UNAVAILABLE, got ${opp.sources.dataforseoSerp.status}`);
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
+    "Must not produce FAILED for zero results with success");
+  assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.PARTIAL,
+    "Must not produce PARTIAL for zero results with no task errors");
+
+  // ── Zero candidates, zero task errors ───────────────────────────────────
+  assert.equal(opp.sources.dataforseoSerp.candidateCount, 0);
+  assert.equal(opp.sources.dataforseoSerp.taskErrors, undefined,
+    "Must not have task errors for successful tasks");
+
+  // ── Task IDs preserved ─────────────────────────────────────────────────
+  assert.ok(opp.sources.dataforseoSerp.taskIds.length > 0,
+    "Must preserve task IDs even when zero results");
+
+  // ── _sourceStatus has no error category ────────────────────────────────
+  assert.equal(opp._sourceStatus.errorCategory, null,
+    "Must not have error category for zero results success");
+});
+
+// ---------------------------------------------------------------------------
 // Test totals
 // ---------------------------------------------------------------------------
 
 test("S-TOTALS: verify production-path regression test count", () => {
-  assert.ok(16 >= 10, "16 production-path regression tests (minimum 10 required)");
+  assert.ok(19 >= 10, "19 production-path regression tests (minimum 10 required)");
 });
