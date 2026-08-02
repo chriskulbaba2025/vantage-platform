@@ -3,7 +3,7 @@
  *
  * Single source of truth for all evidence status values, the source-status
  * record, and the provider-independent evidence envelope required by
- * Vantage Production PRD v3.0.
+ * Prysm Production PRD v3.0.
  *
  * Every evidence provider MUST use these canonical values and attach a
  * source-status record to its return shape.  Consumers MUST compare against

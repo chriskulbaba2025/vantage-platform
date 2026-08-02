@@ -37,7 +37,7 @@ ${scoreCard(scores.conversionPathways, "Conversion Pathways")}
 </div>`;
 
   return section("executive-conversion-scorecard", "01", "Executive Conversion Scorecard", `
-<p>Vantage Phase 1 Audit of <strong>${e(site.domain)}</strong>, a ${e(site.pageCount)}-page crawlable website detected as ${e(site.platform)}.</p>
+<p>Prysm Phase 1 Audit of <strong>${e(site.domain)}</strong>, a ${e(site.pageCount)}-page crawlable website detected as ${e(site.platform)}.</p>
 ${statusBanner}${legacyReadiness}
 <div class="confidence-note"><h3>Evidence Confidence — ${e(bands.evidenceConfidence)}</h3>
 <p><strong>Website crawl:</strong> ${e(site.pageCount)} page(s) captured. Source status: ${e(site.sourceStatus)}. ${site._contentEvidenceAvailable !== false ? "Page-level headings, links, forms, trust signals, schema, images, and headers were extracted." : "Page body content, CTAs, forms, trust signals, and structured data are not available from this provider."}</p>
@@ -123,6 +123,24 @@ function competitorBenchmark(model) {
 
   const serpSource = sources.dataforseoSerp?.status || "NOT_CONNECTED";
   const suppliedSource = sources.supplied?.status || "NOT_APPLICABLE";
+  const serpFailed = serpSource === "FAILED";
+  const serpUnavailable = serpSource === "UNAVAILABLE";
+
+  // ── SERP source limitation notice ────────────────────────────────────
+  let serpLimitationHtml = "";
+  if (serpFailed) {
+    const taskErrors = sources.dataforseoSerp?.taskErrors || [];
+    const taskDetail = taskErrors.length > 0
+      ? taskErrors.map((te) => `"${e(te.topic)}" (code ${e(String(te.statusCode))})`).join("; ")
+      : "task error details unavailable";
+    serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP could not collect localized competitor evidence. ` +
+      `The search provider returned a task error: ${taskDetail}. ` +
+      `Competitor analysis continues with supplied-competitor evidence only. ` +
+      `Original market: ${e(sources.dataforseoSerp?.originalLocation || "not specified")}. ` +
+      `Normalized location: ${e(sources.dataforseoSerp?.normalizedLocation || "unresolved")}.</div>`;
+  } else if (serpUnavailable) {
+    serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP query completed but returned no organic results for the targeted topics. This may indicate a very narrow niche or an unsupported location. Competitor analysis continues with supplied-competitor evidence only.</div>`;
+  }
 
   const oppSection = gaps.length > 0
     ? `<h3>Qualified Competitor Gaps</h3>
@@ -145,10 +163,11 @@ ${gaps.some((g) => g.recommendation) ? `<h3>Recommendations</h3><ul>${gaps.filte
   const sourcesSection = `<h3>Competitor Sources</h3>
 <ul>
 <li><strong>User-supplied:</strong> ${e(suppliedSource)} — ${e(sources.supplied?.candidateCount || 0)} candidate(s)</li>
-<li><strong>DataForSEO SERP:</strong> ${e(serpSource)} — ${e(sources.dataforseoSerp?.candidateCount || 0)} candidate(s)${sources.dataforseoSerp?.taskIds?.length ? ` (task: ${e(sources.dataforseoSerp.taskIds.join(", "))})` : ""}</li>
+<li><strong>DataForSEO SERP:</strong> ${e(serpSource)} — ${e(sources.dataforseoSerp?.candidateCount || 0)} candidate(s)${sources.dataforseoSerp?.taskIds?.length ? ` (task: ${e(sources.dataforseoSerp.taskIds.join(", "))})` : ""}${sources.dataforseoSerp?.normalizedLanguage ? `, language: ${e(sources.dataforseoSerp.normalizedLanguage)}` : ""}${sources.dataforseoSerp?.normalizedLocation ? `, location: ${e(sources.dataforseoSerp.normalizedLocation)}` : ""}</li>
 <li><strong>Qualified candidates:</strong> ${e(qualifiedCandidates.length)}</li>
 <li><strong>Excluded candidates:</strong> ${e(excludedCandidates.length)}</li>
 </ul>`;
+  // ── End SERP source section ──────────────────────────────────────────
 
   const excludedSection = excludedCandidates.length > 0
     ? `<h3>Excluded Candidates</h3>
@@ -164,7 +183,7 @@ ${table(["URL", "Domain", "Reason"], excludedCandidates.slice(0, 10).map((c) => 
     "supplied-competitor-benchmark",
     "06",
     "Supplied Competitor Benchmark — Conversion Positioning",
-    `${sourcesSection}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}${oppSection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}`,
+    `${sourcesSection}${serpLimitationHtml}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}${oppSection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}`,
   );
 }
 

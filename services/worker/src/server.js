@@ -80,7 +80,7 @@ const server = createServer(async (req, res) => {
 
     // ── Health ────────────────────────────────────────────────────────
     if (req.method === "GET" && url.pathname === "/health") {
-      return send(res, 200, { status: "ok", service: "vantage-worker", version: "0.2.0" });
+      return send(res, 200, { status: "ok", service: "prysm-worker", version: "0.2.0" });
     }
 
     // ── CORS preflight ─────────────────────────────────────────────────
@@ -441,5 +441,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(config.port, "0.0.0.0", () => {
-  console.log(`Vantage worker listening on :${config.port}`);
+  console.log(`Prysm worker listening on :${config.port}`);
 });

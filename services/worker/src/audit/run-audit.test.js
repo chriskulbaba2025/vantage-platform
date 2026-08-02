@@ -217,7 +217,7 @@ test("runAudit completes without API secrets and writes the full report artifact
   assert.equal(result.status, "draft");
   assert.equal(result.lifecycleStatus, "draft");
   const html = await readFile(result.storage.indexPath, "utf8");
-  assert.match(html, /Vantage Phase 1 Audit/);
+  assert.match(html, /Prysm Phase 1 Audit/);
   assert.equal(result.manifest.sources.website, SOURCE_STATUS.AVAILABLE);
   assert.equal(result.manifest.sources.backlinks, SOURCE_STATUS.NOT_CONNECTED);
   assert.equal(result.manifest.sources.ga4, SOURCE_STATUS.NOT_CONNECTED);

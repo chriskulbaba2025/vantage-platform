@@ -1,0 +1,371 @@
+{
+  "name": "Pryzm GPT Client Report Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "pryzm-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "37bff689-4f92-4b4c-8f37-0966d72a1c3d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -320,
+        512
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "95b8642f-7eeb-4ba9-b5fc-59b23f8c4ef6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate webhook payload — accepts either audit JSON directly\n// or a reference to an audit file path.\n// Hardened: path traversal, absolute paths, and symlink escapes blocked.\n\nconst body = $input.first().json;\n\nif (body.auditPath) {\n  const path = require('path');\n  const fs = require('fs');\n\n  // Block path traversal and absolute paths\n  const raw = String(body.auditPath);\n  if (raw.includes('..')) throw new Error('Path traversal rejected');\n  if (raw.startsWith('/') || raw.startsWith('\\\\')) throw new Error('Absolute path rejected');\n  if (/^[A-Za-z]:[/\\\\]/.test(raw)) throw new Error('Windows absolute path rejected');\n\n  // Resolve against safe artifact base directory\n  const safeBase = process.env.VANTAGE_ARTIFACT_DIR || path.resolve('/app/artifacts/reports');\n  const resolved = path.resolve(safeBase, raw);\n\n  // Use realpathSync to resolve symlinks and verify containment\n  let realPath;\n  try {\n    realPath = fs.realpathSync(resolved);\n  } catch (e) {\n    throw new Error('auditPath cannot be resolved: ' + raw);\n  }\n\n  const normalizedBase = path.normalize(safeBase) + path.sep;\n  const normalizedReal = path.normalize(realPath) + path.sep;\n  if (!normalizedReal.startsWith(normalizedBase)) {\n    throw new Error('Path escapes artifact directory');\n  }\n\n  if (!fs.existsSync(realPath)) throw new Error('auditPath not found');\n  const audit = JSON.parse(fs.readFileSync(realPath, 'utf8'));\n  return [{ json: { audit, source: 'file' } }];\n}\n\nif (body.audit) {\n  const audit = typeof body.audit === 'string' ? JSON.parse(body.audit) : body.audit;\n  return [{ json: { audit, source: 'inline' } }];\n}\n\nthrow new Error('Missing audit or auditPath in webhook body');"
+      },
+      "id": "5e470a49-9b02-432d-a740-a78cedd690eb",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -128,
+        512
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic payload preparation — strips oversized artifacts,\n// credentials, raw provider payloads, and duplicated data.\n// Preserves: scores, finding IDs, rule IDs, URLs, limitations,\n// confidence, recommendations, verification methods.\nconst MAX_FINDINGS = 30, MAX_COMPETITORS = 5, MAX_LIMITATIONS = 20, MAX_KEYWORDS = 20;\n\nconst audit = $input.first().json.audit;\nconst ev = audit.evidence || {};\nconst site = ev.site || {};\nconst perf = ev.performance || {};\nconst business = audit.input?.businessName || site.domain || 'Unknown';\n\nconst compact = {\n  business: { name: business, domain: site.domain || 'Unknown', platform: site.platform || 'Unknown' },\n  scores: _preserveScores(audit.scores || {}),\n  bands: {\n    conversionReadiness: (audit.bands||{}).conversionReadiness || 'Not Assessed',\n    trust: (audit.bands||{}).trust || 'Not Assessed',\n    evidenceConfidence: (audit.bands||{}).evidenceConfidence || 'Not Assessed'\n  },\n  readinessStatus: audit.readinessStatus || 'Unknown',\n  assessedWeight: audit.assessedWeight ?? null,\n  showNumericScore: audit.showNumericScore !== false,\n  evidenceConfidenceScore: audit.evidenceConfidenceScore ?? null,\n  rootCause: (audit.rootCause||'').slice(0, 500),\n  sourceStatus: {\n    website: site.sourceStatus || 'UNKNOWN',\n    performance: perf.sourceStatus || 'UNKNOWN',\n    competitors: (ev.competitors||[]).length > 0 ? 'SUPPLIED' : 'NONE',\n    backlinks: (ev.backlinks||{}).sourceStatus || 'NOT_CONNECTED',\n    ga4: (ev.ga4||{}).sourceStatus || 'NOT_CONNECTED',\n    gsc: (ev.gsc||{}).sourceStatus || 'NOT_CONNECTED'\n  },\n  competitors: (ev.competitors||[]).slice(0,MAX_COMPETITORS).map(c=>({url:c.url||c.targetUrl||'',domain:c.domain||'',pageCount:c.pageCount||0,status:c.sourceStatus||'UNKNOWN'})),\n  performanceCoverage: { requested: perf.coverage?.requested||0, completed: perf.coverage?.completed||0, failed: perf.coverage?.failed||0, pagesTested: perf.coverage?.pagesTested||0 },\n  limitations: [...new Set([...(site.limitations||[]),...(perf.limitations||[]),...((ev.backlinks||{}).limitations||[]),...((ev.ga4||{}).limitations||[]),...((ev.gsc||{}).limitations||[])])].slice(0,MAX_LIMITATIONS),\n  findings: (audit.findings||[]).slice(0,MAX_FINDINGS).map(f=>({findingId:f.findingId,ruleId:f.ruleId,title:f.title,severity:f.severity,confidence:f.confidence,scoreBearing:f.scoreBearing,businessImpact:f.businessImpact||'',recommendation:f.recommendation||'',verificationMethod:f.verificationMethod||'',affectedUrls:(f.affectedUrls||[]).slice(0,10),evidence:(f.evidence||[]).slice(0,3).map(er=>({field:er.field,observedValue:er.observedValue})),implementationEffort:f.implementationEffort||'M'})),\n  siteMetrics: { pageCount: site.pageCount||0, services:(site.services||[]).slice(0,MAX_KEYWORDS), topicKeywords:(site.topicKeywords||[]).slice(0,MAX_KEYWORDS), platform: site.platform||'Unknown', hasHttps:(site.targetUrl||'').startsWith('https://'), schemaCount:(site.schemaTypes||[]).length, ctaCount:(site.ctas||[]).length, formCount:(site.forms||[]).length },\n  trustFlags: { testimonials:!!(site.trust||{}).testimonials, credentials:!!(site.trust||{}).credentials, caseStudies:!!(site.trust||{}).caseStudies, faq:!!(site.trust||{}).faq, pricing:!!(site.trust||{}).pricing, policies:!!(site.trust||{}).policies, contact:!!(site.trust||{}).contact },\n  technical: { missingTitles:site.missingTitles||0, missingDescriptions:site.missingDescriptions||0, h1Missing:site.h1Missing||0, h1Multiple:site.h1Multiple||0, imagesMissingAlt:site.imagesMissingAlt||0, internalLinkCount:site.internalLinkCount||0 }\n};\n\nif (audit.renderingDiagnostics && audit.renderingDiagnostics.length > 0) {\n  compact.renderingDiagnostics = audit.renderingDiagnostics.map(d=>({code:d.diagnosticCode,category:d.diagnosticCategory,explanation:d.clientExplanation,confidence:d.confidence}));\n}\nif (audit._gate) {\n  compact.gateRecommendation = audit._gate.commercialRecommendation||'';\n  compact.gateNextAction = audit._gate.nextAction||'';\n  compact.gateServiceCategories = audit._gate.serviceCategories||[];\n}\n\nfunction _preserveScores(s){const out={};for(const k of ['trust','contentDepth','conversionPathways','technical','performance','conversionReadiness','awareness','consideration','decision','aiReadiness','conversionPathwaysDimension','trustEatDimension','contentFunnelDimension','technicalPerformanceDimension','entitySchemaAiDimension']){if(k in s)out[k]=s[k];}return out;}\n\nreturn [{ json: compact }];"
+      },
+      "id": "6e56ed29-6005-4ef0-b019-6abbf78c62ec",
+      "name": "Prepare GPT Payload",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        80,
+        512
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate compact payload before GPT processing\nconst p = $input.first().json;\nconst required = ['scores','findings','sourceStatus'];\nfor (const key of required) {\n  if (!p[key]) throw new Error('Missing required key: ' + key);\n}\nif (!Array.isArray(p.findings) || p.findings.length === 0) {\n  throw new Error('Payload must contain at least one finding');\n}\nif (p.scores.performance == null || p.scores.conversionReadiness == null) {\n  throw new Error('Required scores missing');\n}\nconst json = JSON.stringify(p);\nif (/will increase (traffic|leads|revenue|sales|bookings) by \\d+%/i.test(json)) {\n  throw new Error('Unsupported numeric claims detected');\n}\nfor (const f of p.findings) {\n  if (!f.findingId || !f.ruleId) throw new Error('Finding missing ID: ' + JSON.stringify(f.title));\n}\nif (json.length > 100000) throw new Error('Payload exceeds 100KB');\nreturn [{ json: p }];"
+      },
+      "id": "1feef305-e9a5-434e-9068-f49cb6b1ebfb",
+      "name": "Validate Compact Output",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        288,
+        512
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are the executive interpretation layer for Pryzm, an evidence-grounded website conversion-readiness audit.  Use only the supplied audit payload.  Return valid JSON only. Do not use markdown fences or include text outside the JSON object.  Required output schema:  {   \"executiveSummary\": \"string\",   \"rootCause\": {     \"statement\": \"string\",     \"supportingFindingIds\": [\"string\"]   },   \"businessRisk\": \"string\",   \"recommendedNextStep\": \"string\",   \"referencedFindingIds\": [\"string\"] }  Rules:  1. Explain the website’s current condition in clear client-facing language. 2. Identify exactly one root cause. 3. Every factual claim must be supported by the supplied findings, scores, source statuses, limitations, or evidence. 4. Use only finding IDs that exist in the supplied payload. 5. Do not alter, recalculate, reinterpret, or invent scores. 6. Do not invent findings, URLs, services, competitors, statistics, percentages, or evidence. 7. Do not treat unavailable, partial, failed, blocked, or not-connected evidence as a confirmed website failure. 8. Do not promise increases in traffic, rankings, leads, bookings, sales, conversions, or revenue. 9. Do not claim causation. 10. Keep the executiveSummary between 120 and 220 words. 11. recommendedNextStep may recommend an implementation scoping session, but must not use pressure language. 12. referencedFindingIds must contain every finding ID used to support the response."
+            },
+            {
+              "content": "=Interpret this validated Pryzm audit payload:  {{ JSON.stringify($node[\"Validate Compact Output\"].json) }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 2500
+        },
+        "requestOptions": {}
+      },
+      "id": "a123d9f4-8724-4e0e-9c8d-58b288169bbe",
+      "name": "GPT Executive Interpretation",
+      "type": "n8n-nodes-base.openAi",
+      "position": [
+        480,
+        400
+      ],
+      "typeVersion": 1.1,
+      "credentials": {
+        "openAiApi": {
+          "id": "IR2hV2C5Xi8Kw1Uz",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "chatModel": "gpt-5.5",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are the priority-planning layer for Pryzm, an evidence-grounded website conversion-readiness audit.  Use only the supplied validated audit payload.  Return valid JSON only. Do not use markdown fences or include text outside the JSON object.  Required output schema:  {   \"priorityGroups\": [     {       \"priority\": 1,       \"title\": \"string\",       \"findingIds\": [\"string\"],       \"reason\": \"string\",       \"expectedImprovement\": \"string\",       \"implementationSequence\": [\"string\"]     }   ],   \"referencedFindingIds\": [\"string\"] }  Rules:  1. Create no more than three priority groups. 2. Use only finding IDs present in the supplied audit. 3. Do not create new findings. 4. Group findings by shared root cause and practical implementation order. 5. Preserve the supplied severity, confidence, effort, recommendation, and verification meaning. 6. Do not alter or recalculate scores. 7. Do not invent URLs, services, competitors, evidence, statistics, or percentages. 8. Do not treat unavailable, partial, failed, blocked, or not-connected evidence as confirmed absence. 9. expectedImprovement may refer only to improved readiness, clarity, trust, usability, accessibility, conversion-path clarity, or measurability. 10. Do not promise traffic, rankings, leads, bookings, sales, conversions, or revenue. 11. implementationSequence must contain concrete actions derived from the supplied recommendations. 12. referencedFindingIds must contain every finding ID used in the response."
+            },
+            {
+              "content": "=Create implementation priority groups from this validated Pryzm audit payload:  {{ JSON.stringify($node[\"Validate Compact Output\"].json) }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 2500
+        },
+        "requestOptions": {}
+      },
+      "id": "9e7dc108-e5b9-4503-ba8b-1c80ca61bfab",
+      "name": "GPT Priority Grouping",
+      "type": "n8n-nodes-base.openAi",
+      "position": [
+        480,
+        688
+      ],
+      "typeVersion": 1.1,
+      "credentials": {
+        "openAiApi": {
+          "id": "IR2hV2C5Xi8Kw1Uz",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "wait"
+      },
+      "id": "6b38dd47-76e5-410a-b927-3acdd2e3c1e9",
+      "name": "Merge GPT Results",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        688,
+        560
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "chatModel": "gpt-5.5",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are the final client-report editor for Pryzm, an evidence-grounded website conversion-readiness audit.  Combine the executive interpretation and priority grouping outputs with the deterministic audit data.  Return valid JSON only. Do not use markdown fences or include text outside the JSON object.  Required output schema:  {   \"reportNarrative\": {     \"opening\": \"string\",     \"currentCondition\": \"string\",     \"whyItMatters\": \"string\",     \"recommendedPlan\": \"string\",     \"engagementRecommendation\": \"string\"   },   \"executiveInterpretation\": {     \"executiveSummary\": \"string\",     \"rootCause\": {       \"statement\": \"string\",       \"supportingFindingIds\": [\"string\"]     },     \"businessRisk\": \"string\",     \"recommendedNextStep\": \"string\",     \"referencedFindingIds\": [\"string\"]   },   \"priorityGroups\": [],   \"referencedFindingIds\": [\"string\"],   \"validationNotes\": [] }  Rules:  1. Preserve all deterministic audit facts exactly. 2. Do not alter scores, score labels, source statuses, URLs, finding IDs, rule IDs, limitations, confidence values, recommendations, or verification methods. 3. Use only findings and evidence contained in the deterministic audit payload. 4. Do not invent findings, evidence, services, competitors, URLs, statistics, percentages, or outcomes. 5. Do not treat unavailable, partial, failed, blocked, or not-connected evidence as confirmed website failure. 6. Do not promise traffic, rankings, leads, bookings, sales, conversions, or revenue. 7. Do not make causal claims. 8. Keep the main narrative concise, professional, and understandable to a non-technical client. 9. Do not place raw provider error messages in the main narrative. 10. Provider failures and collection limitations belong in the evidence appendix. 11. recommendedPlan must follow the supplied priority order. 12. engagementRecommendation should recommend an implementation scoping session without pressure language. 13. referencedFindingIds must contain every finding ID used anywhere in the narrative. 14. validationNotes must list any supplied statement that could not safely be included because it lacked evidence. Use an empty array when none exist."
+            },
+            {
+              "content": "=Create the final Pryzm client-report narrative using these inputs.  DETERMINISTIC AUDIT DATA: {{ JSON.stringify($node[\"Validate Compact Output\"].json) }}  EXECUTIVE INTERPRETATION: {{ JSON.stringify($node[\"GPT Executive Interpretation\"].json) }}  PRIORITY GROUPING: {{ JSON.stringify($node[\"GPT Priority Grouping\"].json) }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 2500
+        },
+        "requestOptions": {}
+      },
+      "id": "aefb2a04-6a1d-41c0-81bb-c35f044d8e4a",
+      "name": "GPT Report Editor",
+      "type": "n8n-nodes-base.openAi",
+      "position": [
+        880,
+        560
+      ],
+      "typeVersion": 1.1,
+      "credentials": {
+        "openAiApi": {
+          "id": "IR2hV2C5Xi8Kw1Uz",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate GPT output — reject invented findings, unsupported claims\nconst item = $input.first().json;\n// Parse GPT response: may be message.content string or already parsed\nlet content;\nif (typeof item === 'string') {\n  content = JSON.parse(item);\n} else if (item.message?.content) {\n  content = typeof item.message.content === 'string' ? JSON.parse(item.message.content) : item.message.content;\n} else {\n  content = item;\n}\n\n// Verify required sections exist\nif (!content.reportNarrative) {\n  throw new Error('GPT output missing reportNarrative');\n}\n\n// Reject unsupported claims in the full output\nconst str = JSON.stringify(content);\nif (/will increase (traffic|leads|revenue|sales|bookings) by \\d+%/i.test(str)) {\n  throw new Error('GPT produced unsupported numeric claims');\n}\nif (/guaranteed|promised|certain to/i.test(str) && /(traffic|leads|revenue|sales|bookings)/i.test(str)) {\n  throw new Error('GPT produced guaranteed outcome claim');\n}\n\n// Verify finding IDs against original payload\nconst origNode = $('Validate Compact Output');\nif (!origNode || !origNode.first()) throw new Error('Original payload not found for validation');\nconst original = origNode.first().json;\nconst origIds = new Set(original.findings.map(f => f.ruleId));\n\n// Check all referencedFindingIds across the output\nconst allRefs = [\n  ...(content.referencedFindingIds || []),\n  ...(content.executiveInterpretation?.referencedFindingIds || []),\n  ...(content.executiveInterpretation?.rootCause?.supportingFindingIds || []),\n  ...(content.priorityGroups || []).flatMap(g => g.findingIds || [])\n];\nfor (const id of allRefs) {\n  if (!origIds.has(id)) {\n    throw new Error('GPT referenced non-existent finding ID: ' + id);\n  }\n}\n\nreturn [{ json: { gpt: content, payload: original } }];"
+      },
+      "id": "b0de8e0a-4f75-4a42-a28b-22a4e407e61e",
+      "name": "Validate GPT Output",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1088,
+        560
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble a multi-page static HTML report with shared CSS and navigation.\n// Produces file contents in-memory for the ZIP generator.\n\nconst data = $input.first().json;\nconst payload = data.payload;\nconst gpt = data.gpt || {};\nconst business = payload.business?.name || 'Client';\n\nconst CSS = `:root{--bg:#fafaf9;--card:#fff;--text:#1a1a1a;--muted:#6b6b6b;--border:#e5e5e5;--accent:#2563eb;--accent-light:#dbeafe;--red:#dc2626;--amber:#d97706;--green:#16a34a;--slate:#475569;--radius:8px}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}.container{max-width:960px;margin:0 auto;padding:24px 20px}header{padding:18px 0 12px}header .container{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;background:linear-gradient(135deg,#123a72,#2563eb);border-radius:16px;padding:26px 24px;color:#fff}header h1{font-size:1.75rem;font-weight:800}.top-nav{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);margin-bottom:20px}.top-nav .container{padding:10px 20px}.nav-list{display:flex;gap:8px;list-style:none;overflow-x:auto}.nav-list a{display:block;padding:9px 13px;font-size:.78rem;font-weight:700;color:var(--slate);text-decoration:none;border:1px solid var(--border);border-radius:8px;background:var(--card)}.nav-list a.active,.nav-list a:hover{color:#fff;border-color:var(--accent);background:var(--accent)}section{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px}section h2{font-size:1.2rem;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--accent-light)}.score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}.score-card{text-align:center;padding:16px;border-radius:var(--radius);border:1px solid var(--border)}.score-card .value{font-size:2rem;font-weight:700}.score-green .value{color:var(--green)}.score-amber .value{color:var(--amber)}.score-red .value{color:var(--red)}table{width:100%;border-collapse:collapse;font-size:.9rem;margin:12px 0}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border)}th{background:#f8fafc;font-weight:600;font-size:.8rem;text-transform:uppercase;color:var(--slate)}.sev-high{color:var(--red);font-weight:600}.sev-med{color:var(--amber)}.sev-low{color:var(--slate)}footer{text-align:center;padding:32px 20px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:40px}@media(max-width:768px){header .container{flex-direction:column}}@media print{.top-nav{display:none!important}body{font-size:11pt;color:#000}section{box-shadow:none;border:1px solid #ddd;break-inside:avoid}@page{margin:15mm}}`;\n\nconst TOML = '[build]\\npublish = \".\"\\n\\n[[redirects]]\\n  from = \"/*\"\\n  to = \"/index.html\"\\n  status = 200\\n\\n[[headers]]\\n  for = \"/*\"\\n  [headers.values]\\n    X-Frame-Options = \"DENY\"\\n    X-Content-Type-Options = \"nosniff\"\\n';\n\nconst PAGES = [\n  { id:'01-executive-summary', title:'Executive Summary', nav:'Summary' },\n  { id:'02-priority-fixes', title:'Priority Fixes', nav:'Priorities' },\n  { id:'03-performance', title:'Performance & Diagnostics', nav:'Performance' },\n  { id:'04-evidence', title:'Evidence & Sources', nav:'Evidence' },\n  { id:'05-next-steps', title:'Next Steps', nav:'Next Steps' }\n];\n\nfunction esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }\nfunction navHtml(cid){ return PAGES.map(p=>`<li><a href=\"${esc(p.id)}.html\"${p.id===cid?' class=\"active\"':''}>${esc(p.nav)}</a></li>`).join(''); }\nfunction shell(id,title,nav,body,foot){ return `<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"><title>${esc(title)} — Pryzm Client Report</title><style>${CSS}</style></head><body><header><div class=\"container\"><div><span style=\"background:rgba(255,255,255,.18);color:#fff;padding:5px 12px;border-radius:100px;font-size:.72rem;font-weight:700\">PRYZM PHASE 1 AUDIT</span><h1>${esc(title)}</h1></div></div></header><nav class=\"top-nav\"><div class=\"container\"><ul class=\"nav-list\">${nav}</ul></div></nav><div class=\"container\">${body}</div>${foot}</body></html>`; }\nfunction foot(){ return `<footer><p>Pryzm Client Report for ${esc(business)}</p><p>Generated by Prysm. No outcomes promised without measurement data.</p></footer>`; }\nfunction sc(label,value){ const cls=value>=80?'score-green':value>=60?'score-amber':'score-red'; return `<div class=\"score-card ${cls}\"><div class=\"value\">${value??'—'}</div><div class=\"label\">${esc(label)}</div></div>`; }\n\nconst s=payload.scores||{};\nconst diags=payload.renderingDiagnostics||[];\nconst f=foot();\nconst pages={\n  'index': shell('index','Pryzm Client Report — '+business,navHtml('index'),`<section><h2>Pryzm Client Report</h2><p>Evidence-grounded website audit for <strong>${esc(business)}</strong></p><p>Domain: ${esc(payload.business?.domain||'N/A')} &middot; Platform: ${esc(payload.business?.platform||'Unknown')}</p><p>Conversion Readiness: <strong>${s.conversionReadiness??'—'}/100</strong> &middot; Assessed Weight: ${payload.assessedWeight??'—'}%</p></section><section><h2>Report Contents</h2><ul>${PAGES.map(p=>`<li><a href=\"pages/${esc(p.id)}.html\">${esc(p.title)}</a></li>`).join('')}</ul></section>`,f),\n  '01-executive-summary': shell('01-executive-summary','Executive Summary',navHtml('01-executive-summary'),`<section><h2>Conversion Readiness</h2><div class=\"score-grid\">${sc('Readiness',s.conversionReadiness)}${sc('Trust',s.trust)}${sc('Content',s.contentDepth)}${sc('Performance',s.performance)}</div><p><strong>Status:</strong> ${esc(payload.readinessStatus)} (${payload.assessedWeight}% assessed weight)</p><p><strong>Confidence:</strong> ${esc(payload.bands.evidenceConfidence)}</p><p style=\"margin-top:16px\">${esc(payload.rootCause||'')}</p></section><section><h2>Source Status</h2><table><thead><tr><th>Source</th><th>Status</th></tr></thead><tbody>${Object.entries(payload.sourceStatus||{}).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table></section>`,f),\n  '02-priority-fixes': shell('02-priority-fixes','Priority Fixes',navHtml('02-priority-fixes'),`<section><h2>Findings</h2>${payload.findings&&payload.findings.length?`<table><thead><tr><th>Sev</th><th>Finding</th><th>Recommendation</th></tr></thead><tbody>${payload.findings.map(f=>`<tr><td class=\"sev-${(f.severity||'med').toLowerCase().slice(0,3)}\">${esc(f.severity||'')}</td><td><strong>${esc(f.ruleId||'')}</strong>: ${esc(f.title||'')}</td><td>${esc(f.recommendation||'')}</td></tr>`).join('')}</tbody></table>`:'<p>No findings.</p>'}</section><section><h2>Coverage</h2><table><tbody><tr><td>Requested</td><td>${payload.performanceCoverage?.requested||0}</td></tr><tr><td>Completed</td><td>${payload.performanceCoverage?.completed||0}</td></tr><tr><td>Failed</td><td>${payload.performanceCoverage?.failed||0}</td></tr></tbody></table></section>`,f),\n  '03-performance': shell('03-performance','Performance & Diagnostics',navHtml('03-performance'),`<section><h2>Performance</h2><div class=\"score-grid\">${sc('Performance',s.performance)}${sc('Technical',s.technical)}</div></section><section><h2>Rendering Diagnostics</h2>${diags.length>0?`<table><thead><tr><th>Code</th><th>Category</th><th>Explanation</th></tr></thead><tbody>${diags.map(d=>`<tr><td>${esc(d.code)}</td><td>${esc(d.category)}</td><td>${esc(d.explanation)}</td></tr>`).join('')}</tbody></table>`:'<p>No rendering defects detected.</p>'}</section>`,f),\n  '04-evidence': shell('04-evidence','Evidence & Sources',navHtml('04-evidence'),`<section><h2>Technical Metrics</h2><table><tbody><tr><td>Pages</td><td>${payload.siteMetrics?.pageCount||0}</td></tr><tr><td>Missing Titles</td><td>${payload.technical?.missingTitles||0}</td></tr><tr><td>Missing Descriptions</td><td>${payload.technical?.missingDescriptions||0}</td></tr><tr><td>H1 Missing</td><td>${payload.technical?.h1Missing||0}</td></tr><tr><td>Images Missing Alt</td><td>${payload.technical?.imagesMissingAlt||0}</td></tr></tbody></table></section><section><h2>Trust Signals</h2><table><tbody>${Object.entries(payload.trustFlags||{}).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v?'Yes':'No'}</td></tr>`).join('')}</tbody></table></section><section><h2>Limitations</h2><ul>${(payload.limitations||[]).map(l=>`<li>${esc(l)}</li>`).join('')}</ul></section>`,f),\n  '05-next-steps': shell('05-next-steps','Next Steps',navHtml('05-next-steps'),`<section><h2>Commercial Recommendation</h2><p style=\"font-size:1.1rem\">${esc(payload.gateRecommendation||gpt.reportNarrative?.recommendedPlan||'')}</p></section><section><h2>Required Next Action</h2><p style=\"font-weight:600\">${esc(payload.gateNextAction||'Book an implementation scoping session to determine whether targeted remediation or a full redesign is the better investment.')}</p></section><section><h2>Service Categories</h2><ul>${(payload.gateServiceCategories||[]).map(c=>`<li>${esc(c)}</li>`).join('')}</ul></section><section><h2>Evidence Statement</h2><p>Generated from a completed Pryzm Phase 1 Audit. All findings reference specific evidence sources and rule IDs. No outcomes are promised without supporting measurement data. Provider limitations are documented in the Evidence section.</p></section>`,f)\n};\npages['netlify.toml'] = TOML;\npages['css/report.css'] = CSS;\n\nreturn [{ json: { pages, business, pageCount: Object.keys(pages).length } }];"
+      },
+      "id": "5d9c4b04-34f7-4ff0-b4bb-465f3808af5d",
+      "name": "Assemble Static HTML Report",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1280,
+        560
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate a Netlify-ready ZIP binary in-memory using only Node.js built-ins.\n// Implements the ZIP file format for uncompressed (store) entries.\n// Returns binary data for the Respond with ZIP node.\n\nconst data = $input.first().json;\nconst pages = data.pages || {};\nconst encoder = new TextEncoder();\nconst entries = [];\nfor (const [name, content] of Object.entries(pages)) {\n  entries.push({ name, raw: encoder.encode(content), crc: _crc32(encoder.encode(content)) });\n}\n\nlet dataOffset = 0;\nconst localHeaders = [];\nfor (const e of entries) {\n  const nb = encoder.encode(e.name);\n  const h = Buffer.alloc(30 + nb.length);\n  let p = 0;\n  h.writeUInt32LE(0x04034b50, p); p += 4;\n  h.writeUInt16LE(20, p); p += 2;\n  h.writeUInt16LE(0x0800, p); p += 2;\n  h.writeUInt16LE(0, p); p += 2;\n  h.writeUInt16LE(0, p); p += 2;\n  h.writeUInt16LE(0, p); p += 2;\n  h.writeUInt32LE(e.crc, p); p += 4;\n  h.writeUInt32LE(e.raw.length, p); p += 4;\n  h.writeUInt32LE(e.raw.length, p); p += 4;\n  h.writeUInt16LE(nb.length, p); p += 2;\n  h.writeUInt16LE(0, p);\n  h.set(nb, 30);\n  localHeaders.push(h);\n  e._off = dataOffset;\n  dataOffset += h.length + e.raw.length;\n}\n\nconst centralOffset = dataOffset;\nlet centralSize = 0;\nconst centralParts = [];\nfor (const e of entries) {\n  const nb = encoder.encode(e.name);\n  const cd = Buffer.alloc(46 + nb.length);\n  let p = 0;\n  cd.writeUInt32LE(0x02014b50, p); p += 4;\n  cd.writeUInt16LE(20, p); p += 2;\n  cd.writeUInt16LE(20, p); p += 2;\n  cd.writeUInt16LE(0x0800, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt32LE(e.crc, p); p += 4;\n  cd.writeUInt32LE(e.raw.length, p); p += 4;\n  cd.writeUInt32LE(e.raw.length, p); p += 4;\n  cd.writeUInt16LE(nb.length, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt16LE(0, p); p += 2;\n  cd.writeUInt32LE(0, p); p += 4;\n  cd.writeUInt32LE(e._off, p); p += 4;\n  cd.set(nb, 46);\n  centralParts.push(cd);\n  centralSize += cd.length;\n}\n\nconst eocd = Buffer.alloc(22);\nlet ep = 0;\neocd.writeUInt32LE(0x06054b50, ep); ep += 4;\neocd.writeUInt16LE(0, ep); ep += 2;\neocd.writeUInt16LE(0, ep); ep += 2;\neocd.writeUInt16LE(entries.length, ep); ep += 2;\neocd.writeUInt16LE(entries.length, ep); ep += 2;\neocd.writeUInt32LE(centralSize, ep); ep += 4;\neocd.writeUInt32LE(centralOffset, ep); ep += 4;\neocd.writeUInt16LE(0, ep);\n\nconst totalSize = dataOffset + centralSize + 22;\nconst zip = Buffer.alloc(totalSize);\nlet z = 0;\nfor (let i = 0; i < entries.length; i++) {\n  localHeaders[i].copy(zip, z); z += localHeaders[i].length;\n  const rb = entries[i].raw;\n  Buffer.from(rb).copy(zip, z); z += rb.length;\n}\nfor (const cd of centralParts) { cd.copy(zip, z); z += cd.length; }\neocd.copy(zip, z);\n\nfunction _crc32(buf) {\n  let crc = 0xFFFFFFFF;\n  const data = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);\n  for (let i = 0; i < data.length; i++) {\n    crc ^= data[i];\n    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);\n  }\n  return (crc ^ 0xFFFFFFFF) >>> 0;\n}\n\nconst base64 = zip.toString('base64');\nreturn [{\n  json: { filename: 'pryzm-report.zip', size: zip.length, pageCount: entries.length },\n  binary: { data: { data: base64, mimeType: 'application/zip', fileName: 'pryzm-report.zip', fileSize: zip.length.toString() } }\n}];"
+      },
+      "id": "2ad8ec2d-5465-4aef-8b59-90655c8c03a6",
+      "name": "Generate Netlify ZIP",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1488,
+        560
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "72f8ad8b-c505-4ff5-a8e3-882b482b9720",
+      "name": "Respond with ZIP",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        1680,
+        560
+      ],
+      "typeVersion": 1.5
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare GPT Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare GPT Payload": {
+      "main": [
+        [
+          {
+            "node": "Validate Compact Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Compact Output": {
+      "main": [
+        [
+          {
+            "node": "GPT Executive Interpretation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GPT Priority Grouping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Executive Interpretation": {
+      "main": [
+        [
+          {
+            "node": "Merge GPT Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Priority Grouping": {
+      "main": [
+        [
+          {
+            "node": "Merge GPT Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge GPT Results": {
+      "main": [
+        [
+          {
+            "node": "GPT Report Editor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Report Editor": {
+      "main": [
+        [
+          {
+            "node": "Validate GPT Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate GPT Output": {
+      "main": [
+        [
+          {
+            "node": "Assemble Static HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Static HTML Report": {
+      "main": [
+        [
+          {
+            "node": "Generate Netlify ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Netlify ZIP": {
+      "main": [
+        [
+          {
+            "node": "Respond with ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "103ccf12-d708-4dcb-97b2-17f866c56971",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fd7eef183ec02516b7d8f33f46b14b25f8a6441bb43fa51eaf1eaf1485d622c7"
+  },
+  "id": "X91TzMpubp7PUvaH",
+  "tags": [],
+  "description": "Converts a completed Pryzm audit into an evidence-grounded multi-page client report using GPT-5.5 interpretation. Uses only standard n8n v2.17.5 nodes."
+}

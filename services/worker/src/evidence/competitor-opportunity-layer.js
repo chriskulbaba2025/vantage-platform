@@ -228,6 +228,11 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
   // ── Source 1: DataForSEO SERP ─────────────────────────────────────────
   const serpCandidates = [];
   let serpTaskIds = [];
+  let serpTaskErrors = [];
+  let serpNormalizedLanguage = null;
+  let serpNormalizedLocation = null;
+  let serpOriginalLanguage = input.language || null;
+  let serpOriginalLocation = input.location || null;
 
   if (hasDfsCredentials && topics.length > 0) {
     for (const topic of topics.slice(0, 3)) {
@@ -240,8 +245,26 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
           fetchImpl,
         });
 
+        // Capture normalized values from first successful resolution
+        if (!serpNormalizedLanguage && result.normalizedLanguage) {
+          serpNormalizedLanguage = result.normalizedLanguage;
+        }
+        if (!serpNormalizedLocation && result.normalizedLocation) {
+          serpNormalizedLocation = result.normalizedLocation;
+        }
+
         if (result.error) {
           limitations.push(`DataForSEO SERP for "${topic.query}": ${result.error}`);
+        }
+
+        // Track task-level errors separately (distinct from empty results)
+        if (result.taskError) {
+          serpTaskErrors.push({
+            topic: topic.query,
+            taskId: result.taskError.taskId,
+            statusCode: result.taskError.statusCode,
+            statusMessage: result.taskError.statusMessage,
+          });
         }
 
         if (result.rawTaskId) serpTaskIds.push(result.rawTaskId);
@@ -350,8 +373,15 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
   }
 
   // ── Source statuses ───────────────────────────────────────────────────
+  // Distinguish task failures from genuine empty results:
+  //   - FAILED: one or more SERP tasks returned an error status_code
+  //   - AVAILABLE: at least one candidate found
+  //   - UNAVAILABLE: tasks succeeded but returned zero organic results
+  //   - NOT_CONNECTED: no DataForSEO credentials
   const serpStatus = hasDfsCredentials
-    ? (serpCandidates.length > 0 ? SOURCE_STATUS.AVAILABLE : SOURCE_STATUS.UNAVAILABLE)
+    ? (serpTaskErrors.length > 0
+        ? SOURCE_STATUS.FAILED
+        : (serpCandidates.length > 0 ? SOURCE_STATUS.AVAILABLE : SOURCE_STATUS.UNAVAILABLE))
     : SOURCE_STATUS.NOT_CONNECTED;
 
   const suppliedStatus = suppliedCompetitors.length > 0
@@ -385,6 +415,11 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
         status: serpStatus,
         taskIds: serpTaskIds,
         candidateCount: serpCandidates.length,
+        taskErrors: serpTaskErrors.length > 0 ? serpTaskErrors : undefined,
+        normalizedLanguage: serpNormalizedLanguage?.languageName || null,
+        normalizedLocation: serpNormalizedLocation?.locationName || null,
+        originalLanguage: serpOriginalLanguage,
+        originalLocation: serpOriginalLocation,
       },
       supplied: {
         status: suppliedStatus,
@@ -411,9 +446,15 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
       retryCount: 0,
       returnedRecordCount: qualified.length,
       expectedRecordCount: topics.length * 20 + suppliedCandidates.length,
-      errorCategory: null,
+      errorCategory: serpStatus === SOURCE_STATUS.FAILED ? ERROR_CATEGORY.INTERNAL : null,
       limitation: limitations.length > 0 ? limitations.join("; ") : null,
       rawArtifactRef: serpTaskIds.length > 0 ? serpTaskIds.join(",") : null,
+      // Preserve locale/location context for audit trail
+      normalizedLanguage: serpNormalizedLanguage?.languageName || null,
+      normalizedLocation: serpNormalizedLocation?.locationName || null,
+      originalLanguage: serpOriginalLanguage,
+      originalLocation: serpOriginalLocation,
+      serpTaskErrors: serpTaskErrors.length > 0 ? serpTaskErrors : undefined,
     }),
   };
 }
