@@ -18,83 +18,43 @@ import { resolveLocation } from "./location-resolver.js";
 const DATAFORSEO_BASE = "https://api.dataforseo.com/v3";
 const SERP_ENDPOINT = `${DATAFORSEO_BASE}/serp/google/organic/live/advanced`;
 
-// ---------------------------------------------------------------------------
-// DataForSEO API status codes
-// ---------------------------------------------------------------------------
-
-/**
- * Top-level API status codes that indicate a successful request.
- * DataForSEO returns 20000 for success.
- */
 const API_SUCCESS_CODE = 20000;
-
-/**
- * Task-level status codes.
- *
- * Per DataForSEO docs, a completed SERP task returns a result array.
- * The documented success code for a completed task is 20000.
- * Any other status_code indicates the task did not complete successfully.
- */
 const TASK_SUCCESS_CODES = Object.freeze(new Set([20000]));
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
+const SERP_ERROR_TYPE = Object.freeze({
+  CONFIGURATION: "CONFIGURATION",
+  LOCATION: "LOCATION",
+  HTTP: "HTTP",
+  API_RESPONSE: "API_RESPONSE",
+  TASK: "TASK",
+  TIMEOUT: "TIMEOUT",
+  TRANSPORT_OR_PARSE: "TRANSPORT_OR_PARSE",
+});
 
 function basicAuth(login, password) {
   return `Basic ${Buffer.from(`${login}:${password}`).toString("base64")}`;
 }
 
-// ---------------------------------------------------------------------------
-// Task builder
-// ---------------------------------------------------------------------------
-
-/**
- * Build a SERP query task for DataForSEO.
- *
- * Uses normalized language_name and location_name values that have
- * been pre-validated by the locale normalizer and location resolver.
- * Never sends raw BCP-47 locale strings or free-text location strings.
- *
- * @param {string} keyword         Search query (topic + geographic term)
- * @param {object} normalized
- * @param {string} normalized.languageName   DataForSEO-supported language name
- * @param {string} normalized.locationName   DataForSEO hierarchical location_name
- * @param {number|null} normalized.locationCode  DataForSEO location_code (country-level)
- * @returns {object} task payload
- */
 function buildSerpTask(keyword, normalized) {
   const task = {
     keyword,
     language_name: normalized.languageName || "English",
     device: "desktop",
     os: "windows",
-    depth: 20, // top 20 organic results
+    depth: 20,
   };
 
-  // Prefer location_code when available (more stable); fall back to location_name
   if (normalized.locationCode != null) {
     task.location_code = normalized.locationCode;
   } else if (normalized.locationName) {
     task.location_name = normalized.locationName;
   } else {
-    // Last-resort fallback — should never happen in production because
-    // the competitor-opportunity layer validates resolution before calling.
     task.location_name = "Canada";
   }
 
   return task;
 }
 
-// ---------------------------------------------------------------------------
-// Normalization
-// ---------------------------------------------------------------------------
-
-/**
- * Normalize a DataForSEO SERP result item into a competitor candidate.
- *
- * Extracts: url, domain, title, position, page type signals.
- */
 function normalizeSerpItem(item, topic, location, language) {
   return {
     candidateUrl: item.url || "",
@@ -112,12 +72,8 @@ function normalizeSerpItem(item, topic, location, language) {
   };
 }
 
-/**
- * Infer page type from SERP item signals.
- */
 function inferPageType(item) {
   const url = (item.url || "").toLowerCase();
-  const title = (item.title || "").toLowerCase();
 
   if (/contact|about-us|team|location|hours/i.test(url)) return "company_page";
   if (/blog|article|news|guide|how-to|what-is/i.test(url)) return "content";
@@ -134,7 +90,6 @@ function inferPageType(item) {
   return "landing";
 }
 
-/** Detect schema hints from SERP metadata. */
 function detectSchema(item) {
   if (!item) return [];
   const signals = [];
@@ -146,47 +101,37 @@ function detectSchema(item) {
   return signals;
 }
 
-// ---------------------------------------------------------------------------
-// Response validation
-// ---------------------------------------------------------------------------
-
-/**
- * Validate a DataForSEO API response.
- *
- * Checks:
- *   1. Top-level status_code === 20000
- *   2. Every task has status_code in TASK_SUCCESS_CODES
- *
- * Returns { valid, error } where error describes the first failure found.
- * A valid response may still have zero results (no organic listings for
- * that query) — that is NOT an error.
- *
- * @param {object} data  Parsed JSON response body
- * @returns {{ valid: boolean, error: string|null }}
- */
 function validateApiResponse(data) {
   if (!data || typeof data !== "object") {
-    return { valid: false, error: "SERP API returned non-object response" };
+    return {
+      valid: false,
+      error: "SERP API returned non-object response",
+      errorType: SERP_ERROR_TYPE.API_RESPONSE,
+      statusCode: null,
+    };
   }
 
-  // Top-level status — must be exactly 20000. Missing, null, or any
-  // other value is a structured API failure.
   if (data.status_code !== API_SUCCESS_CODE) {
     const code = data.status_code;
     const msg = data.status_message || "missing top-level status code";
     return {
       valid: false,
       error: `SERP API top-level status ${code != null ? code : "missing"}: ${msg}`,
+      errorType: SERP_ERROR_TYPE.API_RESPONSE,
+      statusCode: code ?? null,
     };
   }
 
   const tasks = data.tasks || [];
   if (tasks.length === 0) {
-    return { valid: false, error: "SERP API returned no tasks" };
+    return {
+      valid: false,
+      error: "SERP API returned no tasks",
+      errorType: SERP_ERROR_TYPE.API_RESPONSE,
+      statusCode: null,
+    };
   }
 
-  // Task-level status — every task must explicitly report 20000.
-  // Missing, null, or any non-success status_code is a structured failure.
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
     const taskCode = task.status_code;
@@ -195,6 +140,8 @@ function validateApiResponse(data) {
       return {
         valid: false,
         error: `SERP task ${i} failed: ${fallbackMsg}`,
+        errorType: SERP_ERROR_TYPE.TASK,
+        statusCode: null,
         taskError: {
           taskId: task.id || null,
           statusCode: null,
@@ -208,6 +155,8 @@ function validateApiResponse(data) {
       return {
         valid: false,
         error: `SERP task ${i} failed: status_code=${taskCode}, message="${taskMsg}"`,
+        errorType: SERP_ERROR_TYPE.TASK,
+        statusCode: taskCode,
         taskError: {
           taskId: task.id || null,
           statusCode: taskCode,
@@ -218,39 +167,28 @@ function validateApiResponse(data) {
     }
   }
 
-  return { valid: true, error: null };
+  return {
+    valid: true,
+    error: null,
+    errorType: null,
+    statusCode: null,
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Main export
-// ---------------------------------------------------------------------------
+function classifyException(error) {
+  const message = String(error?.message || error || "Unknown SERP request error");
+  const isTimeout = error?.name === "AbortError" || /timed?\s*out|timeout/i.test(message);
+  return {
+    error: message,
+    errorType: isTimeout ? SERP_ERROR_TYPE.TIMEOUT : SERP_ERROR_TYPE.TRANSPORT_OR_PARSE,
+  };
+}
 
-/**
- * Query DataForSEO SERP API for organic results.
- *
- * Accepts raw audit language/location values and normalizes them before
- * sending to DataForSEO.  Never sends BCP-47 locale strings or free-text
- * location strings directly.
- *
- * Validates both top-level API status and every task-level status_code.
- * A failed task produces a structured error — it is never silently
- * returned as an empty successful result set.
- *
- * @param {string}   keyword   Search query
- * @param {object}   options
- * @param {string}   options.login       DataForSEO login
- * @param {string}   options.password    DataForSEO password
- * @param {string}   [options.location]  Free-text geographic market (raw audit input)
- * @param {string}   [options.language]  Audit language (BCP-47 or plain name)
- * @param {object}   [options.fetchImpl] Fetch implementation
- * @returns {object} { items, rawTaskId, error, normalizedLanguage, normalizedLocation, taskError }
- */
 export async function querySerp(keyword, options = {}) {
   const login = options.login || "";
   const password = options.password || "";
   const fetchImpl = options.fetchImpl || globalThis.fetch;
 
-  // ── Normalize language ──────────────────────────────────────────────
   const langResult = normalizeLanguage(options.language || "en");
   const locResult = resolveLocation(options.location || "Canada");
 
@@ -259,17 +197,20 @@ export async function querySerp(keyword, options = {}) {
       items: [],
       rawTaskId: null,
       error: "DataForSEO credentials not configured",
+      errorType: SERP_ERROR_TYPE.CONFIGURATION,
+      errorStatusCode: null,
       normalizedLanguage: langResult,
       normalizedLocation: locResult,
     };
   }
 
-  // ── Validate location resolution ────────────────────────────────────
   if (locResult.error) {
     return {
       items: [],
       rawTaskId: null,
       error: `Location resolution failed: ${locResult.error}`,
+      errorType: SERP_ERROR_TYPE.LOCATION,
+      errorStatusCode: null,
       normalizedLanguage: langResult,
       normalizedLocation: locResult,
     };
@@ -281,8 +222,6 @@ export async function querySerp(keyword, options = {}) {
     locationCode: locResult.locationCode,
   });
 
-  const body = [{ ...task }];
-
   try {
     const response = await withTimeout(
       fetchImpl(SERP_ENDPOINT, {
@@ -291,7 +230,7 @@ export async function querySerp(keyword, options = {}) {
           authorization: basicAuth(login, password),
           "content-type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify([task]),
       }),
       45000,
       `DataForSEO SERP: ${keyword}`,
@@ -303,20 +242,22 @@ export async function querySerp(keyword, options = {}) {
         items: [],
         rawTaskId: null,
         error: `SERP API ${response.status}: ${text.slice(0, 200)}`,
+        errorType: SERP_ERROR_TYPE.HTTP,
+        errorStatusCode: response.status,
         normalizedLanguage: langResult,
         normalizedLocation: locResult,
       };
     }
 
     const data = await response.json();
-
-    // ── Validate response ─────────────────────────────────────────────
     const validation = validateApiResponse(data);
     if (!validation.valid) {
       return {
         items: [],
         rawTaskId: validation.taskError?.taskId || null,
         error: validation.error,
+        errorType: validation.errorType,
+        errorStatusCode: validation.statusCode,
         taskError: validation.taskError || null,
         normalizedLanguage: langResult,
         normalizedLocation: locResult,
@@ -326,25 +267,36 @@ export async function querySerp(keyword, options = {}) {
     const serpTask = data.tasks[0];
     const rawTaskId = serpTask.id || null;
     const resultItems = serpTask.result?.[0]?.items || [];
-
     const items = resultItems
       .filter((item) => item.type === "organic")
-      .map((item) => normalizeSerpItem(item, keyword, locResult.originalLocation || locResult.locationName, langResult.originalLanguage || langResult.languageName));
+      .map((item) => normalizeSerpItem(
+        item,
+        keyword,
+        locResult.originalLocation || locResult.locationName,
+        langResult.originalLanguage || langResult.languageName,
+      ));
 
     return {
       items,
       rawTaskId,
       error: null,
+      errorType: null,
+      errorStatusCode: null,
       normalizedLanguage: langResult,
       normalizedLocation: locResult,
     };
   } catch (error) {
+    const classified = classifyException(error);
     return {
       items: [],
       rawTaskId: null,
-      error: error.message,
+      error: classified.error,
+      errorType: classified.errorType,
+      errorStatusCode: null,
       normalizedLanguage: langResult,
       normalizedLocation: locResult,
     };
   }
 }
+
+export { SERP_ERROR_TYPE, validateApiResponse, classifyException };
