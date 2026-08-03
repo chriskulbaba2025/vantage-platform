@@ -2162,3 +2162,171 @@ test("production regression: matches expected values from page_metrics", async (
   // imageCount is null (not available from pages endpoint)
   assert.equal(result.imageCount, null);
 });
+
+// ---------------------------------------------------------------------------
+// T-DT-01 through T-DT-06: pollSubEndpoint / duplicate_tags 20100 behaviour
+// ---------------------------------------------------------------------------
+
+// T-DT-01: 20100 on first call, then 20000 on second — returns populated result
+test("T-DT-01: 20100 followed by 20000 returns populated result with retry metadata", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    if (calls === 1) {
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        tasks: [{ id: "dt-task-1", status_code: 20100, status_message: "Task Created." }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{
+        id: "dt-task-1", status_code: 20000, status_message: "Ok.",
+        result: [{ items: [{ tag: "title", count: 3 }] }],
+      }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const dt = await client.getDuplicateTags("dt-task-1");
+    assert.equal(dt.metadata.retryCount, 1, "Must have retried once after 20100");
+    assert.equal(dt.metadata.finalCode, 20000);
+    assert.equal(dt.metadata.timedOut, false);
+    assert.ok(dt.result, "Must have a result after retry");
+    assert.equal(dt.result.items[0].tag, "title");
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// T-DT-02: Repeated 20100 until timeout — returns null result with timeout metadata
+test("T-DT-02: repeated 20100 until timeout returns null result with timedOut metadata", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ id: "dt-task-2", status_code: 20100, status_message: "Task Created." }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const result = await client.getDuplicateTags("dt-task-2", {
+      timeoutMs: 500, pollIntervalMs: 100,
+    });
+    assert.equal(result.metadata.timedOut, true, "Must time out after repeated 20100");
+    assert.equal(result.result, null, "Must have null result on timeout");
+    assert.ok(result.metadata.retryCount >= 1, `Must have retried, got ${result.metadata.retryCount}`);
+    assert.equal(result.metadata.finalCode, 20100);
+    assert.equal(result.metadata.taskId, "dt-task-2");
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// T-DT-03: Terminal provider error (non-20000, non-20100) — null result, preserved error
+test("T-DT-03: terminal provider error returns null result with error metadata", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ id: "dt-task-3", status_code: 40403, status_message: "Task not found." }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const dt = await client.getDuplicateTags("dt-task-3");
+    assert.equal(dt.metadata.finalCode, 40403, "Must preserve terminal error code");
+    assert.match(dt.metadata.finalMessage, /Task not found/);
+    assert.equal(dt.result, null, "Must return null result for terminal error");
+    assert.equal(dt.metadata.retryCount, 0, "Must not retry on terminal errors");
+    assert.equal(dt.metadata.timedOut, false);
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// T-DT-04: Completed empty result (20000 with empty items) — result with empty array
+test("T-DT-04: completed empty result returns items:[] with success metadata", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{
+        id: "dt-task-4", status_code: 20000, status_message: "Ok.",
+        result: [{ items: [] }],
+      }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const dt = await client.getDuplicateTags("dt-task-4");
+    assert.equal(dt.metadata.finalCode, 20000);
+    assert.equal(dt.metadata.retryCount, 0);
+    assert.ok(dt.result, "Must have a result object");
+    assert.deepEqual(dt.result.items, [], "Empty items array for no duplicates");
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// T-DT-05: Completed populated result (20000 with data) — full result preserved
+test("T-DT-05: completed populated result preserves full duplicate data", async () => {
+  const fetchImpl = async () => {
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{
+        id: "dt-task-5", status_code: 20000, status_message: "Ok.",
+        result: [{
+          items: [
+            { tag: "title", count: 5 },
+            { tag: "description", count: 3 },
+          ],
+        }],
+      }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const dt = await client.getDuplicateTags("dt-task-5");
+    assert.equal(dt.metadata.finalCode, 20000);
+    assert.equal(dt.result.items.length, 2);
+    assert.equal(dt.result.items[0].tag, "title");
+    assert.equal(dt.result.items[1].tag, "description");
+    assert.equal(dt.metadata.taskId, "dt-task-5");
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// T-DT-06: duplicate_content also uses pollSubEndpoint
+test("T-DT-06: duplicate_content polls through 20100 and returns populated result", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    if (calls <= 2) {
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        tasks: [{ id: "dc-task-6", status_code: 20100, status_message: "Task Created." }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{
+        id: "dc-task-6", status_code: 20000, status_message: "Ok.",
+        result: [{ items: [{ url: "https://example.com/page1", duplicate_count: 2 }] }],
+      }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const dc = await client.getDuplicateContent("dc-task-6");
+    assert.equal(dc.metadata.retryCount, 2, "Must have retried twice after 20100s");
+    assert.equal(dc.metadata.finalCode, 20000);
+    assert.ok(dc.result.items.length > 0);
+  } finally {
+    clearTestCredentials();
+  }
+});

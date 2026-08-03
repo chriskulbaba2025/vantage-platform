@@ -701,59 +701,135 @@ export function createDataforseoOnpageClient(opts = {}) {
   }
 
   /**
-   * Fetch duplicate tags for a completed task.
+   * Poll a DataForSEO sub-endpoint (POST-based) that may return 20100
+   * (Task Created / still processing) even after the main crawl has
+   * completed.  Retries with linear backoff until the endpoint returns
+   * a terminal result (20000), a terminal error, or the timeout expires.
    *
-   * POST /v3/on_page/duplicate_tags
+   * Returns { result, metadata } where metadata records the task ID,
+   * retry count, final status code, final status message, and whether
+   * the call timed out.
    *
-   * @param {string} taskId - Task ID.
-   * @returns {Promise<object>} Duplicate tags result.
+   * Does NOT throw on timeout or terminal errors — callers decide how
+   * to handle partial data.
+   *
+   * @param {string}   endpoint   e.g. "/on_page/duplicate_tags"
+   * @param {string}   taskId     Main crawl task ID
+   * @param {object}   [options]
+   * @param {number}   [options.timeoutMs=60000]   Max poll time (default 60 s)
+   * @param {number}   [options.pollIntervalMs=5000]  Interval between polls
+   * @param {number[]} [options.pendingCodes=[20100]] Status codes that mean "still processing"
+   * @returns {Promise<{result: object|null, metadata: object}>}
    */
-  async function getDuplicateTags(taskId) {
+  async function pollSubEndpoint(endpoint, taskId, options = {}) {
+    const timeoutMs = options.timeoutMs ?? 60000;
+    const pollIntervalMs = options.pollIntervalMs ?? 5000;
+    const pendingCodes = options.pendingCodes ?? [20100];
+
     if (mode === "fixture") {
       const fixtures = opts.fixtures || {};
-      return fixtures.duplicateTags || {};
+      const key = endpoint.replace("/on_page/", "");
+      return {
+        result: fixtures[key] || { items: [] },
+        metadata: { taskId, retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false },
+      };
     }
 
     const { login, password } = getCredentials();
-    const response = await dataforseoPost(
-      "/on_page/duplicate_tags",
-      [{ id: taskId }],
-      { login, password, fetchImpl: opts.fetchImpl },
-    );
+    const startedAt = Date.now();
+    let retryCount = 0;
+    let finalCode = null;
+    let finalMessage = null;
 
-    const result = extractTaskResult(response, "/on_page/duplicate_tags", [20000, 20100]);
-    if (!result) {
-      return { items: [] };
+    while (Date.now() - startedAt < timeoutMs) {
+      try {
+        const response = await dataforseoPost(
+          endpoint,
+          [{ id: taskId }],
+          { login, password, fetchImpl: opts.fetchImpl },
+        );
+
+        const task = response?.tasks?.[0];
+        const code = task?.status_code;
+        finalCode = code;
+        finalMessage = task?.status_message || null;
+
+        if (code === 20000) {
+          const rawResult = task?.result?.[0] || null;
+          return {
+            result: rawResult,
+            metadata: { taskId, retryCount, finalCode, finalMessage, timedOut: false },
+          };
+        }
+
+        if (pendingCodes.includes(code)) {
+          retryCount++;
+          await new Promise((r) => setTimeout(r, pollIntervalMs));
+          continue;
+        }
+
+        // Terminal non-20000, non-pending code
+        return {
+          result: null,
+          metadata: { taskId, retryCount, finalCode, finalMessage, timedOut: false },
+        };
+      } catch (error) {
+        if (
+          error.message &&
+          (error.message.includes("20100") || error.message.includes("processing"))
+        ) {
+          retryCount++;
+          await new Promise((r) => setTimeout(r, pollIntervalMs));
+          continue;
+        }
+        return {
+          result: null,
+          metadata: {
+            taskId, retryCount,
+            finalCode: null,
+            finalMessage: error.message?.slice(0, 200) || "Transport error",
+            timedOut: false,
+          },
+        };
+      }
     }
-    return result;
+
+    return {
+      result: null,
+      metadata: {
+        taskId, retryCount,
+        finalCode: finalCode ?? null,
+        finalMessage: finalMessage ?? `Polling timed out after ${timeoutMs}ms`,
+        timedOut: true,
+      },
+    };
+  }
+
+  /**
+   * Fetch duplicate tags for a completed task.
+   *
+   * Polls the endpoint until a terminal result is returned or timeout.
+   * POST /v3/on_page/duplicate_tags
+   *
+   * @param {string} taskId - Task ID.
+   * @returns {Promise<{result: object|null, metadata: object}>}
+   */
+  async function getDuplicateTags(taskId, options) {
+    return pollSubEndpoint("/on_page/duplicate_tags", taskId, options);
   }
 
   /**
    * Fetch duplicate content for a completed task.
    *
+   * Polls the endpoint until a terminal result is returned or timeout.
    * POST /v3/on_page/duplicate_content
    *
    * @param {string} taskId - Task ID.
-   * @returns {Promise<object>} Duplicate content result.
+   * @param {object} [options] - Poll options (timeoutMs, pollIntervalMs, etc.)
+   * @returns {Promise<{result: object|null, metadata: object}>}
    */
-  async function getDuplicateContent(taskId) {
-    if (mode === "fixture") {
-      const fixtures = opts.fixtures || {};
-      return fixtures.duplicateContent || {};
-    }
-
-    const { login, password } = getCredentials();
-    const response = await dataforseoPost(
-      "/on_page/duplicate_content",
-      [{ id: taskId }],
-      { login, password, fetchImpl: opts.fetchImpl },
-    );
-
-    const result = extractTaskResult(response, "/on_page/duplicate_content", [20000, 20100]);
-    if (!result) {
-      return { items: [] };
-    }
-    return result;
+  async function getDuplicateContent(taskId, options) {
+    return pollSubEndpoint("/on_page/duplicate_content", taskId, options);
   }
 
   /**

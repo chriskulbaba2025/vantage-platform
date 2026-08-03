@@ -402,6 +402,8 @@ function summarizeSite({
   rawSummary,
   rawDuplicateTags,
   rawDuplicateContent,
+  dtMeta,
+  dcMeta,
   links,
   limitations,
   rawTaskId,
@@ -813,6 +815,8 @@ function summarizeSite({
       summary: rawSummary,
       duplicateTags: rawDuplicateTags,
       duplicateContent: rawDuplicateContent,
+      dtMeta: dtMeta || null,
+      dcMeta: dcMeta || null,
     },
   };
 }
@@ -950,6 +954,8 @@ export async function crawlWithDataforseo(target, options = {}) {
   let rawLinks = [];
   let rawDuplicateTags;
   let rawDuplicateContent;
+  let dtMeta = null;
+  let dcMeta = null;
   let cappedPages = false;
   let jsContentMissing = false;
   let robotsBlocked = false;
@@ -1095,18 +1101,52 @@ export async function crawlWithDataforseo(target, options = {}) {
       limitations.push(`Link retrieval failed: ${linkError.message}`);
     }
 
-    // 3d. Retrieve duplicate tags
+    // 3d. Retrieve duplicate tags (polls through 20100)
+    rawDuplicateTags = {};
+    dtMeta = null;
     try {
-      rawDuplicateTags = await client.getDuplicateTags(rawTaskId);
+      const dtResult = await client.getDuplicateTags(rawTaskId);
+      rawDuplicateTags = dtResult.result || {};
+      dtMeta = dtResult.metadata;
+      if (dtMeta?.timedOut) {
+        limitations.push(
+          `Duplicate tag retrieval timed out after ${dtMeta.retryCount} retries ` +
+          `(final code ${dtMeta.finalCode ?? "none"}). Task ID: ${dtMeta.taskId}.`,
+        );
+      } else if (dtMeta?.finalCode !== 20000 && dtMeta?.finalCode != null) {
+        limitations.push(
+          `Duplicate tag retrieval returned non-success status ` +
+          `(code ${dtMeta.finalCode}, message: "${dtMeta.finalMessage || "unknown"}"). ` +
+          `Task ID: ${dtMeta.taskId}, retries: ${dtMeta.retryCount}.`,
+        );
+      } else if (dtMeta && dtMeta.retryCount > 0) {
+        // Succeeded after retries — note in diagnostic metadata
+      }
     } catch (dtError) {
       limitations.push(
         `Duplicate tag retrieval failed: ${dtError.message}`,
       );
     }
 
-    // 3e. Retrieve duplicate content
+    // 3e. Retrieve duplicate content (polls through 20100)
+    rawDuplicateContent = {};
+    dcMeta = null;
     try {
-      rawDuplicateContent = await client.getDuplicateContent(rawTaskId);
+      const dcResult = await client.getDuplicateContent(rawTaskId);
+      rawDuplicateContent = dcResult.result || {};
+      dcMeta = dcResult.metadata;
+      if (dcMeta?.timedOut) {
+        limitations.push(
+          `Duplicate content retrieval timed out after ${dcMeta.retryCount} retries ` +
+          `(final code ${dcMeta.finalCode ?? "none"}). Task ID: ${dcMeta.taskId}.`,
+        );
+      } else if (dcMeta?.finalCode !== 20000 && dcMeta?.finalCode != null) {
+        limitations.push(
+          `Duplicate content retrieval returned non-success status ` +
+          `(code ${dcMeta.finalCode}, message: "${dcMeta.finalMessage || "unknown"}"). ` +
+          `Task ID: ${dcMeta.taskId}, retries: ${dcMeta.retryCount}.`,
+        );
+      }
     } catch (dcError) {
       limitations.push(
         `Duplicate content retrieval failed: ${dcError.message}`,
@@ -1159,6 +1199,8 @@ export async function crawlWithDataforseo(target, options = {}) {
     rawSummary,
     rawDuplicateTags,
     rawDuplicateContent,
+    dtMeta,
+    dcMeta,
     links: rawLinks,
     limitations,
     rawTaskId,
