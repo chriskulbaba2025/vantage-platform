@@ -20,6 +20,8 @@
  * scoring, reporting, and module gates work without modification.
  */
 
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { domainOf } from "../../utils.js";
 import {
@@ -1278,7 +1280,7 @@ export async function crawlWithDataforseo(target, options = {}) {
     normalizePage(raw, { targetDomain }),
   );
 
-  return summarizeSite({
+  const result = summarizeSite({
     targetUrl: target,
     pages: normalizedPages,
     rawSummary,
@@ -1299,6 +1301,49 @@ export async function crawlWithDataforseo(target, options = {}) {
     robotsBlocked,
     loginBlocked,
   });
+
+  // ── Persist raw artifact ───────────────────────────────────────────────
+  const artifactRoot = options.artifactRoot || null;
+  const artifactSlug = options.artifactSlug || null;
+  const artifactRunId = options.artifactRunId || null;
+
+  if (artifactRoot && artifactSlug && artifactRunId && rawTaskId) {
+    try {
+      const rawPayload = {
+        adapterVersion: ADAPTER_VERSION,
+        collectedAt: completedAt,
+        taskPost: taskPostResult,
+        taskId: rawTaskId,
+        pollStatus: clientOpts.pollStatus || "completed",
+        summary: rawSummary,
+        pages: rawPages,
+        links: rawLinks,
+        duplicateTags: rawDuplicateTags,
+        duplicateContent: rawDuplicateContent,
+        microdata: rawMicrodata,
+        dtMeta,
+        dcMeta,
+        microdataMeta,
+        retryCount,
+      };
+      const rawJson = JSON.stringify(rawPayload, null, 2);
+      const rawHash = createHash("sha256").update(rawJson).digest("hex");
+      const rawBytes = Buffer.byteLength(rawJson, "utf8");
+
+      const artifactDir = resolve(artifactRoot, "raw");
+      await mkdir(artifactDir, { recursive: true });
+      const artifactPath = resolve(artifactDir, `${artifactRunId}.json`);
+      await writeFile(artifactPath, rawJson, "utf8");
+
+      result._rawSha256 = rawHash;
+      result._rawBytes = rawBytes;
+      result.rawArtifactRef = `${artifactSlug}/${artifactRunId}/raw/${artifactRunId}.json?sha256=${rawHash}`;
+    } catch (rawWriteError) {
+      result._rawWriteError = rawWriteError.message;
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
