@@ -126,6 +126,17 @@ function performance(model, renderOpts = {}) {
     ? `<div class="note"><strong>Note:</strong> No performance result was measured for this audit. PageSpeed Insights and local Lighthouse were both unavailable. All scores and metrics are shown as N/A. This does not affect other scored dimensions.</div>`
     : "";
 
+  // When the performance provider ran but produced null scores (e.g., site timeout
+  // during metric collection), explain the gap without site-specific wording.
+  const mobileScore = perf?.mobile?.scores?.performance;
+  const desktopScore = perf?.desktop?.scores?.performance;
+  const ranButNoScore = !perfUnavailable && mobileScore == null && desktopScore == null;
+  const partialScoreNote = ranButNoScore
+    ? `<div class="note"><strong>Note:</strong> Performance tests completed but did not produce measurable scores. The page may have exceeded the test timeout, loaded too slowly to reach a measurable state, or lacked sufficient content for Lighthouse metric collection. Lab results are unavailable for both device profiles. This does not affect other scored dimensions.</div>`
+    : (!perfUnavailable && (mobileScore == null || desktopScore == null)
+      ? `<div class="note"><strong>Note:</strong> Only one device profile produced a measurable performance score. The other profile may have exceeded the test timeout or lacked sufficient content for measurement.</div>`
+      : "");
+
   // Multi-page results (when available)
   const multiPageSection = perf?.pageResults && perf.pageResults.length > 1
     ? `<h3 style="margin-top:20px">Tested Pages</h3>
@@ -178,7 +189,7 @@ ${perf.pageResults.map((pr, i) => pageResultBlock(pr, i)).join("")}`
     "experience-and-performance",
     "12",
     "Experience and Performance",
-    `${unavailableNote}${fallbackAlert}<div class="note"><strong>Source:</strong> ${sourceNoteParts.join(" &middot; ")}</div>${coverageNote}${diagnosticHtml}<div class="two-col">${deviceCard("Mobile", perf?.mobile, fallbackUsed)}${deviceCard("Desktop", perf?.desktop, fallbackUsed)}</div>${multiPageSection}<h3 style="margin-top:20px">AI Search Readiness</h3>${table(["Dimension", "Score"], [["Structured Data", `${model.evidence.site.schemaTypes.length ? 25 : 0}/25`], ["Entity Clarity", `${model.evidence.site.pages[0]?.headings?.h1?.length ? 15 : 5}/25`], ["Answer-First Copy", `${model.evidence.site.averageWords >= 300 ? 15 : 5}/25`], ["FAQ Coverage", `${model.evidence.site.trust.faq ? 20 : 0}/25`], ["Topic Authority", `${Math.min(25, model.evidence.site.pageCount * 4)}/25`], ["Local SEO", `${model.evidence.site.schemaTypes.some((x) => /localbusiness/i.test(x)) ? 25 : 0}/25`]].map((r) => r.map(e)))}<p style="margin-top:8px"><strong>AI Readiness: ${e(model.scores.aiReadiness !== null ? `${model.scores.aiReadiness}/100` : "Not Assessed")}.</strong></p>`,
+    `${unavailableNote}${partialScoreNote}${fallbackAlert}<div class="note"><strong>Source:</strong> ${sourceNoteParts.join(" &middot; ")}</div>${coverageNote}${diagnosticHtml}<div class="two-col">${deviceCard("Mobile", perf?.mobile, fallbackUsed)}${deviceCard("Desktop", perf?.desktop, fallbackUsed)}</div>${multiPageSection}<h3 style="margin-top:20px">AI Search Readiness</h3>${table(["Dimension", "Score"], [["Structured Data", `${model.evidence.site.schemaTypes.length ? 25 : 0}/25`], ["Entity Clarity", `${model.evidence.site.pages[0]?.headings?.h1?.length ? 15 : 5}/25`], ["Answer-First Copy", `${model.evidence.site.averageWords >= 300 ? 15 : 5}/25`], ["FAQ Coverage", `${model.evidence.site.trust.faq ? 20 : 0}/25`], ["Topic Authority", `${Math.min(25, model.evidence.site.pageCount * 4)}/25`], ["Local SEO", `${model.evidence.site.schemaTypes.some((x) => /localbusiness/i.test(x)) ? 25 : 0}/25`]].map((r) => r.map(e)))}<p style="margin-top:8px"><strong>AI Readiness: ${e(model.scores.aiReadiness !== null ? `${model.scores.aiReadiness}/100` : "Not Assessed")}.</strong></p>`,
   );
 }
 
