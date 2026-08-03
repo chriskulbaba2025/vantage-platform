@@ -146,24 +146,21 @@ function validateApiResponse(data) {
           taskId: task.id || null,
           statusCode: null,
           statusMessage: fallbackMsg,
-          providerStatusMessage: fallbackMsg,
           endpoint: SERP_ENDPOINT,
         },
       };
     }
     if (!TASK_SUCCESS_CODES.has(taskCode)) {
       const taskMsg = task.status_message || "unknown task error";
-      const surfacedTaskMessage = `status_code=${taskCode}, message="${taskMsg}"`;
       return {
         valid: false,
-        error: `SERP task ${i} failed: ${surfacedTaskMessage}`,
+        error: `SERP task ${i} failed: status_code=${taskCode}, message="${taskMsg}"`,
         errorType: SERP_ERROR_TYPE.TASK,
         statusCode: taskCode,
         taskError: {
           taskId: task.id || null,
           statusCode: taskCode,
-          statusMessage: surfacedTaskMessage,
-          providerStatusMessage: taskMsg,
+          statusMessage: taskMsg,
           endpoint: SERP_ENDPOINT,
         },
       };
