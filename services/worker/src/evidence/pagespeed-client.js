@@ -105,8 +105,10 @@ function normalizeLighthouse(lhr, source, strategy, opts = {}) {
   const finalDisplayedUrl = lhr?.finalDisplayedUrl || lhr?.finalUrl || opts.url || null;
   const httpStatus = captureDiagnostic ? _resolveHttpStatus(networkRecords, opts.url) : null;
 
+  const hasPerformanceScore = score("performance") !== null;
+
   return {
-    status: SOURCE_STATUS.AVAILABLE,
+    status: hasPerformanceScore ? SOURCE_STATUS.AVAILABLE : SOURCE_STATUS.PARTIAL,
     source,
     strategy,
     url: opts.url || null,
@@ -553,11 +555,15 @@ export async function collectPerformance(url, options = {}) {
   }
 
   // ── Determine source status ──────────────────────────────────────────
+  // A strategy is AVAILABLE when it produced a non-null performance score.
+  // A strategy is PARTIAL when it ran (no provider error) but the score is null.
+  // A strategy is FAILED when the provider could not run at all.
   const strategies = Object.values(results);
-  const completeCount = strategies.filter((r) => r.status === SOURCE_STATUS.AVAILABLE).length;
   const totalStrategies = strategies.length;
-  const sourceStatus = completeCount === totalStrategies ? SOURCE_STATUS.AVAILABLE
-    : completeCount > 0 ? SOURCE_STATUS.PARTIAL
+  const ranCount = strategies.filter((r) => r.status !== SOURCE_STATUS.FAILED).length;
+  const usableCount = strategies.filter((r) => r.scores?.performance != null).length;
+  const sourceStatus = usableCount === totalStrategies ? SOURCE_STATUS.AVAILABLE
+    : ranCount > 0 ? SOURCE_STATUS.PARTIAL
     : SOURCE_STATUS.FAILED;
 
   // ── Determine providers used ─────────────────────────────────────────
@@ -575,7 +581,7 @@ export async function collectPerformance(url, options = {}) {
 
   // Determine aggregate error category for failed/partial results
   let aggregateErrorCategory = null;
-  if (completeCount === 0) {
+  if (ranCount === 0) {
     aggregateErrorCategory = Object.values(strategyErrors).some((e) => e.category === ERROR_CATEGORY.RATE_LIMIT)
       ? ERROR_CATEGORY.RATE_LIMIT
       : Object.values(strategyErrors).some((e) => e.category === ERROR_CATEGORY.TIMEOUT)
@@ -583,10 +589,22 @@ export async function collectPerformance(url, options = {}) {
         : Object.values(strategyErrors).some((e) => e.category === ERROR_CATEGORY.AUTH)
           ? ERROR_CATEGORY.AUTH
           : ERROR_CATEGORY.INTERNAL;
-  } else if (completeCount < totalStrategies) {
+  } else if (usableCount < totalStrategies) {
     aggregateErrorCategory = Object.values(strategyErrors).some((e) => e.category === ERROR_CATEGORY.RATE_LIMIT)
       ? ERROR_CATEGORY.RATE_LIMIT
       : null;
+  }
+
+  // Build a precise limitation message
+  let sourceLimitation = null;
+  if (ranCount === 0) {
+    sourceLimitation = "No usable PageSpeed or Lighthouse result.";
+  } else if (usableCount === 0 && ranCount > 0) {
+    sourceLimitation = "Performance tests ran but did not produce measurable scores. The page may have timed out during metric collection or lacked sufficient content for Lighthouse scoring.";
+  } else if (fallbackUsed) {
+    sourceLimitation = "PageSpeed failed for at least one strategy; Lighthouse CLI fallback succeeded.";
+  } else if (usableCount < totalStrategies) {
+    sourceLimitation = `Only ${usableCount} of ${totalStrategies} device strategies produced a measurable performance score.`;
   }
 
   const value = {
@@ -604,26 +622,23 @@ export async function collectPerformance(url, options = {}) {
     collectedAt: completedAt,
     coverage: {
       requested: totalStrategies,
-      completed: completeCount,
-      failed: totalStrategies - completeCount,
+      completed: ranCount,
+      failed: totalStrategies - ranCount,
+      usableScores: usableCount,
     },
     rawArtifactRef: null,
     _sourceStatus: buildSourceStatus({
       provider: primarySource,
       intendedProvider,
-      adapterVersion: "1.0.0",
+      adapterVersion: "1.1.0",
       startedAt,
       completedAt,
       requestId: null,
       retryCount: totalRetries,
-      returnedRecordCount: completeCount,
+      returnedRecordCount: usableCount,
       expectedRecordCount: totalStrategies,
       errorCategory: aggregateErrorCategory,
-      limitation: completeCount === 0
-        ? "No usable PageSpeed or Lighthouse result."
-        : fallbackUsed
-          ? "PageSpeed failed; Lighthouse CLI fallback succeeded."
-          : null,
+      limitation: sourceLimitation,
       rawArtifactRef: null,
     }),
     cache: "miss",
@@ -721,6 +736,7 @@ export async function collectPerformanceForPages(urls, options = {}) {
   const totalRequested = pageResults.reduce((sum, p) => sum + (p.coverage?.requested || 2), 0);
   const totalCompleted = pageResults.reduce((sum, p) => sum + (p.coverage?.completed || 0), 0);
   const totalFailed = totalRequested - totalCompleted;
+  const totalUsableScores = pageResults.reduce((sum, p) => sum + (p.coverage?.usableScores || 0), 0);
 
   // Aggregate limitations
   const allLimitations = pageResults.flatMap((p) => p.limitations || []);
@@ -748,6 +764,7 @@ export async function collectPerformanceForPages(urls, options = {}) {
       requested: totalRequested,
       completed: totalCompleted,
       failed: totalFailed,
+      usableScores: totalUsableScores,
       pagesTested: uniqueUrls.length,
     },
     rawArtifactRef: null,

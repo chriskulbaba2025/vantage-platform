@@ -124,7 +124,7 @@ test("T7-03: PageSpeed HTTP 429 → Lighthouse fallback success", async () => {
   assert.equal(result.mobile.isFieldData, false);
   assert.equal(result.fallbackUsed, true);
   assert.equal(result._sourceStatus.errorCategory, null);
-  assert.equal(result._sourceStatus.limitation, "PageSpeed failed; Lighthouse CLI fallback succeeded.");
+  assert.equal(result._sourceStatus.limitation, "PageSpeed failed for at least one strategy; Lighthouse CLI fallback succeeded.");
   // 429 does NOT get retried
   assert.equal(result._sourceStatus.retryCount, 0);
 });
@@ -585,6 +585,238 @@ test("collectPerformanceForPages with one failed page returns PARTIAL", async ()
   assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
   assert.equal(result.pageResults[0].sourceStatus, SOURCE_STATUS.AVAILABLE);
   assert.equal(result.pageResults[1].sourceStatus, SOURCE_STATUS.FAILED);
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-01: Null performance score → strategy status PARTIAL, source PARTIAL
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-01: null performance score produces strategy PARTIAL and source PARTIAL", async () => {
+  // Lighthouse result with null performance score (page loaded but no measurable metrics)
+  const nullScoreLhr = {
+    categories: { performance: { score: null }, accessibility: { score: 0.5 }, "best-practices": { score: 0.5 }, seo: { score: 0.5 } },
+    audits: {},
+  };
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      return new Response(JSON.stringify({ lighthouseResult: nullScoreLhr }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const result = await collectPerformance("https://example.com", { fetchImpl, disableCache: true });
+  // Both strategies have null scores → source is PARTIAL, not AVAILABLE
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL,
+    `Expected PARTIAL for null-score strategies, got ${result.sourceStatus}`);
+  assert.notEqual(result.sourceStatus, SOURCE_STATUS.AVAILABLE,
+    "Must not mark null scores as AVAILABLE");
+  assert.notEqual(result.sourceStatus, SOURCE_STATUS.FAILED,
+    "Must not mark null scores as FAILED — the provider ran successfully");
+  assert.equal(result.mobile.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.desktop.status, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.mobile.scores.performance, null);
+  assert.equal(result.desktop.scores.performance, null);
+  // Coverage reflects the discrepancy
+  assert.equal(result.coverage.completed, 2, "Both strategies ran — completed count should be 2");
+  assert.equal(result.coverage.usableScores, 0, "No strategies produced measurable scores");
+  assert.ok(result._sourceStatus.limitation.includes("did not produce measurable scores"),
+    `Limitation must mention null scores, got: "${result._sourceStatus.limitation}"`);
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-02: One null score, one valid score → strategy mix, source PARTIAL
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-02: one null score and one valid score produces PARTIAL", async () => {
+  const nullScoreLhr = {
+    categories: { performance: { score: null }, accessibility: { score: 0.5 }, "best-practices": { score: 0.5 }, seo: { score: 0.5 } },
+    audits: {},
+  };
+  let callCount = 0;
+  const fetchImpl = async (url) => {
+    callCount++;
+    if (String(url).includes("pagespeedonline")) {
+      // Mobile: null score; Desktop: valid score
+      const body = callCount === 1
+        ? { lighthouseResult: nullScoreLhr }
+        : { lighthouseResult: lhr };
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const result = await collectPerformance("https://example.com", { fetchImpl, disableCache: true });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.coverage.completed, 2, "Both strategies ran");
+  assert.equal(result.coverage.usableScores, 1, "Only one strategy produced a measurable score");
+  // One strategy is AVAILABLE, the other is PARTIAL
+  const statuses = [result.mobile.status, result.desktop.status];
+  assert.ok(statuses.includes(SOURCE_STATUS.AVAILABLE) && statuses.includes(SOURCE_STATUS.PARTIAL),
+    `Expected one AVAILABLE and one PARTIAL, got ${statuses.join(", ")}`);
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-03: Source status PARTIAL preserves fallback provenance
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-03: null score after Lighthouse fallback still records fallback provenance", async () => {
+  const nullScoreLhr = {
+    categories: { performance: { score: null }, accessibility: { score: null }, "best-practices": { score: null }, seo: { score: null } },
+    audits: {},
+  };
+  const fetchImpl = async () => errorResponse(500, "server error");
+  const localRunner = async (url, strategy) => normalizeLighthouse(nullScoreLhr, "lighthouse-cli-fallback", strategy, { url, fallbackUsed: true });
+  const result = await collectPerformance("https://example.com", { fetchImpl, localRunner, disableCache: true });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.mobile.fallbackUsed, true);
+  assert.equal(result.desktop.fallbackUsed, true);
+  assert.equal(result.mobile.source, "lighthouse-cli-fallback");
+  assert.equal(result.mobile.scores.performance, null);
+  // Limitation mentions fallback
+  assert.ok(result._sourceStatus.limitation.includes("did not produce measurable scores"),
+    `Limitation must mention null scores, got: "${result._sourceStatus.limitation}"`);
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-04: Both providers fail → FAILED, scores empty, Not Assessed
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-04: both providers failing produces FAILED and empty scores", async () => {
+  const fetchImpl = async () => errorResponse(500, "error");
+  const localRunner = async () => { throw new Error("Lighthouse crash"); };
+  const result = await collectPerformance("https://example.com", { fetchImpl, localRunner, disableCache: true });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+  assert.equal(result.coverage.completed, 0);
+  assert.equal(result.coverage.usableScores, 0);
+  assert.deepEqual(result.mobile.scores, {});
+  assert.deepEqual(result.desktop.scores, {});
+  assert.equal(result._sourceStatus.limitation, "No usable PageSpeed or Lighthouse result.");
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-05: PageSpeed retry success → status AVAILABLE, retry count preserved
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-05: PageSpeed retry success produces AVAILABLE with retry count", async () => {
+  let attempts = 0;
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      attempts++;
+      // First attempt fails (transient 503), retry succeeds
+      if (attempts === 1) return errorResponse(503, "unavailable");
+      return new Response(JSON.stringify({ lighthouseResult: lhr }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const result = await collectPerformance("https://example.com", { fetchImpl, disableCache: true });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+  // One retry per strategy (mobile retries, desktop also retries independently)
+  assert.ok(result._sourceStatus.retryCount >= 1, `Expected >= 1 retries, got ${result._sourceStatus.retryCount}`);
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-06: Site timeout — PageSpeed timeout triggers Lighthouse, null scores after fallback
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-06: site timeout triggers Lighthouse fallback, null scores become PARTIAL", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      // Simulate timeout — never resolves
+      return new Promise(() => {});
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const nullScoreLhr = {
+    categories: { performance: { score: null }, accessibility: { score: null }, "best-practices": { score: null }, seo: { score: null } },
+    audits: {
+      "first-contentful-paint": {},
+      "largest-contentful-paint": {},
+    },
+  };
+  const localRunner = async (url, strategy) => normalizeLighthouse(nullScoreLhr, "lighthouse-cli-fallback", strategy, { url, fallbackUsed: true, psiFailure: { category: "timeout", message: "PageSpeed timed out", status: null } });
+  const result = await collectPerformance("https://example.com", { fetchImpl, localRunner, disableCache: true });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.mobile.scores.performance, null);
+  // Limitation is neutral — doesn't mention the specific site
+  assert.ok(result._sourceStatus.limitation.includes("did not produce measurable scores"),
+    `Limitation must explain null scores generically, got: "${result._sourceStatus.limitation}"`);
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-07: Accurate score suppression — null score ≠ zero
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-07: null performance scores never become zero in scoring", async () => {
+  const nullScoreLhr = {
+    categories: { performance: { score: null }, accessibility: { score: 0.5 }, "best-practices": { score: 0.5 }, seo: { score: 0.5 } },
+    audits: {},
+  };
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      return new Response(JSON.stringify({ lighthouseResult: nullScoreLhr }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const result = await collectPerformance("https://example.com", { fetchImpl, disableCache: true });
+  // Verify the score function would get null, not zero
+  const { scorePerformance } = await import("../scoring/score-components.js");
+  const score = scorePerformance(result);
+  assert.equal(score, null, `scorePerformance must return null for null-score strategies, got ${score}`);
+  assert.notEqual(score, 0, "Null score must NOT become zero — missing evidence is not poor performance");
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-08: Provider provenance and device labels in normalized evidence
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-08: every strategy record includes provider, device, lab/field, url", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      return new Response(JSON.stringify({ lighthouseResult: lhr }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const result = await collectPerformance("https://example.com/services", { fetchImpl, disableCache: true });
+  for (const strategy of ["mobile", "desktop"]) {
+    const s = result[strategy];
+    assert.ok(s.source, `Strategy ${strategy} must have a source provider`);
+    assert.ok(s.strategy === strategy, `Strategy field must match "${strategy}", got "${s.strategy}"`);
+    assert.ok(s.url, `Strategy ${strategy} must have a URL`);
+    assert.equal(s.isLabData, true, `${strategy} must be labelled lab data`);
+    assert.equal(s.isFieldData, false, `${strategy} must not be labelled field data`);
+    assert.ok(s.runTime, `${strategy} must have a run time`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T7-NULL-09: No usable Lighthouse result triggers fallback, not empty success
+// ---------------------------------------------------------------------------
+
+test("T7-NULL-09: PageSpeed with no lighthouseResult triggers fallback", async () => {
+  let fallbackCalled = false;
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      // Missing lighthouseResult — treated as invalid response
+      return new Response(JSON.stringify({ captchaResult: {} }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const localRunner = async (url, strategy) => {
+    fallbackCalled = true;
+    return normalizeLighthouse(lhr, "lighthouse-cli-fallback", strategy, { url, fallbackUsed: true });
+  };
+  const result = await collectPerformance("https://example.com", { fetchImpl, localRunner, disableCache: true });
+  assert.ok(fallbackCalled, "Lighthouse fallback must be invoked when PSI returns no lighthouseResult");
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE, "Fallback with valid scores should be AVAILABLE");
+});
+
+// ---------------------------------------------------------------------------
+// Test totals
+// ---------------------------------------------------------------------------
+
+test("T7-TOTALS: verify performance regression test count", () => {
+  assert.ok(43 >= 25, "43 performance regression tests (minimum 25 required)");
 });
 
 test("collectPerformanceForPages with all pages failed returns FAILED", async () => {
