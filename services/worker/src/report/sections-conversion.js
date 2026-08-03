@@ -125,10 +125,13 @@ function competitorBenchmark(model) {
   const queryFailures = serpSourceData.queryFailures || serpSourceData.taskErrors || [];
 
   const describeFailure = (failure) => {
-    const identifier = failure.statusCode != null
+    const codePart = failure.statusCode != null
       ? `code ${e(String(failure.statusCode))}`
       : e(failure.errorType || "provider error");
-    return `"${e(failure.topic || "unknown topic")}" (${identifier})`;
+    const messagePart = failure.statusMessage && failure.statusMessage !== "Unknown SERP query failure"
+      ? `: ${e(failure.statusMessage)}`
+      : "";
+    return `"${e(failure.topic || "unknown topic")}" (${codePart}${messagePart})`;
   };
 
   let serpLimitationHtml = "";
