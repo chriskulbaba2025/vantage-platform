@@ -56,6 +56,7 @@ test("PARTIAL report uses attempted query count and preserves successful candida
   assert.match(html, /18 candidate\(s\) were preserved from 2 successful query or queries out of 3 attempted/i);
   assert.match(html, /Executive coaching Ottawa and Ontario, Canada/);
   assert.match(html, /code 40101/);
+  assert.match(html, /Internal SE Server Error/);
   assert.match(html, /language: English/);
   assert.match(html, /location: Ottawa,Ontario,Canada/);
   assert.doesNotMatch(html, /stack trace|at querySerp|at collectCompetitorOpportunities/i);
@@ -83,5 +84,6 @@ test("FAILED report surfaces non-task failure category without inventing a task 
   assert.match(html, /could not collect localized competitor evidence/i);
   assert.match(html, /Leadership training Ottawa and Ontario, Canada/);
   assert.match(html, /code 503/);
+  assert.match(html, /upstream unavailable/);
   assert.doesNotMatch(html, /code null/);
 });
