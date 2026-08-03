@@ -721,7 +721,7 @@ export function createDataforseoOnpageClient(opts = {}) {
       { login, password, fetchImpl: opts.fetchImpl },
     );
 
-    const result = extractTaskResult(response, "/on_page/duplicate_tags");
+    const result = extractTaskResult(response, "/on_page/duplicate_tags", [20000, 20100]);
     if (!result) {
       return { items: [] };
     }
@@ -749,7 +749,7 @@ export function createDataforseoOnpageClient(opts = {}) {
       { login, password, fetchImpl: opts.fetchImpl },
     );
 
-    const result = extractTaskResult(response, "/on_page/duplicate_content");
+    const result = extractTaskResult(response, "/on_page/duplicate_content", [20000, 20100]);
     if (!result) {
       return { items: [] };
     }
