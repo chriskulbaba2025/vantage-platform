@@ -162,6 +162,13 @@ function normalizeQueryFailure(topic, result = {}, caughtError = null) {
   };
 }
 
+function formatQueryFailureForLimitation(failure) {
+  const message = failure.statusMessage || "Unknown SERP query failure";
+  return failure.statusCode != null
+    ? `status_code=${failure.statusCode}, message="${message}"`
+    : message;
+}
+
 function deriveSerpStatus({ hasCredentials, attemptedCount, successfulCount, failureCount, candidateCount }) {
   if (!hasCredentials) return SOURCE_STATUS.NOT_CONNECTED;
 
@@ -233,7 +240,7 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
         if (result.error) {
           const failure = normalizeQueryFailure(topic.query, result);
           serpQueryFailures.push(failure);
-          limitations.push(`DataForSEO SERP for "${topic.query}": ${failure.statusMessage}`);
+          limitations.push(`DataForSEO SERP for "${topic.query}": ${formatQueryFailureForLimitation(failure)}`);
           continue;
         }
 
@@ -244,7 +251,7 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
       } catch (error) {
         const failure = normalizeQueryFailure(topic.query, {}, error);
         serpQueryFailures.push(failure);
-        limitations.push(`DataForSEO SERP failed for topic "${topic.query}": ${failure.statusMessage}`);
+        limitations.push(`DataForSEO SERP failed for topic "${topic.query}": ${formatQueryFailureForLimitation(failure)}`);
       }
     }
   } else if (!hasDfsCredentials) {
@@ -442,4 +449,5 @@ export {
   isExcludedPageType,
   deriveSerpStatus,
   normalizeQueryFailure,
+  formatQueryFailureForLimitation,
 };
