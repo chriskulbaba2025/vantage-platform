@@ -5,12 +5,10 @@ function scorecard(model) {
   const { scores, bands, evidenceConfidenceScore, rootCause, evidence } = model;
   const site = evidence.site;
 
-  // PRD §15.3 — assessed weight and readiness status
   const assessedWeight = model.assessedWeight ?? 100;
   const readinessStatus = model.readinessStatus ?? null;
   const showNumeric = model.showNumericScore !== false;
 
-  // Readiness score card
   const readinessDisplay = showNumeric && scores.conversionReadiness !== null
     ? scores.conversionReadiness
     : "—";
@@ -18,7 +16,6 @@ function scorecard(model) {
     ? "Conversion Readiness (Provisional)"
     : "Conversion Readiness";
 
-  // Assessed weight and status banner
   const statusBanner = readinessStatus && readinessStatus !== "Complete"
     ? `<div class="note" style="margin-bottom:16px"><strong>Readiness Status:</strong> ${e(readinessStatus)}. <strong>Assessed Weight:</strong> ${e(assessedWeight)}% of total intended dimensions. ${!showNumeric ? "An overall numeric score cannot be shown because assessed weight is below 60%." : "The score is provisional because less than 80% of intended evidence dimensions were assessed. Missing module weight was not redistributed."}</div>`
     : "";
@@ -53,58 +50,57 @@ ${statusBanner}${legacyReadiness}
 }
 
 function priorityFixes(model) {
-  // Render evidence as readable text — never raw object coercion.
-  function renderEvidence(f) {
-    if (f.evidenceText) return e(f.evidenceText);
-    if (Array.isArray(f.evidence)) {
-      return e(f.evidence.map((er) => `${er.field}: ${er.observedValue ?? "unavailable"}`).join("; "));
+  function renderEvidence(finding) {
+    if (finding.evidenceText) return e(finding.evidenceText);
+    if (Array.isArray(finding.evidence)) {
+      return e(finding.evidence.map((record) => `${record.field}: ${record.observedValue ?? "unavailable"}`).join("; "));
     }
-    return e(String(f.evidence || ""));
+    return e(String(finding.evidence || ""));
   }
-  return section("priority-fixes", "02", "Priority Fixes", `<p style="margin-bottom:16px">Ranked by conversion impact. Each fix is tied to captured website or performance evidence.</p>${table(["#", "Sev", "Problem", "Evidence", "Conversion Impact", "Fix", "Effort"], model.findings.map((f, i) => [e(i + 1), `<span class="${severityClass(f.severity)}">${e(f.severity)}</span>`, e(f.problem), renderEvidence(f), e(f.impact), e(f.fix), e(f.effort)]))}`);
+
+  return section("priority-fixes", "02", "Priority Fixes", `<p style="margin-bottom:16px">Ranked by conversion impact. Each fix is tied to captured website or performance evidence.</p>${table(["#", "Sev", "Problem", "Evidence", "Conversion Impact", "Fix", "Effort"], model.findings.map((finding, index) => [e(index + 1), `<span class="${severityClass(finding.severity)}">${e(finding.severity)}</span>`, e(finding.problem), renderEvidence(finding), e(finding.impact), e(finding.fix), e(finding.effort)]))}`);
 }
 
 function conversionPaths(model) {
   const body = model.conversionPaths.map((path) => `<h3>${e(path.name)}</h3><ol>${path.steps.map((step) => `<li>${e(step)}</li>`).join("")}</ol>`).join("");
   const issues = [...new Set(model.conversionPaths.flatMap((path) => path.blockers))];
-  return section("conversion-path-architecture", "03", "Conversion Path Architecture", `<p style="margin-bottom:16px">Tests whether a visitor can move from landing on the site to completing a conversion action across the captured website.</p>${body}<h3>Conversion Path Issues</h3><ul class="finding-list">${issues.length ? issues.map((issue, i) => `<li class="${i < 2 ? "high" : "medium"}"><strong>${e(issue)}</strong> — this weakens confidence or clarity before the action is completed.</li>`).join("") : '<li class="low"><strong>No major path blocker detected</strong> — the visible path includes sufficient support.</li>'}</ul><p style="margin-top:12px"><strong>Path Summary:</strong> ${e(model.conversionPaths.length)} path(s) tested. ${e(model.conversionPaths.filter((p) => p.status === "Clear").length)} clear.</p>`);
+  return section("conversion-path-architecture", "03", "Conversion Path Architecture", `<p style="margin-bottom:16px">Tests whether a visitor can move from landing on the site to completing a conversion action across the captured website.</p>${body}<h3>Conversion Path Issues</h3><ul class="finding-list">${issues.length ? issues.map((issue, index) => `<li class="${index < 2 ? "high" : "medium"}"><strong>${e(issue)}</strong> — this weakens confidence or clarity before the action is completed.</li>`).join("") : '<li class="low"><strong>No major path blocker detected</strong> — the visible path includes sufficient support.</li>'}</ul><p style="margin-top:12px"><strong>Path Summary:</strong> ${e(model.conversionPaths.length)} path(s) tested. ${e(model.conversionPaths.filter((path) => path.status === "Clear").length)} clear.</p>`);
 }
 
 function readinessMap(model) {
-  const rows = model.readinessMap.map((r) => [e(r.topic), e(r.stage), e(r.blocker), e(r.trustAsset), e(r.eeat), e(r.cta), `<span class="${r.path === "Clear" ? "path-clear" : r.path === "Weak" ? "path-weak" : "path-missing"}">${e(r.path)}</span>`, `<span class="${severityClass(r.priority)}">${e(r.priority)}</span>`]);
-  const clear = model.readinessMap.filter((r) => r.path === "Clear").length;
-  const weak = model.readinessMap.filter((r) => r.path === "Weak").length;
+  const rows = model.readinessMap.map((row) => [e(row.topic), e(row.stage), e(row.blocker), e(row.trustAsset), e(row.eeat), e(row.cta), `<span class="${row.path === "Clear" ? "path-clear" : row.path === "Weak" ? "path-weak" : "path-missing"}">${e(row.path)}</span>`, `<span class="${severityClass(row.priority)}">${e(row.priority)}</span>`]);
+  const clear = model.readinessMap.filter((row) => row.path === "Clear").length;
+  const weak = model.readinessMap.filter((row) => row.path === "Weak").length;
   const missing = model.readinessMap.length - clear - weak;
   return section("conversion-readiness-map", "04", "Conversion Readiness Map", `<p style="font-size:.85rem;color:var(--muted);margin-bottom:16px">Connects each detected service or topic to the evidence needed for conversion readiness.</p>${table(["Topic / Service", "Stage", "Blocker", "Trust Asset", "E-E-A-T Signal", "CTA", "Path", "Pri"], rows)}<p style="margin-top:12px"><strong>Summary:</strong> ${e(model.readinessMap.length)} topics. <span class="path-clear">${clear} clear</span>, <span class="path-weak">${weak} weak</span>, <span class="path-missing">${missing} missing</span>.</p>`);
 }
 
 function ideaTable(items) {
-  return table(["Idea", "Frame", "Type", "Question Answered", "Pri"], items.map((x) => [e(x.idea), e(x.frame), e(x.type), e(x.question), `<span class="${severityClass(x.priority)}">${e(x.priority)}</span>`]));
+  return table(["Idea", "Frame", "Type", "Question Answered", "Pri"], items.map((item) => [e(item.idea), e(item.frame), e(item.type), e(item.question), `<span class="${severityClass(item.priority)}">${e(item.priority)}</span>`]));
 }
 
 function contentIdeas(model) {
   const site = model.evidence.site;
-  const covered = [...new Set([...site.services, ...site.topicKeywords.map((x) => x.replace(/\b\w/g, (c) => c.toUpperCase()))])].slice(0, 8);
+  const covered = [...new Set([...site.services, ...site.topicKeywords.map((item) => item.replace(/\b\w/g, (character) => character.toUpperCase()))])].slice(0, 8);
   const half = Math.ceil(covered.length / 2);
-  const coverageTable = (items) => table(["Topic", "Coverage"], items.map((x, i) => [e(x), e(i < 2 ? "Moderate" : "Light")]));
-  return section("topical-map-content-ideas", "05", "Topical Map + Content Ideas", `<p style="font-size:.85rem;color:var(--muted);margin-bottom:16px">Generated from crawl-visible evidence only. Suggestions answer buyer questions and strengthen trust.</p><h3>Covered Topics</h3><div class="two-col"><div>${coverageTable(covered.slice(0, half))}</div><div>${coverageTable(covered.slice(half))}</div></div><h3>TOFU — Awareness</h3>${ideaTable(model.contentIdeas.tofu)}<h3>MOFU — Consideration</h3>${ideaTable(model.contentIdeas.mofu)}<h3>BOFU — Decision</h3>${ideaTable(model.contentIdeas.bofu)}<h3>Leading-Edge Queries</h3>${table(["Query", "Rationale", "Pri"], model.contentIdeas.leading.map((x) => [e(x.query), e(x.rationale), `<span class="${severityClass(x.priority)}">${e(x.priority)}</span>`]))}`);
+  const coverageTable = (items) => table(["Topic", "Coverage"], items.map((item, index) => [e(item), e(index < 2 ? "Moderate" : "Light")]));
+  return section("topical-map-content-ideas", "05", "Topical Map + Content Ideas", `<p style="font-size:.85rem;color:var(--muted);margin-bottom:16px">Generated from crawl-visible evidence only. Suggestions answer buyer questions and strengthen trust.</p><h3>Covered Topics</h3><div class="two-col"><div>${coverageTable(covered.slice(0, half))}</div><div>${coverageTable(covered.slice(half))}</div></div><h3>TOFU — Awareness</h3>${ideaTable(model.contentIdeas.tofu)}<h3>MOFU — Consideration</h3>${ideaTable(model.contentIdeas.mofu)}<h3>BOFU — Decision</h3>${ideaTable(model.contentIdeas.bofu)}<h3>Leading-Edge Queries</h3>${table(["Query", "Rationale", "Pri"], model.contentIdeas.leading.map((item) => [e(item.query), e(item.rationale), `<span class="${severityClass(item.priority)}">${e(item.priority)}</span>`]))}`);
 }
 
 function competitorBenchmark(model) {
   const site = model.evidence.site;
   const competitors = model.competitors;
-  const opp = model.competitorOpportunities || {};
+  const opportunities = model.competitorOpportunities || {};
 
-  // Traditional crawl-based comparison (backward compat)
   const supplied = competitors.comparisons
     ? competitors.comparisons.length
-      ? table(["#", "Name", "URL", "Topic"], competitors.comparisons.map((c, i) => [e(i + 1), e(c.name), `<a href="${e(c.url)}" target="_blank" rel="noopener">${e(new URL(c.url).hostname)}</a>`, e(c.topic || c.note || "Unavailable")]))
+      ? table(["#", "Name", "URL", "Topic"], competitors.comparisons.map((competitor, index) => [e(index + 1), e(competitor.name), `<a href="${e(competitor.url)}" target="_blank" rel="noopener">${e(new URL(competitor.url).hostname)}</a>`, e(competitor.topic || competitor.note || "Unavailable")]))
       : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>'
     : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>';
 
-  const comps = competitors.comparisons || [];
-  const headers = ["Signal", site.domain, ...comps.map((c) => c.name)];
-  const value = (label, target, key) => [e(label), e(target), ...comps.map((c) => e(c[key] || "Unavailable"))];
+  const comparisons = competitors.comparisons || [];
+  const headers = ["Signal", site.domain, ...comparisons.map((competitor) => competitor.name)];
+  const value = (label, target, key) => [e(label), e(target), ...comparisons.map((competitor) => e(competitor[key] || "Unavailable"))];
   const rows = [
     value("Offer Clarity", site.services.length >= 3 ? "Moderate" : "Light", "offerClarity"),
     value("Trust Proof (on-site)", model.bands.trust, "trustProof"),
@@ -114,89 +110,96 @@ function competitorBenchmark(model) {
     value("Conversion Path Clarity", (model.scores.conversionPathways ?? 0) >= 70 ? "Strong" : (model.scores.conversionPathways ?? 0) >= 40 ? "Moderate" : "Light", "pathClarity"),
   ];
 
-  // ── Competitor Opportunity Layer ─────────────────────────────────────
-  const gaps = opp.gaps || [];
-  const qualifiedCandidates = opp.qualifiedCandidates || [];
-  const excludedCandidates = opp.excludedCandidates || [];
-  const sources = opp.sources || {};
-  const limitations = opp.limitations || [];
+  const gaps = opportunities.gaps || [];
+  const qualifiedCandidates = opportunities.qualifiedCandidates || [];
+  const excludedCandidates = opportunities.excludedCandidates || [];
+  const sources = opportunities.sources || {};
+  const limitations = opportunities.limitations || [];
 
-  const serpSource = sources.dataforseoSerp?.status || "NOT_CONNECTED";
+  const serpSourceData = sources.dataforseoSerp || {};
+  const serpSource = serpSourceData.status || "NOT_CONNECTED";
   const suppliedSource = sources.supplied?.status || "NOT_APPLICABLE";
   const serpFailed = serpSource === "FAILED";
   const serpPartial = serpSource === "PARTIAL";
   const serpUnavailable = serpSource === "UNAVAILABLE";
+  const queryFailures = serpSourceData.queryFailures || serpSourceData.taskErrors || [];
 
-  // ── SERP source limitation notice ────────────────────────────────────
+  const describeFailure = (failure) => {
+    const identifier = failure.statusCode != null
+      ? `code ${e(String(failure.statusCode))}`
+      : e(failure.errorType || "provider error");
+    return `"${e(failure.topic || "unknown topic")}" (${identifier})`;
+  };
+
   let serpLimitationHtml = "";
   if (serpFailed) {
-    const taskErrors = sources.dataforseoSerp?.taskErrors || [];
-    const taskDetail = taskErrors.length > 0
-      ? taskErrors.map((te) => `"${e(te.topic)}" (code ${e(String(te.statusCode))})`).join("; ")
-      : "task error details unavailable";
+    const failureDetail = queryFailures.length > 0
+      ? queryFailures.map(describeFailure).join("; ")
+      : "failure details unavailable";
     serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP could not collect localized competitor evidence. ` +
-      `The search provider returned a task error: ${taskDetail}. ` +
+      `The search provider could not complete: ${failureDetail}. ` +
       `Competitor analysis continues with supplied-competitor evidence only. ` +
-      `Original market: ${e(sources.dataforseoSerp?.originalLocation || "not specified")}. ` +
-      `Normalized location: ${e(sources.dataforseoSerp?.normalizedLocation || "unresolved")}.</div>`;
+      `Original market: ${e(serpSourceData.originalLocation || "not specified")}. ` +
+      `Normalized location: ${e(serpSourceData.normalizedLocation || "unresolved")}.</div>`;
   } else if (serpPartial) {
-    const taskErrors = sources.dataforseoSerp?.taskErrors || [];
-    const failedTopics = taskErrors.length > 0
-      ? taskErrors.map((te) => `"${e(te.topic)}"`).join("; ")
-      : "unknown topic";
-    const candidateCount = sources.dataforseoSerp?.candidateCount || 0;
-    const taskCount = sources.dataforseoSerp?.taskIds?.length || 0;
+    const failedQueries = queryFailures.length > 0
+      ? queryFailures.map(describeFailure).join("; ")
+      : "failure details unavailable";
+    const candidateCount = serpSourceData.candidateCount || 0;
+    const attemptedCount = serpSourceData.attemptedCount ?? serpSourceData.taskIds?.length ?? 0;
+    const successfulCount = serpSourceData.successfulCount ?? Math.max(0, attemptedCount - queryFailures.length);
     serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP collected partial localized competitor evidence. ` +
-      `${candidateCount} candidate(s) returned across ${taskCount} task(s), but SERP data could not be retrieved for: ${failedTopics}. ` +
+      `${candidateCount} candidate(s) were preserved from ${successfulCount} successful query or queries out of ${attemptedCount} attempted. ` +
+      `SERP data could not be retrieved for: ${failedQueries}. ` +
       `Competitor analysis continues with the available SERP evidence plus any supplied-competitor evidence. ` +
-      `Original market: ${e(sources.dataforseoSerp?.originalLocation || "not specified")}. ` +
-      `Normalized location: ${e(sources.dataforseoSerp?.normalizedLocation || "unresolved")}.</div>`;
+      `Original market: ${e(serpSourceData.originalLocation || "not specified")}. ` +
+      `Normalized location: ${e(serpSourceData.normalizedLocation || "unresolved")}.</div>`;
   } else if (serpUnavailable) {
     serpLimitationHtml = `<div class="note"><strong>Source limitation:</strong> DataForSEO SERP query completed but returned no organic results for the targeted topics. This may indicate a very narrow niche or an unsupported location. Competitor analysis continues with supplied-competitor evidence only.</div>`;
   }
 
-  const oppSection = gaps.length > 0
+  const opportunitySection = gaps.length > 0
     ? `<h3>Qualified Competitor Gaps</h3>
 <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">Only approved, qualified gaps that passed all eligibility checks are shown. Each gap is tied to SERP or supplied-competitor evidence.</p>
 ${table(
   ["Topic", "Competitor Page", "Client Coverage", "Competitor Coverage", "Conversion Relevance", "Confidence", "Limitation"],
-  gaps.map((g) => [
-    e(g.clientTopic),
-    `<a href="${e(g.competitorPage)}" target="_blank" rel="noopener">${e(g.competitorDomain || new URL(g.competitorPage).hostname)}</a>`,
-    e(g.clientCoverage),
-    e((g.observedCompetitorCoverage || []).join(", ") || "N/A"),
-    e(g.conversionRelevance),
-    e(g.confidence),
-    e(g.limitationStatement?.slice(0, 120)),
+  gaps.map((gap) => [
+    e(gap.clientTopic),
+    `<a href="${e(gap.competitorPage)}" target="_blank" rel="noopener">${e(gap.competitorDomain || new URL(gap.competitorPage).hostname)}</a>`,
+    e(gap.clientCoverage),
+    e((gap.observedCompetitorCoverage || []).join(", ") || "N/A"),
+    e(gap.conversionRelevance),
+    e(gap.confidence),
+    e(gap.limitationStatement?.slice(0, 120)),
   ]),
 )}
-${gaps.some((g) => g.recommendation) ? `<h3>Recommendations</h3><ul>${gaps.filter((g) => g.recommendation).map((g) => `<li><strong>${e(g.clientTopic)}:</strong> ${e(g.recommendation)}</li>`).join("")}</ul>` : ""}`
+${gaps.some((gap) => gap.recommendation) ? `<h3>Recommendations</h3><ul>${gaps.filter((gap) => gap.recommendation).map((gap) => `<li><strong>${e(gap.clientTopic)}:</strong> ${e(gap.recommendation)}</li>`).join("")}</ul>` : ""}`
     : '<div class="note"><strong>No qualified gaps:</strong> No competitor gaps passed all qualification checks and auditor approval. This may indicate that competitors have not been approved, or that available competitors do not meet the comparison criteria.</div>';
 
   const sourcesSection = `<h3>Competitor Sources</h3>
 <ul>
 <li><strong>User-supplied:</strong> ${e(suppliedSource)} — ${e(sources.supplied?.candidateCount || 0)} candidate(s)</li>
-<li><strong>DataForSEO SERP:</strong> ${e(serpSource)} — ${e(sources.dataforseoSerp?.candidateCount || 0)} candidate(s)${sources.dataforseoSerp?.taskIds?.length ? ` (task: ${e(sources.dataforseoSerp.taskIds.join(", "))})` : ""}${sources.dataforseoSerp?.normalizedLanguage ? `, language: ${e(sources.dataforseoSerp.normalizedLanguage)}` : ""}${sources.dataforseoSerp?.normalizedLocation ? `, location: ${e(sources.dataforseoSerp.normalizedLocation)}` : ""}</li>
+<li><strong>DataForSEO SERP:</strong> ${e(serpSource)} — ${e(serpSourceData.candidateCount || 0)} candidate(s), ${e(serpSourceData.successfulCount ?? 0)} successful and ${e(serpSourceData.failedCount ?? queryFailures.length)} failed query or queries from ${e(serpSourceData.attemptedCount ?? serpSourceData.taskIds?.length ?? 0)} attempted${serpSourceData.taskIds?.length ? ` (task: ${e(serpSourceData.taskIds.join(", "))})` : ""}${serpSourceData.normalizedLanguage ? `, language: ${e(serpSourceData.normalizedLanguage)}` : ""}${serpSourceData.normalizedLocation ? `, location: ${e(serpSourceData.normalizedLocation)}` : ""}</li>
 <li><strong>Qualified candidates:</strong> ${e(qualifiedCandidates.length)}</li>
 <li><strong>Excluded candidates:</strong> ${e(excludedCandidates.length)}</li>
 </ul>`;
-  // ── End SERP source section ──────────────────────────────────────────
 
   const excludedSection = excludedCandidates.length > 0
     ? `<h3>Excluded Candidates</h3>
 <p style="font-size:.8rem;color:var(--muted)">These candidates were excluded by the qualification gate and did not generate recommendations.</p>
-${table(["URL", "Domain", "Reason"], excludedCandidates.slice(0, 10).map((c) => [e(c.candidateUrl?.slice(0, 60)), e(c.domain), e(c.exclusionReason)]))}`
+${table(["URL", "Domain", "Reason"], excludedCandidates.slice(0, 10).map((candidate) => [e(candidate.candidateUrl?.slice(0, 60)), e(candidate.domain), e(candidate.exclusionReason)]))}`
     : "";
 
-  const opportunity = comps.length
-    ? `The strongest positioning opportunity is to make the detected offer stack explicit, support it with visible proof, and connect each offer to one primary action. The comparison is based on visible on-page evidence from ${comps.length} supplied competitor site(s)${serpSource === "AVAILABLE" ? ` and DataForSEO SERP analysis of ${qualifiedCandidates.length} qualified candidates` : ""}.`
+  const hasSerpEvidence = serpSource === "AVAILABLE" || serpSource === "PARTIAL";
+  const opportunity = comparisons.length
+    ? `The strongest positioning opportunity is to make the detected offer stack explicit, support it with visible proof, and connect each offer to one primary action. The comparison is based on visible on-page evidence from ${comparisons.length} supplied competitor site(s)${hasSerpEvidence ? ` and DataForSEO SERP analysis of ${qualifiedCandidates.length} qualified candidates` : ""}.`
     : "A competitor-based positioning opportunity cannot be stated until competitor URLs are supplied. The report does not invent market-wide claims.";
 
   return section(
     "supplied-competitor-benchmark",
     "06",
     "Supplied Competitor Benchmark — Conversion Positioning",
-    `${sourcesSection}${serpLimitationHtml}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}${oppSection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}`,
+    `${sourcesSection}${serpLimitationHtml}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}${opportunitySection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>` : ""}`,
   );
 }
 
