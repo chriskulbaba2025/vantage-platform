@@ -1,0 +1,45 @@
+{
+  "adapterVersion": "1.0.0",
+  "collectedAt": "2026-08-04T10:22:37.301Z",
+  "taskPost": {
+    "taskId": "test-task-20260726-001",
+    "rawTask": {
+      "id": "test-task-20260726-001",
+      "status": "pending"
+    }
+  },
+  "taskId": "test-task-20260726-001",
+  "pollStatus": "blocked",
+  "summary": {
+    "crawl_status": {
+      "crawl_stop_reason": "forbidden_robots",
+      "max_crawl_pages": 1,
+      "pages_crawled": 0,
+      "pages_in_queue": 0
+    },
+    "pages_crawled": 0,
+    "total_pages": 0,
+    "domain_info": {
+      "extended_crawl_status": "forbidden_robots",
+      "checks": {
+        "start_page_deny_flag": true
+      }
+    }
+  },
+  "pages": [],
+  "links": [],
+  "duplicateTags": {
+    "results": [],
+    "metadata": []
+  },
+  "duplicateContent": {
+    "results": [],
+    "metadata": []
+  },
+  "microdata": null,
+  "dtMeta": null,
+  "dcMeta": null,
+  "microdataMeta": null,
+  "retryCount": 0,
+  "blockReason": "robots.txt blocked the crawl"
+}
