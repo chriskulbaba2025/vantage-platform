@@ -34,8 +34,8 @@
 |---|---|---|
 | **Audited base** | `eb7f3b36d3840e5c0eda965bae3befe579d0fc7b` | Production baseline tagged `prysm-pre-rebuild-production-2026-08-04` |
 | **Original audit commit** | `ad91ad4b2f49de0e2d4e9ce5941513968cb33e52` | Initial WP1 governance docs + 7 audit records |
-| **Latest correction commit** | *(to be recorded in follow-up)* | Classification-total reconciliation and stale-reference correction |
-| **Current PR head** | *(to be recorded in follow-up)* | HEAD of `audit/prysm-wp1-repository-disposition` after all corrections |
+| **Latest correction commit** | `7bdafce807a7450434f8b00810be392fcc0f0ec6` | Classification-total reconciliation and stale-reference correction |
+| **Current PR head** | `7bdafce807a7450434f8b00810be392fcc0f0ec6` | HEAD of `audit/prysm-wp1-repository-disposition` after all corrections |
 
 ---
 
