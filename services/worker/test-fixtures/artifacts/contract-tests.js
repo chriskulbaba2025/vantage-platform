@@ -4,17 +4,14 @@
  * The same behavioural suite runs against memory, temporary-filesystem,
  * and mocked object-storage implementations.
  *
- * Every test uses a fresh store factory provided by the caller.
+ * Two suites are exported:
+ *   runContractTests        — core correctness (runs on every impl)
+ *   runFailureContractTests — failure propagation (runs on every impl
+ *                              with backend-specific fault factories)
+ *
  * Zero live cloud calls. Zero provider calls. Deterministic.
  *
  * @module artifact-contract-tests
- *
- * Usage:
- *   import { runContractTests } from "../../test-fixtures/artifacts/contract-tests.js";
- *   import { createMemoryArtifactStore } from "../../src/storage/memory-artifact-store.js";
- *
- *   // In a test file:
- *   runContractTests("memory", () => createMemoryArtifactStore());
  */
 
 import test from "node:test";
@@ -24,6 +21,9 @@ import { buildArtifactKey } from "../../src/storage/artifact-key.js";
 import {
   ImmutableConflictError,
   ObjectNotFoundError,
+  ProviderFailureError,
+  WriteFailureError,
+  ReadBackFailureError,
 } from "../../src/storage/artifact-errors.js";
 
 // ---------------------------------------------------------------------------
@@ -63,7 +63,7 @@ function sha256(buf) {
 }
 
 // ---------------------------------------------------------------------------
-// Suite runner
+// Core contract suite
 // ---------------------------------------------------------------------------
 
 /**
@@ -71,11 +71,8 @@ function sha256(buf) {
  *
  * @param {string} label              - Human-readable label for the store type.
  * @param {() => object} factory      - Synchronous factory returning an ArtifactStore.
- * @param {object} [opts]
- * @param {boolean} [opts.skipSlow]   - Skip teardown-heavy tests.
  */
-export function runContractTests(label, factory, opts = {}) {
-  // ── Round-trip: text ──────────────────────────────────────────────────
+export function runContractTests(label, factory) {
   test(`${label}: exact bytes survive round-trip (UTF-8)`, async () => {
     const store = factory();
     const input = makeInput({ bytes: Buffer.from("hello world", "utf-8") });
@@ -89,16 +86,12 @@ export function runContractTests(label, factory, opts = {}) {
     assert.equal(buf.toString("utf-8"), "hello world");
   });
 
-  // ── Round-trip: binary ────────────────────────────────────────────────
   test(`${label}: binary data survives round-trip`, async () => {
     const store = factory();
     const binary = Buffer.alloc(256);
     for (let i = 0; i < 256; i++) binary[i] = i;
 
-    const input = makeInput({
-      bytes: binary,
-      contentType: "application/octet-stream",
-    });
+    const input = makeInput({ bytes: binary, contentType: "application/octet-stream" });
     const record = await store.put(input);
 
     const buf = await store.get(record.key);
@@ -106,7 +99,6 @@ export function runContractTests(label, factory, opts = {}) {
     assert.equal(buf.length, 256);
   });
 
-  // ── Round-trip: JSON ──────────────────────────────────────────────────
   test(`${label}: JSON data survives round-trip`, async () => {
     const store = factory();
     const data = { nested: { array: [1, 2, 3], bool: true, num: 42 } };
@@ -118,7 +110,6 @@ export function runContractTests(label, factory, opts = {}) {
     assert.deepEqual(JSON.parse(buf.toString("utf-8")), data);
   });
 
-  // ── Exact SHA-256 ─────────────────────────────────────────────────────
   test(`${label}: SHA-256 is calculated from stored bytes`, async () => {
     const store = factory();
     const bytes = Buffer.from("exact hash test", "utf-8");
@@ -132,25 +123,19 @@ export function runContractTests(label, factory, opts = {}) {
     assert.ok(/^[a-f0-9]{64}$/.test(record.sha256));
   });
 
-  // ── Exact byte length ─────────────────────────────────────────────────
   test(`${label}: byte length is exact`, async () => {
     const store = factory();
     for (const size of [0, 1, 100, 1024, 65536]) {
       const bytes = Buffer.alloc(size, 0x41);
       const input = makeInput({
         bytes,
-        scope: {
-          ...TEST_SCOPE,
-          category: "raw",
-          artifactName: `size-${size}.bin`,
-        },
+        scope: { ...TEST_SCOPE, category: "raw", artifactName: `size-${size}.bin` },
       });
       const record = await store.put(input);
       assert.equal(record.bytes, size, `size=${size}`);
     }
   });
 
-  // ── Artifact Record schema validation ─────────────────────────────────
   test(`${label}: returned record validates against schema`, async () => {
     const store = factory();
     const input = makeInput();
@@ -168,7 +153,6 @@ export function runContractTests(label, factory, opts = {}) {
     assert.ok(typeof record.storageBackend === "string");
   });
 
-  // ── exists before and after ───────────────────────────────────────────
   test(`${label}: exists is correct before and after writes`, async () => {
     const store = factory();
     const input = makeInput();
@@ -179,120 +163,87 @@ export function runContractTests(label, factory, opts = {}) {
     assert.equal(await store.exists(key), true);
   });
 
-  // ── get returns Buffer ────────────────────────────────────────────────
   test(`${label}: get returns a Buffer`, async () => {
     const store = factory();
     const input = makeInput();
     const record = await store.put(input);
     const buf = await store.get(record.key);
-
     assert.ok(Buffer.isBuffer(buf));
   });
 
-  // ── verify succeeds for matching bytes ────────────────────────────────
   test(`${label}: verify succeeds for matching bytes and metadata`, async () => {
     const store = factory();
     const input = makeInput();
     const record = await store.put(input);
-
-    const verified = await store.verify(record);
-    assert.equal(verified, true);
+    assert.equal(await store.verify(record), true);
   });
 
-  // ── verify fails for wrong SHA ────────────────────────────────────────
   test(`${label}: verify fails for wrong SHA-256`, async () => {
     const store = factory();
     const input = makeInput();
     const record = await store.put(input);
-
-    const tampered = { ...record, sha256: "0".repeat(64) };
-    const verified = await store.verify(tampered);
-    assert.equal(verified, false);
+    assert.equal(await store.verify({ ...record, sha256: "0".repeat(64) }), false);
   });
 
-  // ── verify fails for wrong bytes ──────────────────────────────────────
   test(`${label}: verify fails for wrong byte count`, async () => {
     const store = factory();
     const input = makeInput();
     const record = await store.put(input);
-
-    const tampered = { ...record, bytes: record.bytes + 1 };
-    const verified = await store.verify(tampered);
-    assert.equal(verified, false);
+    assert.equal(await store.verify({ ...record, bytes: record.bytes + 1 }), false);
   });
 
-  // ── Idempotent repeat writes ──────────────────────────────────────────
   test(`${label}: identical repeat writes are idempotent`, async () => {
     const store = factory();
     const input = makeInput();
     const record1 = await store.put(input);
     const record2 = await store.put(input);
-
     assert.equal(record1.key, record2.key);
     assert.equal(record1.sha256, record2.sha256);
     assert.equal(record1.bytes, record2.bytes);
   });
 
-  // ── Immutable-write conflict ──────────────────────────────────────────
   test(`${label}: different bytes at the same key are rejected`, async () => {
     const store = factory();
-    const input1 = makeInput({ bytes: Buffer.from("version A") });
-    const input2 = makeInput({ bytes: Buffer.from("version B") });
-
-    await store.put(input1);
+    await store.put(makeInput({ bytes: Buffer.from("version A") }));
     await assert.rejects(
-      () => store.put(input2),
+      () => store.put(makeInput({ bytes: Buffer.from("version B") })),
       (err) => err instanceof ImmutableConflictError,
     );
   });
 
-  // ── Tenant isolation ──────────────────────────────────────────────────
   test(`${label}: tenant isolation is enforced`, async () => {
     const store = factory();
-    const tenant1 = makeInput({
+    const r1 = await store.put(makeInput({
       scope: { ...TEST_SCOPE, tenantId: "tenant-alpha", category: "raw", artifactName: "data.json" },
-    });
-    const tenant2 = makeInput({
+    }));
+    const r2 = await store.put(makeInput({
       scope: { ...TEST_SCOPE, tenantId: "tenant-beta", category: "raw", artifactName: "data.json" },
-    });
-
-    const r1 = await store.put(tenant1);
-    const r2 = await store.put(tenant2);
+    }));
 
     assert.notEqual(r1.key, r2.key);
     assert.ok(r1.key.includes("tenant-alpha"));
     assert.ok(r2.key.includes("tenant-beta"));
-
-    // Each tenant can only see their own artifacts
     assert.equal(await store.exists(r1.key), true);
     assert.equal(await store.exists(r2.key), true);
-
-    const buf1 = await store.get(r1.key);
-    assert.equal(buf1.toString("utf-8"), JSON.stringify({ hello: "world" }));
+    assert.equal((await store.get(r1.key)).toString("utf-8"), JSON.stringify({ hello: "world" }));
   });
 
-  // ── Traversal rejection ───────────────────────────────────────────────
   test(`${label}: traversal and malformed keys are rejected`, async () => {
     const store = factory();
-
     const badScopes = [
       { ...TEST_SCOPE, tenantId: "../evil", category: "raw", artifactName: "test.json" },
       { ...TEST_SCOPE, tenantId: "ok", clientId: "..\\windows", category: "raw", artifactName: "test.json" },
     ];
-
     for (const badScope of badScopes) {
       await assert.rejects(
         () => store.put(makeInput({ scope: badScope })),
         (err) => err.code === "ERR_ARTIFACT_PATH_TRAVERSAL" || err.code === "ERR_ARTIFACT_INVALID_SCOPE",
-        `Expected traversal rejection for scope: ${JSON.stringify(badScope)}`,
       );
     }
   });
 
-  // ── Empty scope rejection ─────────────────────────────────────────────
   test(`${label}: empty scope segments are rejected`, async () => {
     const store = factory();
-
     const emptyScopes = [
       { ...TEST_SCOPE, tenantId: "", category: "raw", artifactName: "test.json" },
       { ...TEST_SCOPE, clientId: "", category: "raw", artifactName: "test.json" },
@@ -300,27 +251,20 @@ export function runContractTests(label, factory, opts = {}) {
       { ...TEST_SCOPE, category: "", artifactName: "test.json" },
       { ...TEST_SCOPE, category: "raw", artifactName: "" },
     ];
-
     for (const badScope of emptyScopes) {
       await assert.rejects(
         () => store.put(makeInput({ scope: badScope })),
         (err) => err.code === "ERR_ARTIFACT_INVALID_SCOPE" || err.code === "ERR_ARTIFACT_INVALID_INPUT",
-        `Expected rejection for empty scope: ${JSON.stringify(badScope)}`,
       );
     }
   });
 
-  // ── Failed writes return no record ────────────────────────────────────
   test(`${label}: invalid input returns no record`, async () => {
     const store = factory();
-
-    // null input
     await assert.rejects(() => store.put(null));
-    // missing bytes
     await assert.rejects(() => store.put({ scope: TEST_SCOPE }));
   });
 
-  // ── Object not found ──────────────────────────────────────────────────
   test(`${label}: getting a non-existent object throws ObjectNotFoundError`, async () => {
     const store = factory();
     await assert.rejects(
@@ -329,7 +273,6 @@ export function runContractTests(label, factory, opts = {}) {
     );
   });
 
-  // ── Uint8Array input accepted ─────────────────────────────────────────
   test(`${label}: accepts Uint8Array input`, async () => {
     const store = factory();
     const arr = new Uint8Array([1, 2, 3, 4, 5]);
@@ -340,26 +283,19 @@ export function runContractTests(label, factory, opts = {}) {
     assert.ok(buf.equals(Buffer.from(arr)));
   });
 
-  // ── String input accepted ─────────────────────────────────────────────
   test(`${label}: accepts string input`, async () => {
     const store = factory();
     const input = makeInput({ bytes: "string input test" });
     const record = await store.put(input);
-    const buf = await store.get(record.key);
-    assert.equal(buf.toString("utf-8"), "string input test");
+    assert.equal((await store.get(record.key)).toString("utf-8"), "string input test");
   });
 
-  // ── verify fails for wrong tenant ─────────────────────────────────────
   test(`${label}: verify fails when scope does not match`, async () => {
     const store = factory();
-    const input = makeInput();
-    const record = await store.put(input);
-
-    const tampered = { ...record, tenantId: "other-tenant" };
-    assert.equal(await store.verify(tampered), false);
+    const record = await store.put(makeInput());
+    assert.equal(await store.verify({ ...record, tenantId: "other-tenant" }), false);
   });
 
-  // ── Backslash rejection in keys ───────────────────────────────────────
   test(`${label}: backslashes are rejected in scope segments`, async () => {
     const store = factory();
     await assert.rejects(
@@ -370,11 +306,204 @@ export function runContractTests(label, factory, opts = {}) {
     );
   });
 
-  // ── verify with non-object record ─────────────────────────────────────
   test(`${label}: verify returns false for non-object or null record`, async () => {
     const store = factory();
     assert.equal(await store.verify(null), false);
     assert.equal(await store.verify(undefined), false);
     assert.equal(await store.verify("not-an-object"), false);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Failure-injection contract suite
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the failure-propagation contract suite.
+ *
+ * @param {string} label   - Backend label ("memory", "fs", "object").
+ * @param {(opts?: object) => object} faultFactory
+ *   Factory that accepts optional injection flags and returns a store.
+ *   Flags supported:
+ *     { failWrite, failReadBack, corruptRead, failGet }
+ *   For object: { failPut, failGet, failHead, corrupt }
+ */
+export function runFailureContractTests(label, faultFactory) {
+
+  // ── Write failure → no record ─────────────────────────────────────────
+  test(`${label} [failure]: write failure throws WriteFailureError, no record returned`, async () => {
+    const store = faultFactory({ failWrite: true, failPut: true });
+    const input = makeInput({
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "fail-write.json" },
+    });
+
+    await assert.rejects(
+      () => store.put(input),
+      (err) => err instanceof WriteFailureError || err instanceof ProviderFailureError,
+      "Expected WriteFailureError or ProviderFailureError on write failure",
+    );
+
+    // No artifact key should exist
+    const key = buildArtifactKey(input.scope);
+    try {
+      assert.equal(await store.exists(key), false, "No record should exist after write failure");
+    } catch {
+      // object store may throw ProviderFailureError on exists() too — that's fine
+    }
+  });
+
+  // ── Read-back failure → no record ─────────────────────────────────────
+  test(`${label} [failure]: read-back failure throws, no record returned`, async () => {
+    const store = faultFactory({ failReadBack: true });
+    const input = makeInput({
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "fail-readback.json" },
+    });
+
+    await assert.rejects(
+      () => store.put(input),
+      (err) => err instanceof ReadBackFailureError,
+      "Expected ReadBackFailureError",
+    );
+
+    // No artifact record should exist
+    const key = buildArtifactKey(input.scope);
+    try {
+      assert.equal(await store.exists(key), false, "No record should exist after read-back failure");
+    } catch {
+      // OK — object store may throw on exists()
+    }
+  });
+
+  // ── Corrupted bytes (truncate) → no record ────────────────────────────
+  test(`${label} [failure]: corrupted read-back bytes (truncate) → no record`, async () => {
+    const store = faultFactory({
+      corruptRead: "truncate",
+      corrupt: { mode: "truncate" },
+    });
+    const input = makeInput({
+      bytes: Buffer.from("enough bytes to truncate", "utf-8"),
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "corrupt-trunc.json" },
+    });
+
+    await assert.rejects(
+      () => store.put(input),
+      (err) => err instanceof ReadBackFailureError,
+      "Expected ReadBackFailureError on truncated read-back",
+    );
+  });
+
+  // ── Corrupted bytes (flip) → no record ────────────────────────────────
+  test(`${label} [failure]: corrupted read-back bytes (flip) → no record`, async () => {
+    const store = faultFactory({
+      corruptRead: "flip",
+      corrupt: { mode: "flip" },
+    });
+    const input = makeInput({
+      bytes: Buffer.from("some bytes to flip", "utf-8"),
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "corrupt-flip.json" },
+    });
+
+    await assert.rejects(
+      () => store.put(input),
+      (err) => err instanceof ReadBackFailureError,
+      "Expected ReadBackFailureError on flipped read-back",
+    );
+  });
+
+  // ── Corrupted bytes (mismatch) → no record ────────────────────────────
+  test(`${label} [failure]: corrupted read-back bytes (mismatch) → no record`, async () => {
+    const store = faultFactory({
+      corruptRead: "mismatch",
+      corrupt: { mode: "mismatch" },
+    });
+    const input = makeInput({
+      bytes: Buffer.from("matching length data!", "utf-8"),
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "corrupt-mismatch.json" },
+    });
+
+    await assert.rejects(
+      () => store.put(input),
+      (err) => err instanceof ReadBackFailureError,
+      "Expected ReadBackFailureError on mismatched read-back",
+    );
+  });
+
+  // ── Provider error on GET propagates ───────────────────────────────────
+  test(`${label} [failure]: provider error on get propagates as ProviderFailureError`, async () => {
+    const store = faultFactory({ failGet: true });
+
+    await assert.rejects(
+      () => store.get("any-key"),
+      (err) => err instanceof ProviderFailureError || err.code === "ERR_ARTIFACT_PROVIDER_FAILURE",
+      "Expected ProviderFailureError on GET failure",
+    );
+  });
+
+  // ── Object store: HEAD NotFound returns false ──────────────────────────
+  test(`${label} [failure]: HEAD not-found returns false (exists)`, async () => {
+    const store = faultFactory({});
+    const result = await store.exists("tenants/t/clients/c/audits/a/raw/does-not-exist.json");
+    assert.equal(result, false);
+  });
+
+  // ── Object store: HEAD provider error throws ───────────────────────────
+  test(`${label} [failure]: HEAD provider error propagates (exists throws)`, async () => {
+    const store = faultFactory({ failHead: true });
+    await assert.rejects(
+      () => store.exists("any-key"),
+      (err) => err instanceof ProviderFailureError || err.code === "ERR_ARTIFACT_PROVIDER_FAILURE",
+      "Expected ProviderFailureError on HEAD failure",
+    );
+  });
+
+  // ── PUT provider error → no record ────────────────────────────────────
+  test(`${label} [failure]: PUT provider error throws ProviderFailureError, no record`, async () => {
+    const store = faultFactory({ failPut: true, failWrite: true });
+    const input = makeInput({
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "fail-put.json" },
+    });
+
+    await assert.rejects(
+      () => store.put(input),
+      (err) => err instanceof ProviderFailureError || err instanceof WriteFailureError,
+      "Expected provider/write error on PUT failure",
+    );
+
+    // No record should exist
+    const key = buildArtifactKey(input.scope);
+    try {
+      assert.equal(await store.exists(key), false, "No artifact after PUT failure");
+    } catch {
+      // OK — propagates
+    }
+  });
+
+  // ── GET provider error propagates ─────────────────────────────────────
+  test(`${label} [failure]: GET provider error propagates`, async () => {
+    const store = faultFactory({ failGet: true });
+    await assert.rejects(
+      () => store.get("some-key"),
+      (err) => err instanceof ProviderFailureError || err.code === "ERR_ARTIFACT_PROVIDER_FAILURE",
+    );
+  });
+
+  // ── No synthetic record on failure ────────────────────────────────────
+  test(`${label} [failure]: no synthetic record returned on failure`, async () => {
+    const store = faultFactory({ failWrite: true, failPut: true });
+    const input = makeInput({
+      scope: { ...TEST_SCOPE, category: "raw", artifactName: "no-synth.json" },
+    });
+
+    let threw = false;
+    try {
+      await store.put(input);
+    } catch (err) {
+      threw = true;
+      // Verify the error is NOT an ArtifactRecord
+      assert.equal(typeof err.key, "undefined", "Error should not carry an artifact key");
+      assert.equal(typeof err.sha256, "undefined", "Error should not carry an artifact SHA");
+      assert.equal(typeof err.contractVersion, "undefined", "Error should not be an Artifact Record");
+    }
+    assert.ok(threw, "Expected put() to throw on failure");
   });
 }

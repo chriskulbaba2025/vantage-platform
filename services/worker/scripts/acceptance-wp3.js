@@ -284,31 +284,46 @@ try {
   }
   try { await rm(tmpDir, { recursive: true, force: true }); } catch {}
 
-  // Object (mocked)
+  // Object (mocked) — uses production-compatible command constructors
+  class MockPutObjectCommand {
+    static name = "PutObjectCommand";
+    constructor(input) { Object.assign(this, input); this._name = "PutObjectCommand"; }
+  }
+  class MockGetObjectCommand {
+    static name = "GetObjectCommand";
+    constructor(input) { Object.assign(this, input); this._name = "GetObjectCommand"; }
+  }
+  class MockHeadObjectCommand {
+    static name = "HeadObjectCommand";
+    constructor(input) { Object.assign(this, input); this._name = "HeadObjectCommand"; }
+  }
+  const mockCommands = {
+    PutObjectCommand: MockPutObjectCommand,
+    GetObjectCommand: MockGetObjectCommand,
+    HeadObjectCommand: MockHeadObjectCommand,
+  };
+
   const mockClient = {
     store: new Map(),
     async send(cmd) {
-      if (cmd._command === "PutObject") {
+      if (cmd._name === "PutObjectCommand") {
         this.store.set(cmd.Key, cmd.Body);
         return {};
       }
-      if (cmd._command === "GetObject") {
+      if (cmd._name === "GetObjectCommand") {
         if (!this.store.has(cmd.Key)) {
-          const e = new Error("NoSuchKey");
-          e.name = "NoSuchKey";
-          throw e;
+          const e = new Error("NoSuchKey"); e.name = "NoSuchKey"; e.Code = "NoSuchKey"; throw e;
         }
         return { Body: this.store.get(cmd.Key) };
       }
-      if (cmd._command === "HeadObject") {
+      if (cmd._name === "HeadObjectCommand") {
         if (!this.store.has(cmd.Key)) {
-          const e = new Error("NotFound");
-          e.name = "NotFound";
-          throw e;
+          const e = new Error("NotFound"); e.name = "NotFound"; e.Code = "NotFound";
+          e.$metadata = { httpStatusCode: 404 }; throw e;
         }
         return {};
       }
-      throw new Error(`Unknown: ${cmd._command}`);
+      throw new Error(`Unknown: ${cmd._name}`);
     },
   };
 
@@ -316,6 +331,7 @@ try {
     type: "object",
     client: mockClient,
     bucket: "test",
+    commands: mockCommands,
   });
   if (typeof objStore.put === "function" && typeof objStore.get === "function" &&
       typeof objStore.exists === "function" && typeof objStore.verify === "function") {
@@ -429,7 +445,102 @@ if (adapterViolations === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Run test:artifacts
+// 8. Contract test enforcement
+// ---------------------------------------------------------------------------
+
+console.log("\n─ Contract test enforcement ─");
+
+const contractTestsPath = resolve(
+  __dirname, "..", "test-fixtures", "artifacts", "contract-tests.js",
+);
+
+try {
+  const rawContract = readFileSync(contractTestsPath, "utf-8");
+
+  if (/export\s+function\s+runFailureContractTests/.test(rawContract)) {
+    pass("runFailureContractTests is exported");
+  } else {
+    fail("runFailureContractTests is exported", "Not found in contract-tests.js");
+  }
+
+  // Verify all required failure scenarios exist
+  const requiredFailures = [
+    { pattern: /write failure throws/, name: "write failure" },
+    { pattern: /read-back failure throws/, name: "read-back failure" },
+    { pattern: /corrupted read-back bytes.*truncate/, name: "corrupt truncate" },
+    { pattern: /corrupted read-back bytes.*flip/, name: "corrupt flip" },
+    { pattern: /corrupted read-back bytes.*mismatch/, name: "corrupt mismatch" },
+    { pattern: /provider error on get propagates/, name: "GET provider error" },
+    { pattern: /HEAD not-found returns false/, name: "HEAD not-found" },
+    { pattern: /HEAD provider error propagates/, name: "HEAD provider error" },
+    { pattern: /PUT provider error throws/, name: "PUT provider error" },
+    { pattern: /GET provider error propagates/, name: "GET provider error 2" },
+    { pattern: /no synthetic record/, name: "no synthetic record" },
+  ];
+
+  let missingFailures = 0;
+  for (const { pattern, name } of requiredFailures) {
+    if (pattern.test(rawContract)) {
+      // pass silently — will be counted in summary
+    } else {
+      fail(`Failure scenario: ${name}`, "Missing from contract-tests.js");
+      missingFailures++;
+    }
+  }
+  if (missingFailures === 0) {
+    pass(`All ${requiredFailures.length} required failure scenarios present`);
+  }
+} catch (err) {
+  fail("Contract test enforcement", err.message);
+}
+
+// Verify each implementation test file imports runFailureContractTests
+const artifactTestFiles = [
+  "memory-artifact-store.test.js",
+  "fs-artifact-store.test.js",
+  "object-artifact-store.test.js",
+];
+
+for (const fn of artifactTestFiles) {
+  const testPath = resolve(__dirname, "..", "test-fixtures", "artifacts", fn);
+  if (existsSync(testPath)) {
+    const raw = readFileSync(testPath, "utf-8");
+    if (/runFailureContractTests/.test(raw)) {
+      pass(`Failure suite imported in ${fn}`);
+    } else {
+      fail(`Failure suite imported in ${fn}`, "Does not import runFailureContractTests");
+    }
+  } else {
+    fail(`Test file exists: ${fn}`);
+  }
+}
+
+// Production S3 command test
+const objectTestPath = resolve(
+  __dirname, "..", "test-fixtures", "artifacts", "object-artifact-store.test.js",
+);
+try {
+  const rawObj = readFileSync(objectTestPath, "utf-8");
+  if (/class\s+MockPutObjectCommand/.test(rawObj) &&
+      /class\s+MockGetObjectCommand/.test(rawObj) &&
+      /class\s+MockHeadObjectCommand/.test(rawObj)) {
+    pass("Production-compatible AWS command mock classes defined");
+  } else {
+    fail("Production-compatible AWS command mock classes defined",
+      "Missing MockPutObjectCommand/MockGetObjectCommand/MockHeadObjectCommand classes");
+  }
+
+  if (/commands:\s*MOCK_COMMANDS/.test(rawObj)) {
+    pass("Commands injected into createObjectArtifactStore");
+  } else {
+    fail("Commands injected into createObjectArtifactStore");
+  }
+} catch (err) {
+  fail("Object test check", err.message);
+}
+
+// ---------------------------------------------------------------------------
+// 9. Run test:artifacts
 // ---------------------------------------------------------------------------
 
 console.log("\n─ npm run test:artifacts ─");

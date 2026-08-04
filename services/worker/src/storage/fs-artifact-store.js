@@ -23,15 +23,13 @@ import {
   PathTraversalError,
   WriteFailureError,
   ReadBackFailureError,
+  ProviderFailureError,
 } from "./artifact-errors.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Normalize input bytes to a Buffer.
- */
 function toBuffer(input) {
   if (Buffer.isBuffer(input)) return input;
   if (input instanceof Uint8Array) return Buffer.from(input);
@@ -48,7 +46,6 @@ function sha256(buf) {
 
 /**
  * Resolve a governed key to a safe filesystem path under baseDir.
- * Rejects traversal.
  */
 function keyToPath(baseDir, key) {
   if (key.includes("..")) throw new PathTraversalError(`key contains traversal: "${key}"`, { key });
@@ -58,7 +55,6 @@ function keyToPath(baseDir, key) {
   const normalized = key.replace(/\//g, "/");
   const fullPath = resolve(baseDir, normalized);
 
-  // Verify containment
   const resolvedBase = resolve(baseDir);
   if (!fullPath.startsWith(resolvedBase + sep) && fullPath !== resolvedBase) {
     throw new PathTraversalError(
@@ -75,14 +71,25 @@ function keyToPath(baseDir, key) {
 // ---------------------------------------------------------------------------
 
 /**
+ * @typedef {object} FsInjectOptions
+ * @property {boolean} [failWrite]    - Simulate a write failure.
+ * @property {boolean} [failReadBack] - Simulate a read-back failure after write.
+ * @property {"truncate"|"flip"|"mismatch"} [corruptRead] - Corrupt bytes on read-back.
+ * @property {boolean} [failGet]      - Simulate a provider error on get.
+ * @property {boolean} [failHead]     - Simulate a provider error on exists.
+ */
+
+/**
  * Create a filesystem-backed Artifact Store.
  *
  * @param {object} [opts]
  * @param {string} opts.baseDir - Base directory for storage. Required.
+ * @param {FsInjectOptions} [opts.inject] - Optional failure injection for tests.
  * @returns {import("./governed-artifact-store.js").ArtifactStore}
  */
 export function createFsArtifactStore(opts = {}) {
   const baseDir = resolve(opts.baseDir || "artifacts/local");
+  const inject = opts.inject || {};
 
   /**
    * Persist exact bytes to disk, verify, and return a validated record.
@@ -131,6 +138,11 @@ export function createFsArtifactStore(opts = {}) {
       }
     }
 
+    // Failure injection: write failure
+    if (inject.failWrite) {
+      throw new WriteFailureError("Injected write failure", { key });
+    }
+
     // Write to disk
     try {
       await mkdir(dirname(filePath), { recursive: true });
@@ -142,6 +154,11 @@ export function createFsArtifactStore(opts = {}) {
       );
     }
 
+    // Failure injection: read-back failure
+    if (inject.failReadBack) {
+      throw new ReadBackFailureError("Injected read-back failure", { key });
+    }
+
     // Mandatory read-back verification
     let storedBytes;
     try {
@@ -151,6 +168,16 @@ export function createFsArtifactStore(opts = {}) {
         `Failed to read back artifact after write: ${readErr.message}`,
         { key, filePath, cause: readErr.message },
       );
+    }
+
+    // Failure injection: corrupt on read-back
+    if (inject.corruptRead === "truncate") {
+      storedBytes = storedBytes.subarray(0, storedBytes.length - 1);
+    } else if (inject.corruptRead === "flip") {
+      storedBytes = Buffer.from(storedBytes);
+      storedBytes[0] = storedBytes[0] ^ 0xff;
+    } else if (inject.corruptRead === "mismatch") {
+      storedBytes = Buffer.alloc(storedBytes.length, 0xff);
     }
 
     if (storedBytes.length !== byteLength) {
@@ -188,6 +215,12 @@ export function createFsArtifactStore(opts = {}) {
       throw new InvalidInputError("key is required");
     }
 
+    if (inject.failGet) {
+      throw new ProviderFailureError("Injected provider error on GET", {
+        command: "GetObject", cause: "injected failure",
+      });
+    }
+
     const filePath = keyToPath(baseDir, key);
 
     try {
@@ -205,6 +238,11 @@ export function createFsArtifactStore(opts = {}) {
    */
   async function exists(key) {
     if (typeof key !== "string" || key.length === 0) return false;
+    if (inject.failHead) {
+      throw new ProviderFailureError("Injected provider error on HEAD", {
+        command: "HeadObject", cause: "injected failure",
+      });
+    }
     try {
       const filePath = keyToPath(baseDir, key);
       await access(filePath);

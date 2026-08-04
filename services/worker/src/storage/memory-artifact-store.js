@@ -7,6 +7,10 @@
  * Implements the governed put/get/exists/verify interface with
  * exact-byte SHA-256 verification and mandatory read-back.
  *
+ * Failure injection:
+ *   Pass `inject` options to simulate write/read/corruption failures.
+ *   All fields are optional and default to no injection.
+ *
  * @module memory-artifact-store
  */
 
@@ -17,18 +21,15 @@ import {
   InvalidInputError,
   ImmutableConflictError,
   ObjectNotFoundError,
+  WriteFailureError,
+  ReadBackFailureError,
+  ProviderFailureError,
 } from "./artifact-errors.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Normalize input bytes to a Buffer.
- *
- * @param {Buffer|Uint8Array|string} input
- * @returns {Buffer}
- */
 function toBuffer(input) {
   if (Buffer.isBuffer(input)) return input;
   if (input instanceof Uint8Array) return Buffer.from(input);
@@ -39,12 +40,6 @@ function toBuffer(input) {
   );
 }
 
-/**
- * Compute SHA-256 of a Buffer, returned as lowercase hex.
- *
- * @param {Buffer} buf
- * @returns {string}
- */
 function sha256(buf) {
   return createHash("sha256").update(buf).digest("hex");
 }
@@ -54,32 +49,24 @@ function sha256(buf) {
 // ---------------------------------------------------------------------------
 
 /**
+ * @typedef {object} MemoryInjectOptions
+ * @property {boolean} [failWrite]    - Simulate a write failure.
+ * @property {boolean} [failReadBack] - Simulate a read-back failure after write.
+ * @property {"truncate"|"flip"|"mismatch"} [corruptRead] - Corrupt bytes on read-back.
+ * @property {boolean} [failGet]      - Simulate a provider error on get.
+ * @property {boolean} [failHead]     - Simulate a provider error on exists (HEAD).
+ */
+
+/**
  * Create a memory-backed Artifact Store.
  *
- * Every stored object is held in a Map keyed by the governed object key.
- * All operations are synchronous or async-safe.
- *
+ * @param {MemoryInjectOptions} [inject] - Optional failure injection.
  * @returns {import("./governed-artifact-store.js").ArtifactStore}
  */
-export function createMemoryArtifactStore() {
+export function createMemoryArtifactStore(inject = {}) {
   /** @type {Map<string, { bytes: Buffer, record: object }>} */
   const store = new Map();
 
-  /**
-   * Persist exact bytes and return a validated Artifact Record.
-   *
-   * @param {object} input
-   * @param {Buffer|Uint8Array|string} input.bytes       - Exact bytes to store.
-   * @param {string} input.contentType                   - MIME type.
-   * @param {object} input.scope                         - Tenant/client/audit scope.
-   * @param {string} input.scope.tenantId
-   * @param {string} input.scope.clientId
-   * @param {string} input.scope.auditId
-   * @param {string} input.scope.category
-   * @param {string} input.scope.artifactName
-   * @param {object} [input.metadata]                    - Optional metadata.
-   * @returns {Promise<object>} Validated Artifact Record.
-   */
   async function put(input) {
     if (!input || typeof input !== "object") {
       throw new InvalidInputError("put requires an input object");
@@ -95,7 +82,6 @@ export function createMemoryArtifactStore() {
     const existing = store.get(key);
     if (existing) {
       if (existing.record.sha256 === computedSha && existing.record.bytes === byteLength) {
-        // Idempotent — return existing verified record
         return { ...existing.record, verifiedAt: now };
       }
       throw new ImmutableConflictError(
@@ -131,33 +117,65 @@ export function createMemoryArtifactStore() {
     // Validate against WP2 schema
     validateArtifactRecord(record);
 
-    // Store first
+    // Failure injection: write failure
+    if (inject.failWrite) {
+      throw new WriteFailureError("Injected write failure", { key });
+    }
+
+    // Store
     store.set(key, { bytes: buf, record });
 
-    // Mandatory read-back verification
-    const storedBytes = store.get(key)?.bytes;
-    if (!storedBytes || storedBytes.length !== byteLength) {
-      store.delete(key);
-      throw new Error("Read-back verification failed: stored bytes missing after put");
+    // Failure injection: read-back failure
+    if (inject.failReadBack) {
+      store.delete(key); // clean up
+      throw new ReadBackFailureError("Injected read-back failure", { key });
     }
+
+    // Mandatory read-back verification
+    let storedBytes = store.get(key)?.bytes;
+    if (!storedBytes) {
+      store.delete(key);
+      throw new ReadBackFailureError("Read-back verification failed: stored bytes missing after put", { key });
+    }
+
+    // Failure injection: corrupt on read-back
+    if (inject.corruptRead === "truncate") {
+      storedBytes = storedBytes.subarray(0, storedBytes.length - 1);
+    } else if (inject.corruptRead === "flip") {
+      storedBytes = Buffer.from(storedBytes);
+      storedBytes[0] = storedBytes[0] ^ 0xff;
+    } else if (inject.corruptRead === "mismatch") {
+      // Return a buffer with different contents but same length
+      storedBytes = Buffer.alloc(storedBytes.length, 0xff);
+    }
+
+    if (storedBytes.length !== byteLength) {
+      store.delete(key);
+      throw new ReadBackFailureError(
+        `Read-back byte count mismatch: expected ${byteLength}, got ${storedBytes.length}`,
+        { key, expected: byteLength, got: storedBytes.length },
+      );
+    }
+
     if (!storedBytes.equals(buf)) {
       store.delete(key);
-      throw new Error("Read-back verification failed: byte mismatch after put");
+      throw new ReadBackFailureError("Read-back byte mismatch after write", { key });
     }
 
     return record;
   }
 
-  /**
-   * Return exact bytes as Buffer.
-   *
-   * @param {string} key - Governed object key.
-   * @returns {Promise<Buffer>}
-   * @throws {ObjectNotFoundError}
-   */
   async function get(key) {
     if (typeof key !== "string" || key.length === 0) {
       throw new InvalidInputError("key is required");
+    }
+
+    // Failure injection: provider error on get
+    if (inject.failGet) {
+      throw new ProviderFailureError("Injected provider error on GET", {
+        command: "GetObject",
+        cause: "injected failure",
+      });
     }
 
     const entry = store.get(key);
@@ -168,27 +186,18 @@ export function createMemoryArtifactStore() {
     return Buffer.from(entry.bytes);
   }
 
-  /**
-   * Check whether an object exists at the given key.
-   *
-   * @param {string} key - Governed object key.
-   * @returns {Promise<boolean>}
-   */
   async function exists(key) {
     if (typeof key !== "string" || key.length === 0) return false;
+    if (inject.failHead) {
+      throw new ProviderFailureError("Injected provider error on HEAD", {
+        command: "HeadObject", cause: "injected failure",
+      });
+    }
     return store.has(key);
   }
 
-  /**
-   * Read back and verify key, bytes, SHA-256, and scope.
-   *
-   * @param {object} record - Artifact Record to verify.
-   * @returns {Promise<boolean>} True when all verifications pass.
-   */
   async function verify(record) {
-    if (!record || typeof record !== "object") {
-      return false;
-    }
+    if (!record || typeof record !== "object") return false;
     if (!record.key) return false;
 
     try {
@@ -199,7 +208,6 @@ export function createMemoryArtifactStore() {
       if (recomputed !== record.sha256) return false;
       if (entry.bytes.length !== record.bytes) return false;
 
-      // Verify scope from key
       const { parseArtifactKey } = await import("./artifact-key.js");
       const parsed = parseArtifactKey(record.key);
       if (parsed.tenantId !== record.tenantId) return false;
@@ -212,20 +220,11 @@ export function createMemoryArtifactStore() {
     }
   }
 
-  /**
-   * Clear all stored artifacts (for test teardown only).
-   */
   function _clear() {
     store.clear();
   }
 
-  return {
-    put,
-    get,
-    exists,
-    verify,
-    _clear,
-  };
+  return { put, get, exists, verify, _clear };
 }
 
 export default { createMemoryArtifactStore };

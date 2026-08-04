@@ -101,6 +101,8 @@ import { buildArtifactKey } from "./artifact-key.js";
  * @param {string} [opts.baseDir]              - Filesystem base directory (fs only).
  * @param {object} [opts.client]               - Object-storage client (object only).
  * @param {string} [opts.bucket]               - Object-storage bucket (object only).
+ * @param {object} [opts.commands]             - AWS SDK command constructors (object only).
+ * @param {string} [opts.prefix]               - S3 key prefix (object only).
  * @returns {ArtifactStore}
  */
 export function createGovernedArtifactStore(opts = {}) {
@@ -115,6 +117,8 @@ export function createGovernedArtifactStore(opts = {}) {
       return createObjectArtifactStore({
         client: opts.client,
         bucket: opts.bucket,
+        commands: opts.commands,
+        prefix: opts.prefix,
       });
     default:
       throw new Error(`Unknown artifact store type: ${type}. Use "memory", "fs", or "object".`);

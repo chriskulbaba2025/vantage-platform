@@ -1,15 +1,29 @@
 /**
  * Object Artifact Store — Mockable Object-Storage Implementation
  *
- * Stores artifacts via an injected client that exposes a `send(command)`
- * method compatible with @aws-sdk/client-s3. The store does not import
- * the AWS SDK directly — the caller injects the client.
+ * Stores artifacts via an injected S3 client and injected AWS SDK command
+ * constructors.  The store does NOT import @aws-sdk/client-s3 directly —
+ * the caller injects both the client and the command classes.
  *
- * For tests, pass a mock client with in-memory storage. Normal CI
- * makes zero live cloud calls.
+ * Production wiring:
+ *   import { S3Client } from "@aws-sdk/client-s3";
+ *   import { PutObjectCommand, GetObjectCommand, HeadObjectCommand }
+ *     from "@aws-sdk/client-s3";
+ *   const store = createObjectArtifactStore({
+ *     client: new S3Client({ region: "ca-central-1" }),
+ *     bucket:  "my-bucket",
+ *     commands: { PutObjectCommand, GetObjectCommand, HeadObjectCommand },
+ *   });
  *
- * Implements the governed put/get/exists/verify interface with
- * exact-byte SHA-256 verification and mandatory read-back.
+ * Test wiring (zero live calls):
+ *   const store = createObjectArtifactStore({
+ *     client: createMockS3Client(),
+ *     bucket:  "test-bucket",
+ *     commands: createMockAwsCommands(),
+ *   });
+ *
+ * Every command sent to `client.send()` is a real AWS Command instance
+ * (or a formally defined mock that satisfies the same instanceof checks).
  *
  * @module object-artifact-store
  */
@@ -43,21 +57,42 @@ function sha256(buf) {
   return createHash("sha256").update(buf).digest("hex");
 }
 
+/**
+ * Build a canonical S3 key prefix from the tenant scope.
+ * Used when a base prefix is supplied.
+ */
+function buildS3Prefix(base, scope) {
+  if (!base) return "";
+  const clean = base.replace(/^\/+|\/+$/g, "");
+  return clean ? `${clean}/` : "";
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
 /**
+ * @typedef {object} AwsCommands
+ * @property {Function} PutObjectCommand  - Constructor for PutObjectCommand.
+ * @property {Function} GetObjectCommand  - Constructor for GetObjectCommand.
+ * @property {Function} HeadObjectCommand - Constructor for HeadObjectCommand.
+ */
+
+/**
  * Create an object-storage-backed Artifact Store.
  *
  * @param {object} opts
- * @param {object} opts.client  - Object with async `send(command)` method.
- * @param {string} opts.bucket  - Storage bucket/container name.
+ * @param {object} opts.client   - S3 client with async `send(command)`.
+ * @param {string} opts.bucket   - S3 bucket name.
+ * @param {AwsCommands} opts.commands - AWS SDK command constructors (or mocks).
+ * @param {string} [opts.prefix] - Optional S3 key prefix.
  * @returns {import("./governed-artifact-store.js").ArtifactStore}
  */
 export function createObjectArtifactStore(opts = {}) {
   const client = opts.client;
   const bucket = opts.bucket || "";
+  const { PutObjectCommand, GetObjectCommand, HeadObjectCommand } = opts.commands || {};
+  const prefix = opts.prefix || "";
 
   if (!client) {
     throw new Error("object-artifact-store requires a client");
@@ -65,19 +100,36 @@ export function createObjectArtifactStore(opts = {}) {
   if (!bucket) {
     throw new Error("object-artifact-store requires a bucket name");
   }
+  if (!PutObjectCommand || !GetObjectCommand || !HeadObjectCommand) {
+    throw new Error(
+      "object-artifact-store requires commands: { PutObjectCommand, GetObjectCommand, HeadObjectCommand }",
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Internal helpers
+  // ------------------------------------------------------------------
 
   /**
-   * Send a PutObject command through the client.
+   * Build the full S3 object key, optionally prefixed.
+   */
+  function s3Key(artifactKey) {
+    return prefix ? `${buildS3Prefix(prefix)}${artifactKey}` : artifactKey;
+  }
+
+  /**
+   * Send a PutObject command.  Returns nothing on success; throws
+   * ProviderFailureError on any client error (no synthetic record).
    */
   async function sendPut(key, body, contentType) {
+    const cmd = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    });
     try {
-      await client.send({
-        _command: "PutObject",
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: contentType,
-      });
+      await client.send(cmd);
     } catch (err) {
       throw new ProviderFailureError(
         `Storage provider error on PUT: ${err.message}`,
@@ -87,16 +139,17 @@ export function createObjectArtifactStore(opts = {}) {
   }
 
   /**
-   * Check whether the given key exists.  Returns false for NotFound/NoSuchKey;
-   * throws ProviderFailureError on real provider errors.
+   * HEAD check.  Returns true when the object exists, false for
+   * NotFound / NoSuchKey.  Propagates ProviderFailureError for
+   * auth errors, timeouts, service errors, and unknown failures.
    */
   async function checkExists(key) {
+    const cmd = new HeadObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
     try {
-      await client.send({
-        _command: "HeadObject",
-        Bucket: bucket,
-        Key: key,
-      });
+      await client.send(cmd);
       return true;
     } catch (err) {
       if (
@@ -109,6 +162,7 @@ export function createObjectArtifactStore(opts = {}) {
       ) {
         return false;
       }
+      // Auth error, timeout, service error, etc. — propagate
       throw new ProviderFailureError(
         `Storage provider error on HEAD: ${err.message}`,
         { command: "HeadObject", cause: err.message },
@@ -117,16 +171,16 @@ export function createObjectArtifactStore(opts = {}) {
   }
 
   /**
-   * Return exact bytes from the object store.
-   * Throws ObjectNotFoundError on NoSuchKey; ProviderFailureError on real errors.
+   * GET an object.  Returns Buffer on success, ObjectNotFoundError
+   * on NoSuchKey, ProviderFailureError on all other errors.
    */
   async function getObject(key) {
+    const cmd = new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
     try {
-      const result = await client.send({
-        _command: "GetObject",
-        Bucket: bucket,
-        Key: key,
-      });
+      const result = await client.send(cmd);
       return await readResponseBody(result);
     } catch (err) {
       if (
@@ -143,7 +197,9 @@ export function createObjectArtifactStore(opts = {}) {
     }
   }
 
-  // ── Public interface ──────────────────────────────────────────────────
+  // ------------------------------------------------------------------
+  // Public interface
+  // ------------------------------------------------------------------
 
   async function put(input) {
     if (!input || typeof input !== "object") {
@@ -151,26 +207,34 @@ export function createObjectArtifactStore(opts = {}) {
     }
 
     const buf = toBuffer(input.bytes);
-    const key = buildArtifactKey(input.scope);
+    const artifactKey = buildArtifactKey(input.scope);
+    const storageKey = s3Key(artifactKey);
     const computedSha = sha256(buf);
     const byteLength = buf.length;
     const now = new Date().toISOString();
 
     // Check immutable-write conflict
-    const keyExists = await checkExists(key);
+    let keyExists = false;
+    try {
+      keyExists = await checkExists(storageKey);
+    } catch (err) {
+      // ProviderFailureError from HEAD — propagate, no record returned
+      throw err;
+    }
+
     if (keyExists) {
       try {
-        const existingBuf = await getObject(key);
+        const existingBuf = await getObject(storageKey);
         const existingSha = sha256(existingBuf);
         if (existingSha === computedSha && existingBuf.length === byteLength) {
-          const record = buildRecord(input, key, computedSha, byteLength, now);
+          const record = buildRecord(input, artifactKey, computedSha, byteLength, now);
           validateArtifactRecord(record);
           return record;
         }
         throw new ImmutableConflictError(
-          `Key "${key}" already exists with different bytes`,
+          `Key "${artifactKey}" already exists with different bytes`,
           {
-            key,
+            key: artifactKey,
             existingSha256: existingSha,
             existingBytes: existingBuf.length,
             newSha256: computedSha,
@@ -182,51 +246,53 @@ export function createObjectArtifactStore(opts = {}) {
         if (err instanceof ObjectNotFoundError) {
           // Race: existed during HEAD, gone during GET — proceed
         } else {
-          throw err;
+          throw err; // ProviderFailureError — propagate, no record
         }
       }
     }
 
-    // Write
-    await sendPut(key, buf, input.contentType || "application/octet-stream");
+    // Write — any error propagates as ProviderFailureError, no record
+    await sendPut(storageKey, buf, input.contentType || "application/octet-stream");
 
     // Mandatory read-back verification
     let storedBytes;
     try {
-      storedBytes = await getObject(key);
+      storedBytes = await getObject(storageKey);
     } catch (err) {
       if (err instanceof ObjectNotFoundError) {
         throw new ReadBackFailureError(
           "Failed to read back artifact after write: object not found",
-          { key },
+          { key: artifactKey },
         );
       }
+      // Wrap provider errors so the caller gets ReadBackFailureError
+      // from a failed post-write verification.
       throw new ReadBackFailureError(
         `Failed to read back artifact after write: ${err.message}`,
-        { key, cause: err.message },
+        { key: artifactKey, cause: err.message },
       );
     }
 
     if (storedBytes.length !== byteLength) {
       throw new ReadBackFailureError(
         `Read-back byte count mismatch: expected ${byteLength}, got ${storedBytes.length}`,
-        { key, expected: byteLength, got: storedBytes.length },
+        { key: artifactKey, expected: byteLength, got: storedBytes.length },
       );
     }
 
     if (!storedBytes.equals(buf)) {
-      throw new ReadBackFailureError("Read-back byte mismatch after write", { key });
+      throw new ReadBackFailureError("Read-back byte mismatch after write", { key: artifactKey });
     }
 
     const readBackSha = sha256(storedBytes);
     if (readBackSha !== computedSha) {
       throw new ReadBackFailureError(
         `Read-back SHA mismatch: expected ${computedSha}, got ${readBackSha}`,
-        { key, expectedSha: computedSha, gotSha: readBackSha },
+        { key: artifactKey, expectedSha: computedSha, gotSha: readBackSha },
       );
     }
 
-    const record = buildRecord(input, key, computedSha, byteLength, now);
+    const record = buildRecord(input, artifactKey, computedSha, byteLength, now);
     validateArtifactRecord(record);
     return record;
   }
@@ -235,16 +301,17 @@ export function createObjectArtifactStore(opts = {}) {
     if (typeof key !== "string" || key.length === 0) {
       throw new InvalidInputError("key is required");
     }
-    return getObject(key);
+    return getObject(s3Key(key));
   }
 
+  /**
+   * Check whether an object exists.  Returns false only for confirmed
+   * NotFound / NoSuchKey.  Propagates ProviderFailureError for auth
+   * errors, timeouts, service errors, and unknown client failures.
+   */
   async function exists(key) {
     if (typeof key !== "string" || key.length === 0) return false;
-    try {
-      return await checkExists(key);
-    } catch {
-      return false;
-    }
+    return checkExists(s3Key(key));
   }
 
   async function verify(record) {
@@ -252,7 +319,7 @@ export function createObjectArtifactStore(opts = {}) {
     if (!record.key) return false;
 
     try {
-      const storedBytes = await getObject(record.key);
+      const storedBytes = await getObject(s3Key(record.key));
       const recomputed = sha256(storedBytes);
       if (recomputed !== record.sha256) return false;
       if (storedBytes.length !== record.bytes) return false;
@@ -276,10 +343,10 @@ export function createObjectArtifactStore(opts = {}) {
 // Internal
 // ---------------------------------------------------------------------------
 
-function buildRecord(input, key, computedSha, byteLength, now) {
+function buildRecord(input, artifactKey, computedSha, byteLength, now) {
   const record = {
     contractVersion: "1.0.0",
-    key,
+    key: artifactKey,
     sha256: computedSha,
     bytes: byteLength,
     contentType: input.contentType || "application/octet-stream",
