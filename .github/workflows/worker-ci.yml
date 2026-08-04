@@ -22,3 +22,5 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run check:template
       - run: npm test
+      - run: npm run test:schemas
+      - run: npm run acceptance:wp2
