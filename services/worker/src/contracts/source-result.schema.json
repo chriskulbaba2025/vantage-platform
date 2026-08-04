@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/source-result.schema.json",
+  "title": "Source Result",
+  "description": "Universal contract that every evidence adapter must return regardless of provider. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "schemaVersion",
+    "source",
+    "provider",
+    "adapterVersion",
+    "status",
+    "startedAt",
+    "completedAt",
+    "retryCount",
+    "coverage",
+    "limitations"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Contract version — must match the schema version."
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Shape version for this source result."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable source key (e.g. dataforseo-onpage, pagespeed, ga4, gsc)."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable provider name (e.g. DataForSEO, Google)."
+    },
+    "adapterVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the adapter that produced this result."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "AVAILABLE",
+        "PARTIAL",
+        "FAILED",
+        "BLOCKED",
+        "UNAVAILABLE",
+        "NOT_CONNECTED",
+        "NOT_APPLICABLE"
+      ],
+      "description": "Canonical seven-status vocabulary."
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when collection started."
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when collection completed."
+    },
+    "requestId": {
+      "type": "string",
+      "description": "Provider-assigned task or request identifier."
+    },
+    "retryCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Number of retries attempted for this source."
+    },
+    "expectedRecords": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of records the adapter expected to collect."
+    },
+    "returnedRecords": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of records actually returned."
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "completed", "failed"],
+      "properties": {
+        "requested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total items requested."
+        },
+        "completed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items successfully collected."
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Items that failed collection."
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Human-readable limitation statements."
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "sha256", "bytes", "contentType"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Immutable object-storage key for the raw provider bytes."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Lowercase hex SHA-256 of the stored bytes."
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Exact byte count of the stored artifact."
+        },
+        "contentType": {
+          "type": "string",
+          "enum": ["application/json", "text/html", "application/octet-stream"],
+          "description": "MIME type of the stored artifact."
+        }
+      },
+      "description": "Required when provider bytes were received and persisted."
+    },
+    "evidence": {
+      "type": "object",
+      "description": "Provider-normalized evidence payload. Must not contain raw provider responses, secrets, or HTML/CSS.",
+      "additionalProperties": true,
+      "properties": {
+        "sourceStatus": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        }
+      }
+    },
+    "errorCategory": {
+      "type": "string",
+      "enum": [
+        "rate_limit", "auth", "network", "timeout",
+        "internal", "not_configured", "no_data", "schema_validation"
+      ],
+      "description": "Error taxonomy when status is not AVAILABLE."
+    }
+  }
+}

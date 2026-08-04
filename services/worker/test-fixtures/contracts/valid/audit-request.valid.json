@@ -1,0 +1,29 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "tenant-001",
+  "clientId": "client-001",
+  "idempotencyKey": "req-2026-08-04-001",
+  "targetUrl": "https://www.oakvillefamilydental.ca",
+  "businessName": "Oakville Family Dental",
+  "market": "Oakville, Ontario",
+  "language": "en-CA",
+  "primaryGoal": "Generate qualified patient enquiries",
+  "services": ["General Dentistry", "Cosmetic Dentistry", "Emergency Dental", "Teeth Whitening"],
+  "competitors": [
+    "https://www.oakvilledentalarts.ca",
+    "https://www.smilesonlakeshore.ca"
+  ],
+  "ga4": {
+    "propertyId": "123456789"
+  },
+  "gsc": {
+    "siteUrl": "https://www.oakvillefamilydental.ca"
+  },
+  "crawl": {
+    "maxPages": 500,
+    "enableJavascript": true,
+    "includePatterns": ["/services/", "/about/"],
+    "excludePatterns": ["/wp-admin/"]
+  }
+}

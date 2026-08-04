@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/canonical-evidence.schema.json",
+  "title": "Canonical Evidence",
+  "description": "Assembled, locked evidence envelope containing all source results before findings or scoring. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "evidenceVersion",
+    "auditId",
+    "normalizedRequest",
+    "sources",
+    "limitations",
+    "artifactReferences",
+    "adapterVersions",
+    "createdAt"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "evidenceVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Evidence envelope shape version."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "normalizedRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetUrl"],
+      "properties": {
+        "targetUrl": { "type": "string", "format": "uri" },
+        "businessName": { "type": "string" },
+        "market": { "type": "string" },
+        "language": { "type": "string" },
+        "primaryGoal": { "type": "string" },
+        "services": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "competitors": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["website"],
+      "properties": {
+        "website": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "status", "collectedAt"],
+          "properties": {
+            "source": { "type": "string" },
+            "provider": { "type": "string" },
+            "adapterVersion": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+                "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+              ]
+            },
+            "startedAt": { "type": "string", "format": "date-time" },
+            "completedAt": { "type": "string", "format": "date-time" },
+            "requestId": { "type": "string" },
+            "retryCount": { "type": "integer", "minimum": 0 },
+            "coverage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["requested", "completed", "failed"],
+              "properties": {
+                "requested": { "type": "integer", "minimum": 0 },
+                "completed": { "type": "integer", "minimum": 0 },
+                "failed": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "artifactRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "sha256"],
+              "properties": {
+                "key": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                "bytes": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "collectedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "performance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "status", "collectedAt"],
+          "properties": {
+            "source": { "type": "string" },
+            "provider": { "type": "string" },
+            "adapterVersion": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+                "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+              ]
+            },
+            "startedAt": { "type": "string", "format": "date-time" },
+            "completedAt": { "type": "string", "format": "date-time" },
+            "requestId": { "type": "string" },
+            "retryCount": { "type": "integer", "minimum": 0 },
+            "coverage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["requested", "completed", "failed"],
+              "properties": {
+                "requested": { "type": "integer", "minimum": 0 },
+                "completed": { "type": "integer", "minimum": 0 },
+                "failed": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "artifactRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "sha256"],
+              "properties": {
+                "key": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                "bytes": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "collectedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "competitors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+                "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+              ]
+            },
+            "collectedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "backlinks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "status", "collectedAt"],
+          "properties": {
+            "source": { "type": "string" },
+            "provider": { "type": "string" },
+            "adapterVersion": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+                "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+              ]
+            },
+            "collectedAt": { "type": "string", "format": "date-time" },
+            "artifactRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "sha256"],
+              "properties": {
+                "key": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                "bytes": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "ga4": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "status", "collectedAt"],
+          "properties": {
+            "source": { "type": "string" },
+            "provider": { "type": "string" },
+            "adapterVersion": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+                "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+              ]
+            },
+            "collectedAt": { "type": "string", "format": "date-time" },
+            "propertyId": { "type": "string" },
+            "artifactRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "sha256"],
+              "properties": {
+                "key": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                "bytes": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "gsc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "status", "collectedAt"],
+          "properties": {
+            "source": { "type": "string" },
+            "provider": { "type": "string" },
+            "adapterVersion": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+                "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+              ]
+            },
+            "collectedAt": { "type": "string", "format": "date-time" },
+            "siteUrl": { "type": "string" },
+            "artifactRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "sha256"],
+              "properties": {
+                "key": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                "bytes": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "pageEvidence": {
+      "type": "object",
+      "description": "Normalized page-level evidence from the crawl source. Provider-specific shapes must not leak through."
+    },
+    "performanceEvidence": {
+      "type": "object",
+      "description": "Normalized performance evidence. Must not contain raw PageSpeed/Lighthouse response dumps."
+    },
+    "competitorEvidence": {
+      "type": "object",
+      "description": "Normalized competitor comparison evidence."
+    },
+    "backlinkEvidence": {
+      "type": "object",
+      "description": "Normalized backlink evidence."
+    },
+    "ga4Evidence": {
+      "type": "object",
+      "description": "Normalized GA4 evidence. Must not contain user-level records."
+    },
+    "gscEvidence": {
+      "type": "object",
+      "description": "Normalized GSC evidence."
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "All limitations aggregated across sources."
+    },
+    "artifactReferences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "key", "sha256"],
+        "properties": {
+          "source": { "type": "string" },
+          "key": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "contentType": { "type": "string" }
+        }
+      }
+    },
+    "adapterVersions": {
+      "type": "object",
+      "description": "Map of source key to adapter version used.",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when evidence was assembled and locked."
+    }
+  }
+}

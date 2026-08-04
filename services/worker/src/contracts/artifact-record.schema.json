@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/artifact-record.schema.json",
+  "title": "Artifact Record",
+  "description": "Immutable record of a stored artifact with verifiable hash. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "key",
+    "sha256",
+    "bytes",
+    "contentType",
+    "tenantId",
+    "clientId",
+    "auditId",
+    "writtenAt",
+    "storageBackend"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Immutable object-storage key following the tenant/client/audit hierarchy."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hex SHA-256 of the exact stored bytes."
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Exact byte count of the stored object."
+    },
+    "contentType": {
+      "type": "string",
+      "enum": ["application/json", "text/html", "application/octet-stream"],
+      "description": "MIME type of the stored artifact."
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning tenant."
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning client within the tenant."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Audit this artifact belongs to."
+    },
+    "executionId": {
+      "type": "string",
+      "description": "Execution identifier for the collection run."
+    },
+    "source": {
+      "type": "string",
+      "description": "Source key matching the source-result contract (e.g. dataforseo-onpage)."
+    },
+    "writtenAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the artifact was written."
+    },
+    "verifiedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of the last successful byte+SHA verification."
+    },
+    "storageBackend": {
+      "type": "string",
+      "enum": ["memory", "local", "s3"],
+      "description": "Storage backend that holds this artifact."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "originalFilename": {
+          "type": "string"
+        },
+        "adapterVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        }
+      }
+    }
+  }
+}

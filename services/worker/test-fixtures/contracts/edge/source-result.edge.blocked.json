@@ -1,0 +1,25 @@
+{
+  "contractVersion": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "source": "dataforseo-onpage",
+  "provider": "DataForSEO",
+  "adapterVersion": "1.1.0",
+  "status": "BLOCKED",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:00:05.000Z",
+  "requestId": "task-blocked-001",
+  "retryCount": 0,
+  "expectedRecords": 20,
+  "returnedRecords": 0,
+  "coverage": {
+    "requested": 20,
+    "completed": 0,
+    "failed": 20
+  },
+  "limitations": [
+    "Target website robots.txt disallows crawling"
+  ],
+  "evidence": {
+    "sourceStatus": "BLOCKED"
+  }
+}

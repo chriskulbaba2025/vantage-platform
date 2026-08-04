@@ -1,0 +1,12 @@
+{
+  "contractVersion": "1.0.0",
+  "evidenceVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "normalizedRequest": {
+    "targetUrl": "https://www.example.com"
+  },
+  "limitations": [],
+  "artifactReferences": [],
+  "adapterVersions": {},
+  "createdAt": "2026-08-04T14:00:00.000Z"
+}

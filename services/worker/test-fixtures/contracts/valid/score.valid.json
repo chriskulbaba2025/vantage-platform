@@ -1,0 +1,79 @@
+{
+  "contractVersion": "1.0.0",
+  "scoringVersion": "3.0.0",
+  "generatedAt": "2026-08-04T14:10:00.000Z",
+  "scores": {
+    "trust": 65,
+    "contentDepth": 58,
+    "conversionPathways": 72,
+    "technical": 55,
+    "performance": 48,
+    "conversionReadiness": 59,
+    "awareness": 62,
+    "consideration": 55,
+    "decision": 60,
+    "aiReadiness": 45,
+    "conversionPathwaysDimension": 72,
+    "trustEeatDimension": 65,
+    "contentFunnelDimension": 58,
+    "technicalPerformanceDimension": 52,
+    "entitySchemaAiDimension": 45
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "Moderate"
+  },
+  "assessedWeight": 75,
+  "readinessStatus": "Provisional",
+  "readinessStatusDetail": "Provisional",
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 70,
+  "evidenceConfidenceFactors": [
+    { "factor": "Crawl coverage", "score": 80, "weight": 0.4 },
+    { "factor": "Performance data", "score": 65, "weight": 0.3 },
+    { "factor": "Analytics data", "score": 50, "weight": 0.3 }
+  ],
+  "dimensionEligibility": {
+    "conversion_pathways": true,
+    "trust_eeat": true,
+    "content_funnel": true,
+    "technical_performance": true,
+    "entity_schema_ai": true
+  },
+  "moduleEligibility": {
+    "conversion_paths": true,
+    "offer_clarity": true,
+    "trust_signals": true,
+    "risk_reduction": true,
+    "content_depth": true,
+    "funnel_coverage": true,
+    "technical_hygiene": true,
+    "performance": true,
+    "schema_entity": false,
+    "ai_readiness": false
+  },
+  "suppressedModules": [
+    {
+      "moduleId": "schema_entity",
+      "dimension": "entity_schema_ai",
+      "label": "Schema and Entity Clarity",
+      "reason": "No structured data detected on site"
+    },
+    {
+      "moduleId": "ai_readiness",
+      "dimension": "entity_schema_ai",
+      "label": "AI-Search Readiness",
+      "reason": "Insufficient entity signals for AI-search assessment"
+    }
+  ],
+  "rootCause": "The most impactful opportunity is missing trust credentials on key conversion pages. Addressing this will improve visitor confidence and readiness to convert.",
+  "findings": [],
+  "sourceDependencies": {
+    "website": "AVAILABLE",
+    "performance": "AVAILABLE",
+    "backlinks": "AVAILABLE",
+    "ga4": "AVAILABLE",
+    "gsc": "NOT_CONNECTED"
+  }
+}

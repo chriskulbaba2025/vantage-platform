@@ -1,0 +1,26 @@
+{
+  "contractVersion": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "source": "ga4",
+  "provider": "Google",
+  "adapterVersion": "1.0.0",
+  "status": "NOT_CONNECTED",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:00:00.001Z",
+  "requestId": null,
+  "retryCount": 0,
+  "expectedRecords": 0,
+  "returnedRecords": 0,
+  "coverage": {
+    "requested": 0,
+    "completed": 0,
+    "failed": 0
+  },
+  "limitations": [
+    "GA4 property is not configured — analytics-dependent modules suppressed"
+  ],
+  "errorCategory": "not_configured",
+  "evidence": {
+    "sourceStatus": "NOT_CONNECTED"
+  }
+}

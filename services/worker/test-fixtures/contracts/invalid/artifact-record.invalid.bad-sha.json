@@ -1,0 +1,12 @@
+{
+  "contractVersion": "1.0.0",
+  "key": "tenants/tenant-001/clients/client-001/audits/a1b2c3d4/raw/test.json",
+  "sha256": "not-a-valid-sha256-hash",
+  "bytes": 100,
+  "contentType": "application/json",
+  "tenantId": "tenant-001",
+  "clientId": "client-001",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "writtenAt": "2026-08-04T14:00:00.000Z",
+  "storageBackend": "local"
+}

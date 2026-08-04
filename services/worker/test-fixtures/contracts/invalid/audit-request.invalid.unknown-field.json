@@ -1,0 +1,9 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "tenant-001",
+  "clientId": "client-001",
+  "idempotencyKey": "req-2026-08-04-003",
+  "targetUrl": "https://www.example.com",
+  "secretApiKey": "sk-live-this-should-never-be-here"
+}

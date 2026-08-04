@@ -1,0 +1,34 @@
+{
+  "contractVersion": "1.0.0",
+  "scoringVersion": "3.0.0",
+  "generatedAt": "2026-08-04T14:10:00.000Z",
+  "scores": {
+    "trust": "invalid",
+    "contentDepth": "invalid",
+    "conversionPathways": "invalid",
+    "technical": "invalid",
+    "performance": "invalid",
+    "conversionReadiness": "invalid"
+  },
+  "bands": {
+    "conversionReadiness": "Not Assessed",
+    "trust": "Not Assessed",
+    "evidenceConfidence": "Not Assessed"
+  },
+  "assessedWeight": 0,
+  "readinessStatus": "Broken",
+  "showNumericScore": false,
+  "evidenceConfidenceScore": 0,
+  "evidenceConfidenceFactors": [],
+  "dimensionEligibility": {
+    "conversion_pathways": false,
+    "trust_eeat": false,
+    "content_funnel": false,
+    "technical_performance": false,
+    "entity_schema_ai": false
+  },
+  "moduleEligibility": {},
+  "suppressedModules": [],
+  "rootCause": "Something went wrong.",
+  "findings": []
+}

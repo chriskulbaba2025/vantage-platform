@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/narrative-response.schema.json",
+  "title": "Narrative Response",
+  "description": "Structured narrative fields returned by the bounded n8n/LLM step. Contains only allowed text fields referencing existing finding IDs. No HTML, CSS, scores, new URLs, or new findings. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "narrativeVersion",
+    "auditId",
+    "generatedAt",
+    "modelId",
+    "promptVersion",
+    "executiveSummary",
+    "priorityFixNarrative"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "narrativeVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Narrative response shape version."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Audit this narrative belongs to."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the narrative was generated."
+    },
+    "modelId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the LLM model that produced this response."
+    },
+    "promptVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Version of the prompt template used."
+    },
+    "cacheKey": {
+      "type": "string",
+      "description": "Deterministic cache key for replay."
+    },
+    "executiveSummary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "Concise executive interpretation from approved facts. Plain text only — no HTML, no CSS, no Markdown."
+    },
+    "priorityFixNarrative": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 3000,
+      "description": "Narrative describing the highest-priority fixes in client-facing language. Plain text only."
+    },
+    "conversionPathNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing conversion path findings. Plain text only."
+    },
+    "readinessMapNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing the conversion readiness map. Plain text only."
+    },
+    "contentOpportunityNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing content opportunities. Plain text only."
+    },
+    "competitorNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing competitor benchmark insights. Plain text only."
+    },
+    "trustNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing trust and E-E-A-T findings. Plain text only."
+    },
+    "technicalNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing technical SEO findings. Plain text only."
+    },
+    "performanceNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing performance findings. Plain text only."
+    },
+    "internalLinkNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing internal-link opportunities. Plain text only."
+    },
+    "limitationsNarrative": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Narrative describing limitations and deferred analysis. Plain text only."
+    },
+    "referencedFindingIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Finding IDs referenced in the narrative. Every ID must exist in the canonical report-content package."
+    },
+    "fieldWordCounts": {
+      "type": "object",
+      "description": "Recorded word counts per narrative field for limit enforcement.",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "estimatedCost", "retryNumber", "cacheHit"],
+      "properties": {
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "cachedInputTokens": { "type": "integer", "minimum": 0 },
+        "estimatedCost": { "type": "number", "minimum": 0 },
+        "actualCost": { "type": "number", "minimum": 0 },
+        "retryNumber": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "cacheHit": { "type": "boolean" },
+        "validationResult": {
+          "type": "string",
+          "enum": ["passed", "failed", "repaired"]
+        }
+      }
+    }
+  }
+}

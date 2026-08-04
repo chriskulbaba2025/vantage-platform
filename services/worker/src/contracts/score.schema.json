@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/score.schema.json",
+  "title": "Score Set",
+  "description": "Deterministic scoring output with dimension scores, module scores, eligibility, and evidence confidence. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "scoringVersion",
+    "generatedAt",
+    "scores",
+    "bands",
+    "assessedWeight",
+    "readinessStatus",
+    "showNumericScore",
+    "evidenceConfidenceScore",
+    "dimensionEligibility",
+    "moduleEligibility",
+    "suppressedModules",
+    "rootCause",
+    "findings"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "scoringVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Version of the scoring rules used."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when scoring was computed."
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trust",
+        "contentDepth",
+        "conversionPathways",
+        "technical",
+        "performance",
+        "conversionReadiness"
+      ],
+      "properties": {
+        "trust": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Trust/E-E-A-T dimension score."
+        },
+        "contentDepth": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Content and funnel coverage score."
+        },
+        "conversionPathways": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Conversion pathways and offer clarity score."
+        },
+        "technical": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Technical hygiene score."
+        },
+        "performance": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Performance score."
+        },
+        "conversionReadiness": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Overall conversion readiness score. Null when assessed weight is below 60%."
+        },
+        "awareness": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Awareness funnel-stage derived score."
+        },
+        "consideration": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Consideration funnel-stage derived score."
+        },
+        "decision": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Decision funnel-stage derived score."
+        },
+        "aiReadiness": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "AI-search readiness derived score."
+        },
+        "conversionPathwaysDimension": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "trustEeatDimension": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "contentFunnelDimension": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "technicalPerformanceDimension": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "entitySchemaAiDimension": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "bands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversionReadiness", "trust", "evidenceConfidence"],
+      "properties": {
+        "conversionReadiness": {
+          "type": "string",
+          "enum": ["Strong", "Moderate", "Limited", "Weak", "Not Assessed"]
+        },
+        "trust": {
+          "type": "string",
+          "enum": ["Strong", "Moderate", "Limited", "Weak", "Not Assessed"]
+        },
+        "evidenceConfidence": {
+          "type": "string",
+          "enum": ["High", "Moderate", "Limited", "Directional", "Not Assessed"]
+        }
+      }
+    },
+    "assessedWeight": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Percentage of total intended dimension weight that was assessed."
+    },
+    "readinessStatus": {
+      "type": "string",
+      "description": "Human-readable readiness status (e.g. Complete, Provisional, Insufficient Evidence)."
+    },
+    "readinessStatusDetail": {
+      "type": "string",
+      "description": "Machine-readable readiness status detail."
+    },
+    "showNumericScore": {
+      "type": "boolean",
+      "description": "Whether the numeric conversion readiness score should be displayed."
+    },
+    "evidenceConfidenceScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Aggregate evidence confidence score 0-100."
+    },
+    "evidenceConfidenceFactors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["factor", "score", "weight"],
+        "properties": {
+          "factor": { "type": "string" },
+          "score": { "type": "number", "minimum": 0, "maximum": 100 },
+          "weight": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "dimensionEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conversion_pathways",
+        "trust_eeat",
+        "content_funnel",
+        "technical_performance",
+        "entity_schema_ai"
+      ],
+      "properties": {
+        "conversion_pathways": { "type": "boolean" },
+        "trust_eeat": { "type": "boolean" },
+        "content_funnel": { "type": "boolean" },
+        "technical_performance": { "type": "boolean" },
+        "entity_schema_ai": { "type": "boolean" }
+      }
+    },
+    "moduleEligibility": {
+      "type": "object",
+      "description": "Map of module ID to eligibility boolean.",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "suppressedModules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["moduleId", "dimension", "label", "reason"],
+        "properties": {
+          "moduleId": { "type": "string" },
+          "dimension": { "type": "string" },
+          "label": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "rootCause": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "Single primary constraint in plain client language."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://vantage-platform.io/prysm/contracts/v1/finding.schema.json"
+      },
+      "description": "Deterministic findings produced before any LLM step."
+    },
+    "findingIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Exact finding IDs included in this score set."
+    },
+    "sourceDependencies": {
+      "type": "object",
+      "description": "Map of source key to status, recording which sources contributed.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+          "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+        ]
+      }
+    }
+  }
+}
