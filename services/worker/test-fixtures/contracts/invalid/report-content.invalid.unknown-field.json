@@ -1,0 +1,53 @@
+{
+  "contractVersion": "1.0.0",
+  "packageVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "business": {
+    "name": "Test Business",
+    "domain": "example.com"
+  },
+  "scores": {},
+  "bands": {
+    "conversionReadiness": "Not Assessed",
+    "trust": "Not Assessed",
+    "evidenceConfidence": "Not Assessed"
+  },
+  "readinessStatus": "Provisional",
+  "sourceStatus": {
+    "website": "AVAILABLE",
+    "performance": "FAILED",
+    "competitors": "NONE",
+    "backlinks": "NOT_CONNECTED",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  },
+  "limitations": [],
+  "findings": [],
+  "siteMetrics": {
+    "pageCount": 0,
+    "platform": "Unknown"
+  },
+  "trustFlags": {
+    "testimonials": false,
+    "credentials": false,
+    "caseStudies": false,
+    "faq": false,
+    "pricing": false,
+    "policies": false,
+    "contact": false
+  },
+  "technical": {
+    "missingTitles": 0,
+    "missingDescriptions": 0,
+    "h1Missing": 0,
+    "h1Multiple": 0,
+    "imagesMissingAlt": 0,
+    "internalLinkCount": 0
+  },
+  "promptVersion": "1.0.0",
+  "outputSchemaVersion": "1.0.0",
+  "rawProviderPayload": {
+    "secretKey": "should-not-be-here",
+    "providerDump": "massive-raw-response"
+  }
+}

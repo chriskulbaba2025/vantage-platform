@@ -1,0 +1,34 @@
+{
+  "contractVersion": "1.0.0",
+  "findingId": "VAN-TRUST-001-a1b2c3d4",
+  "ruleId": "VAN-TRUST-001",
+  "ruleVersion": "3.0.0",
+  "dimension": "trust_eeat",
+  "module": "trust_signals",
+  "title": "Missing trust credentials on key conversion pages",
+  "affectedUrls": [
+    "https://www.oakvillefamilydental.ca",
+    "https://www.oakvillefamilydental.ca/services"
+  ],
+  "evidence": [
+    {
+      "field": "trust.credentials",
+      "observedValue": false,
+      "expectedValue": true,
+      "source": "dataforseo-onpage"
+    },
+    {
+      "field": "trust.testimonials",
+      "observedValue": false,
+      "source": "dataforseo-onpage"
+    }
+  ],
+  "confidence": 85,
+  "businessImpact": "Visitors cannot verify provider qualifications, reducing conversion confidence on service pages.",
+  "recommendation": "Add professional credentials, certifications, and team qualifications to the homepage and service pages.",
+  "implementationEffort": "M",
+  "verificationMethod": "Confirm credentials page is linked from homepage and all service pages with structured data markup.",
+  "scoreBearing": true,
+  "severity": "High",
+  "finalPriority": 92.5
+}

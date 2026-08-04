@@ -1,0 +1,104 @@
+{
+  "contractVersion": "1.0.0",
+  "packageVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "business": {
+    "name": "Oakville Family Dental",
+    "domain": "oakvillefamilydental.ca",
+    "platform": "WordPress"
+  },
+  "scores": {
+    "trust": 65,
+    "contentDepth": 58,
+    "conversionPathways": 72,
+    "technical": 55,
+    "performance": 48,
+    "conversionReadiness": 59,
+    "awareness": 62,
+    "consideration": 55,
+    "decision": 60,
+    "aiReadiness": 45
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "Moderate"
+  },
+  "readinessStatus": "Provisional",
+  "assessedWeight": 75,
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 70,
+  "rootCause": "The most impactful opportunity is missing trust credentials on key conversion pages.",
+  "sourceStatus": {
+    "website": "AVAILABLE",
+    "performance": "AVAILABLE",
+    "competitors": "SUPPLIED",
+    "backlinks": "AVAILABLE",
+    "ga4": "AVAILABLE",
+    "gsc": "NOT_CONNECTED"
+  },
+  "competitors": [
+    {
+      "url": "https://www.oakvilledentalarts.ca",
+      "domain": "oakvilledentalarts.ca",
+      "pageCount": 12,
+      "status": "AVAILABLE"
+    }
+  ],
+  "performanceCoverage": {
+    "requested": 2,
+    "completed": 2,
+    "failed": 0,
+    "pagesTested": 2
+  },
+  "limitations": [
+    "GSC property not connected — search performance data unavailable"
+  ],
+  "findings": [
+    {
+      "findingId": "VAN-TRUST-001-a1b2",
+      "ruleId": "VAN-TRUST-001",
+      "title": "Missing trust credentials on key conversion pages",
+      "severity": "High",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Visitors cannot verify provider qualifications.",
+      "recommendation": "Add professional credentials to the homepage and service pages.",
+      "verificationMethod": "Confirm credentials page is linked from homepage.",
+      "affectedUrls": ["https://www.oakvillefamilydental.ca"],
+      "evidence": [
+        { "field": "trust.credentials", "observedValue": false }
+      ],
+      "implementationEffort": "M"
+    }
+  ],
+  "siteMetrics": {
+    "pageCount": 20,
+    "services": ["General Dentistry", "Cosmetic Dentistry"],
+    "topicKeywords": ["dental care", "family dentist", "teeth whitening"],
+    "platform": "WordPress",
+    "hasHttps": true,
+    "schemaCount": 0,
+    "ctaCount": 3,
+    "formCount": 1
+  },
+  "trustFlags": {
+    "testimonials": false,
+    "credentials": false,
+    "caseStudies": false,
+    "faq": true,
+    "pricing": false,
+    "policies": true,
+    "contact": true
+  },
+  "technical": {
+    "missingTitles": 2,
+    "missingDescriptions": 5,
+    "h1Missing": 1,
+    "h1Multiple": 3,
+    "imagesMissingAlt": 12,
+    "internalLinkCount": 45
+  },
+  "promptVersion": "1.0.0",
+  "outputSchemaVersion": "1.0.0"
+}

@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/report-view-model.schema.json",
+  "title": "Report View Model",
+  "description": "The single validated input to the locked report renderer. Combines deterministic report content, validated narrative response, and locked report metadata. The renderer accepts only this shape. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "reportVersion",
+    "reportDesignVersion",
+    "generatedAt",
+    "input",
+    "scores",
+    "bands",
+    "assessedWeight",
+    "readinessStatus",
+    "showNumericScore",
+    "evidenceConfidenceScore",
+    "rootCause",
+    "findings",
+    "conversionPaths",
+    "readinessMap",
+    "contentIdeas",
+    "competitors",
+    "sourceStatus",
+    "limitations"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "reportVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Version of the scoring/report logic."
+    },
+    "reportDesignVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Locked report design version. Changing this requires a separate report-design PR."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "input": {
+      "type": "object",
+      "description": "Normalized audit request that produced this report.",
+      "additionalProperties": false,
+      "required": ["targetUrl"],
+      "properties": {
+        "targetUrl": { "type": "string", "format": "uri" },
+        "businessName": { "type": "string" },
+        "market": { "type": "string" },
+        "language": { "type": "string" },
+        "primaryGoal": { "type": "string" },
+        "services": { "type": "array", "items": { "type": "string" } },
+        "competitors": { "type": "array", "items": { "type": "string", "format": "uri" } }
+      }
+    },
+    "scores": {
+      "$ref": "https://vantage-platform.io/prysm/contracts/v1/score.schema.json#/properties/scores"
+    },
+    "bands": {
+      "$ref": "https://vantage-platform.io/prysm/contracts/v1/score.schema.json#/properties/bands"
+    },
+    "assessedWeight": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "readinessStatus": {
+      "type": "string"
+    },
+    "showNumericScore": {
+      "type": "boolean"
+    },
+    "evidenceConfidenceScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "rootCause": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://vantage-platform.io/prysm/contracts/v1/finding.schema.json"
+      }
+    },
+    "conversionPaths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "steps", "blockers", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "cta": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "text": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          },
+          "host": { "type": "string" },
+          "steps": { "type": "array", "items": { "type": "string" } },
+          "blockers": { "type": "array", "items": { "type": "string" } },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "readinessMap": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic", "stage", "blocker", "trustAsset", "eeat", "cta", "path", "priority"],
+        "properties": {
+          "topic": { "type": "string" },
+          "stage": { "type": "string", "enum": ["TOFU", "MOFU", "BOFU"] },
+          "blocker": { "type": "string" },
+          "trustAsset": { "type": "string" },
+          "eeat": { "type": "string" },
+          "cta": { "type": "string" },
+          "path": { "type": "string" },
+          "priority": { "type": "string", "enum": ["H", "M", "L"] }
+        }
+      }
+    },
+    "contentIdeas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tofu", "mofu", "bofu", "leading"],
+      "properties": {
+        "tofu": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["idea", "frame", "type", "question", "priority"],
+            "properties": {
+              "idea": { "type": "string" },
+              "frame": { "type": "string" },
+              "type": { "type": "string" },
+              "question": { "type": "string" },
+              "priority": { "type": "string", "enum": ["H", "M", "L"] }
+            }
+          }
+        },
+        "mofu": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["idea", "frame", "type", "question", "priority"],
+            "properties": {
+              "idea": { "type": "string" },
+              "frame": { "type": "string" },
+              "type": { "type": "string" },
+              "question": { "type": "string" },
+              "priority": { "type": "string", "enum": ["H", "M", "L"] }
+            }
+          }
+        },
+        "bofu": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["idea", "frame", "type", "question", "priority"],
+            "properties": {
+              "idea": { "type": "string" },
+              "frame": { "type": "string" },
+              "type": { "type": "string" },
+              "question": { "type": "string" },
+              "priority": { "type": "string", "enum": ["H", "M", "L"] }
+            }
+          }
+        },
+        "leading": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["query", "rationale", "priority"],
+            "properties": {
+              "query": { "type": "string" },
+              "rationale": { "type": "string" },
+              "priority": { "type": "string", "enum": ["H", "M", "L"] }
+            }
+          }
+        }
+      }
+    },
+    "competitors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comparisons", "opportunities"],
+      "properties": {
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "url", "status"],
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string", "format": "uri" },
+              "topic": { "type": "string" },
+              "offerClarity": { "type": "string" },
+              "trustProof": { "type": "string" },
+              "ctaClarity": { "type": "string" },
+              "contentDepth": { "type": "string" },
+              "eeat": { "type": "string" },
+              "pathClarity": { "type": "string" },
+              "status": { "type": "string" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "opportunities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["topics", "qualifiedCandidates", "excludedCandidates", "gaps", "allGaps", "sources", "limitations"],
+          "properties": {
+            "topics": { "type": "array", "items": { "type": "string" } },
+            "qualifiedCandidates": { "type": "array" },
+            "excludedCandidates": { "type": "array" },
+            "gaps": { "type": "array" },
+            "allGaps": { "type": "array" },
+            "sources": { "type": "object" },
+            "limitations": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["website", "performance", "competitors", "backlinks", "ga4", "gsc"],
+      "properties": {
+        "website": { "type": "string" },
+        "performance": { "type": "string" },
+        "competitors": { "type": "string" },
+        "backlinks": { "type": "string" },
+        "ga4": { "type": "string" },
+        "gsc": { "type": "string" }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "renderingDiagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["diagnosticCode", "diagnosticCategory", "clientExplanation", "confidence"],
+        "properties": {
+          "diagnosticCode": { "type": "string" },
+          "diagnosticCategory": { "type": "string" },
+          "clientExplanation": { "type": "string" },
+          "confidence": { "type": "string" }
+        }
+      }
+    },
+    "narrative": {
+      "$ref": "https://vantage-platform.io/prysm/contracts/v1/narrative-response.schema.json",
+      "description": "Validated narrative response from the n8n/LLM step. Optional — may be absent for audits that failed before narrative generation."
+    },
+    "gate": {
+      "type": "object",
+      "description": "Finalization gate output attached to the model.",
+      "additionalProperties": false,
+      "required": ["passed", "validatedAt"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "field": { "type": "string" },
+              "section": { "type": "string" },
+              "message": { "type": "string" },
+              "severity": { "type": "string" }
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "field": { "type": "string" },
+              "section": { "type": "string" },
+              "message": { "type": "string" },
+              "severity": { "type": "string" }
+            }
+          }
+        },
+        "commercialRecommendation": { "type": "string" },
+        "nextAction": { "type": "string" },
+        "serviceCategories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "validatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "selectedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ga4PropertyId": { "type": "string" },
+        "gscSiteUrl": { "type": "string" },
+        "competitors": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    }
+  }
+}

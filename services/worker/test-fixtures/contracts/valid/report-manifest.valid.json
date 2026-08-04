@@ -1,0 +1,48 @@
+{
+  "contractVersion": "1.0.0",
+  "artifactVersion": "1.0.0",
+  "reportVersion": "3.0.0",
+  "reportDesignVersion": "1.0.0",
+  "runId": "run-20260804-001",
+  "slug": "oakville-family-dental",
+  "targetUrl": "https://www.oakvillefamilydental.ca",
+  "targetDomain": "oakvillefamilydental.ca",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:20:00.000Z",
+  "status": "draft",
+  "scores": {
+    "trust": 65,
+    "contentDepth": 58,
+    "conversionPathways": 72,
+    "technical": 55,
+    "performance": 48,
+    "conversionReadiness": 59,
+    "awareness": 62,
+    "consideration": 55,
+    "decision": 60,
+    "aiReadiness": 45
+  },
+  "sources": {
+    "website": "AVAILABLE",
+    "performance": "AVAILABLE",
+    "competitors": "AVAILABLE",
+    "backlinks": "AVAILABLE",
+    "ga4": "AVAILABLE",
+    "gsc": "NOT_CONNECTED"
+  },
+  "selectedProperties": {
+    "ga4PropertyId": "123456789",
+    "gscSiteUrl": "https://www.oakvillefamilydental.ca",
+    "competitors": ["https://www.oakvilledentalarts.ca"]
+  },
+  "files": [
+    "index.html",
+    "audit.json",
+    "evidence.json",
+    "manifest.json"
+  ],
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "tenant-001",
+  "clientId": "client-001",
+  "lifecycleStatus": "DRAFT_RENDERED"
+}

@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/finding.schema.json",
+  "title": "Finding",
+  "description": "A single evidence-backed finding produced by deterministic rules before any LLM step. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "findingId",
+    "ruleId",
+    "ruleVersion",
+    "dimension",
+    "module",
+    "title",
+    "affectedUrls",
+    "evidence",
+    "confidence",
+    "businessImpact",
+    "recommendation",
+    "implementationEffort",
+    "verificationMethod",
+    "scoreBearing",
+    "severity",
+    "finalPriority"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "findingId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable finding identifier that exists before any LLM or n8n step."
+    },
+    "ruleId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deterministic rule that produced this finding."
+    },
+    "ruleVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Version of the rule when this finding was created."
+    },
+    "dimension": {
+      "type": "string",
+      "enum": [
+        "conversion_pathways",
+        "trust_eeat",
+        "content_funnel",
+        "technical_performance",
+        "entity_schema_ai"
+      ],
+      "description": "Scoring dimension this finding belongs to."
+    },
+    "module": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scoring module within the dimension."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Human-readable finding title."
+    },
+    "affectedUrls": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "description": "URLs affected by this finding. At least one is required."
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "observedValue"],
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Evidence field name."
+          },
+          "observedValue": {
+            "description": "The observed value for this evidence field."
+          },
+          "expectedValue": {
+            "description": "The expected or threshold value."
+          },
+          "source": {
+            "type": "string",
+            "description": "Source key that produced this evidence."
+          }
+        }
+      },
+      "description": "Evidence references backing this finding. At least one is required — no evidence means no finding."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Confidence score 0-100 for this finding."
+    },
+    "businessImpact": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Client-facing explanation of business impact."
+    },
+    "recommendation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Deterministic recommendation text."
+    },
+    "implementationEffort": {
+      "type": "string",
+      "enum": ["L", "M", "H"],
+      "description": "Implementation effort: Low, Medium, High."
+    },
+    "verificationMethod": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "How to verify this finding has been addressed."
+    },
+    "scoreBearing": {
+      "type": "boolean",
+      "description": "Whether this finding affects the readiness score."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["High", "Medium", "Low"],
+      "description": "Severity classification."
+    },
+    "finalPriority": {
+      "type": "number",
+      "description": "Computed priority for sorting findings."
+    },
+    "findingKey": {
+      "type": "string",
+      "description": "Optional stable key for grouping or deduplication."
+    }
+  }
+}

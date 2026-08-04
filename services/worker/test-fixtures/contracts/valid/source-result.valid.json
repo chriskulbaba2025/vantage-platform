@@ -1,0 +1,29 @@
+{
+  "contractVersion": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "source": "dataforseo-onpage",
+  "provider": "DataForSEO",
+  "adapterVersion": "1.1.0",
+  "status": "AVAILABLE",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:05:30.000Z",
+  "requestId": "task-abc123-def456",
+  "retryCount": 0,
+  "expectedRecords": 20,
+  "returnedRecords": 20,
+  "coverage": {
+    "requested": 20,
+    "completed": 20,
+    "failed": 0
+  },
+  "limitations": [],
+  "artifact": {
+    "key": "tenants/tenant-001/clients/client-001/audits/a1b2c3d4/raw/dataforseo-onpage/task-abc123.json",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 24576,
+    "contentType": "application/json"
+  },
+  "evidence": {
+    "sourceStatus": "AVAILABLE"
+  }
+}

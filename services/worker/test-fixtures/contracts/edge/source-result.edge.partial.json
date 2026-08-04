@@ -1,0 +1,26 @@
+{
+  "contractVersion": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "source": "dataforseo-onpage",
+  "provider": "DataForSEO",
+  "adapterVersion": "1.1.0",
+  "status": "PARTIAL",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:03:00.000Z",
+  "requestId": "task-partial-001",
+  "retryCount": 1,
+  "expectedRecords": 50,
+  "returnedRecords": 32,
+  "coverage": {
+    "requested": 50,
+    "completed": 32,
+    "failed": 18
+  },
+  "limitations": [
+    "Page ceiling reached at 32 of 50 requested pages",
+    "18 pages returned non-200 status codes"
+  ],
+  "evidence": {
+    "sourceStatus": "PARTIAL"
+  }
+}

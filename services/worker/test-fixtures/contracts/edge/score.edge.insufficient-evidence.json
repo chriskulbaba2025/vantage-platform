@@ -1,0 +1,49 @@
+{
+  "contractVersion": "1.0.0",
+  "scoringVersion": "3.0.0",
+  "generatedAt": "2026-08-04T14:10:00.000Z",
+  "scores": {
+    "trust": null,
+    "contentDepth": null,
+    "conversionPathways": null,
+    "technical": null,
+    "performance": 48,
+    "conversionReadiness": null
+  },
+  "bands": {
+    "conversionReadiness": "Not Assessed",
+    "trust": "Not Assessed",
+    "evidenceConfidence": "Directional"
+  },
+  "assessedWeight": 10,
+  "readinessStatus": "Insufficient Evidence for Overall Score",
+  "readinessStatusDetail": "Insufficient Evidence for Overall Score",
+  "showNumericScore": false,
+  "evidenceConfidenceScore": 30,
+  "evidenceConfidenceFactors": [],
+  "dimensionEligibility": {
+    "conversion_pathways": false,
+    "trust_eeat": false,
+    "content_funnel": false,
+    "technical_performance": false,
+    "entity_schema_ai": false
+  },
+  "moduleEligibility": {},
+  "suppressedModules": [
+    {
+      "moduleId": "conversion_paths",
+      "dimension": "conversion_pathways",
+      "label": "Conversion Paths",
+      "reason": "Crawl source status is NOT_CONNECTED"
+    }
+  ],
+  "rootCause": "The primary crawl provider is not connected. Crawl-dependent modules could not be assessed.",
+  "findings": [],
+  "sourceDependencies": {
+    "website": "NOT_CONNECTED",
+    "performance": "AVAILABLE",
+    "backlinks": "NOT_CONNECTED",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  }
+}

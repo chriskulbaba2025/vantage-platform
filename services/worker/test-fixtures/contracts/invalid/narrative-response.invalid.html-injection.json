@@ -1,0 +1,12 @@
+{
+  "contractVersion": "1.0.0",
+  "narrativeVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "generatedAt": "2026-08-04T14:12:00.000Z",
+  "modelId": "claude-opus-4-8",
+  "promptVersion": "1.0.0",
+  "executiveSummary": "<div style='color:red'>This is an HTML injection attempt</div>",
+  "priorityFixNarrative": "Valid priority fix narrative text",
+  "newFindingId": "INVENTED-FINDING-001",
+  "newScore": 95
+}

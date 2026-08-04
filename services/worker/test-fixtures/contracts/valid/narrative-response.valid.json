@@ -1,0 +1,37 @@
+{
+  "contractVersion": "1.0.0",
+  "narrativeVersion": "1.0.0",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "generatedAt": "2026-08-04T14:12:00.000Z",
+  "modelId": "claude-opus-4-8",
+  "promptVersion": "1.0.0",
+  "cacheKey": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "executiveSummary": "Oakville Family Dental has a functional website with moderate conversion readiness. The primary constraint is missing trust credentials on key pages. Visitors cannot verify provider qualifications, which reduces confidence in booking. The site would benefit most from adding professional credentials, testimonials, and clearer pricing information.",
+  "priorityFixNarrative": "The highest-priority action is to add professional credentials and team qualifications to the homepage and all service pages. This single change addresses the most significant barrier to conversion: visitor uncertainty about provider expertise. We recommend a dedicated credentials section with practitioner photos, certifications, and professional affiliations.",
+  "conversionPathNarrative": "The site has two visible conversion paths: a contact form and a phone number. Both are functional but lack supporting trust signals that would increase completion rates.",
+  "readinessMapNarrative": "Key service topics like General Dentistry and Cosmetic Dentistry are present on the site. However, supporting content for middle-of-funnel consideration stages is thin. Adding comparison content and process explanations would strengthen the funnel.",
+  "contentOpportunityNarrative": "Three content opportunities stand out: a detailed service comparison page, a patient results showcase, and an FAQ section addressing cost and procedure concerns. Each would address specific visitor questions identified in the crawl.",
+  "competitorNarrative": "Oakville Dental Arts, the primary local competitor, has stronger trust signals including practitioner profiles and patient testimonials. Closing the trust gap should be the immediate competitive priority.",
+  "trustNarrative": "The site currently lacks testimonials, credentials displays, and case studies. It does have contact information and basic policies. Adding these missing trust elements would significantly improve E-E-A-T signals.",
+  "technicalNarrative": "Technical hygiene shows moderate issues: 2 pages missing titles, 5 missing meta descriptions, and 12 images missing alt text. These are straightforward fixes that improve both SEO and accessibility.",
+  "performanceNarrative": "Performance scores indicate room for improvement at 48/100. Key issues include unoptimized images and render-blocking resources. Addressing these would improve both user experience and search rankings.",
+  "internalLinkNarrative": "The site has 45 internal links, which is reasonable for its size. A few high-value service pages could benefit from additional contextual links from blog or FAQ content.",
+  "limitationsNarrative": "This audit did not include Google Search Console data because the property was not connected. Connecting GSC would provide valuable search performance context for future audits.",
+  "referencedFindingIds": ["VAN-TRUST-001-a1b2"],
+  "fieldWordCounts": {
+    "executiveSummary": 68,
+    "priorityFixNarrative": 72,
+    "conversionPathNarrative": 32,
+    "readinessMapNarrative": 38
+  },
+  "usage": {
+    "inputTokens": 4200,
+    "outputTokens": 850,
+    "cachedInputTokens": 0,
+    "estimatedCost": 0.015,
+    "actualCost": 0.012,
+    "retryNumber": 0,
+    "cacheHit": false,
+    "validationResult": "passed"
+  }
+}

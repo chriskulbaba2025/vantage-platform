@@ -1,0 +1,9 @@
+{
+  "contractVersion": "1.0.0",
+  "reportVersion": "3.0.0",
+  "reportDesignVersion": "1.0.0",
+  "generatedAt": "2026-08-04T14:15:00.000Z",
+  "input": {
+    "targetUrl": "https://www.example.com"
+  }
+}

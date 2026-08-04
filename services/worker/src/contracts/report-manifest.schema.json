@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/report-manifest.schema.json",
+  "title": "Report Artifact Manifest",
+  "description": "Complete manifest of all artifacts produced by an audit run. Records versions, hashes, source statuses, selected properties, and all output files. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "artifactVersion",
+    "reportVersion",
+    "runId",
+    "slug",
+    "targetUrl",
+    "targetDomain",
+    "startedAt",
+    "completedAt",
+    "status",
+    "scores",
+    "sources",
+    "files"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "artifactVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Manifest shape version."
+    },
+    "reportVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Report scoring/renderer version."
+    },
+    "reportDesignVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Locked report design version."
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique run identifier."
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "description": "URL-safe slug for the audit."
+    },
+    "targetUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "targetDomain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "reviewed", "approved", "published"],
+      "description": "Lifecycle status at manifest creation."
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trust", "contentDepth", "conversionPathways",
+        "technical", "performance", "conversionReadiness"
+      ],
+      "properties": {
+        "trust": { "type": ["number", "null"] },
+        "contentDepth": { "type": ["number", "null"] },
+        "conversionPathways": { "type": ["number", "null"] },
+        "technical": { "type": ["number", "null"] },
+        "performance": { "type": ["number", "null"] },
+        "conversionReadiness": { "type": ["number", "null"] },
+        "awareness": { "type": ["number", "null"] },
+        "consideration": { "type": ["number", "null"] },
+        "decision": { "type": ["number", "null"] },
+        "aiReadiness": { "type": ["number", "null"] }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["website", "performance", "competitors", "backlinks", "ga4", "gsc"],
+      "properties": {
+        "website": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        },
+        "performance": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        },
+        "competitors": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        },
+        "backlinks": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        },
+        "ga4": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        },
+        "gsc": {
+          "type": "string",
+          "enum": [
+            "AVAILABLE", "PARTIAL", "FAILED", "BLOCKED",
+            "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"
+          ]
+        }
+      }
+    },
+    "selectedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ga4PropertyId": { "type": "string" },
+        "gscSiteUrl": { "type": "string" },
+        "competitors": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "List of output filenames included in this run."
+    },
+    "artifactRecords": {
+      "type": "array",
+      "items": {
+        "$ref": "https://vantage-platform.io/prysm/contracts/v1/artifact-record.schema.json"
+      },
+      "description": "Complete list of artifact records for every stored object."
+    },
+    "lifecycleStatus": {
+      "type": "string",
+      "enum": [
+        "CREATED", "VALIDATED", "COLLECTING",
+        "EVIDENCE_STORED", "EVIDENCE_LOCKED", "SCORED",
+        "NARRATIVE_PENDING", "NARRATIVE_READY", "DRAFT_RENDERED",
+        "IN_REVIEW", "APPROVED", "PUBLISHED",
+        "VALIDATION_FAILED", "COLLECTION_FAILED",
+        "NARRATIVE_FAILED", "RENDER_FAILED",
+        "APPROVAL_REJECTED", "PUBLISH_FAILED"
+      ],
+      "description": "Full lifecycle state from the state machine."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "tenantId": {
+      "type": "string"
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "approvalRecord": {
+      "type": "object",
+      "description": "Approval record when status is approved or published.",
+      "additionalProperties": false,
+      "properties": {
+        "approvedBy": { "type": "string" },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "reviewId": { "type": "string" }
+      }
+    }
+  }
+}

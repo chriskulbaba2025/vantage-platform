@@ -1,0 +1,135 @@
+{
+  "contractVersion": "1.0.0",
+  "reportVersion": "3.0.0",
+  "reportDesignVersion": "1.0.0",
+  "generatedAt": "2026-08-04T14:15:00.000Z",
+  "input": {
+    "targetUrl": "https://www.oakvillefamilydental.ca",
+    "businessName": "Oakville Family Dental",
+    "market": "Oakville, Ontario",
+    "language": "en-CA",
+    "primaryGoal": "Generate qualified patient enquiries",
+    "services": ["General Dentistry", "Cosmetic Dentistry"],
+    "competitors": ["https://www.oakvilledentalarts.ca"]
+  },
+  "scores": {
+    "trust": 65,
+    "contentDepth": 58,
+    "conversionPathways": 72,
+    "technical": 55,
+    "performance": 48,
+    "conversionReadiness": 59
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "Moderate"
+  },
+  "assessedWeight": 75,
+  "readinessStatus": "Provisional",
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 70,
+  "rootCause": "The most impactful opportunity is missing trust credentials on key conversion pages.",
+  "findings": [
+    {
+      "contractVersion": "1.0.0",
+      "findingId": "VAN-TRUST-001-a1b2",
+      "ruleId": "VAN-TRUST-001",
+      "ruleVersion": "3.0.0",
+      "dimension": "trust_eeat",
+      "module": "trust_signals",
+      "title": "Missing trust credentials on key conversion pages",
+      "affectedUrls": ["https://www.oakvillefamilydental.ca"],
+      "evidence": [
+        { "field": "trust.credentials", "observedValue": false, "source": "dataforseo-onpage" }
+      ],
+      "confidence": 85,
+      "businessImpact": "Visitors cannot verify provider qualifications.",
+      "recommendation": "Add professional credentials to the homepage.",
+      "implementationEffort": "M",
+      "verificationMethod": "Confirm credentials section is visible on homepage.",
+      "scoreBearing": true,
+      "severity": "High",
+      "finalPriority": 92.5
+    }
+  ],
+  "conversionPaths": [
+    {
+      "name": "Primary Path: Contact Form",
+      "cta": { "text": "Book Appointment", "url": "https://www.oakvillefamilydental.ca/contact" },
+      "host": "on-site",
+      "steps": ["Land on the homepage", "Locate Book Appointment", "Fill contact form", "Submit"],
+      "blockers": ["no trust proof"],
+      "status": "Weak"
+    }
+  ],
+  "readinessMap": [
+    {
+      "topic": "General Dentistry",
+      "stage": "TOFU",
+      "blocker": "Doubt",
+      "trustAsset": "Credential",
+      "eeat": "Expertise proof",
+      "cta": "Form",
+      "path": "Weak",
+      "priority": "H"
+    }
+  ],
+  "contentIdeas": {
+    "tofu": [
+      { "idea": "What Is General Dentistry?", "frame": "Answer-first", "type": "Guide", "question": "What is this?", "priority": "H" }
+    ],
+    "mofu": [
+      { "idea": "General Dentistry: Options and Fit", "frame": "Comparison/fit", "type": "Comparison page", "question": "Which option is right?", "priority": "H" }
+    ],
+    "bofu": [
+      { "idea": "Pricing and What to Expect", "frame": "Risk-reversal", "type": "Pricing page", "question": "What does it cost?", "priority": "H" }
+    ],
+    "leading": [
+      { "query": "family dentistry for decision making", "rationale": "Connects the offer to an urgent practical use", "priority": "H" }
+    ]
+  },
+  "competitors": {
+    "comparisons": [
+      {
+        "name": "Oakville Dental Arts",
+        "url": "https://www.oakvilledentalarts.ca",
+        "topic": "General Dentistry, Cosmetic Dentistry",
+        "offerClarity": "Strong",
+        "trustProof": "Moderate",
+        "ctaClarity": "Strong",
+        "contentDepth": "Moderate",
+        "eeat": "Moderate",
+        "pathClarity": "Moderate",
+        "status": "AVAILABLE"
+      }
+    ],
+    "opportunities": {
+      "topics": ["general dentistry", "cosmetic dentistry"],
+      "qualifiedCandidates": [],
+      "excludedCandidates": [],
+      "gaps": [],
+      "allGaps": [],
+      "sources": {},
+      "limitations": []
+    }
+  },
+  "sourceStatus": {
+    "website": "AVAILABLE",
+    "performance": "AVAILABLE",
+    "competitors": "AVAILABLE",
+    "backlinks": "AVAILABLE",
+    "ga4": "AVAILABLE",
+    "gsc": "NOT_CONNECTED"
+  },
+  "limitations": ["GSC property not connected"],
+  "gate": {
+    "passed": true,
+    "errors": [],
+    "warnings": [],
+    "commercialRecommendation": "Targeted technical and content remediation is recommended.",
+    "nextAction": "Book an implementation scoping session.",
+    "serviceCategories": ["content strategy", "technical remediation"],
+    "validatedAt": "2026-08-04T14:10:01.000Z"
+  }
+}

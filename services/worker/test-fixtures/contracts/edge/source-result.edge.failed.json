@@ -1,0 +1,26 @@
+{
+  "contractVersion": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "source": "pagespeed",
+  "provider": "Google",
+  "adapterVersion": "1.0.0",
+  "status": "FAILED",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:00:30.000Z",
+  "requestId": "ps-call-001",
+  "retryCount": 2,
+  "expectedRecords": 2,
+  "returnedRecords": 0,
+  "coverage": {
+    "requested": 2,
+    "completed": 0,
+    "failed": 2
+  },
+  "limitations": [
+    "PageSpeed API returned 500 for both mobile and desktop strategies"
+  ],
+  "errorCategory": "internal",
+  "evidence": {
+    "sourceStatus": "FAILED"
+  }
+}

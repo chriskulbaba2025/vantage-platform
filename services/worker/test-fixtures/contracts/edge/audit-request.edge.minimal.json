@@ -1,0 +1,8 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "tenantId": "tenant-002",
+  "clientId": "client-002",
+  "idempotencyKey": "minimal-req-001",
+  "targetUrl": "https://www.minimalsite.com"
+}

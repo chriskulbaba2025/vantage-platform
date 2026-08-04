@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/audit-request.schema.json",
+  "title": "Audit Request",
+  "description": "Validated intake payload that starts a Prysm audit. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "auditId",
+    "tenantId",
+    "clientId",
+    "idempotencyKey",
+    "targetUrl",
+    "contractVersion"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Contract version — must match the schema version."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique audit identifier assigned at intake."
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning tenant identifier."
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Client identifier within the tenant."
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256,
+      "description": "Client-supplied key that prevents duplicate audit creation."
+    },
+    "targetUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "Normalized target website URL."
+    },
+    "businessName": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Client-facing business name."
+    },
+    "market": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Primary market or location string (e.g. city and region)."
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "default": "en-CA",
+      "maxLength": 10,
+      "description": "BCP 47 language tag for the report."
+    },
+    "primaryGoal": {
+      "type": "string",
+      "maxLength": 256,
+      "description": "Primary business goal for this audit."
+    },
+    "services": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "maxLength": 128
+      },
+      "description": "Service lines or offerings."
+    },
+    "competitors": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https?://"
+      },
+      "description": "Up to three competitor URLs."
+    },
+    "ga4": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "propertyId": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "description": "Google Analytics 4 property ID (digits only)."
+        }
+      },
+      "description": "Optional GA4 property selection. Only propertyId is permitted."
+    },
+    "gsc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "siteUrl": {
+          "type": "string",
+          "description": "Google Search Console site URL or sc-domain property."
+        }
+      },
+      "description": "Optional GSC property selection. Only siteUrl is permitted."
+    },
+    "crawl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxPages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 500
+        },
+        "enableJavascript": {
+          "type": "boolean",
+          "default": false
+        },
+        "includePatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "excludePatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "description": "Crawl configuration overrides."
+    }
+  }
+}

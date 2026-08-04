@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/report-content.schema.json",
+  "title": "Report Content Package",
+  "description": "The only payload sent to n8n for narrative generation. Contains locked scores, approved finding facts, and fixed field limits. Excludes raw provider payloads, HTML, CSS, secrets, and debug logs. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "packageVersion",
+    "auditId",
+    "business",
+    "scores",
+    "bands",
+    "readinessStatus",
+    "sourceStatus",
+    "limitations",
+    "findings",
+    "siteMetrics",
+    "trustFlags",
+    "technical",
+    "promptVersion",
+    "outputSchemaVersion"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "packageVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Report content package shape version."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "business": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "domain"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string" }
+      }
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trust": { "type": ["number", "null"] },
+        "contentDepth": { "type": ["number", "null"] },
+        "conversionPathways": { "type": ["number", "null"] },
+        "technical": { "type": ["number", "null"] },
+        "performance": { "type": ["number", "null"] },
+        "conversionReadiness": { "type": ["number", "null"] },
+        "awareness": { "type": ["number", "null"] },
+        "consideration": { "type": ["number", "null"] },
+        "decision": { "type": ["number", "null"] },
+        "aiReadiness": { "type": ["number", "null"] },
+        "conversionPathwaysDimension": { "type": ["number", "null"] },
+        "trustEeatDimension": { "type": ["number", "null"] },
+        "contentFunnelDimension": { "type": ["number", "null"] },
+        "technicalPerformanceDimension": { "type": ["number", "null"] },
+        "entitySchemaAiDimension": { "type": ["number", "null"] }
+      }
+    },
+    "bands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversionReadiness", "trust", "evidenceConfidence"],
+      "properties": {
+        "conversionReadiness": { "type": "string" },
+        "trust": { "type": "string" },
+        "evidenceConfidence": { "type": "string" }
+      }
+    },
+    "readinessStatus": {
+      "type": "string"
+    },
+    "assessedWeight": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "showNumericScore": {
+      "type": "boolean"
+    },
+    "evidenceConfidenceScore": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "rootCause": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "renderingDiagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "category", "explanation", "confidence"],
+        "properties": {
+          "code": { "type": "string" },
+          "category": { "type": "string" },
+          "explanation": { "type": "string" },
+          "confidence": { "type": "string" }
+        }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["website", "performance", "competitors", "backlinks", "ga4", "gsc"],
+      "properties": {
+        "website": { "type": "string" },
+        "performance": { "type": "string" },
+        "competitors": { "type": "string" },
+        "backlinks": { "type": "string" },
+        "ga4": { "type": "string" },
+        "gsc": { "type": "string" }
+      }
+    },
+    "competitors": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "domain": { "type": "string" },
+          "pageCount": { "type": "integer", "minimum": 0 },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "performanceCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "completed", "failed"],
+      "properties": {
+        "requested": { "type": "integer", "minimum": 0 },
+        "completed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "pagesTested": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string" }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["findingId", "ruleId", "title", "severity", "confidence", "scoreBearing"],
+        "properties": {
+          "findingId": { "type": "string", "minLength": 1 },
+          "ruleId": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "severity": { "type": "string", "enum": ["High", "Medium", "Low"] },
+          "confidence": { "type": "string" },
+          "scoreBearing": { "type": "boolean" },
+          "businessImpact": { "type": "string" },
+          "recommendation": { "type": "string" },
+          "verificationMethod": { "type": "string" },
+          "affectedUrls": {
+            "type": "array",
+            "maxItems": 10,
+            "items": { "type": "string", "format": "uri" }
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["field", "observedValue"],
+              "properties": {
+                "field": { "type": "string" },
+                "observedValue": {}
+              }
+            }
+          },
+          "implementationEffort": { "type": "string", "enum": ["L", "M", "H"] }
+        }
+      }
+    },
+    "siteMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageCount", "platform"],
+      "properties": {
+        "pageCount": { "type": "integer", "minimum": 0 },
+        "services": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string" }
+        },
+        "topicKeywords": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string" }
+        },
+        "platform": { "type": "string" },
+        "hasHttps": { "type": "boolean" },
+        "schemaCount": { "type": "integer", "minimum": 0 },
+        "ctaCount": { "type": "integer", "minimum": 0 },
+        "formCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "trustFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["testimonials", "credentials", "caseStudies", "faq", "pricing", "policies", "contact"],
+      "properties": {
+        "testimonials": { "type": "boolean" },
+        "credentials": { "type": "boolean" },
+        "caseStudies": { "type": "boolean" },
+        "faq": { "type": "boolean" },
+        "pricing": { "type": "boolean" },
+        "policies": { "type": "boolean" },
+        "contact": { "type": "boolean" }
+      }
+    },
+    "technical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["missingTitles", "missingDescriptions", "h1Missing", "h1Multiple", "imagesMissingAlt", "internalLinkCount"],
+      "properties": {
+        "missingTitles": { "type": "integer", "minimum": 0 },
+        "missingDescriptions": { "type": "integer", "minimum": 0 },
+        "h1Missing": { "type": "integer", "minimum": 0 },
+        "h1Multiple": { "type": "integer", "minimum": 0 },
+        "imagesMissingAlt": { "type": "integer", "minimum": 0 },
+        "internalLinkCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "gateRecommendation": {
+      "type": "string",
+      "description": "Commercial recommendation from the finalization gate."
+    },
+    "gateNextAction": {
+      "type": "string"
+    },
+    "gateServiceCategories": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "promptVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Version of the narrative prompt template."
+    },
+    "outputSchemaVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Version of the narrative response schema expected."
+    }
+  }
+}

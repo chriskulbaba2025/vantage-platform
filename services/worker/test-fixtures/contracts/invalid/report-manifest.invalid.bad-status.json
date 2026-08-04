@@ -1,0 +1,29 @@
+{
+  "contractVersion": "1.0.0",
+  "artifactVersion": "1.0.0",
+  "reportVersion": "3.0.0",
+  "runId": "run-20260804-002",
+  "slug": "test-site",
+  "targetUrl": "https://www.testsite.com",
+  "targetDomain": "testsite.com",
+  "startedAt": "2026-08-04T14:00:00.000Z",
+  "completedAt": "2026-08-04T14:01:00.000Z",
+  "status": "INVALID_STATUS",
+  "scores": {
+    "trust": null,
+    "contentDepth": null,
+    "conversionPathways": null,
+    "technical": null,
+    "performance": null,
+    "conversionReadiness": null
+  },
+  "sources": {
+    "website": "NOT_CONNECTED",
+    "performance": "NOT_CONNECTED",
+    "competitors": "NOT_APPLICABLE",
+    "backlinks": "NOT_CONNECTED",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  },
+  "files": ["audit.json"]
+}

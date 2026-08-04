@@ -1,0 +1,19 @@
+{
+  "contractVersion": "1.0.0",
+  "key": "tenants/tenant-001/clients/client-001/audits/a1b2c3d4/raw/dataforseo-onpage/task-abc123.json",
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "bytes": 24576,
+  "contentType": "application/json",
+  "tenantId": "tenant-001",
+  "clientId": "client-001",
+  "auditId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "executionId": "exec-20260804-001",
+  "source": "dataforseo-onpage",
+  "writtenAt": "2026-08-04T14:05:31.000Z",
+  "verifiedAt": "2026-08-04T14:05:32.000Z",
+  "storageBackend": "s3",
+  "metadata": {
+    "originalFilename": "dataforseo-onpage-raw.json",
+    "adapterVersion": "1.1.0"
+  }
+}
