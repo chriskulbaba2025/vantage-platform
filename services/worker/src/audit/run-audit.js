@@ -375,6 +375,9 @@ export async function runAudit(rawInput, options = {}) {
     browserMode: config.browserMode,
     fetchImpl: options.fetchImpl,
     browserRenderer: options.browserRenderer,
+    artifactRoot,
+    artifactSlug: slug,
+    artifactRunId: runId,
   });
   if (!input.businessName) {
     input.businessName = site.pages?.[0]?.title || site.domain;

@@ -20,6 +20,9 @@
  * scoring, reporting, and module gates work without modification.
  */
 
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { domainOf } from "../../utils.js";
 import {
   SOURCE_STATUS,
@@ -1000,6 +1003,42 @@ export async function crawlWithDataforseo(target, options = {}) {
     // If blocked, return early with no pages
     if (robotsBlocked || loginBlocked) {
       const completedAt = new Date().toISOString();
+      const blockReason = robotsBlocked
+        ? "robots.txt blocked the crawl"
+        : "login wall blocked the crawl";
+
+      const rawPayload = {
+        adapterVersion: ADAPTER_VERSION,
+        collectedAt: completedAt,
+        taskPost: taskPostResult,
+        taskId: rawTaskId,
+        pollStatus: "blocked",
+        summary: rawSummary,
+        pages: [],
+        links: [],
+        duplicateTags: [],
+        duplicateContent: [],
+        retryCount,
+        blockReason,
+      };
+      const rawJson = JSON.stringify(rawPayload, null, 2);
+      const rawHash = createHash("sha256").update(rawJson).digest("hex");
+      const rawBytes = Buffer.byteLength(rawJson, "utf8");
+
+      let realArtifactRef = null;
+      const artifactRoot = options.artifactRoot || null;
+      const artifactSlug = options.artifactSlug || null;
+      const artifactRunId = options.artifactRunId || null;
+      if (artifactRoot && artifactSlug && artifactRunId && rawTaskId) {
+        try {
+          const artifactDir = resolve(artifactRoot, "raw");
+          await mkdir(artifactDir, { recursive: true });
+          const artifactPath = resolve(artifactDir, `${artifactRunId}.json`);
+          await writeFile(artifactPath, rawJson, "utf8");
+          realArtifactRef = `${artifactSlug}/${artifactRunId}/raw/${artifactRunId}.json?sha256=${rawHash}`;
+        } catch { /* best-effort */ }
+      }
+
       return {
         evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
         source: "dataforseo-onpage",
@@ -1056,7 +1095,9 @@ export async function crawlWithDataforseo(target, options = {}) {
         ],
         collectedAt: completedAt,
         coverage: { requested: maxPages, completed: 0, failed: maxPages },
-        rawArtifactRef: `dataforseo://on_page/${rawTaskId}`,
+        rawArtifactRef: realArtifactRef || `dataforseo://on_page/${rawTaskId}`,
+        _rawSha256: rawHash,
+        _rawBytes: rawBytes,
         _contentEvidenceAvailable: false,
         _responseHeadersAvailable: false,
         _sourceStatus: buildSourceStatus({
@@ -1069,12 +1110,14 @@ export async function crawlWithDataforseo(target, options = {}) {
           returnedRecordCount: 0,
           expectedRecordCount: maxPages,
           errorCategory: null,
-          limitation: robotsBlocked
-            ? "robots.txt blocked the crawl"
-            : "login wall blocked the crawl",
-          rawArtifactRef: `dataforseo://on_page/${rawTaskId}`,
+          limitation: blockReason,
+          rawArtifactRef: realArtifactRef || `dataforseo://on_page/${rawTaskId}`,
         }),
-        _raw: { taskId: rawTaskId, summary: rawSummary },
+        _raw: {
+          taskId: rawTaskId,
+          summary: rawSummary,
+          blockReason,
+        },
       };
     }
 

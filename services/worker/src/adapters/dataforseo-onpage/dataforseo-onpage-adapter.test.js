@@ -2330,3 +2330,45 @@ test("T-DT-06: duplicate_content polls through 20100 and returns populated resul
     clearTestCredentials();
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-BLOCKED-HOTFIX: BLOCKED early-return persists raw artifact
+// ---------------------------------------------------------------------------
+
+test("T-BLOCKED-HOTFIX: BLOCKED crawl persists raw artifact with SHA-256", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: "blocked_robots",
+      pages_crawled: 0,
+      total_pages: 0,
+      domain_info: {
+        extended_crawl_status: "forbidden_robots",
+        checks: { start_page_deny_flag: true },
+      },
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", {
+    ...crawlOpts(fixtures),
+    artifactRoot: "C:/Users/kulba/Desktop/vantage-platform/services/worker/artifacts",
+    artifactSlug: "blocked-hotfix-test",
+    artifactRunId: "blocked-hotfix-run-001",
+  });
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED);
+  assert.equal(result.pageCount, 0);
+  assert.ok(result._rawSha256, "Must have _rawSha256");
+  assert.ok(result._rawSha256.length >= 64, `SHA-256 too short: ${result._rawSha256?.length}`);
+  assert.ok(result._rawBytes > 0, `_rawBytes must be > 0, got ${result._rawBytes}`);
+  assert.ok(
+    result.rawArtifactRef && !result.rawArtifactRef.startsWith("dataforseo://"),
+    `rawArtifactRef must be a real path, got "${result.rawArtifactRef}"`,
+  );
+  assert.match(result.rawArtifactRef, /sha256=/);
+  assert.match(result.rawArtifactRef, /raw\//);
+  assert.equal(result.totalWords, 0);
+  assert.equal(result.schemaTypes.length, 0);
+});
