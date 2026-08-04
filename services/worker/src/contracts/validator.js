@@ -12,7 +12,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import Ajv from "ajv";
+import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 // ---------------------------------------------------------------------------
@@ -48,16 +48,20 @@ const REQUIRED_SCHEMAS = [
 /**
  * Create a configured AJV instance for Draft 2020-12.
  *
+ * Uses the standalone Draft 2020-12 implementation (ajv/dist/2020.js) which
+ * bundles the 2020-12 meta-schema and vocabulary keywords so no remote
+ * $schema fetch is required.
+ *
  * - strict: false is required because our schemas use $ref across separate
  *   files with versioned $id URIs. AJV strict mode would reject $ref
  *   targets that aren't present as schemas in the same instance.
  * - allErrors: true collects all validation errors, not just the first.
  * - addFormats adds standard format validators (uri, date-time, uuid, etc.).
  *
- * @returns {Ajv}
+ * @returns {Ajv2020}
  */
 export function createValidator() {
-  const ajv = new Ajv({
+  const ajv = new Ajv2020({
     strict: false,
     allErrors: true,
     schemas: [],
@@ -126,12 +130,10 @@ export function compileAllSchemas(schemas) {
       throw new Error(`Schema ${filename} is missing $id`);
     }
     try {
-      // Strip the $schema meta-schema URI before adding to AJV.
-      // AJV v8 supports Draft 2020-12 keywords natively but cannot resolve
-      // the remote meta-schema URI without network access. The $schema
-      // property is preserved in the source files for documentation.
-      const { $schema, ...schemaBody } = schema;
-      ajv.addSchema(schemaBody, schema.$id);
+      // Register the full schema including $schema. The Ajv2020
+      // implementation bundles the Draft 2020-12 meta-schema so the
+      // $schema URI resolves without network access.
+      ajv.addSchema(schema, schema.$id);
       compiled.set(filename, schema);
     } catch (err) {
       throw new Error(`Failed to compile schema ${filename}: ${err.message}`);

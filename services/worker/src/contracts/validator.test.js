@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import Ajv2020 from "ajv/dist/2020.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,6 +24,7 @@ import {
   validateFixture,
   loadFixtures,
   parseFixtureName,
+  createValidator,
   REQUIRED_SCHEMAS,
   CONTRACTS_DIR,
 } from "./validator.js";
@@ -108,6 +110,62 @@ test("cross-schema $ref targets are resolvable", () => {
     const validate = ajv.getSchema(schema.$id);
     assert.ok(validate, `$ref target ${filename} ($id: ${schema.$id}) not resolvable`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Test: Draft 2020-12 validator implementation, $schema intact, cross-schema refs
+// ---------------------------------------------------------------------------
+
+test("Draft 2020-12 validator is used with $schema intact and cross-schema $ref resolving", () => {
+  const ajv = createValidator();
+  assert.ok(ajv instanceof Ajv2020, "createValidator() must return an Ajv2020 instance");
+
+  const schemas = loadAllSchemas();
+  const { ajv: compiledAjv, compiled } = compileAllSchemas(schemas);
+
+  // 1. Draft 2020-12 implementation
+  assert.ok(
+    compiledAjv instanceof Ajv2020,
+    "compiled AJV instance must be Ajv2020 (Draft 2020-12)",
+  );
+
+  // 2. All ten schemas compile with $schema intact (no stripping)
+  for (const [filename, schema] of compiled) {
+    assert.equal(
+      schema.$schema,
+      "https://json-schema.org/draft/2020-12/schema",
+      `${filename}: $schema must be preserved as Draft 2020-12`,
+    );
+  }
+  assert.equal(compiled.size, REQUIRED_SCHEMAS.length, "all ten schemas must compile");
+
+  // 3. Every cross-schema $ref target is resolvable through the compiled AJV
+  const refTargets = [
+    "score.schema.json",
+    "finding.schema.json",
+    "narrative-response.schema.json",
+    "artifact-record.schema.json",
+    "report-view-model.schema.json",
+  ];
+  for (const fn of refTargets) {
+    const s = schemas.get(fn);
+    assert.ok(s, `${fn} must be loaded`);
+    const v = compiledAjv.getSchema(s.$id);
+    assert.ok(v, `${fn} ($id: ${s.$id}) must be resolvable`);
+  }
+
+  // 4. Live cross-schema $ref validation: the report-manifest valid fixture
+  //    must pass, proving that $ref chains (report-manifest →
+  //    artifact-record) resolve end-to-end.
+  const validFixtures = loadFixtures(join(FIXTURES_DIR, "valid"));
+  const manifestFixture = validFixtures.find((f) => f.filename === "report-manifest.valid.json");
+  assert.ok(manifestFixture, "report-manifest.valid.json fixture must exist");
+
+  const result = validateFixture(compiledAjv, "report-manifest.schema.json", manifestFixture.data);
+  assert.ok(
+    result.valid,
+    `Cross-schema $ref validation failed: ${result.errors.map((e) => `${e.path}: ${e.message}`).join("; ")}`,
+  );
 });
 
 // ---------------------------------------------------------------------------
