@@ -20,6 +20,9 @@
  * scoring, reporting, and module gates work without modification.
  */
 
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { domainOf } from "../../utils.js";
 import {
   SOURCE_STATUS,
@@ -127,24 +130,72 @@ function normalizePage(raw, context = {}) {
   // sets this to true because it parses full HTML.
   const contentAvailable = bodyText.length > 0;
 
+  // Canonical field mapping from DataForSEO raw fields
+  // §Complete normalized page contract — maps DataForSEO fields per PRD
+  const meta = raw.meta || {};
+  const checks = raw.checks || {};
+  const fetchTiming = raw.fetch_timing || {};
+  const pageTiming = raw.page_timing || {};
+
   return {
+    // ── Required canonical fields ──────────────────────────────────────
+    crawledUrl: raw.url || "",
+    finalUrl: raw.location || raw.url || "",
+    statusCode,
+    redirectDestination: statusCode >= 300 && statusCode < 400 ? (raw.location || null) : null,
+    indexable: meta.follow !== false && statusCode === 200,
+    robotsDirectives: meta.robots || (meta.follow === false ? "nofollow" : null),
+    canonicalUrl: meta.canonical || raw.canonical || null,
+
+    // ── Content fields ─────────────────────────────────────────────────
+    title,
+    metaDescription: description,
+    headings,
+
+    wordCount: meta.content?.plain_text_word_count
+      ?? meta.word_count
+      ?? raw.content?.word_count
+      ?? 0,
+
+    // Link counts from meta (pages endpoint provides counts, not arrays)
+    internalInlinks: meta.internal_links_count ?? null,
+    internalOutlinks: null, // Not available from pages endpoint
+    externalOutlinks: meta.external_links_count ?? null,
+    brokenLinks: null, // Not available from pages endpoint; use links endpoint
+
+    // ── Image evidence ─────────────────────────────────────────────────
+    imageCount: meta.images_count ?? (images.length || null),
+    imagesMissingAlt: images.length > 0
+      ? images.filter((img) => !img.alt).length
+      : null,
+    imagesSizeBytes: meta.images_size ?? null,
+
+    // ── Structured data / microdata ────────────────────────────────────
+    schemaTypes,
+    hasMicrodata: checks.has_micromarkup === true,
+
+    // ── Sitemap and crawl metadata ─────────────────────────────────────
+    sitemapMembership: checks.from_sitemap === true,
+    crawlDepth: raw.click_depth ?? raw.crawl_depth ?? null,
+    responseTimeMs: fetchTiming.duration_time ?? pageTiming.duration_time ?? null,
+    pageSizeBytes: raw.size ?? null,
+
+    // ── Platform / technology ──────────────────────────────────────────
+    detectedTechnology: detectPlatform(raw),
+
+    // ── Legacy backward-compatible fields ──────────────────────────────
     url: raw.url || "",
     status: statusCode,
     rendered,
-    title,
     description,
-    canonical: raw.meta?.canonical || raw.canonical || null,
-    language: raw.meta?.content_language || raw.language || "",
-    generator: raw.meta?.generator || raw.technologies?.cms || "",
+    canonical: meta.canonical || raw.canonical || null,
+    language: meta.content_language || raw.language || "",
+    generator: meta.generator || raw.technologies?.cms || "",
     platform: detectPlatform(raw),
-    // Word count: DataForSEO uses meta.content.plain_text_word_count (float).
-    // Fall back to meta.word_count (legacy fixture format) then content.word_count.
-    words: raw.meta?.content?.plain_text_word_count
-      ?? raw.meta?.word_count
+    words: meta.content?.plain_text_word_count
+      ?? meta.word_count
       ?? raw.content?.word_count
       ?? 0,
-    headings,
-    schemaTypes,
     links,
     ctas: extractCtas(raw, targetDomain),
     images,
@@ -156,20 +207,23 @@ function normalizePage(raw, context = {}) {
     signals,
     bodyText: bodyText.slice(0, 50000),
     responseHeaders: extractResponseHeaders(raw),
-    // Provider-specific metadata preserved
+
     _dataforseo: {
       resourceErrors,
       loadTime: raw.load_time || raw.time_to_interactive || null,
       sizeBytes: raw.size || raw.page_size || null,
-      crawlDepth: raw.crawl_depth ?? null,
+      crawlDepth: raw.click_depth ?? raw.crawl_depth ?? null,
       sitemapUrl: raw.sitemap_url || null,
-      metaInternalLinksCount: raw.meta?.internal_links_count ?? null,
-      metaExternalLinksCount: raw.meta?.external_links_count ?? null,
-      metaImagesCount: raw.meta?.images_count ?? null,
+      metaInternalLinksCount: meta.internal_links_count ?? null,
+      metaExternalLinksCount: meta.external_links_count ?? null,
+      metaImagesCount: meta.images_count ?? null,
+      imagesSize: meta.images_size ?? null,
+      fetchDurationMs: fetchTiming.duration_time ?? null,
+      pageDurationMs: pageTiming.duration_time ?? null,
+      fromSitemap: checks.from_sitemap === true,
+      hasMicromarkup: checks.has_micromarkup === true,
+      inboundLinksCount: meta.inbound_links_count ?? null,
     },
-    // Content-availability marker — downstream consumers read this to
-    // decide whether content-dependent signals (trust, CTA, forms) are
-    // based on real extracted text or are unavailable.
     _contentAvailable: contentAvailable,
   };
 }
@@ -402,6 +456,8 @@ function summarizeSite({
   rawSummary,
   rawDuplicateTags,
   rawDuplicateContent,
+  rawMicrodata,
+  microdataMeta,
   dtMeta,
   dcMeta,
   links,
@@ -785,14 +841,10 @@ function summarizeSite({
     limitations: allLimitations,
     collectedAt: completedAt,
     coverage,
-    rawArtifactRef: rawTaskId ? `dataforseo://on_page/${rawTaskId}` : null,
-    // Content-availability flag for downstream scoring/reporting.
-    // When false, content-dependent signals were not extracted from
-    // real page text and should be treated as unavailable.
+    rawArtifactRef: rawTaskId
+      ? `dataforseo://on_page/${rawTaskId}`
+      : null,
     _contentEvidenceAvailable: contentEvidenceAvailable,
-    // Response-headers availability flag.  DataForSEO does not return
-    // HTTP response headers; findings that depend on them (e.g. security
-    // headers) should be suppressed when this is false.
     _responseHeadersAvailable: responseHeadersAvailable,
     _sourceStatus: buildSourceStatus({
       provider: "dataforseo-onpage",
@@ -809,16 +861,30 @@ function summarizeSite({
         ? `dataforseo://on_page/${rawTaskId}`
         : null,
     }),
-    // Preserve raw provider data for artifact storage
+    // ── Raw artifact with SHA-256 proof ───────────────────────────
     _raw: {
       taskId: rawTaskId,
       summary: rawSummary,
       duplicateTags: rawDuplicateTags,
       duplicateContent: rawDuplicateContent,
+      microdata: rawMicrodata,
       dtMeta: dtMeta || null,
       dcMeta: dcMeta || null,
+      microdataMeta: microdataMeta || null,
     },
   };
+
+  // Compute SHA-256 of the raw artifact for proof of preservation
+  const rawArtifactPayload = JSON.stringify(result._raw);
+  const rawHash = createHash("sha256").update(rawArtifactPayload).digest("hex");
+  const rawBytes = Buffer.byteLength(rawArtifactPayload, "utf8");
+  result._rawSha256 = rawHash;
+  result._rawBytes = rawBytes;
+  result.rawArtifactRef = rawTaskId
+    ? `dataforseo://on_page/${rawTaskId}?sha256=${rawHash}`
+    : null;
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -879,6 +945,7 @@ export async function crawlWithDataforseo(target, options = {}) {
       includePatterns: options.includePatterns,
       excludePatterns: options.excludePatterns,
       maxExternalResources: options.maxExternalResources,
+      customRobotsTxt: options.customRobotsTxt || null,
     });
     rawTaskId = taskPostResult.taskId;
   } catch (error) {
@@ -952,8 +1019,10 @@ export async function crawlWithDataforseo(target, options = {}) {
   let rawSummary;
   let rawPages = [];
   let rawLinks = [];
-  let rawDuplicateTags;
-  let rawDuplicateContent;
+  let rawDuplicateTags = { results: [], metadata: [] };
+  let rawDuplicateContent = { results: [], metadata: [] };
+  let rawMicrodata = null;
+  let microdataMeta = null;
   let dtMeta = null;
   let dcMeta = null;
   let cappedPages = false;
@@ -967,34 +1036,52 @@ export async function crawlWithDataforseo(target, options = {}) {
     rawSummary = await client.getSummary(rawTaskId);
 
     // Check for blocking conditions from summary
+    // §BLOCKED detection: uses provider-shaped fields from DataForSEO
     if (rawSummary) {
-      const crawlStatus = rawSummary.crawl_status || rawSummary.status || "";
-
-      if (/blocked|robots/i.test(crawlStatus)) {
-        robotsBlocked = true;
-      }
-      if (/login|auth|forbidden/i.test(crawlStatus)) {
-        loginBlocked = true;
-      }
-
-      // DataForSEO summary nests total/crawled page counts under
-      // crawl_status and domain_info (not at the root).  Also fall back
-      // to the old-format root-level fields for test compatibility.
-      //
-      // Priority: domain_info.total_pages (total pages on site, new
-      // format) > rawSummary.total_pages (old format root-level) >
-      // crawl_status.pages_crawled (pages actually crawled) >
-      // rawSummary.pages_crawled (old format) > maxPages.
-      const crawlStatusObj = rawSummary.crawl_status;
       const domainInfo = rawSummary.domain_info || {};
-      totalCrawlPages =
-        domainInfo.total_pages ||           // new format: total pages on site
-        rawSummary.total_pages ||           // old-format fallback
-        (crawlStatusObj && typeof crawlStatusObj === "object"
-          ? crawlStatusObj.pages_crawled    // pages actually crawled
-          : null) ||
-        rawSummary.pages_crawled ||         // old-format fallback
-        maxPages;
+      const checks = domainInfo.checks || {};
+      const crawlStatus = rawSummary.crawl_status || {};
+      const crawlStatusStr = typeof crawlStatus === "string" ? crawlStatus : "";
+      const extendedStatus = domainInfo.extended_crawl_status || crawlStatusStr;
+      const startPageStatusCode = domainInfo.start_page_status_code || 0;
+
+      // Production-shaped BLOCKED detection
+      if (
+        extendedStatus === "forbidden_robots" ||
+        checks.start_page_deny_flag === true ||
+        startPageStatusCode === 401 ||
+        startPageStatusCode === 403 ||
+        /blocked|robots/i.test(crawlStatusStr) ||
+        /login|auth|forbidden/i.test(crawlStatusStr)
+      ) {
+        if (
+          extendedStatus === "forbidden_robots" ||
+          checks.start_page_deny_flag === true ||
+          /blocked|robots/i.test(crawlStatusStr)
+        ) {
+          robotsBlocked = true;
+        } else {
+          loginBlocked = true;
+        }
+      }
+
+      // §Crawl-limit detection: authoritative fields from crawl_status
+      const crawlStopReason = crawlStatus.crawl_stop_reason || rawSummary.crawl_stop_reason || "";
+      const maxCrawlPages = crawlStatus.max_crawl_pages ?? rawSummary.max_crawl_pages ?? maxPages;
+      const pagesCrawled = crawlStatus.pages_crawled ?? rawSummary.pages_crawled ?? 0;
+      const pagesInQueue = crawlStatus.pages_in_queue ?? rawSummary.pages_in_queue ?? 0;
+
+      cappedPages = (crawlStopReason === "limit_exceeded");
+
+      // Configured limit from max_crawl_pages (provider-specified ceiling)
+      totalCrawlPages = maxCrawlPages;
+
+      // Record crawl-limit metadata
+      if (cappedPages) {
+        limitations.push(
+          `Crawl stopped: ${crawlStopReason} (limit: ${maxCrawlPages}, crawled: ${pagesCrawled}, queued: ${pagesInQueue})`,
+        );
+      }
     }
 
     // If blocked, return early with no pages
@@ -1101,56 +1188,57 @@ export async function crawlWithDataforseo(target, options = {}) {
       limitations.push(`Link retrieval failed: ${linkError.message}`);
     }
 
-    // 3d. Retrieve duplicate tags (polls through 20100)
-    rawDuplicateTags = {};
-    dtMeta = null;
+    // 3d. Retrieve duplicate tags (with required `type` fields, polls through 20100)
     try {
-      const dtResult = await client.getDuplicateTags(rawTaskId);
-      rawDuplicateTags = dtResult.result || {};
-      dtMeta = dtResult.metadata;
-      if (dtMeta?.timedOut) {
-        limitations.push(
-          `Duplicate tag retrieval timed out after ${dtMeta.retryCount} retries ` +
-          `(final code ${dtMeta.finalCode ?? "none"}). Task ID: ${dtMeta.taskId}.`,
-        );
-      } else if (dtMeta?.finalCode !== 20000 && dtMeta?.finalCode != null) {
-        limitations.push(
-          `Duplicate tag retrieval returned non-success status ` +
-          `(code ${dtMeta.finalCode}, message: "${dtMeta.finalMessage || "unknown"}"). ` +
-          `Task ID: ${dtMeta.taskId}, retries: ${dtMeta.retryCount}.`,
-        );
-      } else if (dtMeta && dtMeta.retryCount > 0) {
-        // Succeeded after retries — note in diagnostic metadata
+      rawDuplicateTags = await client.getDuplicateTags(rawTaskId,
+        ["duplicate_title", "duplicate_description"]);
+      dtMeta = rawDuplicateTags.metadata;
+      for (const m of (dtMeta || [])) {
+        if (m.timedOut) {
+          limitations.push(
+            `Duplicate ${m.type} retrieval timed out after ${m.retryCount} retries ` +
+            `(final code ${m.finalCode ?? "none"}).`);
+        } else if (m.finalCode !== 20000 && m.finalCode != null) {
+          limitations.push(
+            `Duplicate ${m.type} returned status code ${m.finalCode}: "${m.finalMessage || "unknown"}". ` +
+            `Retries: ${m.retryCount}.`);
+        }
       }
     } catch (dtError) {
-      limitations.push(
-        `Duplicate tag retrieval failed: ${dtError.message}`,
-      );
+      limitations.push(`Duplicate tag retrieval failed: ${dtError.message}`);
     }
 
-    // 3e. Retrieve duplicate content (polls through 20100)
-    rawDuplicateContent = {};
-    dcMeta = null;
+    // 3e. Retrieve duplicate content (with required `url` fields, polls through 20100)
     try {
-      const dcResult = await client.getDuplicateContent(rawTaskId);
-      rawDuplicateContent = dcResult.result || {};
-      dcMeta = dcResult.metadata;
-      if (dcMeta?.timedOut) {
-        limitations.push(
-          `Duplicate content retrieval timed out after ${dcMeta.retryCount} retries ` +
-          `(final code ${dcMeta.finalCode ?? "none"}). Task ID: ${dcMeta.taskId}.`,
-        );
-      } else if (dcMeta?.finalCode !== 20000 && dcMeta?.finalCode != null) {
-        limitations.push(
-          `Duplicate content retrieval returned non-success status ` +
-          `(code ${dcMeta.finalCode}, message: "${dcMeta.finalMessage || "unknown"}"). ` +
-          `Task ID: ${dcMeta.taskId}, retries: ${dcMeta.retryCount}.`,
-        );
+      // Get crawled page URLs for duplicate content checking (max 10 for safety)
+      const pageUrlsForDup = (rawPages || []).slice(0, 10).map(p => p.url || p.location).filter(Boolean);
+      rawDuplicateContent = await client.getDuplicateContent(rawTaskId, pageUrlsForDup,
+        { maxUrls: 10 });
+      dcMeta = rawDuplicateContent.metadata;
+      for (const m of (dcMeta || [])) {
+        if (m.timedOut) {
+          limitations.push(
+            `Duplicate content for ${m.url} timed out after ${m.retryCount} retries.`);
+        } else if (m.finalCode !== 20000 && m.finalCode != null) {
+          limitations.push(
+            `Duplicate content for ${m.url} returned code ${m.finalCode}: "${m.finalMessage || "unknown"}".`);
+        }
       }
     } catch (dcError) {
-      limitations.push(
-        `Duplicate content retrieval failed: ${dcError.message}`,
-      );
+      limitations.push(`Duplicate content retrieval failed: ${dcError.message}`);
+    }
+
+    // 3f. Retrieve microdata / structured data
+    try {
+      const mdResult = await client.getMicrodata(rawTaskId);
+      rawMicrodata = mdResult.result || {};
+      microdataMeta = mdResult.metadata;
+      if (microdataMeta?.finalCode !== 20000 && microdataMeta?.finalCode != null) {
+        limitations.push(
+          `Microdata retrieval returned code ${microdataMeta.finalCode}: "${microdataMeta.finalMessage || "unknown"}".`);
+      }
+    } catch (mdError) {
+      limitations.push(`Microdata retrieval failed: ${mdError.message}`);
     }
 
     // 3f. Detect JavaScript-content issues
@@ -1193,12 +1281,14 @@ export async function crawlWithDataforseo(target, options = {}) {
     normalizePage(raw, { targetDomain }),
   );
 
-  return summarizeSite({
+  const result = summarizeSite({
     targetUrl: target,
     pages: normalizedPages,
     rawSummary,
     rawDuplicateTags,
     rawDuplicateContent,
+    rawMicrodata,
+    microdataMeta,
     dtMeta,
     dcMeta,
     links: rawLinks,
@@ -1212,6 +1302,49 @@ export async function crawlWithDataforseo(target, options = {}) {
     robotsBlocked,
     loginBlocked,
   });
+
+  // ── Persist raw artifact ───────────────────────────────────────────────
+  const artifactRoot = options.artifactRoot || null;
+  const artifactSlug = options.artifactSlug || null;
+  const artifactRunId = options.artifactRunId || null;
+
+  if (artifactRoot && artifactSlug && artifactRunId && rawTaskId) {
+    try {
+      const rawPayload = {
+        adapterVersion: ADAPTER_VERSION,
+        collectedAt: completedAt,
+        taskPost: taskPostResult,
+        taskId: rawTaskId,
+        pollStatus: clientOpts.pollStatus || "completed",
+        summary: rawSummary,
+        pages: rawPages,
+        links: rawLinks,
+        duplicateTags: rawDuplicateTags,
+        duplicateContent: rawDuplicateContent,
+        microdata: rawMicrodata,
+        dtMeta,
+        dcMeta,
+        microdataMeta,
+        retryCount,
+      };
+      const rawJson = JSON.stringify(rawPayload, null, 2);
+      const rawHash = createHash("sha256").update(rawJson).digest("hex");
+      const rawBytes = Buffer.byteLength(rawJson, "utf8");
+
+      const artifactDir = resolve(artifactRoot, "raw");
+      await mkdir(artifactDir, { recursive: true });
+      const artifactPath = resolve(artifactDir, `${artifactRunId}.json`);
+      await writeFile(artifactPath, rawJson, "utf8");
+
+      result._rawSha256 = rawHash;
+      result._rawBytes = rawBytes;
+      result.rawArtifactRef = `${artifactSlug}/${artifactRunId}/raw/${artifactRunId}.json?sha256=${rawHash}`;
+    } catch (rawWriteError) {
+      result._rawWriteError = rawWriteError.message;
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

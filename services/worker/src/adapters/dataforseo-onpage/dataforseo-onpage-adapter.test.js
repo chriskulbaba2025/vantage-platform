@@ -115,9 +115,15 @@ function buildSuccessfulFixtures(pageCount = 5) {
     },
     pollTask: { status: "ready", taskId: "test-task-20260726-001" },
     summary: {
-      crawl_status: "completed",
+      crawl_status: {
+        crawl_stop_reason: "completed",
+        max_crawl_pages: pageCount,
+        pages_crawled: pageCount,
+        pages_in_queue: 0,
+      },
       pages_crawled: pageCount,
       total_pages: pageCount,
+      max_crawl_pages: pageCount,
       duplicate_content: 0,
       duplicate_tags: 0,
       sitemap: { urls: [] },
@@ -132,6 +138,7 @@ function buildSuccessfulFixtures(pageCount = 5) {
     },
     duplicateTags: { items: [] },
     duplicateContent: { items: [] },
+    microdata: { items: [] },
   };
 }
 
@@ -397,9 +404,15 @@ test("page ceiling produces PARTIAL status with coverage metadata", async () => 
   const fixtures = buildFixturesWithExtras({
     pageCount: 10,
     summary: {
-      crawl_status: "completed",
+      crawl_status: {
+        crawl_stop_reason: "limit_exceeded",
+        max_crawl_pages: 10,
+        pages_crawled: 10,
+        pages_in_queue: 490,
+      },
       pages_crawled: 10,
-      total_pages: 500,
+      total_pages: 10,
+      max_crawl_pages: 10,
       duplicate_content: 0,
       duplicate_tags: 0,
     },
@@ -412,8 +425,8 @@ test("page ceiling produces PARTIAL status with coverage metadata", async () => 
 
   assert.equal(result.sourceStatus, SOURCE_STATUS.PARTIAL);
   assert.ok(
-    result.limitations.some((l) => /ceiling|limit/i.test(l)),
-    `Expected ceiling limitation, got: ${JSON.stringify(result.limitations)}`,
+    result.limitations.some((l) => /limit_exceeded|limit/i.test(l)),
+    `Expected crawl-stop limitation, got: ${JSON.stringify(result.limitations)}`,
   );
   assert.equal(result.pageCount, 10);
   assert.equal(result._sourceStatus.returnedRecordCount, 10);
@@ -2167,7 +2180,8 @@ test("production regression: matches expected values from page_metrics", async (
 // T-DT-01 through T-DT-06: pollSubEndpoint / duplicate_tags 20100 behaviour
 // ---------------------------------------------------------------------------
 
-// T-DT-01: 20100 on first call, then 20000 on second — returns populated result
+// T-DT-01: 20100 on first call, then 20000 — returns populated result with retry metadata
+// getDuplicateTags now returns {results: [{type,items}], metadata: [{...type}]}
 test("T-DT-01: 20100 followed by 20000 returns populated result with retry metadata", async () => {
   let calls = 0;
   const fetchImpl = async () => {
@@ -2189,18 +2203,21 @@ test("T-DT-01: 20100 followed by 20000 returns populated result with retry metad
   setTestCredentials();
   try {
     const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
-    const dt = await client.getDuplicateTags("dt-task-1");
-    assert.equal(dt.metadata.retryCount, 1, "Must have retried once after 20100");
-    assert.equal(dt.metadata.finalCode, 20000);
-    assert.equal(dt.metadata.timedOut, false);
-    assert.ok(dt.result, "Must have a result after retry");
-    assert.equal(dt.result.items[0].tag, "title");
+    const dt = await client.getDuplicateTags("dt-task-1", ["duplicate_title"]);
+    assert.equal(dt.results.length, 1);
+    assert.equal(dt.metadata.length, 1);
+    const m = dt.metadata[0];
+    assert.equal(m.retryCount, 1, "Must have retried once after 20100");
+    assert.equal(m.finalCode, 20000);
+    assert.equal(m.timedOut, false);
+    assert.equal(m.type, "duplicate_title");
+    assert.equal(dt.results[0].items[0].tag, "title");
   } finally {
     clearTestCredentials();
   }
 });
 
-// T-DT-02: Repeated 20100 until timeout — returns null result with timeout metadata
+// T-DT-02: Repeated 20100 until timeout
 test("T-DT-02: repeated 20100 until timeout returns null result with timedOut metadata", async () => {
   const fetchImpl = async () => {
     return new Response(JSON.stringify({
@@ -2211,20 +2228,20 @@ test("T-DT-02: repeated 20100 until timeout returns null result with timedOut me
   setTestCredentials();
   try {
     const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
-    const result = await client.getDuplicateTags("dt-task-2", {
+    const dt = await client.getDuplicateTags("dt-task-2", ["duplicate_title"], {
       timeoutMs: 500, pollIntervalMs: 100,
     });
-    assert.equal(result.metadata.timedOut, true, "Must time out after repeated 20100");
-    assert.equal(result.result, null, "Must have null result on timeout");
-    assert.ok(result.metadata.retryCount >= 1, `Must have retried, got ${result.metadata.retryCount}`);
-    assert.equal(result.metadata.finalCode, 20100);
-    assert.equal(result.metadata.taskId, "dt-task-2");
+    const m = dt.metadata[0];
+    assert.equal(m.timedOut, true, "Must time out after repeated 20100");
+    assert.equal(dt.results[0].items.length, 0, "Must have empty items on timeout");
+    assert.ok(m.retryCount >= 1, `Must have retried, got ${m.retryCount}`);
+    assert.equal(m.finalCode, 20100);
   } finally {
     clearTestCredentials();
   }
 });
 
-// T-DT-03: Terminal provider error (non-20000, non-20100) — null result, preserved error
+// T-DT-03: Terminal provider error
 test("T-DT-03: terminal provider error returns null result with error metadata", async () => {
   const fetchImpl = async () => {
     return new Response(JSON.stringify({
@@ -2235,18 +2252,19 @@ test("T-DT-03: terminal provider error returns null result with error metadata",
   setTestCredentials();
   try {
     const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
-    const dt = await client.getDuplicateTags("dt-task-3");
-    assert.equal(dt.metadata.finalCode, 40403, "Must preserve terminal error code");
-    assert.match(dt.metadata.finalMessage, /Task not found/);
-    assert.equal(dt.result, null, "Must return null result for terminal error");
-    assert.equal(dt.metadata.retryCount, 0, "Must not retry on terminal errors");
-    assert.equal(dt.metadata.timedOut, false);
+    const dt = await client.getDuplicateTags("dt-task-3", ["duplicate_title"]);
+    const m = dt.metadata[0];
+    assert.equal(m.finalCode, 40403, "Must preserve terminal error code");
+    assert.match(m.finalMessage, /Task not found/);
+    assert.equal(dt.results[0].items.length, 0, "Must return empty items for terminal error");
+    assert.equal(m.retryCount, 0, "Must not retry on terminal errors");
+    assert.equal(m.timedOut, false);
   } finally {
     clearTestCredentials();
   }
 });
 
-// T-DT-04: Completed empty result (20000 with empty items) — result with empty array
+// T-DT-04: Completed empty result (20000 with empty items)
 test("T-DT-04: completed empty result returns items:[] with success metadata", async () => {
   const fetchImpl = async () => {
     return new Response(JSON.stringify({
@@ -2260,17 +2278,17 @@ test("T-DT-04: completed empty result returns items:[] with success metadata", a
   setTestCredentials();
   try {
     const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
-    const dt = await client.getDuplicateTags("dt-task-4");
-    assert.equal(dt.metadata.finalCode, 20000);
-    assert.equal(dt.metadata.retryCount, 0);
-    assert.ok(dt.result, "Must have a result object");
-    assert.deepEqual(dt.result.items, [], "Empty items array for no duplicates");
+    const dt = await client.getDuplicateTags("dt-task-4", ["duplicate_title"]);
+    const m = dt.metadata[0];
+    assert.equal(m.finalCode, 20000);
+    assert.equal(m.retryCount, 0);
+    assert.deepEqual(dt.results[0].items, [], "Empty items array for no duplicates");
   } finally {
     clearTestCredentials();
   }
 });
 
-// T-DT-05: Completed populated result (20000 with data) — full result preserved
+// T-DT-05: Completed populated result (20000 with data)
 test("T-DT-05: completed populated result preserves full duplicate data", async () => {
   const fetchImpl = async () => {
     return new Response(JSON.stringify({
@@ -2289,18 +2307,18 @@ test("T-DT-05: completed populated result preserves full duplicate data", async 
   setTestCredentials();
   try {
     const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
-    const dt = await client.getDuplicateTags("dt-task-5");
-    assert.equal(dt.metadata.finalCode, 20000);
-    assert.equal(dt.result.items.length, 2);
-    assert.equal(dt.result.items[0].tag, "title");
-    assert.equal(dt.result.items[1].tag, "description");
-    assert.equal(dt.metadata.taskId, "dt-task-5");
+    const dt = await client.getDuplicateTags("dt-task-5", ["duplicate_title", "duplicate_description"]);
+    assert.equal(dt.results.length, 2);
+    assert.equal(dt.metadata.length, 2);
+    assert.equal(dt.results[0].type, "duplicate_title");
+    assert.equal(dt.results[1].type, "duplicate_description");
+    assert.equal(dt.results[0].items.length, 2);
   } finally {
     clearTestCredentials();
   }
 });
 
-// T-DT-06: duplicate_content also uses pollSubEndpoint
+// T-DT-06: duplicate_content polls through 20100
 test("T-DT-06: duplicate_content polls through 20100 and returns populated result", async () => {
   let calls = 0;
   const fetchImpl = async () => {
@@ -2322,10 +2340,137 @@ test("T-DT-06: duplicate_content polls through 20100 and returns populated resul
   setTestCredentials();
   try {
     const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
-    const dc = await client.getDuplicateContent("dc-task-6");
-    assert.equal(dc.metadata.retryCount, 2, "Must have retried twice after 20100s");
-    assert.equal(dc.metadata.finalCode, 20000);
-    assert.ok(dc.result.items.length > 0);
+    const dc = await client.getDuplicateContent("dc-task-6", ["https://example.com/page1"]);
+    const m = dc.metadata[0];
+    assert.equal(m.retryCount, 2, "Must have retried twice after 20100s");
+    assert.equal(m.finalCode, 20000);
+    assert.ok(dc.results[0].items.length > 0);
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T-BLOCKED regression tests
+// ---------------------------------------------------------------------------
+
+// T-BLOCKED-01: custom_robots_txt with Disallow: / produces BLOCKED
+test("T-BLOCKED-01: custom_robots_txt Disallow all produces BLOCKED status", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "forbidden_robots",
+        max_crawl_pages: 1,
+        pages_crawled: 0,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 0,
+      total_pages: 0,
+      domain_info: {
+        extended_crawl_status: "forbidden_robots",
+        checks: { start_page_deny_flag: true },
+      },
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", {
+    ...crawlOpts(fixtures),
+    customRobotsTxt: "User-agent: *\nDisallow: /",
+  });
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED,
+    `Expected BLOCKED, got ${result.sourceStatus}`);
+  assert.equal(result.pageCount, 0);
+  assert.equal(result._sourceStatus.errorCategory, null,
+    "BLOCKED is expected, not an error");
+});
+
+// T-BLOCKED-02: FAILED must not be accepted as BLOCKED
+test("T-BLOCKED-02: FAILED status is distinct from BLOCKED", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "some_error",
+        max_crawl_pages: 1,
+        pages_crawled: 0,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 0,
+      total_pages: 0,
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+  assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED,
+    "Empty pages without block reason must be FAILED, not BLOCKED");
+  assert.notEqual(result.sourceStatus, SOURCE_STATUS.BLOCKED,
+    "FAILED must never equal BLOCKED");
+});
+
+// T-BLOCKED-03: BLOCKED produces null crawl-dependent scores, not zero
+test("T-BLOCKED-03: BLOCKED crawl produces null dependent metrics", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "forbidden_robots",
+        max_crawl_pages: 1,
+        pages_crawled: 0,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 0,
+      total_pages: 0,
+      domain_info: {
+        extended_crawl_status: "forbidden_robots",
+        checks: { start_page_deny_flag: true },
+      },
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED);
+  assert.equal(result.totalWords, 0);
+  assert.equal(result.averageWords, 0);
+  assert.equal(result.imageCount, 0);
+});
+
+// T-BLOCKED-04: customRobotsTxt is forwarded to client taskPost
+test("T-BLOCKED-04: customRobotsTxt option reaches client taskPost", async () => {
+  let capturedBody = null;
+  const fetchImpl = async (url, init) => {
+    if (url.includes("task_post")) {
+      capturedBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        tasks: [{ id: "custom-robots-task", status_code: 20000, result: [{ id: "custom-robots-task", status: "pending" }] }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ status_code: 20000, result: [{ items: [] }] }],
+    }), { status: 200 });
+  };
+
+  setTestCredentials();
+  try {
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 10,
+      pollTimeoutMs: 500,
+      pollIntervalMs: 100,
+      customRobotsTxt: "User-agent: *\nDisallow: /",
+      clientOptions: { mode: "live", fetchImpl },
+    });
+    assert.ok(capturedBody, "Must have captured taskPost body");
+    assert.equal(capturedBody[0].custom_robots_txt, "User-agent: *\nDisallow: /",
+      "custom_robots_txt must be in the task_post request");
   } finally {
     clearTestCredentials();
   }

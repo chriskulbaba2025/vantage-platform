@@ -93,6 +93,9 @@ function validateInput(raw) {
     primaryGoal: String(raw.primaryGoal || "Generate qualified enquiries").trim(),
     ga4,
     gsc,
+    // Test-only: custom_robots_txt override for BLOCKED acceptance testing.
+    // Must never be exposed through normal audit intake UI.
+    customRobotsTxt: typeof raw.customRobotsTxt === "string" ? raw.customRobotsTxt : null,
   };
 }
 
@@ -252,6 +255,7 @@ function createProductionCrawlProvider(config) {
         config.onpageExcludePatterns.length > 0
           ? config.onpageExcludePatterns
           : undefined,
+      customRobotsTxt: options.customRobotsTxt || null,
       ...options,
     });
   };
@@ -375,6 +379,10 @@ export async function runAudit(rawInput, options = {}) {
     browserMode: config.browserMode,
     fetchImpl: options.fetchImpl,
     browserRenderer: options.browserRenderer,
+    artifactRoot,
+    artifactSlug: slug,
+    artifactRunId: runId,
+    customRobotsTxt: input.customRobotsTxt || null,
   });
   if (!input.businessName) {
     input.businessName = site.pages?.[0]?.title || site.domain;

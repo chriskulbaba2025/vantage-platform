@@ -390,6 +390,9 @@ export function createDataforseoOnpageClient(opts = {}) {
         store_raw_html: false,
         validate_headings: true,
         validate_page_changes: false,
+        ...(options.customRobotsTxt != null && {
+          custom_robots_txt: options.customRobotsTxt,
+        }),
       },
     ];
 
@@ -706,6 +709,9 @@ export function createDataforseoOnpageClient(opts = {}) {
    * completed.  Retries with linear backoff until the endpoint returns
    * a terminal result (20000), a terminal error, or the timeout expires.
    *
+   * The caller provides a complete request payload (array of task objects).
+   * The same payload is re-sent on every poll attempt.
+   *
    * Returns { result, metadata } where metadata records the task ID,
    * retry count, final status code, final status message, and whether
    * the call timed out.
@@ -714,24 +720,25 @@ export function createDataforseoOnpageClient(opts = {}) {
    * to handle partial data.
    *
    * @param {string}   endpoint   e.g. "/on_page/duplicate_tags"
-   * @param {string}   taskId     Main crawl task ID
+   * @param {object[]} payload    Array of task objects to POST
    * @param {object}   [options]
    * @param {number}   [options.timeoutMs=60000]   Max poll time (default 60 s)
    * @param {number}   [options.pollIntervalMs=5000]  Interval between polls
    * @param {number[]} [options.pendingCodes=[20100]] Status codes that mean "still processing"
    * @returns {Promise<{result: object|null, metadata: object}>}
    */
-  async function pollSubEndpoint(endpoint, taskId, options = {}) {
+  async function pollSubEndpoint(endpoint, payload, options = {}) {
     const timeoutMs = options.timeoutMs ?? 60000;
     const pollIntervalMs = options.pollIntervalMs ?? 5000;
     const pendingCodes = options.pendingCodes ?? [20100];
+    const requestPayload = Array.isArray(payload) ? payload : [{ id: payload }];
 
     if (mode === "fixture") {
       const fixtures = opts.fixtures || {};
       const key = endpoint.replace("/on_page/", "");
       return {
         result: fixtures[key] || { items: [] },
-        metadata: { taskId, retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false },
+        metadata: { retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, requestPayload },
       };
     }
 
@@ -745,7 +752,7 @@ export function createDataforseoOnpageClient(opts = {}) {
       try {
         const response = await dataforseoPost(
           endpoint,
-          [{ id: taskId }],
+          requestPayload,
           { login, password, fetchImpl: opts.fetchImpl },
         );
 
@@ -755,10 +762,9 @@ export function createDataforseoOnpageClient(opts = {}) {
         finalMessage = task?.status_message || null;
 
         if (code === 20000) {
-          const rawResult = task?.result?.[0] || null;
           return {
-            result: rawResult,
-            metadata: { taskId, retryCount, finalCode, finalMessage, timedOut: false },
+            result: task?.result?.[0] || null,
+            metadata: { retryCount, finalCode, finalMessage, timedOut: false, requestPayload },
           };
         }
 
@@ -771,7 +777,7 @@ export function createDataforseoOnpageClient(opts = {}) {
         // Terminal non-20000, non-pending code
         return {
           result: null,
-          metadata: { taskId, retryCount, finalCode, finalMessage, timedOut: false },
+          metadata: { retryCount, finalCode, finalMessage, timedOut: false, requestPayload },
         };
       } catch (error) {
         if (
@@ -785,10 +791,11 @@ export function createDataforseoOnpageClient(opts = {}) {
         return {
           result: null,
           metadata: {
-            taskId, retryCount,
+            retryCount,
             finalCode: null,
             finalMessage: error.message?.slice(0, 200) || "Transport error",
             timedOut: false,
+            requestPayload,
           },
         };
       }
@@ -797,10 +804,11 @@ export function createDataforseoOnpageClient(opts = {}) {
     return {
       result: null,
       metadata: {
-        taskId, retryCount,
+        retryCount,
         finalCode: finalCode ?? null,
         finalMessage: finalMessage ?? `Polling timed out after ${timeoutMs}ms`,
         timedOut: true,
+        requestPayload,
       },
     };
   }
@@ -814,8 +822,56 @@ export function createDataforseoOnpageClient(opts = {}) {
    * @param {string} taskId - Task ID.
    * @returns {Promise<{result: object|null, metadata: object}>}
    */
-  async function getDuplicateTags(taskId, options) {
-    return pollSubEndpoint("/on_page/duplicate_tags", taskId, options);
+  async function getDuplicateTags(taskId, types = ["duplicate_title", "duplicate_description"], options) {
+    const allResults = [];
+    const allMetadata = [];
+    if (mode === "fixture") {
+      const fixtures = opts.fixtures || {};
+      const fixtureData = fixtures.duplicateTags || {};
+      // Support both old flat {items} and new per-type fixture format
+      if (Array.isArray(fixtureData)) {
+        return { results: fixtureData, metadata: fixtureData.map((r) => ({ ...r, retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false })) };
+      }
+      for (const type of types) {
+        allResults.push({ type, items: fixtureData.items || [] });
+        allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, type, requestPayload: [{ id: taskId, type }] });
+      }
+      return { results: allResults, metadata: allMetadata };
+    }
+    for (const type of types) {
+      const payload = [{ id: taskId, type }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/duplicate_tags", payload, options);
+      allResults.push({ type, items: result?.items || [] });
+      allMetadata.push({ ...metadata, type });
+    }
+    return { results: allResults, metadata: allMetadata };
+  }
+
+  async function getDuplicateContent(taskId, urls = [], options) {
+    const maxUrls = (options && options.maxUrls != null) ? options.maxUrls : 10;
+    const cappedUrls = urls.slice(0, maxUrls);
+    const allResults = [];
+    const allMetadata = [];
+    const { maxUrls: _unused, ...pollOpts } = (options || {});
+    if (mode === "fixture") {
+      const fixtures = opts.fixtures || {};
+      const fixtureData = fixtures.duplicateContent || {};
+      if (Array.isArray(fixtureData)) {
+        return { results: fixtureData, metadata: fixtureData.map((r) => ({ ...r, retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false })) };
+      }
+      for (const url of cappedUrls.length > 0 ? cappedUrls : ["https://example.com/page-1"]) {
+        allResults.push({ url, items: fixtureData.items || [] });
+        allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url, requestPayload: [{ id: taskId, url }] });
+      }
+      return { results: allResults, metadata: allMetadata };
+    }
+    for (const url of cappedUrls) {
+      const payload = [{ id: taskId, url }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/duplicate_content", payload, pollOpts);
+      allResults.push({ url, items: result?.items || [] });
+      allMetadata.push({ ...metadata, url });
+    }
+    return { results: allResults, metadata: allMetadata };
   }
 
   /**
@@ -828,8 +884,34 @@ export function createDataforseoOnpageClient(opts = {}) {
    * @param {object} [options] - Poll options (timeoutMs, pollIntervalMs, etc.)
    * @returns {Promise<{result: object|null, metadata: object}>}
    */
-  async function getDuplicateContent(taskId, options) {
-    return pollSubEndpoint("/on_page/duplicate_content", taskId, options);
+  async function getDuplicateContent(taskId, urls = [], options) {
+    const maxUrls = (options && options.maxUrls != null) ? options.maxUrls : 10;
+    const cappedUrls = urls.slice(0, maxUrls);
+    const allResults = [];
+    const allMetadata = [];
+    // Remove maxUrls from poll options so it doesn't leak to pollSubEndpoint
+    const { maxUrls: _unused, ...pollOpts } = (options || {});
+    for (const url of cappedUrls) {
+      const payload = [{ id: taskId, url }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/duplicate_content", payload, pollOpts);
+      allResults.push({ url, items: result?.items || [] });
+      allMetadata.push({ ...metadata, url });
+    }
+    return { results: allResults, metadata: allMetadata };
+  }
+
+  /**
+   * Fetch microdata / structured data for a completed task.
+   *
+   * POST /v3/on_page/microdata
+   *
+   * @param {string} taskId - Main crawl task ID.
+   * @param {object} [options] - Poll options.
+   * @returns {Promise<{result: object|null, metadata: object}>}
+   */
+  async function getMicrodata(taskId, options) {
+    const payload = [{ id: taskId }];
+    return pollSubEndpoint("/on_page/microdata", payload, options);
   }
 
   /**
@@ -856,6 +938,8 @@ export function createDataforseoOnpageClient(opts = {}) {
     getAllLinks,
     getDuplicateTags,
     getDuplicateContent,
+    getMicrodata,
+    pollSubEndpoint,
     getRawTaskArtifact,
     TASK_STATUS,
   };
