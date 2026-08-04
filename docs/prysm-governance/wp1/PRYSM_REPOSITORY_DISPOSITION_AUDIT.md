@@ -63,13 +63,13 @@ This document presents the complete evidence-supported disposition of the Prysm 
 
 | Classification | Count | Description |
 |---|---|---|
-| KEEP | 48 | Contract-compliant; requires no changes during rebuild |
-| REFACTOR | 34 | Functional but needs boundary/contract adjustments |
-| REPLACE | 18 | Does not meet governance contracts; must be rebuilt |
-| REMOVE | 9 | Superseded, misplaced, or obsolete |
+| KEEP | 74 | Contract-compliant; requires no changes during rebuild |
+| REFACTOR | 20 | Functional but needs boundary/contract adjustments |
+| REPLACE | 3 | Does not meet governance contracts; must be rebuilt |
+| REMOVE | 5 | Superseded, misplaced, or obsolete |
 | UNVERIFIED | 3 | Behavior could not be confirmed without live environment |
 
-(Detailed file-level classifications in Appendix: `PRYSM_FILE_DISPOSITION_APPENDIX.md`)
+(File-level totals reconciled against the 105-entry appendix: `PRYSM_FILE_DISPOSITION_APPENDIX.md`)
 
 ---
 
@@ -441,7 +441,7 @@ Credentials are loaded from environment variables only (`process.env`). The toke
 
 ## 5. Classification Guidance
 
-### KEEP (48 files)
+### KEEP (74 files)
 Modules that are contract-compliant and require no changes during rebuild:
 - All scoring logic (vantage-score.js, score-components.js, evidence-contracts.js, diagnostic-contracts.js)
 - Finding rules and priority calculation
@@ -454,7 +454,7 @@ Modules that are contract-compliant and require no changes during rebuild:
 - Test infrastructure and fixtures
 - CI workflow
 
-### REFACTOR (34 files)
+### REFACTOR (20 files)
 Modules that are functional but need boundary/contract adjustments:
 - run-audit.js (add lifecycle states, use buildEvidenceEnvelope)
 - server.js (separate API from worker, add logging)
@@ -468,7 +468,7 @@ Modules that are functional but need boundary/contract adjustments:
 - n8n scripts (remove hardcoded /tmp paths)
 - run-blocked-acceptance.mjs (remove SSH requirement)
 
-### REPLACE (18 files)
+### REPLACE (3 files)
 Modules that must be rebuilt to meet governance contracts:
 - **Artifact storage layer** (report-store.js, artifact-store.js, s3-artifact-store.js) → unified ArtifactStore interface
 - **Database layer** (absent) → new database persistence
@@ -476,7 +476,7 @@ Modules that must be rebuilt to meet governance contracts:
 - **State machine** (review-gate.js partial) → full 12+ state lifecycle
 - **Cost control** (absent) → budget enforcement, cost ledger, cache policy
 
-### REMOVE (9 files)
+### REMOVE (5 files)
 - `artifacts/local/backlink-tests/.gitkeep` (generated artifact placeholder)
 - Legacy crawler integration (site-crawler.js when DataForSEO is primary)
 - `backlink-adapter.legacy.js` (misnamed test file — relocate or rename)

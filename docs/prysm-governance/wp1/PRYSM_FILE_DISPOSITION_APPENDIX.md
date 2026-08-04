@@ -229,10 +229,10 @@
 
 | Classification | Count |
 |---|---|
-| **KEEP** | 77 |
-| **REFACTOR** | 22 |
+| **KEEP** | 74 |
+| **REFACTOR** | 20 |
 | **REPLACE** | 3 |
-| **REMOVE** | 4 |
+| **REMOVE** | 5 |
 | **UNVERIFIED** | 3 |
 | **TOTAL** | 105 |
 

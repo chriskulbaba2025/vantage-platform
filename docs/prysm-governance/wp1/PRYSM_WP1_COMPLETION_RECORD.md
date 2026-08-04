@@ -13,19 +13,29 @@
 | Metric | Value |
 |---|---|
 | **Branch name** | `audit/prysm-wp1-repository-disposition` |
-| **Commit SHA** | `c53df23` |
 | **PR number** | [#31](https://github.com/chriskulbaba2025/vantage-platform/pull/31) |
 | **Files audited** | 105 source, test, script, config, and workflow files |
-| **Classification: KEEP** | 77 |
-| **Classification: REFACTOR** | 22 |
+| **Classification: KEEP** | 74 |
+| **Classification: REFACTOR** | 20 |
 | **Classification: REPLACE** | 3 |
-| **Classification: REMOVE** | 4 |
+| **Classification: REMOVE** | 5 |
 | **Classification: UNVERIFIED** | 3 |
 | **Tests** | 637 pass, 0 fail, 0 skipped |
 | **Live provider calls** | 0 |
 | **Live LLM calls** | 0 |
 | **Production code changes** | 0 |
 | **Report file changes** | 0 |
+
+---
+
+## Audit Commit Convention
+
+| Ref | SHA | Description |
+|---|---|---|
+| **Audited base** | `eb7f3b36d3840e5c0eda965bae3befe579d0fc7b` | Production baseline tagged `prysm-pre-rebuild-production-2026-08-04` |
+| **Original audit commit** | `ad91ad4b2f49de0e2d4e9ce5941513968cb33e52` | Initial WP1 governance docs + 7 audit records |
+| **Latest correction commit** | *(to be recorded in follow-up)* | Classification-total reconciliation and stale-reference correction |
+| **Current PR head** | *(to be recorded in follow-up)* | HEAD of `audit/prysm-wp1-repository-disposition` after all corrections |
 
 ---
 
@@ -66,13 +76,13 @@ docs/prysm-governance/
 ├── 08_PRYSM_DECISION_AND_RISK_LOG.md                   (SHA-256 verified ✓)
 ├── manifest.json                                       (SHA-256 verified ✓)
 └── wp1/
-    ├── PRYSM_REPOSITORY_DISPOSITION_AUDIT.md           (this audit)
+    ├── PRYSM_REPOSITORY_DISPOSITION_AUDIT.md
     ├── PRYSM_CURRENT_ARCHITECTURE_MAP.md
     ├── PRYSM_DEPENDENCY_MAP.md
     ├── PRYSM_WP1_RISK_REGISTER.md
     ├── PRYSM_FILE_DISPOSITION_APPENDIX.md
     ├── PRYSM_RECOMMENDED_FIRST_IMPLEMENTATION_PR.md
-    └── PRYSM_WP1_COMPLETION_RECORD.md                  (this record)
+    └── PRYSM_WP1_COMPLETION_RECORD.md
 ```
 
 ---
@@ -156,6 +166,7 @@ None detected. Final diff contains only governance documents and WP1 audit recor
 | Test verification | 100% — 637/637 pass, zero live calls |
 | Golden-master integrity | 100% — SHA-256 verified |
 | Governance doc integrity | 100% — all 10 files byte-identical |
+| Classification reconciliation | 100% — 105 appendix entries verified; totals sum to 105 |
 | **Overall confidence** | **97%** |
 
 The 3% uncertainty is confined to the 3 UNVERIFIED n8n integration scripts (`build-report.js`, `generate-zip.js`, `prysm-n8n-workflow.json`) which require a live n8n environment to fully verify their behavior.
@@ -177,19 +188,6 @@ Work Package 1 is not complete until the Principal Auditor:
 Work Package 2 (Schemas and Fixtures) is blocked pending this approval.
 
 Do not mark Work Package 1 approved or complete on behalf of the user.
-
----
-
-## Exact Git Status (pre-commit)
-
-```text
-Branch:  audit/prysm-wp1-repository-disposition
-Base:    origin/main (eb7f3b36d3840e5c0eda965bae3befe579d0fc7b)
-Commit:  c53df23
-PR:      #31
-Status:  Pushed, awaiting review
-Changes: 17 governance + WP1 record files only (0 production code changes)
-```
 
 ---
 
