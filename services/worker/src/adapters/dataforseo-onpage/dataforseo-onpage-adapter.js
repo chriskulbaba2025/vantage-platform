@@ -945,6 +945,7 @@ export async function crawlWithDataforseo(target, options = {}) {
       includePatterns: options.includePatterns,
       excludePatterns: options.excludePatterns,
       maxExternalResources: options.maxExternalResources,
+      customRobotsTxt: options.customRobotsTxt || null,
     });
     rawTaskId = taskPostResult.taskId;
   } catch (error) {

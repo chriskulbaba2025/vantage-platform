@@ -2,19 +2,13 @@
 /**
  * DataForSEO On-Page — Internal BLOCKED Acceptance Script
  *
- * Uses DataForSEO custom_robots_txt to create a controlled block scenario.
- * This script is for internal acceptance testing only and must never be
- * exposed through normal audit intake.
+ * Uses DataForSEO custom_robots_txt to create a controlled block.
+ * Internal acceptance only — must never be exposed through normal UI.
  *
  * Usage:
  *   node scripts/run-blocked-acceptance.mjs
  *
- * Prerequisites:
- *   - DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD must be set
- *   - VANTAGE_WEBHOOK_SECRET must be set (or railway run -s vantage-platform)
- *
- * Produces: a production audit with sourceStatus: BLOCKED and verifies
- * that dependent modules are Not Assessed with no zero scores.
+ * Requires: VANTAGE_WEBHOOK_SECRET or Railway CLI access.
  */
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -22,110 +16,125 @@ import { createHash } from "node:crypto";
 const SECRET = process.env.VANTAGE_WEBHOOK_SECRET
   || execSync('railway run -s vantage-platform "printenv VANTAGE_WEBHOOK_SECRET"', { encoding: "utf8" }).trim();
 
+const BLOCKED_TARGET = "https://example.com";
+const CUSTOM_ROBOTS = "User-agent: *\nDisallow: /";
+
 console.log("=== DataForSEO On-Page BLOCKED Acceptance Test ===");
+console.log(`  Target: ${BLOCKED_TARGET}`);
+console.log(`  Custom robots: ${CUSTOM_ROBOTS.replace(/\n/g, " | ")}`);
 console.log("");
 
-// Step 1: Create audit with the custom-robots-override acceptance flag.
-// The crawler accepts custom_robots_txt in task_post for testing.
-const BLOCKED_TARGET = "https://example.com"; // safe target, will be blocked by custom robots
-const BUSINESS_NAME = "blocked-acceptance-test";
-
-console.log(`Creating BLOCKED audit for ${BLOCKED_TARGET}...`);
+// ── Step 1: Create audit with custom_robots_txt override ──────────────
+console.log("Creating BLOCKED audit...");
+const body = JSON.stringify({
+  targetUrl: BLOCKED_TARGET,
+  businessName: "blocked-acceptance-test",
+  location: "Global",
+  language: "en",
+  customRobotsTxt: CUSTOM_ROBOTS,
+});
 const createResp = await fetch("https://vantage-platform-production.up.railway.app/audits", {
   method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-vantage-secret": SECRET,
-  },
-  body: JSON.stringify({
-    targetUrl: BLOCKED_TARGET,
-    businessName: BUSINESS_NAME,
-    location: "Global",
-    language: "en",
-    // The crawl adapter accepts custom_robots_txt if passed through options
-    // For now, this is embedded in the audit input as a test-only field
-  }),
+  headers: { "Content-Type": "application/json", "x-vantage-secret": SECRET },
+  body,
 });
 const createData = await createResp.json();
-console.log(`  Run ID: ${createData.runId}`);
-console.log(`  Slug: ${createData.slug}`);
-console.log(`  Initial website status: ${createData.evidence?.website}`);
-console.log(`  Initial scores.technical: ${createData.scores?.technical}`);
+if (createData.error) { console.error("Audit creation failed:", createData.error); process.exit(1); }
+const { runId, slug } = createData;
+console.log(`  Run ID: ${runId}  Slug: ${slug}`);
+console.log(`  Initial website: ${createData.evidence?.website}`);
+console.log(`  Scores: tech=${createData.scores?.technical} contentDepth=${createData.scores?.contentDepth}`);
 
-// Step 2: Poll for completion
-const runId = createData.runId;
-const slug = createData.slug;
-console.log("\nWaiting for audit to complete...");
+// ── Step 2: Poll for completion ─────────────────────────────────────
+console.log("\nWaiting for audit to finish...");
 for (let attempt = 0; attempt < 30; attempt++) {
   await new Promise(r => setTimeout(r, 10000));
-  const statusResp = await fetch(
-    `https://vantage-platform-production.up.railway.app/audits/${runId}?slug=${slug}`,
-    { headers: { "x-vantage-secret": SECRET } }
-  );
-  const statusData = await statusResp.json();
-  const lcStatus = statusData.lifecycleStatus || statusData.status;
-  if (lcStatus !== "draft" && lcStatus !== undefined) {
-    console.log(`  Completed: ${lcStatus}`);
-    break;
-  }
-  if (attempt % 5 === 0) console.log(`  Poll ${attempt + 1}: still running...`);
+  const r = await fetch(`https://vantage-platform-production.up.railway.app/audits/${runId}?slug=${slug}`, { headers: { "x-vantage-secret": SECRET } });
+  const d = await r.json();
+  if (d.status !== "draft" || d.lifecycleStatus === "approved") { console.log(`  Done: ${d.status}`); break; }
+  if (attempt % 5 === 0) console.log(`  Poll ${attempt + 1}...`);
 }
 
-// Step 3: Read audit.json via SSH
-console.log("\nReading production audit.json...");
+// ── Step 3: Read audit.json ──────────────────────────────────────────
+console.log("\nReading audit.json...");
 let auditData = null;
+let rawBytes = 0;
 try {
   const result = execSync(
-    `railway ssh -s vantage-platform "node -e 'const fs=require(\\\"fs\\\");const dirs=fs.readdirSync(\\\"/app/artifacts/reports/${slug}\\\");const latest=dirs.sort().reverse()[0];const d=JSON.parse(fs.readFileSync(\\\"/app/artifacts/reports/${slug}/\\\"+latest+\\\"/audit.json\\\",\\\"utf8\\\"));const s=d.evidence?.site||{};console.log(JSON.stringify({runId:latest,domain:s.domain,pageCount:s.pageCount,sourceStatus:s.sourceStatus,targetUrl:s.targetUrl,_sourceStatus:s._sourceStatus,rawSha256:s._rawSha256?.slice(0,16),rawBytes:s._rawBytes,rawArtifactRef:s.rawArtifactRef}))'"`,
+    `railway ssh -s vantage-platform "node -e 'const fs=require(\\\"fs\\\");const dirs=fs.readdirSync(\\\"/app/artifacts/reports/${slug}\\\");const latest=dirs.sort().reverse()[0];const d=JSON.parse(fs.readFileSync(\\\"/app/artifacts/reports/${slug}/\\\"+latest+\\\"/audit.json\\\",\\\"utf8\\\"));const s=d.evidence?.site||{};console.log(JSON.stringify({runId:latest,sourceStatus:s.sourceStatus,pageCount:s.pageCount,domain:s.domain,_sourceStatus:s._sourceStatus,rawSha256:s._rawSha256,rawBytes:s._rawBytes,rawArtifactRef:s.rawArtifactRef}))'"`,
     { encoding: "utf8", timeout: 15000 }
   );
   const lines = result.split("\n").filter(l => l.startsWith("{") && l.includes('"runId"'));
   if (lines.length > 0) auditData = JSON.parse(lines[0]);
-} catch (e) {
-  console.log(`  SSH error: ${e.message?.slice(0, 100)}`);
+  rawBytes = auditData?.rawBytes || 0;
+} catch (e) { console.error("SSH error:", e.message?.slice(0, 100)); }
+
+// ── Step 4: Verify raw artifact via SSH ─────────────────────────────
+let storedHash = null;
+if (auditData?.rawArtifactRef) {
+  try {
+    const rawPath = auditData.rawArtifactRef.split("?")[0];
+    const catCmd = `railway ssh -s vantage-platform "cat /app/artifacts/reports/${rawPath}"`;
+    const rawContent = execSync(catCmd, { encoding: "utf8", timeout: 10000 });
+    storedHash = createHash("sha256").update(rawContent).digest("hex");
+  } catch { /* file may not exist */ }
 }
 
-// Step 4: Verify BLOCKED behavior
+// ── Step 5: Strict verification ──────────────────────────────────────
 console.log("\n=== Verification ===");
-let passCount = 0;
-let failCount = 0;
-
-function check(label, condition, detail) {
-  if (condition) { passCount++; console.log(`  PASS: ${label}`); }
-  else { failCount++; console.log(`  FAIL: ${label} — ${detail || "unexpected"}`); }
+let pass = 0;
+let fail = 0;
+function chk(label, ok, detail) {
+  if (ok) { pass++; console.log(`  PASS: ${label}`); }
+  else { fail++; console.log(`  FAIL: ${label} — ${detail || "unexpected"}`); }
 }
 
 if (auditData) {
-  check("sourceStatus is BLOCKED or FAILED",
-    auditData.sourceStatus === "BLOCKED" || auditData.sourceStatus === "FAILED",
-    `got ${auditData.sourceStatus}`);
+  chk("sourceStatus === BLOCKED",
+    auditData.sourceStatus === "BLOCKED",
+    `got "${auditData.sourceStatus}"`);
 
-  check("pageCount is 0 or very low",
-    (auditData.pageCount || 0) <= 1,
+  chk("pageCount is 0",
+    auditData.pageCount === 0,
     `got ${auditData.pageCount}`);
 
-  check("raw artifact SHA-256 present",
-    typeof auditData.rawSha256 === "string" && auditData.rawSha256.length > 0,
-    `got ${auditData.rawSha256}`);
+  chk("provider evidence exists",
+    !!auditData._sourceStatus?.provider,
+    "no _sourceStatus");
 
-  check("raw artifact bytes > 0",
-    (auditData.rawBytes || 0) > 0,
-    `got ${auditData.rawBytes}`);
+  chk("raw artifact SHA-256 present",
+    typeof auditData.rawSha256 === "string" && auditData.rawSha256.length >= 64,
+    `got "${auditData.rawSha256?.slice(0, 20) || 'none'}..."`);
 
-  check("rawArtifactRef contains sha256",
-    (auditData.rawArtifactRef || "").includes("sha256="),
-    `got ${auditData.rawArtifactRef}`);
+  chk("raw artifact bytes > 0",
+    rawBytes > 0,
+    `got ${rawBytes}`);
 
-  check("no false zero score",
-    createData.scores?.technical !== 0,
-    `technical score is ${createData.scores?.technical}`);
+  chk("rawArtifactRef is a real path",
+    (auditData.rawArtifactRef || "").startsWith("blocked-acceptance-test/"),
+    `got "${auditData.rawArtifactRef}"`);
+
+  chk("stored file SHA-256 matches _rawSha256",
+    storedHash === auditData.rawSha256,
+    storedHash
+      ? `stored=${storedHash.slice(0,16)} vs _rawSha256=${auditData.rawSha256?.slice(0,16)}`
+      : "could not read stored file");
+
+  chk("crawl-dependent score is null (Not Assessed)",
+    createData.scores?.contentDepth === null || createData.scores?.contentDepth === undefined,
+    `contentDepth=${createData.scores?.contentDepth}`);
+
+  chk("crawl-dependent score NOT zero",
+    createData.scores?.contentDepth !== 0,
+    `contentDepth=${createData.scores?.contentDepth} (must not be zero)`);
+
+  chk("FAILED is not accepted as BLOCKED",
+    auditData.sourceStatus !== "FAILED",
+    "sourceStatus is FAILED — must be BLOCKED");
 } else {
-  check("audit data available", false, "could not read audit.json");
-  // Use initial API response as fallback
-  check("website status from API", createData.evidence?.website === "FAILED" || createData.evidence?.website === "BLOCKED",
-    `got ${createData.evidence?.website}`);
+  chk("audit data available", false, "SSH failed, no audit data");
 }
 
-console.log(`\n${passCount}/${passCount + failCount} checks passed`);
+console.log(`\n${pass}/${pass + fail} checks passed`);
 console.log(`Run ID: ${runId}`);
-process.exit(failCount > 0 ? 1 : 0);
+process.exit(fail > 0 ? 1 : 0);

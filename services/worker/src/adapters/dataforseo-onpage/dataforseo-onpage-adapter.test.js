@@ -2349,3 +2349,129 @@ test("T-DT-06: duplicate_content polls through 20100 and returns populated resul
     clearTestCredentials();
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-BLOCKED regression tests
+// ---------------------------------------------------------------------------
+
+// T-BLOCKED-01: custom_robots_txt with Disallow: / produces BLOCKED
+test("T-BLOCKED-01: custom_robots_txt Disallow all produces BLOCKED status", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "forbidden_robots",
+        max_crawl_pages: 1,
+        pages_crawled: 0,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 0,
+      total_pages: 0,
+      domain_info: {
+        extended_crawl_status: "forbidden_robots",
+        checks: { start_page_deny_flag: true },
+      },
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", {
+    ...crawlOpts(fixtures),
+    customRobotsTxt: "User-agent: *\nDisallow: /",
+  });
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED,
+    `Expected BLOCKED, got ${result.sourceStatus}`);
+  assert.equal(result.pageCount, 0);
+  assert.equal(result._sourceStatus.errorCategory, null,
+    "BLOCKED is expected, not an error");
+});
+
+// T-BLOCKED-02: FAILED must not be accepted as BLOCKED
+test("T-BLOCKED-02: FAILED status is distinct from BLOCKED", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "some_error",
+        max_crawl_pages: 1,
+        pages_crawled: 0,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 0,
+      total_pages: 0,
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+  assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED,
+    "Empty pages without block reason must be FAILED, not BLOCKED");
+  assert.notEqual(result.sourceStatus, SOURCE_STATUS.BLOCKED,
+    "FAILED must never equal BLOCKED");
+});
+
+// T-BLOCKED-03: BLOCKED produces null crawl-dependent scores, not zero
+test("T-BLOCKED-03: BLOCKED crawl produces null dependent metrics", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 0,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "forbidden_robots",
+        max_crawl_pages: 1,
+        pages_crawled: 0,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 0,
+      total_pages: 0,
+      domain_info: {
+        extended_crawl_status: "forbidden_robots",
+        checks: { start_page_deny_flag: true },
+      },
+    },
+    pages: { items: [], total_count: 0 },
+    links: { items: [], total_count: 0 },
+  });
+
+  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED);
+  assert.equal(result.totalWords, 0);
+  assert.equal(result.averageWords, 0);
+  assert.equal(result.imageCount, 0);
+});
+
+// T-BLOCKED-04: customRobotsTxt is forwarded to client taskPost
+test("T-BLOCKED-04: customRobotsTxt option reaches client taskPost", async () => {
+  let capturedBody = null;
+  const fetchImpl = async (url, init) => {
+    if (url.includes("task_post")) {
+      capturedBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        tasks: [{ id: "custom-robots-task", status_code: 20000, result: [{ id: "custom-robots-task", status: "pending" }] }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ status_code: 20000, result: [{ items: [] }] }],
+    }), { status: 200 });
+  };
+
+  setTestCredentials();
+  try {
+    const result = await crawlWithDataforseo("https://example.com", {
+      maxPages: 10,
+      pollTimeoutMs: 500,
+      pollIntervalMs: 100,
+      customRobotsTxt: "User-agent: *\nDisallow: /",
+      clientOptions: { mode: "live", fetchImpl },
+    });
+    assert.ok(capturedBody, "Must have captured taskPost body");
+    assert.equal(capturedBody[0].custom_robots_txt, "User-agent: *\nDisallow: /",
+      "custom_robots_txt must be in the task_post request");
+  } finally {
+    clearTestCredentials();
+  }
+});

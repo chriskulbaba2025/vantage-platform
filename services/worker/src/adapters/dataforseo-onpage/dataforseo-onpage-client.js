@@ -390,6 +390,9 @@ export function createDataforseoOnpageClient(opts = {}) {
         store_raw_html: false,
         validate_headings: true,
         validate_page_changes: false,
+        ...(options.customRobotsTxt != null && {
+          custom_robots_txt: options.customRobotsTxt,
+        }),
       },
     ];
 
