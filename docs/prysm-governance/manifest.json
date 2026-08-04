@@ -1,0 +1,43 @@
+{
+  "name": "Prysm Governed Rebuild Pack",
+  "version": "1.0.0",
+  "createdAt": "2026-08-04",
+  "files": [
+    {
+      "name": "00_START_HERE.md",
+      "bytes": 3064
+    },
+    {
+      "name": "01_PRYSM_MASTER_REBUILD_CHARTER.md",
+      "bytes": 8547
+    },
+    {
+      "name": "02_PRYSM_REPORT_IMMUTABILITY_CONTRACT.md",
+      "bytes": 4578
+    },
+    {
+      "name": "03_PRYSM_PIPELINE_CONTRACTS_AND_STATE_MACHINE.md",
+      "bytes": 6341
+    },
+    {
+      "name": "04_PRYSM_N8N_AND_LLM_COST_CONTRACT.md",
+      "bytes": 5984
+    },
+    {
+      "name": "05_PRYSM_ACCEPTANCE_AND_RELEASE_PLAYBOOK.md",
+      "bytes": 5614
+    },
+    {
+      "name": "06_PRYSM_IMPLEMENTATION_BACKLOG.md",
+      "bytes": 5558
+    },
+    {
+      "name": "07_PRYSM_CLAUDE_CODE_WORK_ORDER.md",
+      "bytes": 3706
+    },
+    {
+      "name": "08_PRYSM_DECISION_AND_RISK_LOG.md",
+      "bytes": 2661
+    }
+  ]
+}
