@@ -106,16 +106,19 @@ test("postgres (pg-mem): concurrent creation — different clientId throws Dupli
 });
 
 // Concurrent transition
-test("postgres (pg-mem): concurrent transitions — 1 success, 1 conflict, 1 event", async () => {
+test("postgres (pg-mem): concurrent transitions — exactly 1 succeeds, 1 fails, 2 events", async () => {
   const repo = createPgMemRepo(); const svc = createLifecycleService(repo);
   const auditId = randomUUID(); const tenantId = "race";
   await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
   const t1 = svc.transition({ auditId, tenantId, toState: "validated", expectedState: "created", expectedVersion: 1, transitionIdempotencyKey: randomUUID() });
   const t2 = svc.transition({ auditId, tenantId, toState: "validated", expectedState: "created", expectedVersion: 1, transitionIdempotencyKey: randomUUID() });
   const results = await Promise.allSettled([t1, t2]);
-  assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
-  assert.equal(results.filter(r => r.status === "rejected").length, 1);
-  assert.equal((await svc.history(auditId, tenantId)).length, 2);
+  assert.equal(results.filter(r => r.status === "fulfilled").length, 1,
+    "Exactly 1 transition must succeed");
+  assert.equal(results.filter(r => r.status === "rejected").length, 1,
+    "Exactly 1 transition must be rejected");
+  assert.equal((await svc.history(auditId, tenantId)).length, 2,
+    "Exactly 2 events after concurrent transition");
 });
 
 // UPDATE proof
