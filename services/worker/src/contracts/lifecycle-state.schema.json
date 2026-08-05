@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/lifecycle-state.schema.json",
+  "title": "Lifecycle State",
+  "description": "Deterministic current-state projection from an append-only event log. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "auditId",
+    "tenantId",
+    "clientId",
+    "state",
+    "version",
+    "lastTransitionedAt"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Owning audit UUID."
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning tenant."
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning client."
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "created",
+        "validated",
+        "collecting",
+        "evidence_stored",
+        "evidence_locked",
+        "scored",
+        "narrative_pending",
+        "narrative_ready",
+        "draft_rendered",
+        "in_review",
+        "approved",
+        "published",
+        "validation_failed",
+        "collection_failed",
+        "narrative_failed",
+        "render_failed",
+        "approval_rejected",
+        "publish_failed"
+      ],
+      "description": "Current lifecycle state."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of events in the audit's lifecycle log."
+    },
+    "lastEvent": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the most recent lifecycle event."
+    },
+    "lastTransitionedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of the most recent transition."
+    }
+  }
+}

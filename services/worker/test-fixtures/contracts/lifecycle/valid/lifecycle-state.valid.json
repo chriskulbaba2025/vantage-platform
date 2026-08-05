@@ -1,0 +1,10 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "00000000-0000-0000-0000-000000000001",
+  "tenantId": "test-tenant",
+  "clientId": "test-client",
+  "state": "created",
+  "version": 1,
+  "lastEvent": "00000000-0000-0000-0000-0000000000e1",
+  "lastTransitionedAt": "2026-08-04T00:00:00.000Z"
+}

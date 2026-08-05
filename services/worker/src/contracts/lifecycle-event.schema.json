@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/lifecycle-event.schema.json",
+  "title": "Lifecycle Event",
+  "description": "A single append-only lifecycle event recording a state-machine transition. Schema version 1.0.0.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "eventId",
+    "auditId",
+    "tenantId",
+    "clientId",
+    "sequence",
+    "priorState",
+    "nextState",
+    "timestamp",
+    "actor",
+    "reason",
+    "codeVersion"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 for this event."
+    },
+    "auditId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Owning audit UUID."
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning tenant."
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning client."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic sequence number within the audit."
+    },
+    "priorState": {
+      "type": "string",
+      "enum": [
+        "created", "validated", "collecting", "evidence_stored",
+        "evidence_locked", "scored", "narrative_pending", "narrative_ready",
+        "draft_rendered", "in_review", "approved", "published",
+        "validation_failed", "collection_failed", "narrative_failed",
+        "render_failed", "approval_rejected", "publish_failed"
+      ],
+      "description": "State before this transition."
+    },
+    "nextState": {
+      "type": "string",
+      "enum": [
+        "created", "validated", "collecting", "evidence_stored",
+        "evidence_locked", "scored", "narrative_pending", "narrative_ready",
+        "draft_rendered", "in_review", "approved", "published",
+        "validation_failed", "collection_failed", "narrative_failed",
+        "render_failed", "approval_rejected", "publish_failed"
+      ],
+      "description": "State after this transition."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of the transition."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "\"system\" or Principal Auditor identity."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable reason for the transition."
+    },
+    "executionId": {
+      "type": ["string", "null"],
+      "description": "Optional execution identifier."
+    },
+    "codeVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Prysm code version at the time of the transition."
+    },
+    "artifactKey": {
+      "type": ["string", "null"],
+      "description": "Optional relevant artifact key."
+    },
+    "transitionIdempotencyKey": {
+      "type": ["string", "null"],
+      "description": "Idempotency key for transition replay protection. Null for creation events."
+    }
+  }
+}

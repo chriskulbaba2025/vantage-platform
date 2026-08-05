@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "eventId": "00000000-0000-0000-0000-0000000000e1",
+  "auditId": "00000000-0000-0000-0000-000000000001",
+  "tenantId": "test-tenant",
+  "clientId": "test-client",
+  "sequence": 0,
+  "priorState": "invalid_state_xyz",
+  "nextState": "invalid_state_abc",
+  "timestamp": "2026-08-04T00:00:00.000Z",
+  "actor": "system",
+  "reason": "",
+  "codeVersion": "4.0.0"
+}
