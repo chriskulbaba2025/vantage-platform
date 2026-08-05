@@ -1,0 +1,16 @@
+{
+  "contractVersion": "1.0.0",
+  "eventId": "00000000-0000-0000-0000-0000000000e1",
+  "auditId": "00000000-0000-0000-0000-000000000001",
+  "tenantId": "test-tenant",
+  "clientId": "test-client",
+  "sequence": 0,
+  "priorState": "created",
+  "nextState": "created",
+  "timestamp": "2026-08-04T00:00:00.000Z",
+  "actor": "system",
+  "reason": "Audit created",
+  "executionId": "exec-001",
+  "codeVersion": "4.0.0",
+  "artifactKey": "tenants/t/clients/c/audits/a/raw/data.json"
+}
