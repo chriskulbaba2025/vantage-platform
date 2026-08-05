@@ -15,7 +15,6 @@
 // State enum (frozen object with stable string values)
 // ---------------------------------------------------------------------------
 
-/** All lifecycle states ordered by normal-path progression. */
 export const LIFECYCLE_STATE = Object.freeze({
   // Normal path
   CREATED:            "created",
@@ -40,117 +39,67 @@ export const LIFECYCLE_STATE = Object.freeze({
   PUBLISH_FAILED:     "publish_failed",
 });
 
+const T = LIFECYCLE_STATE;
+
 // ---------------------------------------------------------------------------
 // State sets
 // ---------------------------------------------------------------------------
 
-/** All normal-path states (not failure states). */
 export const NORMAL_STATES = new Set([
-  LIFECYCLE_STATE.CREATED,
-  LIFECYCLE_STATE.VALIDATED,
-  LIFECYCLE_STATE.COLLECTING,
-  LIFECYCLE_STATE.EVIDENCE_STORED,
-  LIFECYCLE_STATE.EVIDENCE_LOCKED,
-  LIFECYCLE_STATE.SCORED,
-  LIFECYCLE_STATE.NARRATIVE_PENDING,
-  LIFECYCLE_STATE.NARRATIVE_READY,
-  LIFECYCLE_STATE.DRAFT_RENDERED,
-  LIFECYCLE_STATE.IN_REVIEW,
-  LIFECYCLE_STATE.APPROVED,
-  LIFECYCLE_STATE.PUBLISHED,
+  T.CREATED, T.VALIDATED, T.COLLECTING, T.EVIDENCE_STORED,
+  T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY,
+  T.DRAFT_RENDERED, T.IN_REVIEW, T.APPROVED, T.PUBLISHED,
 ]);
 
-/** Controlled failure states. */
 export const FAILURE_STATES = new Set([
-  LIFECYCLE_STATE.VALIDATION_FAILED,
-  LIFECYCLE_STATE.COLLECTION_FAILED,
-  LIFECYCLE_STATE.NARRATIVE_FAILED,
-  LIFECYCLE_STATE.RENDER_FAILED,
-  LIFECYCLE_STATE.APPROVAL_REJECTED,
-  LIFECYCLE_STATE.PUBLISH_FAILED,
+  T.VALIDATION_FAILED, T.COLLECTION_FAILED, T.NARRATIVE_FAILED,
+  T.RENDER_FAILED, T.APPROVAL_REJECTED, T.PUBLISH_FAILED,
 ]);
 
-/** Terminal states — no further transitions possible. */
-export const TERMINAL_STATES = new Set([
-  LIFECYCLE_STATE.PUBLISHED,
-]);
+/** PUBLISHED is genuinely terminal — no outgoing transitions. */
+export const TERMINAL_STATES = new Set([T.PUBLISHED]);
 
 // ---------------------------------------------------------------------------
 // Authoritative transition map
 //
-// Format: { [fromState]: Set<toState> }
-//
-// Normal-path forward transitions follow the pipeline order.
-// Failure transitions branch off from the normal path at defined points.
-// Recovery transitions return from a failure state to the appropriate
-// re-entry point.
+// Every edge listed here is valid.  Any transition not listed is invalid.
 // ---------------------------------------------------------------------------
 
-const T = LIFECYCLE_STATE;
-
-/**
- * The single authoritative allowed-transition map.
- *
- * Every entry is a Set of valid target states for the given source.
- * Any transition not listed here is invalid.
- */
 export const TRANSITION_MAP = Object.freeze({
-  // ── Normal-path forward ─────────────────────────────────────────────
-  [T.CREATED]:            new Set([T.VALIDATED, T.VALIDATION_FAILED]),
-  [T.VALIDATED]:          new Set([T.COLLECTING]),
-  [T.COLLECTING]:         new Set([T.EVIDENCE_STORED, T.COLLECTION_FAILED]),
-  [T.EVIDENCE_STORED]:    new Set([T.EVIDENCE_LOCKED]),
-  [T.EVIDENCE_LOCKED]:    new Set([T.SCORED]),
-  [T.SCORED]:             new Set([T.NARRATIVE_PENDING]),
-  [T.NARRATIVE_PENDING]:  new Set([T.NARRATIVE_READY, T.NARRATIVE_FAILED]),
-  [T.NARRATIVE_READY]:    new Set([T.DRAFT_RENDERED]),
-  [T.DRAFT_RENDERED]:     new Set([T.IN_REVIEW, T.RENDER_FAILED]),
-  [T.IN_REVIEW]:          new Set([T.APPROVED, T.APPROVAL_REJECTED]),
-  [T.APPROVED]:           new Set([T.PUBLISHED, T.APPROVAL_REJECTED, T.PUBLISH_FAILED]),
-  [T.PUBLISHED]:          new Set([T.PUBLISH_FAILED]),
-
-  // ── Controlled failure → recovery ───────────────────────────────────
-  [T.VALIDATION_FAILED]:  new Set([T.CREATED]),
-  [T.COLLECTION_FAILED]:  new Set([T.COLLECTING]),
-  [T.NARRATIVE_FAILED]:   new Set([T.NARRATIVE_PENDING]),
-  [T.RENDER_FAILED]:      new Set([T.DRAFT_RENDERED]),
-  [T.APPROVAL_REJECTED]:  new Set([T.IN_REVIEW]),
-  [T.PUBLISH_FAILED]:     new Set([T.APPROVED]),
+  [T.CREATED]:           new Set([T.VALIDATED, T.VALIDATION_FAILED]),
+  [T.VALIDATION_FAILED]: new Set([T.CREATED]),
+  [T.VALIDATED]:         new Set([T.COLLECTING]),
+  [T.COLLECTING]:        new Set([T.EVIDENCE_STORED, T.COLLECTION_FAILED]),
+  [T.COLLECTION_FAILED]: new Set([T.COLLECTING]),
+  [T.EVIDENCE_STORED]:   new Set([T.EVIDENCE_LOCKED]),
+  [T.EVIDENCE_LOCKED]:   new Set([T.SCORED]),
+  [T.SCORED]:            new Set([T.NARRATIVE_PENDING]),
+  [T.NARRATIVE_PENDING]: new Set([T.NARRATIVE_READY, T.NARRATIVE_FAILED]),
+  [T.NARRATIVE_FAILED]:  new Set([T.NARRATIVE_PENDING]),
+  [T.NARRATIVE_READY]:   new Set([T.DRAFT_RENDERED, T.RENDER_FAILED]),
+  [T.RENDER_FAILED]:     new Set([T.NARRATIVE_READY]),
+  [T.DRAFT_RENDERED]:    new Set([T.IN_REVIEW]),
+  [T.IN_REVIEW]:         new Set([T.APPROVED, T.APPROVAL_REJECTED]),
+  [T.APPROVAL_REJECTED]: new Set([T.IN_REVIEW]),
+  [T.APPROVED]:          new Set([T.PUBLISHED, T.PUBLISH_FAILED]),
+  [T.PUBLISH_FAILED]:    new Set([T.APPROVED]),
+  [T.PUBLISHED]:         new Set(), // genuinely terminal
 });
 
 // ---------------------------------------------------------------------------
 // Validation helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Check whether a transition from `from` to `to` is allowed.
- *
- * @param {string} from - Current lifecycle state.
- * @param {string} to   - Proposed next state.
- * @returns {boolean}
- */
 export function isValidTransition(from, to) {
   const allowed = TRANSITION_MAP[from];
   if (!allowed) return false;
   return allowed.has(to);
 }
 
-/**
- * Return the set of allowed next states for a given state.
- *
- * @param {string} state
- * @returns {Set<string>}
- */
 export function allowedTransitions(state) {
   return TRANSITION_MAP[state] || new Set();
 }
 
-/**
- * Check whether a state value is a known lifecycle state.
- *
- * @param {string} value
- * @returns {boolean}
- */
 export function isKnownState(value) {
   return Object.values(LIFECYCLE_STATE).includes(value);
 }

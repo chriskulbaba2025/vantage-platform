@@ -99,6 +99,10 @@
     "artifactKey": {
       "type": "string",
       "description": "Optional relevant artifact key."
+    },
+    "transitionIdempotencyKey": {
+      "type": "string",
+      "description": "Idempotency key for transition replay protection. Null for creation events."
     }
   }
 }

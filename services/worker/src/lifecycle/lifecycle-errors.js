@@ -1,14 +1,7 @@
 /**
- * Lifecycle Errors — Structured failure propagation for state machine operations.
- *
- * Every lifecycle error has a stable `code` for programmatic handling.
- *
+ * Lifecycle Errors — Structured failure propagation.
  * @module lifecycle/lifecycle-errors
  */
-
-// ---------------------------------------------------------------------------
-// Error codes
-// ---------------------------------------------------------------------------
 
 export const LIFECYCLE_ERROR_CODE = Object.freeze({
   AUDIT_NOT_FOUND:        "ERR_LIFECYCLE_AUDIT_NOT_FOUND",
@@ -17,18 +10,11 @@ export const LIFECYCLE_ERROR_CODE = Object.freeze({
   CONCURRENCY_CONFLICT:   "ERR_LIFECYCLE_CONCURRENCY_CONFLICT",
   INVALID_INPUT:          "ERR_LIFECYCLE_INVALID_INPUT",
   REPOSITORY_FAILURE:     "ERR_LIFECYCLE_REPOSITORY_FAILURE",
+  TRANSITION_IDEMPOTENCY_CONFLICT: "ERR_LIFECYCLE_TRANSITION_IDEMPOTENCY_CONFLICT",
+  TENANT_ISOLATION:       "ERR_LIFECYCLE_TENANT_ISOLATION",
 });
 
-// ---------------------------------------------------------------------------
-// Base error
-// ---------------------------------------------------------------------------
-
 export class LifecycleError extends Error {
-  /**
-   * @param {string} code
-   * @param {string} message
-   * @param {object} [detail]
-   */
   constructor(code, message, detail = {}) {
     super(message);
     this.name = "LifecycleError";
@@ -38,10 +24,6 @@ export class LifecycleError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Typed errors
-// ---------------------------------------------------------------------------
-
 export class AuditNotFoundError extends LifecycleError {
   constructor(auditId, detail = {}) {
     super(LIFECYCLE_ERROR_CODE.AUDIT_NOT_FOUND, `Audit not found: "${auditId}"`, { auditId, ...detail });
@@ -50,34 +32,26 @@ export class AuditNotFoundError extends LifecycleError {
 }
 
 export class DuplicateAuditError extends LifecycleError {
-  constructor(auditId, idempotencyKey, detail = {}) {
-    super(
-      LIFECYCLE_ERROR_CODE.DUPLICATE_AUDIT,
-      `Duplicate audit creation: idempotencyKey "${idempotencyKey}" already used for a different auditId`,
-      { auditId, idempotencyKey, ...detail },
-    );
+  constructor(detail = {}) {
+    super(LIFECYCLE_ERROR_CODE.DUPLICATE_AUDIT, "Duplicate audit creation", detail);
     this.name = "DuplicateAuditError";
   }
 }
 
 export class InvalidTransitionError extends LifecycleError {
   constructor(auditId, fromState, toState, detail = {}) {
-    super(
-      LIFECYCLE_ERROR_CODE.INVALID_TRANSITION,
+    super(LIFECYCLE_ERROR_CODE.INVALID_TRANSITION,
       `Invalid lifecycle transition: "${fromState}" → "${toState}" for audit "${auditId}"`,
-      { auditId, fromState, toState, ...detail },
-    );
+      { auditId, fromState, toState, ...detail });
     this.name = "InvalidTransitionError";
   }
 }
 
 export class ConcurrencyConflictError extends LifecycleError {
   constructor(auditId, detail = {}) {
-    super(
-      LIFECYCLE_ERROR_CODE.CONCURRENCY_CONFLICT,
-      `Concurrency conflict for audit "${auditId}": expected state or version does not match`,
-      { auditId, ...detail },
-    );
+    super(LIFECYCLE_ERROR_CODE.CONCURRENCY_CONFLICT,
+      `Concurrency conflict for audit "${auditId}"`,
+      { auditId, ...detail });
     this.name = "ConcurrencyConflictError";
   }
 }
@@ -93,5 +67,21 @@ export class RepositoryFailureError extends LifecycleError {
   constructor(message, detail = {}) {
     super(LIFECYCLE_ERROR_CODE.REPOSITORY_FAILURE, message, detail);
     this.name = "RepositoryFailureError";
+  }
+}
+
+export class TransitionIdempotencyConflictError extends LifecycleError {
+  constructor(auditId, transitionKey, detail = {}) {
+    super(LIFECYCLE_ERROR_CODE.TRANSITION_IDEMPOTENCY_CONFLICT,
+      `Transition idempotency conflict for audit "${auditId}" with key "${transitionKey}"`,
+      { auditId, transitionIdempotencyKey: transitionKey, ...detail });
+    this.name = "TransitionIdempotencyConflictError";
+  }
+}
+
+export class TenantIsolationError extends LifecycleError {
+  constructor(detail = {}) {
+    super(LIFECYCLE_ERROR_CODE.TENANT_ISOLATION, "Tenant isolation violation", detail);
+    this.name = "TenantIsolationError";
   }
 }
