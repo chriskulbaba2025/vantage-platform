@@ -515,28 +515,96 @@ for (const fn of artifactTestFiles) {
   }
 }
 
-// Production S3 command test
+// Production S3 command test + production-shaped stream enforcement
 const objectTestPath = resolve(
   __dirname, "..", "test-fixtures", "artifacts", "object-artifact-store.test.js",
 );
+let objectTestSrc = "";
+try { objectTestSrc = readFileSync(objectTestPath, "utf-8"); } catch { /* handled below */ }
+
 try {
-  const rawObj = readFileSync(objectTestPath, "utf-8");
-  if (/class\s+MockPutObjectCommand/.test(rawObj) &&
-      /class\s+MockGetObjectCommand/.test(rawObj) &&
-      /class\s+MockHeadObjectCommand/.test(rawObj)) {
+  if (/class\s+MockPutObjectCommand/.test(objectTestSrc) &&
+      /class\s+MockGetObjectCommand/.test(objectTestSrc) &&
+      /class\s+MockHeadObjectCommand/.test(objectTestSrc)) {
     pass("Production-compatible AWS command mock classes defined");
   } else {
     fail("Production-compatible AWS command mock classes defined",
       "Missing MockPutObjectCommand/MockGetObjectCommand/MockHeadObjectCommand classes");
   }
 
-  if (/commands:\s*MOCK_COMMANDS/.test(rawObj)) {
+  if (/commands:\s*MOCK_COMMANDS/.test(objectTestSrc)) {
     pass("Commands injected into createObjectArtifactStore");
   } else {
     fail("Commands injected into createObjectArtifactStore");
   }
 } catch (err) {
   fail("Object test check", err.message);
+}
+
+// Production-shaped S3 binary stream enforcement
+console.log("\n─ Production-shaped S3 binary stream tests ─");
+
+try {
+  if (!objectTestSrc) {
+    fail("Object test source not available");
+  } else {
+    if (/transformToByteArray/.test(objectTestSrc)) {
+      pass("transformToByteArray referenced in object test");
+    } else {
+      fail("transformToByteArray referenced in object test",
+        "Production-shaped binary stream test must reference transformToByteArray");
+    }
+
+    if (/transformToString.*NOT called/.test(objectTestSrc) ||
+        /transformToString.*not called/i.test(objectTestSrc) ||
+        /callLog\.includes.*transformToString/.test(objectTestSrc)) {
+      pass("transformToString exclusion enforced in test");
+    } else {
+      fail("transformToString exclusion enforced in test",
+        "Test must assert transformToString is NOT called for binary data");
+    }
+
+    // Verify required production-shaped body shapes are tested
+    const requiredBodyTests = [
+      { pattern: /dual.*Body.*transformToByteArray/i, name: "dual-method Body" },
+      { pattern: /async iterable.*stream/i, name: "async iterable stream" },
+      { pattern: /Buffer Body preserves/i, name: "Buffer Body" },
+      { pattern: /Uint8Array Body preserves/i, name: "Uint8Array Body" },
+    ];
+
+    for (const { pattern, name } of requiredBodyTests) {
+      if (pattern.test(objectTestSrc)) {
+        pass(`Production body shape tested: ${name}`);
+      } else {
+        fail(`Production body shape tested: ${name}`, "Missing test");
+      }
+    }
+
+    // Verify binary bytes fixture contains non-UTF-8 sequences
+    if (/0x00.*0xff/i.test(objectTestSrc) || /BINARY_BYTES/.test(objectTestSrc)) {
+      pass("Non-UTF-8 binary fixture present");
+    } else {
+      fail("Non-UTF-8 binary fixture present",
+        "Test must use binary bytes containing invalid UTF-8 sequences");
+    }
+
+    // Verify readResponseBody priority order in source
+    const sourceObj = readFileSync(
+      resolve(STORAGE_DIR, "object-artifact-store.js"), "utf-8",
+    );
+    const tbaIdx = sourceObj.indexOf("transformToByteArray");
+    const ttsIdx = sourceObj.indexOf("transformToString");
+    if (tbaIdx > 0 && ttsIdx > 0 && tbaIdx < ttsIdx) {
+      pass("readResponseBody: transformToByteArray before transformToString");
+    } else if (tbaIdx > 0 && ttsIdx < 0) {
+      pass("readResponseBody: transformToByteArray present (transformToString absent or after)");
+    } else {
+      fail("readResponseBody: transformToByteArray before transformToString",
+        "transformToByteArray must be checked before transformToString in readResponseBody()");
+    }
+  }
+} catch (err) {
+  fail("Production-shaped stream test enforcement", err.message);
 }
 
 // ---------------------------------------------------------------------------

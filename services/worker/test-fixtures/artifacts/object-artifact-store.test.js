@@ -5,9 +5,15 @@
  * the object-storage implementation using a mock client and mock AWS
  * command constructors.
  *
+ * Also includes production-shaped S3 binary stream tests that verify
+ * exact-byte preservation through every AWS SDK Body shape.
+ *
  * Zero live cloud calls. Zero provider calls. Deterministic.
  */
 
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { runContractTests, runFailureContractTests } from "./contract-tests.js";
 import { createObjectArtifactStore } from "../../src/storage/object-artifact-store.js";
 
@@ -192,4 +198,280 @@ runFailureContractTests("object", (opts = {}) => {
   });
   store._mockClient = mockClient;
   return store;
+});
+
+// =========================================================================
+// Production-shaped S3 binary stream tests
+//
+// These tests verify that readResponseBody() always prefers binary-exact
+// methods over text-based methods, even when the AWS SDK v3 response Body
+// exposes both transformToByteArray() and transformToString().
+// =========================================================================
+
+function sha256(buf) {
+  return createHash("sha256").update(buf).digest("hex");
+}
+
+const TEST_SCOPE = Object.freeze({
+  tenantId: "stream-tenant",
+  clientId: "stream-client",
+  auditId: "00000000-0000-0000-0000-00000000ffff",
+});
+
+// -----------------------------------------------------------------------
+// Mock Body that exposes BOTH transformToByteArray AND transformToString
+// with binary bytes that are NOT valid UTF-8.
+// -----------------------------------------------------------------------
+
+const BINARY_BYTES = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0x41, 0xc3, 0x28]);
+
+function createDualMethodBody(rawBytes, callLog) {
+  return {
+    // transformToByteArray — binary-exact, MUST be called
+    async transformToByteArray() {
+      callLog.push("transformToByteArray");
+      return new Uint8Array(rawBytes);
+    },
+    // transformToString — MUST NOT be called for binary data
+    async transformToString(_encoding) {
+      callLog.push("transformToString");
+      // If called, it would mangle the bytes through UTF-8
+      return Buffer.from(rawBytes).toString("utf-8");
+    },
+  };
+}
+
+// -----------------------------------------------------------------------
+// test: dual-method body — transformToByteArray preferred
+// -----------------------------------------------------------------------
+
+test("object [production-shape]: dual Body — transformToByteArray called, transformToString NOT called", async () => {
+  const callLog = [];
+
+  const mockClient = {
+    store: new Map(),
+    async send(command) {
+      if (command._name === "PutObjectCommand") {
+        this.store.set(command.Key, command.Body);
+        return {};
+      }
+      if (command._name === "GetObjectCommand") {
+        const stored = this.store.get(command.Key);
+        if (!stored) {
+          const err = new Error("NoSuchKey"); err.name = "NoSuchKey"; err.Code = "NoSuchKey"; throw err;
+        }
+        return { Body: createDualMethodBody(stored, callLog) };
+      }
+      if (command._name === "HeadObjectCommand") {
+        if (!this.store.has(command.Key)) {
+          const err = new Error("NotFound"); err.name = "NotFound"; err.Code = "NotFound";
+          err.$metadata = { httpStatusCode: 404 }; throw err;
+        }
+        return {};
+      }
+      throw new Error(`Unknown: ${command._name}`);
+    },
+  };
+
+  const store = createObjectArtifactStore({
+    client: mockClient,
+    bucket: "test-bucket",
+    commands: MOCK_COMMANDS,
+  });
+
+  // PUT binary bytes
+  const expectedSha = sha256(BINARY_BYTES);
+  const record = await store.put({
+    bytes: BINARY_BYTES,
+    contentType: "application/octet-stream",
+    scope: { ...TEST_SCOPE, category: "raw", artifactName: "binary.bin" },
+  });
+
+  // Assert record metadata is correct
+  assert.equal(record.bytes, BINARY_BYTES.length, "record.bytes must match");
+  assert.equal(record.sha256, expectedSha, "record.sha256 must match computed SHA");
+  assert.equal(record.contentType, "application/octet-stream");
+
+  // GET — must return identical bytes
+  const retrieved = await store.get(record.key);
+  assert.ok(Buffer.isBuffer(retrieved), "get must return a Buffer");
+  assert.ok(retrieved.equals(BINARY_BYTES), "retrieved bytes must be identical to input");
+  assert.equal(retrieved.length, BINARY_BYTES.length);
+
+  // SHA-256 of retrieved bytes must match
+  const retrievedSha = sha256(retrieved);
+  assert.equal(retrievedSha, expectedSha, "SHA-256 of retrieved bytes must match");
+
+  // verify() must return true
+  const verified = await store.verify(record);
+  assert.equal(verified, true, "verify(record) must return true");
+
+  // transformToByteArray was called, transformToString was NOT
+  assert.ok(callLog.includes("transformToByteArray"), "transformToByteArray must be called");
+  assert.ok(!callLog.includes("transformToString"), "transformToString must NOT be called");
+});
+
+// -----------------------------------------------------------------------
+// test: async iterable (Node stream) Body
+// -----------------------------------------------------------------------
+
+test("object [production-shape]: async iterable stream Body preserves exact bytes", async () => {
+  const mockClient = {
+    store: new Map(),
+    async send(command) {
+      if (command._name === "PutObjectCommand") {
+        this.store.set(command.Key, command.Body);
+        return {};
+      }
+      if (command._name === "GetObjectCommand") {
+        const stored = this.store.get(command.Key);
+        if (!stored) {
+          const err = new Error("NoSuchKey"); err.name = "NoSuchKey"; err.Code = "NoSuchKey"; throw err;
+        }
+        // Return an async iterable (simulates Node Readable stream)
+        return {
+          Body: {
+            [Symbol.asyncIterator]() {
+              let i = 0;
+              const buf = stored;
+              const chunkSize = 3;
+              return {
+                async next() {
+                  if (i >= buf.length) return { done: true };
+                  const end = Math.min(i + chunkSize, buf.length);
+                  const chunk = buf.subarray(i, end);
+                  i = end;
+                  return { value: chunk, done: false };
+                },
+              };
+            },
+          },
+        };
+      }
+      if (command._name === "HeadObjectCommand") {
+        if (!this.store.has(command.Key)) {
+          const err = new Error("NotFound"); err.name = "NotFound"; err.Code = "NotFound";
+          err.$metadata = { httpStatusCode: 404 }; throw err;
+        }
+        return {};
+      }
+      throw new Error(`Unknown: ${command._name}`);
+    },
+  };
+
+  const store = createObjectArtifactStore({
+    client: mockClient,
+    bucket: "test-bucket",
+    commands: MOCK_COMMANDS,
+  });
+
+  const expectedSha = sha256(BINARY_BYTES);
+  const record = await store.put({
+    bytes: BINARY_BYTES,
+    contentType: "application/octet-stream",
+    scope: { ...TEST_SCOPE, category: "raw", artifactName: "stream.bin" },
+  });
+
+  const retrieved = await store.get(record.key);
+  assert.ok(retrieved.equals(BINARY_BYTES), "stream-retrieved bytes must be identical");
+  assert.equal(sha256(retrieved), expectedSha, "stream SHA must match");
+  assert.equal(await store.verify(record), true, "verify must pass for stream body");
+});
+
+// -----------------------------------------------------------------------
+// test: Buffer Body (most common production shape)
+// -----------------------------------------------------------------------
+
+test("object [production-shape]: Buffer Body preserves exact binary bytes", async () => {
+  const mockClient = {
+    store: new Map(),
+    async send(command) {
+      if (command._name === "PutObjectCommand") {
+        this.store.set(command.Key, command.Body);
+        return {};
+      }
+      if (command._name === "GetObjectCommand") {
+        const stored = this.store.get(command.Key);
+        if (!stored) {
+          const err = new Error("NoSuchKey"); err.name = "NoSuchKey"; err.Code = "NoSuchKey"; throw err;
+        }
+        return { Body: Buffer.from(stored) };
+      }
+      if (command._name === "HeadObjectCommand") {
+        if (!this.store.has(command.Key)) {
+          const err = new Error("NotFound"); err.name = "NotFound"; err.Code = "NotFound";
+          err.$metadata = { httpStatusCode: 404 }; throw err;
+        }
+        return {};
+      }
+      throw new Error(`Unknown: ${command._name}`);
+    },
+  };
+
+  const store = createObjectArtifactStore({
+    client: mockClient,
+    bucket: "test-bucket",
+    commands: MOCK_COMMANDS,
+  });
+
+  const expectedSha = sha256(BINARY_BYTES);
+  const record = await store.put({
+    bytes: BINARY_BYTES,
+    contentType: "application/octet-stream",
+    scope: { ...TEST_SCOPE, category: "raw", artifactName: "buf.bin" },
+  });
+
+  const retrieved = await store.get(record.key);
+  assert.ok(retrieved.equals(BINARY_BYTES), "Buffer-retrieved bytes must be identical");
+  assert.equal(sha256(retrieved), expectedSha);
+  assert.equal(await store.verify(record), true);
+});
+
+// -----------------------------------------------------------------------
+// test: Uint8Array Body
+// -----------------------------------------------------------------------
+
+test("object [production-shape]: Uint8Array Body preserves exact binary bytes", async () => {
+  const mockClient = {
+    store: new Map(),
+    async send(command) {
+      if (command._name === "PutObjectCommand") {
+        this.store.set(command.Key, command.Body);
+        return {};
+      }
+      if (command._name === "GetObjectCommand") {
+        const stored = this.store.get(command.Key);
+        if (!stored) {
+          const err = new Error("NoSuchKey"); err.name = "NoSuchKey"; err.Code = "NoSuchKey"; throw err;
+        }
+        return { Body: new Uint8Array(stored) };
+      }
+      if (command._name === "HeadObjectCommand") {
+        if (!this.store.has(command.Key)) {
+          const err = new Error("NotFound"); err.name = "NotFound"; err.Code = "NotFound";
+          err.$metadata = { httpStatusCode: 404 }; throw err;
+        }
+        return {};
+      }
+      throw new Error(`Unknown: ${command._name}`);
+    },
+  };
+
+  const store = createObjectArtifactStore({
+    client: mockClient,
+    bucket: "test-bucket",
+    commands: MOCK_COMMANDS,
+  });
+
+  const expectedSha = sha256(BINARY_BYTES);
+  const record = await store.put({
+    bytes: BINARY_BYTES,
+    contentType: "application/octet-stream",
+    scope: { ...TEST_SCOPE, category: "raw", artifactName: "u8.bin" },
+  });
+
+  const retrieved = await store.get(record.key);
+  assert.ok(retrieved.equals(BINARY_BYTES), "Uint8Array-retrieved bytes must be identical");
+  assert.equal(sha256(retrieved), expectedSha);
+  assert.equal(await store.verify(record), true);
 });

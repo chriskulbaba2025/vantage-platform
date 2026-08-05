@@ -370,32 +370,62 @@ function buildRecord(input, artifactKey, computedSha, byteLength, now) {
 
 /**
  * Read body bytes from a GetObject-style response.
+ *
+ * Priority order (exact binary preservation):
+ *   1. Buffer                    — already raw bytes
+ *   2. Uint8Array                — raw bytes, zero-copy
+ *   3. transformToByteArray()    — AWS SDK v3 native binary method
+ *   4. Node / async-iterable stream — collect Buffer chunks
+ *   5. string                    — already a string (treat as UTF-8)
+ *   6. transformToString()       — LAST resort text fallback;
+ *                                  may corrupt binary data
+ *
+ * transformToByteArray() is ALWAYS preferred over transformToString()
+ * because the latter re-encodes through UTF-8 and will mangle any byte
+ * sequence that is not valid UTF-8.
  */
 async function readResponseBody(response) {
   if (!response || !response.Body) return Buffer.alloc(0);
 
   const body = response.Body;
 
+  // 1. Already a Buffer — zero-copy
   if (Buffer.isBuffer(body)) return body;
+
+  // 2. Uint8Array — zero-copy
   if (body instanceof Uint8Array) return Buffer.from(body);
+
+  // 3. AWS SDK v3 transformToByteArray — binary-exact
+  if (typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+
+  // 4. Node / async-iterable stream — collect raw chunks
+  if (typeof body.on === "function" || typeof body[Symbol.asyncIterator] === "function") {
+    const chunks = [];
+    for await (const chunk of body) {
+      if (Buffer.isBuffer(chunk)) {
+        chunks.push(chunk);
+      } else if (chunk instanceof Uint8Array) {
+        chunks.push(Buffer.from(chunk));
+      } else if (typeof chunk === "string") {
+        chunks.push(Buffer.from(chunk, "utf-8"));
+      } else {
+        chunks.push(Buffer.from(String(chunk), "utf-8"));
+      }
+    }
+    return Buffer.concat(chunks);
+  }
+
+  // 5. Plain string
   if (typeof body === "string") return Buffer.from(body, "utf-8");
 
+  // 6. transformToString — LAST resort text fallback
   if (typeof body.transformToString === "function") {
     const str = await body.transformToString("utf-8");
     return Buffer.from(str, "utf-8");
   }
 
-  if (typeof body.transformToByteArray === "function") {
-    return Buffer.from(await body.transformToByteArray());
-  }
-
-  if (typeof body.on === "function") {
-    const chunks = [];
-    for await (const chunk of body) {
-      chunks.push(typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : Buffer.from(chunk));
-    }
-    return Buffer.concat(chunks);
-  }
-
+  // Ultimate fallback
   return Buffer.from(String(body), "utf-8");
 }
