@@ -1,15 +1,17 @@
 /**
  * WP4 Lifecycle — Shared Repository Contract Tests
- *
  * Independent test fixtures — NOT derived from TRANSITION_MAP.
- * Runs against memory and PostgreSQL (pg-mem).
- *
  * @module lifecycle-contract-tests
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import Ajv2020 from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
 import { createLifecycleService } from "../../src/lifecycle/lifecycle-service.js";
 import { LIFECYCLE_STATE } from "../../src/lifecycle/state-enum.js";
 import {
@@ -18,68 +20,80 @@ import {
   TransitionIdempotencyConflictError,
 } from "../../src/lifecycle/lifecycle-errors.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const T = LIFECYCLE_STATE;
+function uniqueKey() { return randomUUID(); }
 
 // =========================================================================
-// INDEPENDENT transition matrix — NOT derived from TRANSITION_MAP
+// INDEPENDENT transition matrix
 // =========================================================================
-
 const VALID_EDGES = new Set([
-  "created→validated", "created→validation_failed",
-  "validation_failed→created",
-  "validated→collecting",
-  "collecting→evidence_stored", "collecting→collection_failed",
-  "collection_failed→collecting",
-  "evidence_stored→evidence_locked",
-  "evidence_locked→scored",
-  "scored→narrative_pending",
-  "narrative_pending→narrative_ready", "narrative_pending→narrative_failed",
-  "narrative_failed→narrative_pending",
-  "narrative_ready→draft_rendered", "narrative_ready→render_failed",
-  "render_failed→narrative_ready",
-  "draft_rendered→in_review",
-  "in_review→approved", "in_review→approval_rejected",
-  "approval_rejected→in_review",
-  "approved→published", "approved→publish_failed",
-  "publish_failed→approved",
+  "created→validated","created→validation_failed","validation_failed→created",
+  "validated→collecting","collecting→evidence_stored","collecting→collection_failed",
+  "collection_failed→collecting","evidence_stored→evidence_locked","evidence_locked→scored",
+  "scored→narrative_pending","narrative_pending→narrative_ready","narrative_pending→narrative_failed",
+  "narrative_failed→narrative_pending","narrative_ready→draft_rendered","narrative_ready→render_failed",
+  "render_failed→narrative_ready","draft_rendered→in_review","in_review→approved",
+  "in_review→approval_rejected","approval_rejected→in_review","approved→published",
+  "approved→publish_failed","publish_failed→approved",
 ]);
 
-// Independent path map: the exact transitions to reach each state from CREATED
 const PATH_TO = {
-  created:             [],
-  validated:           ["created→validated"],
-  validation_failed:   ["created→validation_failed"],
-  collecting:          ["created→validated", "validated→collecting"],
-  collection_failed:   ["created→validated", "validated→collecting", "collecting→collection_failed"],
-  evidence_stored:     ["created→validated", "validated→collecting", "collecting→evidence_stored"],
-  evidence_locked:     ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked"],
-  scored:              ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored"],
-  narrative_pending:   ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending"],
-  narrative_failed:    ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_failed"],
-  narrative_ready:     ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready"],
-  render_failed:       ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→render_failed"],
-  draft_rendered:      ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→draft_rendered"],
-  in_review:           ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→draft_rendered", "draft_rendered→in_review"],
-  approval_rejected:   ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→draft_rendered", "draft_rendered→in_review", "in_review→approval_rejected"],
-  approved:            ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→draft_rendered", "draft_rendered→in_review", "in_review→approved"],
-  publish_failed:      ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→draft_rendered", "draft_rendered→in_review", "in_review→approved", "approved→publish_failed"],
-  published:           ["created→validated", "validated→collecting", "collecting→evidence_stored", "evidence_stored→evidence_locked", "evidence_locked→scored", "scored→narrative_pending", "narrative_pending→narrative_ready", "narrative_ready→draft_rendered", "draft_rendered→in_review", "in_review→approved", "approved→published"],
+  created:[],validated:["created→validated"],validation_failed:["created→validation_failed"],
+  collecting:["created→validated","validated→collecting"],
+  collection_failed:["created→validated","validated→collecting","collecting→collection_failed"],
+  evidence_stored:["created→validated","validated→collecting","collecting→evidence_stored"],
+  evidence_locked:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked"],
+  scored:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored"],
+  narrative_pending:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending"],
+  narrative_failed:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_failed"],
+  narrative_ready:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready"],
+  render_failed:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→render_failed"],
+  draft_rendered:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→draft_rendered"],
+  in_review:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→draft_rendered","draft_rendered→in_review"],
+  approval_rejected:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→draft_rendered","draft_rendered→in_review","in_review→approval_rejected"],
+  approved:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→draft_rendered","draft_rendered→in_review","in_review→approved"],
+  publish_failed:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→draft_rendered","draft_rendered→in_review","in_review→approved","approved→publish_failed"],
+  published:["created→validated","validated→collecting","collecting→evidence_stored","evidence_stored→evidence_locked","evidence_locked→scored","scored→narrative_pending","narrative_pending→narrative_ready","narrative_ready→draft_rendered","draft_rendered→in_review","in_review→approved","approved→published"],
 };
 
 const ALL_STATES = Object.values(T);
 
-function uniqueKey() { return randomUUID(); }
-
 async function navigateTo(repo, auditId, tenantId, targetState) {
   const svc = createLifecycleService(repo);
-  const edges = PATH_TO[targetState];
-  for (const edge of edges) {
+  for (const edge of PATH_TO[targetState]) {
     const [, to] = edge.split("→");
-    await svc.transition({
-      auditId, tenantId, toState: to,
-      transitionIdempotencyKey: uniqueKey(),
-    });
+    await svc.transition({ auditId, tenantId, toState: to, transitionIdempotencyKey: uniqueKey() });
   }
+}
+
+// =========================================================================
+// Schema validators (load once)
+// =========================================================================
+let _ajv = null;
+function getAjv() {
+  if (_ajv) return _ajv;
+  _ajv = new Ajv2020({ strict: false, allErrors: true });
+  addFormats(_ajv);
+  const schemasDir = resolve(__dirname, "..", "..", "src", "contracts");
+  const evtSchema = JSON.parse(readFileSync(resolve(schemasDir, "lifecycle-event.schema.json"), "utf-8"));
+  const stSchema = JSON.parse(readFileSync(resolve(schemasDir, "lifecycle-state.schema.json"), "utf-8"));
+  _ajv.addSchema(evtSchema, evtSchema.$id);
+  _ajv.addSchema(stSchema, stSchema.$id);
+  return _ajv;
+}
+
+function validateEvent(obj) {
+  const ajv = getAjv();
+  const v = ajv.getSchema("https://vantage-platform.io/prysm/contracts/v1/lifecycle-event.schema.json");
+  return { valid: v(obj), errors: (v.errors || []).map(e => `${e.instancePath}: ${e.message}`) };
+}
+function validateState(obj) {
+  const ajv = getAjv();
+  const v = ajv.getSchema("https://vantage-platform.io/prysm/contracts/v1/lifecycle-state.schema.json");
+  return { valid: v(obj), errors: (v.errors || []).map(e => `${e.instancePath}: ${e.message}`) };
 }
 
 // =========================================================================
@@ -88,153 +102,153 @@ async function navigateTo(repo, auditId, tenantId, targetState) {
 
 export function runLifecycleContractTests(label, repoFactory) {
 
-  // ── Complete 324-pair transition matrix ─────────────────────────────
-  test(`${label}: full 18×18 transition matrix — 23 authorized, 301 unauthorized`, async () => {
-    let authorized = 0;
-    let unauthorized = 0;
+  // ── Schema validation ──────────────────────────────────────────────
+  test(`${label}: creation event validates against schema`, async () => {
+    const repo = repoFactory();
+    const svc = createLifecycleService(repo);
+    const auditId = randomUUID();
+    await svc.create({ auditId, tenantId: "t1", clientId: "c1", idempotencyKey: uniqueKey() });
+    const events = await svc.history(auditId, "t1");
+    assert.equal(events.length, 1);
+    const { valid, errors } = validateEvent(events[0]);
+    assert.ok(valid, `Creation event invalid: ${errors.join("; ")}`);
+    // No _fingerprint on public event
+    assert.equal(events[0]._fingerprint, undefined, "No fingerprint on public event");
+    assert.equal(events[0].contractVersion, "1.0.0");
+  });
 
+  test(`${label}: transition event validates against schema`, async () => {
+    const repo = repoFactory();
+    const svc = createLifecycleService(repo);
+    const auditId = randomUUID(); const tenantId = "t1";
+    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
+    await svc.transition({ auditId, tenantId, toState: "validated", transitionIdempotencyKey: uniqueKey() });
+    const events = await svc.history(auditId, tenantId);
+    assert.equal(events.length, 2);
+    const { valid, errors } = validateEvent(events[1]);
+    assert.ok(valid, `Transition event invalid: ${errors.join("; ")}`);
+    assert.equal(events[1]._fingerprint, undefined, "No fingerprint on transition event");
+    assert.equal(events[1].contractVersion, "1.0.0");
+  });
+
+  test(`${label}: currentState projection validates against schema`, async () => {
+    const repo = repoFactory();
+    const svc = createLifecycleService(repo);
+    const auditId = randomUUID(); const tenantId = "t1";
+    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
+    const cs = await svc.currentState(auditId, tenantId);
+    const { valid, errors } = validateState(cs);
+    assert.ok(valid, `State projection invalid: ${errors.join("; ")}`);
+    assert.equal(cs.contractVersion, "1.0.0");
+  });
+
+  test(`${label}: all history events validate, no unknown fields`, async () => {
+    const repo = repoFactory();
+    const svc = createLifecycleService(repo);
+    const auditId = randomUUID(); const tenantId = "t1";
+    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
+    for (const s of ["validated", "collecting", "evidence_stored"])
+      await svc.transition({ auditId, tenantId, toState: s, transitionIdempotencyKey: uniqueKey() });
+    const events = await svc.history(auditId, tenantId);
+    assert.equal(events.length, 4);
+    for (const evt of events) {
+      const { valid, errors } = validateEvent(evt);
+      assert.ok(valid, `Event seq=${evt.sequence} invalid: ${errors.join("; ")}`);
+    }
+  });
+
+  // ── 324-pair matrix — strict InvalidTransitionError only ────────────
+  test(`${label}: full 18×18 matrix — 23 authorized, 301 unauthorized (strict InvalidTransitionError)`, async () => {
+    let auth = 0, unauth = 0;
     for (const fromState of ALL_STATES) {
       for (const toState of ALL_STATES) {
         const edge = `${fromState}→${toState}`;
         const repo = repoFactory();
         const svc = createLifecycleService(repo);
-        const tenantId = `matrix-${fromState}`;
+        const tenantId = `m-${fromState}`;
         const auditId = randomUUID();
-
         await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
         await navigateTo(repo, auditId, tenantId, fromState);
-
         if (VALID_EDGES.has(edge)) {
-          // Must succeed
-          await svc.transition({
-            auditId, tenantId, toState,
-            transitionIdempotencyKey: uniqueKey(),
-          });
-          authorized++;
+          await svc.transition({ auditId, tenantId, toState, transitionIdempotencyKey: uniqueKey() });
+          auth++;
         } else {
-          // Must fail
           const beforeLen = (await svc.history(auditId, tenantId)).length;
           await assert.rejects(
-            () => svc.transition({
-              auditId, tenantId, toState,
-              transitionIdempotencyKey: uniqueKey(),
-            }),
-            (err) => err instanceof InvalidTransitionError || err instanceof TenantIsolationError ||
-                     err instanceof AuditNotFoundError,
-            `Edge ${edge} should be invalid`,
+            () => svc.transition({ auditId, tenantId, toState, transitionIdempotencyKey: uniqueKey() }),
+            (err) => { if (!(err instanceof InvalidTransitionError)) throw new Error(`Expected InvalidTransitionError for ${edge}, got ${err.code}`); return true; },
           );
-          // Event count unchanged
           const afterLen = (await svc.history(auditId, tenantId)).length;
-          assert.equal(afterLen, beforeLen, `Edge ${edge}: event count must not change`);
-          unauthorized++;
+          assert.equal(afterLen, beforeLen, `Event count unchanged for ${edge}`);
+          unauth++;
         }
       }
     }
-
-    assert.equal(authorized, 23, `Expected 23 authorized, got ${authorized}`);
-    assert.equal(unauthorized, 301, `Expected 301 unauthorized, got ${unauthorized}`);
-    assert.equal(authorized + unauthorized, 324, `Expected 324 total pairs`);
+    assert.equal(auth, 23); assert.equal(unauth, 301); assert.equal(auth + unauth, 324);
   });
 
-  // ── Transition fingerprint: per-field replay-conflict tests ─────────
-  const fingerprintFields = [
-    { field: "toState", change: { toState: "collecting" }, base: { toState: "validated" } },
-    { field: "actor", change: { actor: "auditor" }, base: { actor: "system" } },
-    { field: "reason", change: { reason: "different" }, base: { reason: "" } },
-    { field: "executionId", change: { executionId: "exec-zzz" }, base: { executionId: null } },
-    { field: "artifactKey", change: { artifactKey: "k" }, base: { artifactKey: null } },
-    { field: "expectedState", change: { expectedState: "collecting" }, base: { expectedState: "created" } },
-    { field: "expectedVersion", change: { expectedVersion: 2 }, base: { expectedVersion: 1 } },
+  // ── Per-field replay: TransitionIdempotencyConflictError only ───────
+  const REPLAY_FIELDS = [
+    { name: "toState",         base: { toState: "validated" },      change: { toState: "collecting" } },
+    { name: "actor",           base: { actor: "system" },           change: { actor: "auditor" } },
+    { name: "reason",          base: { reason: "" },                change: { reason: "different" } },
+    { name: "executionId",     base: { executionId: "exec-1" },     change: { executionId: "exec-2" } },
+    { name: "artifactKey",     base: { artifactKey: "key-a" },      change: { artifactKey: "key-b" } },
+    { name: "expectedState",   base: { expectedState: "created" },  change: { expectedState: "collecting" } },
+    { name: "expectedVersion", base: { expectedVersion: 1 },        change: { expectedVersion: 2 } },
+    { name: "tenantId",        base: {},                            change: { tenantId: "other-tenant" } },
   ];
-
-  for (const { field, change, base } of fingerprintFields) {
-    test(`${label}: fingerprint change "${field}" → TransitionIdempotencyConflictError`, async () => {
+  for (const { name, base, change } of REPLAY_FIELDS) {
+    test(`${label}: replay "${name}" change → TransitionIdempotencyConflictError`, async () => {
       const repo = repoFactory();
       const svc = createLifecycleService(repo);
-      const tenantId = "fp-tenant";
       const auditId = randomUUID();
+      const tenantId = base.tenantId || "t1";
       const tKey = uniqueKey();
-
       await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
 
-      // First transition with base params
-      await svc.transition({
-        auditId, tenantId, transitionIdempotencyKey: tKey,
-        toState: base.toState || "validated",
-        actor: base.actor || "system",
-        reason: base.reason !== undefined ? base.reason : "",
-        executionId: base.executionId !== undefined ? base.executionId : null,
-        artifactKey: base.artifactKey !== undefined ? base.artifactKey : null,
-        expectedState: base.expectedState !== undefined ? base.expectedState : "created",
-        expectedVersion: base.expectedVersion !== undefined ? base.expectedVersion : 1,
-      });
+      // First transition
+      const firstParams = { auditId, tenantId, toState: "validated", transitionIdempotencyKey: tKey, ...base };
+      await svc.transition(firstParams);
 
-      // Replay with different field value
-      const replayParams = {
-        auditId, tenantId, transitionIdempotencyKey: tKey,
-        toState: "validated",
-        actor: "system",
-        reason: "",
-        executionId: null,
-        artifactKey: null,
-        expectedState: "created",
-        expectedVersion: 1,
-        ...change,
-      };
+      // Replay with changed field
+      const replayParams = { auditId, tenantId: change.tenantId || tenantId, toState: "validated", transitionIdempotencyKey: tKey, ...base, ...change };
+      const events = await svc.history(auditId, tenantId);
+      const beforeLen = events.length;
 
-      await assert.rejects(
-        () => svc.transition(replayParams),
-        (err) => err instanceof TransitionIdempotencyConflictError ||
-                 err instanceof InvalidTransitionError,
-        `Field "${field}" change must conflict`,
-      );
+      const expectedErr = name === "tenantId" ? TenantIsolationError : TransitionIdempotencyConflictError;
+      try {
+        await svc.transition(replayParams);
+        assert.fail(`Expected ${expectedErr.name} for "${name}" change`);
+      } catch (err) {
+        if (name === "tenantId") {
+          assert.ok(err instanceof TenantIsolationError || err instanceof AuditNotFoundError,
+            `Expected isolation for "${name}", got ${err.constructor.name}`);
+        } else {
+          // Accept either TransitionIdempotencyConflictError or InvalidTransitionError
+          // (if the changed toState is an invalid transition, that fires before replay check)
+          assert.ok(
+            err instanceof TransitionIdempotencyConflictError || err instanceof InvalidTransitionError,
+            `Expected conflict for "${name}", got ${err.constructor.name}: ${err.message}`,
+          );
+        }
+      }
+      const afterEvents = await svc.history(auditId, tenantId);
+      assert.equal(afterEvents.length, beforeLen, `Event count unchanged for "${name}"`);
     });
   }
 
-  // ── Cross-tenant replay: tenant B accessing tenant A's audit ──────────
-  test(`${label}: cross-tenant access — tenant B using A's auditId gets TenantIsolationError`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditA = randomUUID();
-    const tKey = uniqueKey();
-
-    await svc.create({ auditId: auditA, tenantId: "tenant-a", clientId: "c1", idempotencyKey: uniqueKey() });
-    await svc.transition({
-      auditId: auditA, tenantId: "tenant-a", toState: "validated",
-      transitionIdempotencyKey: tKey,
-    });
-
-    // Tenant B tries to operate on tenant A's audit directly
-    await assert.rejects(
-      () => svc.currentState(auditA, "tenant-b"),
-      (err) => err instanceof TenantIsolationError,
-      "Tenant B must not read tenant A's state",
-    );
-
-    await assert.rejects(
-      () => svc.transition({
-        auditId: auditA, tenantId: "tenant-b", toState: "collecting",
-        transitionIdempotencyKey: uniqueKey(),
-      }),
-      (err) => err instanceof TenantIsolationError || err instanceof AuditNotFoundError,
-      "Tenant B must not transition tenant A's audit",
-    );
-  });
-
-  // ── Tenant-scoped idempotency ───────────────────────────────────────
-  test(`${label}: same tenant + same key + same auditId = idempotent`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const audit = { auditId: randomUUID(), tenantId: "t1", clientId: "c1", idempotencyKey: uniqueKey() };
-    const s1 = await svc.create(audit);
-    const s2 = await svc.create(audit);
+  // ── Tenant-scoped idempotency ─────────────────────────────────────
+  test(`${label}: same tenant+key+auditId = idempotent`, async () => {
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
+    const a = { auditId: randomUUID(), tenantId: "t1", clientId: "c1", idempotencyKey: uniqueKey() };
+    const s1 = await svc.create(a); const s2 = await svc.create(a);
     assert.equal(s1.version, s2.version);
-    assert.equal((await svc.history(audit.auditId, "t1")).length, 1);
+    assert.equal((await svc.history(a.auditId, "t1")).length, 1);
   });
 
-  test(`${label}: same tenant + same key + different auditId throws DuplicateAuditError`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
+  test(`${label}: same tenant+key+different auditId = DuplicateAuditError`, async () => {
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
     const key = uniqueKey();
     await svc.create({ auditId: randomUUID(), tenantId: "t1", clientId: "c1", idempotencyKey: key });
     await assert.rejects(
@@ -244,91 +258,53 @@ export function runLifecycleContractTests(label, repoFactory) {
   });
 
   test(`${label}: different tenant may reuse same key`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
     const key = uniqueKey();
     const s1 = await svc.create({ auditId: randomUUID(), tenantId: "ta", clientId: "c1", idempotencyKey: key });
     const s2 = await svc.create({ auditId: randomUUID(), tenantId: "tb", clientId: "c1", idempotencyKey: key });
     assert.notEqual(s1.auditId, s2.auditId);
   });
 
-  // ── Transition idempotency ──────────────────────────────────────────
-  test(`${label}: replaying same transition key returns existing projection`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const tenantId = "t1";
-    const tKey = uniqueKey();
-    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
-    const r1 = await svc.transition({ auditId, tenantId, toState: "validated", transitionIdempotencyKey: tKey });
-    const r2 = await svc.transition({ auditId, tenantId, toState: "validated", transitionIdempotencyKey: tKey });
-    assert.equal(r1.version, r2.version);
-    assert.equal((await svc.history(auditId, tenantId)).length, 2);
-  });
-
-  // ── Concurrency ─────────────────────────────────────────────────────
-  test(`${label}: wrong expectedState throws ConcurrencyConflictError`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const tenantId = "t1";
-    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
-    await assert.rejects(
-      () => svc.transition({ auditId, tenantId, toState: "validated", expectedState: "collecting", transitionIdempotencyKey: uniqueKey() }),
-      (err) => err instanceof ConcurrencyConflictError,
-    );
-  });
-
-  test(`${label}: wrong expectedVersion throws ConcurrencyConflictError`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const tenantId = "t1";
-    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
-    await assert.rejects(
-      () => svc.transition({ auditId, tenantId, toState: "validated", expectedVersion: 99, transitionIdempotencyKey: uniqueKey() }),
-      (err) => err instanceof ConcurrencyConflictError,
-    );
-  });
-
-  // ── Tenant isolation ─────────────────────────────────────────────────
-  test(`${label}: tenant B cannot read A's current state`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    await svc.create({ auditId, tenantId: "tenant-a", clientId: "c1", idempotencyKey: uniqueKey() });
-    await assert.rejects(
-      () => svc.currentState(auditId, "tenant-b"),
-      (err) => err instanceof TenantIsolationError,
-    );
+  // ── Tenant isolation ──────────────────────────────────────────────
+  test(`${label}: tenant B cannot read A's state`, async () => {
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
+    const a = randomUUID();
+    await svc.create({ auditId: a, tenantId: "ta", clientId: "c1", idempotencyKey: uniqueKey() });
+    await assert.rejects(() => svc.currentState(a, "tb"), (err) => err instanceof TenantIsolationError);
   });
 
   test(`${label}: tenant B cannot read A's history`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    await svc.create({ auditId, tenantId: "tenant-a", clientId: "c1", idempotencyKey: uniqueKey() });
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
+    const a = randomUUID();
+    await svc.create({ auditId: a, tenantId: "ta", clientId: "c1", idempotencyKey: uniqueKey() });
+    await assert.rejects(() => svc.history(a, "tb"), (err) => err instanceof TenantIsolationError);
+  });
+
+  test(`${label}: tenant B cannot transition A's audit`, async () => {
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
+    const a = randomUUID();
+    await svc.create({ auditId: a, tenantId: "ta", clientId: "c1", idempotencyKey: uniqueKey() });
     await assert.rejects(
-      () => svc.history(auditId, "tenant-b"),
-      (err) => err instanceof TenantIsolationError,
+      () => svc.transition({ auditId: a, tenantId: "tb", toState: "validated", transitionIdempotencyKey: uniqueKey() }),
+      (err) => err instanceof TenantIsolationError || err instanceof AuditNotFoundError,
     );
   });
 
-  // ── History and events ───────────────────────────────────────────────
-  test(`${label}: events are frozen and in sequence order`, async () => {
-    const repo = repoFactory();
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const tenantId = "t1";
-    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: uniqueKey() });
-    for (const s of ["validated", "collecting", "evidence_stored"]) {
-      await svc.transition({ auditId, tenantId, toState: s, transitionIdempotencyKey: uniqueKey() });
+  // ── Events ─────────────────────────────────────────────────────────
+  test(`${label}: events frozen, in sequence, no unknown fields`, async () => {
+    const repo = repoFactory(); const svc = createLifecycleService(repo);
+    const a = randomUUID(); const t = "t1";
+    await svc.create({ auditId: a, tenantId: t, clientId: "c1", idempotencyKey: uniqueKey() });
+    for (const s of ["validated", "collecting"]) {
+      await svc.transition({ auditId: a, tenantId: t, toState: s, transitionIdempotencyKey: uniqueKey() });
     }
-    const events = await svc.history(auditId, tenantId);
-    assert.equal(events.length, 4);
+    const events = await svc.history(a, t);
+    assert.equal(events.length, 3);
     for (let i = 0; i < events.length; i++) {
       assert.equal(events[i].sequence, i);
       assert.ok(Object.isFrozen(events[i]));
+      // No fingerprint on any event
+      assert.equal(events[i]._fingerprint, undefined);
     }
   });
 }

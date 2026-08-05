@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS prysm.lifecycle_events (
     code_version                TEXT NOT NULL,
     artifact_key                TEXT,
     transition_idempotency_key  TEXT,
-    request_fingerprint         TEXT,
     UNIQUE (audit_id, sequence)
 );
 

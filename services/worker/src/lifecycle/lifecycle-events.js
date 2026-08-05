@@ -1,5 +1,5 @@
 /**
- * Lifecycle Events — Append-only event factory and validation.
+ * Lifecycle Events — Append-only event factory.
  * @module lifecycle/lifecycle-events
  */
 
@@ -12,28 +12,22 @@ export const PRYSM_CODE_VERSION = "4.0.0";
 /**
  * Create a lifecycle event.
  *
+ * Absent optional fields (executionId, artifactKey, transitionIdempotencyKey)
+ * are omitted from the returned object rather than set to null.
+ *
+ * No internal persistence-only metadata (e.g. request fingerprints) is
+ * exposed on the public event.
+ *
  * @param {object} params
- * @param {string} params.auditId
- * @param {string} params.tenantId
- * @param {string} params.clientId
- * @param {number} params.sequence
- * @param {string} params.priorState
- * @param {string} params.nextState
- * @param {string} [params.actor="system"]
- * @param {string} [params.reason=""]
- * @param {string} [params.executionId]
- * @param {string} [params.artifactKey]
- * @param {string} [params.transitionIdempotencyKey]
- * @param {string} [params._fingerprint] - Transition-request SHA-256 fingerprint.
  * @returns {object} A frozen lifecycle event.
  */
 export function createLifecycleEvent({
   auditId, tenantId, clientId, sequence,
   priorState, nextState,
   actor = "system", reason = "",
-  executionId, artifactKey,
+  executionId,
+  artifactKey,
   transitionIdempotencyKey,
-  _fingerprint,
 }) {
   if (!auditId || typeof auditId !== "string") throw new InvalidLifecycleInputError("auditId is required");
   if (!tenantId || typeof tenantId !== "string") throw new InvalidLifecycleInputError("tenantId is required");
@@ -42,24 +36,27 @@ export function createLifecycleEvent({
   if (!isKnownState(priorState)) throw new InvalidLifecycleInputError(`Unknown priorState: "${priorState}"`);
   if (!isKnownState(nextState)) throw new InvalidLifecycleInputError(`Unknown nextState: "${nextState}"`);
 
-  return Object.freeze({
+  const event = {
+    contractVersion: "1.0.0",
     eventId: randomUUID(),
     auditId, tenantId, clientId, sequence,
     priorState, nextState,
     timestamp: new Date().toISOString(),
     actor: actor || "system",
     reason: reason || "",
-    executionId: executionId || null,
     codeVersion: PRYSM_CODE_VERSION,
-    artifactKey: artifactKey || null,
-    transitionIdempotencyKey: transitionIdempotencyKey || null,
-    _fingerprint: _fingerprint || null,
-  });
+  };
+
+  // Omit absent optional fields entirely
+  if (executionId != null) event.executionId = executionId;
+  if (artifactKey != null) event.artifactKey = artifactKey;
+  if (transitionIdempotencyKey != null) event.transitionIdempotencyKey = transitionIdempotencyKey;
+
+  return Object.freeze(event);
 }
 
 /**
  * Create the initial "audit created" event (sequence 0).
- * Creation events do not have a transitionIdempotencyKey.
  */
 export function createAuditCreatedEvent({ auditId, tenantId, clientId }) {
   return createLifecycleEvent({

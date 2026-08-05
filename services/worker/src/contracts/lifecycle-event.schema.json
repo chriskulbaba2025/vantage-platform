@@ -88,7 +88,7 @@
       "description": "Human-readable reason for the transition."
     },
     "executionId": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Optional execution identifier."
     },
     "codeVersion": {
@@ -97,11 +97,11 @@
       "description": "Prysm code version at the time of the transition."
     },
     "artifactKey": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Optional relevant artifact key."
     },
     "transitionIdempotencyKey": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Idempotency key for transition replay protection. Null for creation events."
     }
   }
