@@ -238,20 +238,20 @@ console.log("\n─ Behavioral: PostgreSQL fail-fast ─");
 {
   const testFile = resolve(ROOT, "test-fixtures/lifecycle/postgres-real.test.js");
 
-  // Strip all PG connection env vars to simulate missing database
-  const cleanEnv = { ...process.env };
-  delete cleanEnv.PRYSM_TEST_DATABASE_URL;
-  delete cleanEnv.PGHOST;
-  delete cleanEnv.PGPORT;
-  delete cleanEnv.PGUSER;
-  delete cleanEnv.PGPASSWORD;
-  delete cleanEnv.PGDATABASE;
-  // Preserve PATH, HOME, SYSTEMROOT etc. so node can launch
-  // Also preserve NODE_PATH so modules resolve
+  // Override PG env vars with unreachable values — deletion alone isn't
+  // sufficient because the test file defaults to localhost/postgres/postgres
+  // which may be valid in CI.
+  const badEnv = { ...process.env };
+  delete badEnv.PRYSM_TEST_DATABASE_URL;
+  badEnv.PGHOST = "127.0.0.2";
+  badEnv.PGPORT = "65432";
+  badEnv.PGUSER = "nobody";
+  badEnv.PGPASSWORD = "nobody";
+  badEnv.PGDATABASE = "none";
 
   const result = spawnSync(process.execPath, ["--test", testFile], {
     cwd: ROOT,
-    env: cleanEnv,
+    env: badEnv,
     stdio: "pipe",
     timeout: 15000,
   });
