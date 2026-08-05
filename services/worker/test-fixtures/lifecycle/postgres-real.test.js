@@ -1,10 +1,11 @@
 /**
  * WP4 Real PostgreSQL — Fail-Fast Migration, Transaction, and Rollback Tests
  *
- * REQUIRES a real PostgreSQL 16+ connection via env vars.
- * Fails immediately (non-zero exit) when the database is unavailable.
+ * REQUIRES a real PostgreSQL 16+ connection via PRYSM_TEST_DATABASE_URL or
+ * individual PG* env vars.  Fails immediately (non-zero exit) when the
+ * database is unavailable or the URL is missing in CI.
  *
- * Expected CI env:
+ * CI must set PRYSM_TEST_DATABASE_URL or the individual vars:
  *   PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
  */
 
@@ -22,6 +23,8 @@ const MIGRATION_PATH = resolve(__dirname, "..", "..", "migrations", "001_lifecyc
 // ---------------------------------------------------------------------------
 // Fail-fast database connection
 // ---------------------------------------------------------------------------
+const DB_URL = process.env.PRYSM_TEST_DATABASE_URL || null;
+
 const PG = {
   host: process.env.PGHOST || "localhost",
   port: process.env.PGPORT || "5432",
@@ -30,18 +33,28 @@ const PG = {
   database: process.env.PGDATABASE || "prysm_test",
 };
 
+function connectionLabel() {
+  if (DB_URL) return DB_URL.replace(/\/\/.*@/, "//***@");
+  return `${PG.host}:${PG.port}/${PG.database}`;
+}
+
 let pgPool = null;
 try {
   const pg = await import("pg");
   const { Pool } = pg;
-  pgPool = new Pool({
-    host: PG.host, port: parseInt(PG.port, 10),
-    user: PG.user, password: PG.password, database: PG.database,
-    max: 5, connectionTimeoutMillis: 5000,
-  });
+  if (DB_URL) {
+    pgPool = new Pool({ connectionString: DB_URL, max: 5, connectionTimeoutMillis: 5000 });
+  } else {
+    pgPool = new Pool({
+      host: PG.host, port: parseInt(PG.port, 10),
+      user: PG.user, password: PG.password, database: PG.database,
+      max: 5, connectionTimeoutMillis: 5000,
+    });
+  }
   await pgPool.query("SELECT 1");
 } catch (err) {
-  console.error(`FATAL: Cannot connect to PostgreSQL at ${PG.host}:${PG.port}/${PG.database} — ${err.message}`);
+  console.error(`FATAL: Cannot connect to PostgreSQL at ${connectionLabel()} — ${err.message}`);
+  await (pgPool?.end?.().catch(() => {}));
   process.exit(1);
 }
 
