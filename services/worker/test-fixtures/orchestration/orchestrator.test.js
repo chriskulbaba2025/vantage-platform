@@ -220,8 +220,8 @@ test("timeout aborts execution and produces FAILED", async () => {
   assert.ok(aborted, "Signal must be aborted on timeout");
 });
 
-// ── 5. Transient retry succeeds ───────────────────────────────────────
-test("transient failure retries and succeeds", async () => {
+// ── 5. Transient retry succeeds — exact retry count ──────────────────
+test("transient failure: retryCount = actual attempts - 1 (success on 3rd)", async () => {
   const store = createGovernedArtifactStore({ type: "memory" });
   let attempts = 0;
   const adapters = createBaseMockAdapters();
@@ -234,6 +234,7 @@ test("transient failure retries and succeeds", async () => {
         err.statusCode = 503;
         throw err;
       }
+      // Return WITH an incorrect retryCount — orchestrator must override it
       return {
         rawBytes: Buffer.from(JSON.stringify({ serp: true }), "utf-8"),
         contentType: "application/json",
@@ -243,7 +244,7 @@ test("transient failure retries and succeeds", async () => {
           status: "AVAILABLE",
           startedAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
-          retryCount: attempts - 1,
+          retryCount: 99, // ← orchestrator must override this
           expectedRecords: 3,
           returnedRecords: 3,
           coverage: { requested: 3, completed: 3, failed: 0 },
@@ -269,10 +270,63 @@ test("transient failure retries and succeeds", async () => {
   const summary = await orch.execute(req);
   assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
   assert.equal(attempts, 3, "Exactly 3 attempts");
+
+  // Verify the orchestrator-corrected retry count in summary and persisted artifact
+  const serpSrc = summary.sources.find(s => s.source === "dataforseo-serp");
+  assert.ok(serpSrc);
+  // Orchestrator overrides adapter's retryCount — summary must show orchestrator value
+  assert.equal(serpSrc.retryCount, 2, "Summary retryCount = 2 (orchestrator-owned, 3 attempts - 1)");
+
+  // Read the normalized artifact to verify the orchestrator-owned retryCount
+  const normKey = `tenants/${req.tenantId}/clients/${req.clientId}/audits/${req.auditId}/normalized/dataforseo-serp.json`;
+  const normBuf = await store.get(normKey);
+  const normalized = JSON.parse(normBuf.toString());
+  assert.equal(normalized.retryCount, 2, "retryCount = 2 (3 attempts - 1) — orchestrator-owned, not adapter's 99");
+  assert.equal(normalized.status, "AVAILABLE");
 });
 
-// ── 6. Non-retryable failure — single attempt ─────────────────────────
-test("non-retryable failure stops at 1 attempt", async () => {
+// ── 5b. First-attempt success → retryCount 0 ─────────────────────────
+test("first-attempt success: retryCount = 0", async () => {
+  const store = createGovernedArtifactStore({ type: "memory" });
+  let attempts = 0;
+  const adapters = createBaseMockAdapters();
+  adapters["pagespeed"] = {
+    execute: async () => {
+      attempts++;
+      return {
+        rawBytes: Buffer.from(JSON.stringify({ ps: true }), "utf-8"),
+        contentType: "application/json",
+        sourceResult: {
+          provider: "MockProvider",
+          adapterVersion: "1.0.0",
+          status: "AVAILABLE",
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          retryCount: 5, // ← incorrect adapter value, orchestrator must override
+          expectedRecords: 1,
+          returnedRecords: 1,
+          coverage: { requested: 1, completed: 1, failed: 0 },
+          limitations: [],
+          evidence: {},
+        },
+      };
+    },
+  };
+
+  const orch = createOrchestrator({ artifactStore: store, adapters });
+  const req = baseAuditRequest();
+  const summary = await orch.execute(req);
+  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(attempts, 1, "Exactly 1 attempt");
+
+  const normKey = `tenants/${req.tenantId}/clients/${req.clientId}/audits/${req.auditId}/normalized/pagespeed.json`;
+  const normBuf = await store.get(normKey);
+  const normalized = JSON.parse(normBuf.toString());
+  assert.equal(normalized.retryCount, 0, "retryCount = 0 on first-attempt success, not adapter's 5");
+});
+
+// ── 6. Non-retryable failure — single attempt, retryCount 0 ───────────
+test("non-retryable failure: exactly 1 attempt, retryCount = 0", async () => {
   const store = createGovernedArtifactStore({ type: "memory" });
   let attempts = 0;
   const adapters = createBaseMockAdapters();
@@ -300,6 +354,76 @@ test("non-retryable failure stops at 1 attempt", async () => {
   const summary = await orch.execute(req);
   assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
   assert.equal(attempts, 1, "Exactly 1 attempt for non-retryable error");
+
+  const backlinksSrc = summary.sources.find(s => s.source === "backlinks");
+  assert.ok(backlinksSrc);
+  assert.equal(backlinksSrc.retryCount, 0); // summary preserves orchestrator value
+
+  // Read normalized artifact — must show FAILED with retryCount 0
+  const normKey = `tenants/${req.tenantId}/clients/${req.clientId}/audits/${req.auditId}/normalized/backlinks.json`;
+  const normBuf = await store.get(normKey);
+  const normalized = JSON.parse(normBuf.toString());
+  assert.equal(normalized.retryCount, 0, "retryCount = 0 (1 attempt - 1)");
+  assert.equal(normalized.status, "FAILED");
+});
+
+// ── 4b. Timeout exhaustion — retryCount = actual attempts - 1 ─────────
+test("timeout exhaustion: retryCount = actual attempts - 1, other sources continue", async () => {
+  const store = createGovernedArtifactStore({ type: "memory" });
+  let timeoutAttempts = 0;
+  let signalsAborted = 0;
+
+  const adapters = createBaseMockAdapters();
+  adapters["pagespeed"] = {
+    execute: async ({ signal }) => {
+      timeoutAttempts++;
+      const checkAbort = () => {
+        if (signal?.aborted) {
+          signalsAborted++;
+          const err = new Error("Source execution timed out");
+          err.category = "timeout";
+          throw err;
+        }
+      };
+      // Check immediately — the injected clock fires setTimeout immediately
+      checkAbort();
+      // If not aborted yet, wait briefly and check again
+      await new Promise(r => setTimeout(r, 50));
+      checkAbort();
+      const err = new Error("Source execution timed out");
+      err.category = "timeout";
+      throw err;
+    },
+  };
+
+  const orch = createOrchestrator({
+    artifactStore: store,
+    adapters,
+    retryPolicyResolver: () => ({
+      timeoutMs: 1,        // very short timeout
+      maxAttempts: 3,
+      retryable: (e) => e?.category === "timeout",
+      delayMs: () => 0,
+    }),
+  });
+
+  const req = baseAuditRequest();
+  const summary = await orch.execute(req);
+
+  // Timeout source exhausts all 3 attempts
+  assert.equal(timeoutAttempts, 3, "Exactly 3 attempts (all timed out)");
+  assert.equal(signalsAborted, 3, "AbortSignal observed for all 3 attempts");
+
+  // Other sources still execute — audit reaches EVIDENCE_LOCKED
+  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.sources.length, 4, "All 4 sources in summary");
+
+  // Verify retry count in normalized artifact
+  const normKey = `tenants/${req.tenantId}/clients/${req.clientId}/audits/${req.auditId}/normalized/pagespeed.json`;
+  const normBuf = await store.get(normKey);
+  const normalized = JSON.parse(normBuf.toString());
+  assert.equal(normalized.retryCount, 2, "retryCount = 2 (3 attempts - 1) — actual, not maxAttempts - 1");
+  assert.equal(normalized.status, "FAILED");
 });
 
 // ── 7. Resume from checkpoints ────────────────────────────────────────

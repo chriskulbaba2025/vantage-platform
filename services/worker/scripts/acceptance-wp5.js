@@ -137,17 +137,22 @@ console.log("\n─ Full mocked audit ─");
 
   // Timeout and retry caps
   let attempts = 0;
+  const artifactStore3 = createGovernedArtifactStore({ type: "memory" });
   const adapters3 = createBaseMockAdapters();
   adapters3["dataforseo-serp"] = {
     execute: async () => {
       attempts++;
       if (attempts < 2) { const e = new Error("net"); e.category = "network"; e.statusCode = 503; throw e; }
-      return (createBaseMockAdapters()["dataforseo-serp"]).execute({});
+      // Return with incorrect retryCount — orchestrator must override it
+      return {
+        ...(createBaseMockAdapters()["dataforseo-serp"]).execute({}),
+        sourceResult: { ...(await (createBaseMockAdapters()["dataforseo-serp"]).execute({})).sourceResult, retryCount: 99 },
+      };
     },
   };
   const orch3 = createAuditOrchestrator({
     lifecycleService: createLifecycleService(createMemoryLifecycleRepository()),
-    artifactStore: createGovernedArtifactStore({ type: "memory" }),
+    artifactStore: artifactStore3,
     adapters: adapters3,
     validateContract,
     clock: mockClock(),
@@ -157,6 +162,17 @@ console.log("\n─ Full mocked audit ─");
   const summary3 = await orch3.execute(req3);
   if (attempts === 2) pass("Retry: 2 attempts (1 failure + 1 success)");
   else fail(`Retry: ${attempts} attempts`);
+
+  // Verify orchestrator-owned retryCount in persisted artifact
+  const serpNormKey = `tenants/${req3.tenantId}/clients/${req3.clientId}/audits/${req3.auditId}/normalized/dataforseo-serp.json`;
+  try {
+    const serpNormBuf = await artifactStore3.get(serpNormKey);
+    const serpNorm = JSON.parse(serpNormBuf.toString());
+    if (serpNorm.retryCount === 1) pass("Retry-count: 1 (2 attempts - 1), orchestrator-owned, not adapter's 99");
+    else fail(`Retry-count: ${serpNorm.retryCount} (expected 1)`);
+  } catch {
+    fail("Retry-count: could not read normalized artifact");
+  }
 
   // Resume
   let onpageCalls = 0;

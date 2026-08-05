@@ -524,7 +524,6 @@ export function createAuditOrchestrator({
           status: rawResult.status || "AVAILABLE",
           startedAt: rawResult.startedAt || c.now(),
           completedAt: rawResult.completedAt || c.now(),
-          requestId: rawResult.requestId || null,
           retryCount: rawResult.retryCount || 0,
           expectedRecords: rawResult.expectedRecords || 0,
           returnedRecords: rawResult.returnedRecords || 0,
@@ -533,6 +532,7 @@ export function createAuditOrchestrator({
           evidence: rawResult.evidence || {},
         };
 
+        if (rawResult.requestId) sourceResult.requestId = rawResult.requestId;
         if (rawResult.errorCategory) {
           sourceResult.errorCategory = rawResult.errorCategory;
         }

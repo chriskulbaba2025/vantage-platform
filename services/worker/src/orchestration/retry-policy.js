@@ -53,10 +53,11 @@ export function resolveSourcePolicy({ policyResolver, source }) {
  */
 export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) {
   const { timeoutMs, maxAttempts, retryable, delayMs } = policy;
-  let lastResult = null;
   let lastError = null;
+  let actualAttempts = 0;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    actualAttempts = attempt;
     const ac = new AbortController();
     const timer = clock ? clock.setTimeout(() => ac.abort(), timeoutMs) : setTimeout(() => ac.abort(), timeoutMs);
 
@@ -64,6 +65,10 @@ export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) 
       const result = await executeFn(ac.signal, attempt);
       clearTimeout(timer);
       if (onAttempt) onAttempt(attempt, { status: "fulfilled" });
+      // Orchestrator owns the retry count — override adapter-provided value
+      if (result.sourceResult) {
+        result.sourceResult.retryCount = attempt - 1;
+      }
       return result;
     } catch (err) {
       clearTimeout(timer);
@@ -87,13 +92,14 @@ export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) 
   }
 
   // All attempts exhausted — build a FAILED source result
+  // retryCount = actual attempts executed - 1 (the initial attempt is not a retry)
   const now = clock ? clock.now() : new Date().toISOString();
   return {
     rawBytes: null,
     contentType: null,
     sourceResult: {
       status: "FAILED",
-      retryCount: maxAttempts - 1,
+      retryCount: actualAttempts - 1,
       startedAt: now,
       completedAt: now,
       limitations: lastError ? [`Source execution failed: ${lastError.message}`] : ["Source execution failed"],
