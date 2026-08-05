@@ -63,6 +63,43 @@ test("memory: deterministic stale expectedState/expectedVersion → ConcurrencyC
   assert.equal(events.length, 2, "No additional event appended");
 });
 
+// ── Identical transition replay (idempotent retry) ──
+test("memory: identical transition replay is idempotent", async () => {
+  const repo = createMemoryLifecycleRepository();
+  const svc = createLifecycleService(repo);
+  const auditId = randomUUID(); const tenantId = "idem-replay";
+  const tKey = randomUUID();
+  const params = {
+    auditId, tenantId,
+    toState: "validated",
+    expectedState: "created",
+    expectedVersion: 1,
+    actor: "system",
+    reason: "test",
+    executionId: "exec-replay",
+    artifactKey: "art-replay",
+    transitionIdempotencyKey: tKey,
+  };
+
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+
+  // First transition
+  const s1 = await svc.transition(params);
+  assert.equal(s1.state, "validated");
+  assert.equal(s1.version, 2);
+
+  // Identical retry
+  const s2 = await svc.transition(params);
+  assert.equal(s2.state, "validated", "Retry returns same state");
+  assert.equal(s2.version, 2, "Retry returns same version");
+
+  // History unchanged
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "Exactly 2 events");
+  assert.equal(events[0].sequence, 0);
+  assert.equal(events[1].sequence, 1);
+});
+
 // Concurrent creation — identical
 test("memory: concurrent identical creation — both succeed, exactly 1 event", async () => {
   const repo = createMemoryLifecycleRepository();

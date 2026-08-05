@@ -102,7 +102,19 @@ export function createLifecycleService(repository) {
     // STEP 3: Check transition idempotency BEFORE validation
     const existingTk = await repository.loadByTransitionKey(auditId, transitionIdempotencyKey);
     if (existingTk) {
-      if (existingTk._fingerprint === fingerprint &&
+      // Reconstruct the fingerprint using the ORIGINAL priorState from the
+      // stored transition event, not the current projected state.  After a
+      // successful transition the current state has changed, so building the
+      // fingerprint from current.state would produce a different hash.
+      const replayFingerprint = transitionFingerprint({
+        auditId, tenantId,
+        priorState: existingTk.priorState,
+        toState,
+        actor, reason, executionId, artifactKey,
+        expectedState, expectedVersion,
+      });
+
+      if (existingTk._fingerprint === replayFingerprint &&
           existingTk.nextState === toState &&
           existingTk.tenantId === tenantId) {
         return projectState(events);
@@ -111,7 +123,7 @@ export function createLifecycleService(repository) {
         existingNextState: existingTk.nextState,
         existingFingerprint: existingTk._fingerprint,
         requestedToState: toState,
-        requestedFingerprint: fingerprint,
+        requestedFingerprint: replayFingerprint,
       });
     }
 

@@ -150,6 +150,39 @@ test("postgres (pg-mem): deterministic stale expectedState/expectedVersion → C
   assert.equal(events.length, 2);
 });
 
+// ── Identical transition replay (idempotent retry) ──
+test("postgres (pg-mem): identical transition replay is idempotent", async () => {
+  const repo = createPgMemRepo(); const svc = createLifecycleService(repo);
+  const auditId = randomUUID(); const tenantId = "idem-replay";
+  const tKey = randomUUID();
+  const params = {
+    auditId, tenantId,
+    toState: "validated",
+    expectedState: "created",
+    expectedVersion: 1,
+    actor: "system",
+    reason: "test",
+    executionId: "exec-replay",
+    artifactKey: "art-replay",
+    transitionIdempotencyKey: tKey,
+  };
+
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+
+  const s1 = await svc.transition(params);
+  assert.equal(s1.state, "validated");
+  assert.equal(s1.version, 2);
+
+  const s2 = await svc.transition(params);
+  assert.equal(s2.state, "validated");
+  assert.equal(s2.version, 2);
+
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2);
+  assert.equal(events[0].sequence, 0);
+  assert.equal(events[1].sequence, 1);
+});
+
 // UPDATE proof
 test("postgres (pg-mem): real UPDATE succeeds", async () => {
   const repo = createPgMemRepo();

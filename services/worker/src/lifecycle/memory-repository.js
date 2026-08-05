@@ -94,6 +94,7 @@ export function createMemoryLifecycleRepository() {
       eventId: event.eventId, auditId: event.auditId,
       nextState: event.nextState, sequence: event.sequence,
       tenantId: event.tenantId,
+      priorState: event.priorState,
       _fingerprint: fingerprint,
     }));
   }

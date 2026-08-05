@@ -333,6 +333,79 @@ console.log("\n─ Behavioral: optimistic concurrency ─");
 }
 
 // =========================================================================
+// 7.6 BEHAVIORAL: identical transition replay — idempotent fingerprint match
+// =========================================================================
+console.log("\n─ Behavioral: identical transition replay ─");
+{
+  const { createMemoryLifecycleRepository } = await import(`file://${resolve(ROOT, "src/lifecycle/memory-repository.js")}`);
+  const { createLifecycleService } = await import(`file://${resolve(ROOT, "src/lifecycle/lifecycle-service.js")}`);
+  const { TransitionIdempotencyConflictError } = await import(`file://${resolve(ROOT, "src/lifecycle/lifecycle-errors.js")}`);
+
+  const repo = createMemoryLifecycleRepository();
+  const svc = createLifecycleService(repo);
+  const auditId = randomUUID();
+  const tenantId = "accept-replay";
+  const tKey = randomUUID();
+  const params = {
+    auditId, tenantId,
+    toState: "validated",
+    expectedState: "created",
+    expectedVersion: 1,
+    actor: "system",
+    reason: "test",
+    executionId: "exec-accept",
+    artifactKey: "art-accept",
+    transitionIdempotencyKey: tKey,
+  };
+
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+
+  // First transition
+  await svc.transition(params);
+
+  // Identical retry — must succeed idempotently
+  let retryState = null;
+  try {
+    retryState = await svc.transition(params);
+    if (retryState.state === "validated" && retryState.version === 2) {
+      pass("Identical replay: returns validated, version 2");
+    } else {
+      fail(`Identical replay: expected validated/2, got ${retryState.state}/${retryState.version}`);
+    }
+  } catch (err) {
+    if (err instanceof TransitionIdempotencyConflictError) {
+      fail("Identical replay: threw TransitionIdempotencyConflictError — must be idempotent");
+    } else {
+      fail(`Identical replay: unexpected ${err.constructor.name}: ${err.message}`);
+    }
+  }
+
+  const events = await svc.history(auditId, tenantId);
+  if (events.length === 2) pass("Identical replay: exactly 2 events");
+  else fail(`Identical replay: ${events.length} events (expected 2)`);
+
+  if (events.length >= 2 && events[0].sequence === 0 && events[1].sequence === 1) {
+    pass("Identical replay: sequences 0, 1");
+  } else {
+    fail(`Identical replay: sequences ${events.map(e => e.sequence).join(",")}`);
+  }
+
+  // Verify changed-field replay still throws TransitionIdempotencyConflictError
+  let changedErr = null;
+  try {
+    await svc.transition({ ...params, toState: "collecting", transitionIdempotencyKey: tKey });
+    fail("Changed-field replay must reject");
+  } catch (err) {
+    changedErr = err;
+  }
+  if (changedErr instanceof TransitionIdempotencyConflictError) {
+    pass("Changed-field replay: TransitionIdempotencyConflictError preserved");
+  } else {
+    fail(`Changed-field replay: expected TransitionIdempotencyConflictError, got ${changedErr?.constructor?.name}`);
+  }
+}
+
+// =========================================================================
 // 8. BEHAVIORAL: PostgreSQL fail-fast — missing DB must exit non-zero
 // =========================================================================
 console.log("\n─ Behavioral: PostgreSQL fail-fast ─");

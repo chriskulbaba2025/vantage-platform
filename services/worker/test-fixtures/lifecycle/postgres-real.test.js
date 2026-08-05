@@ -276,6 +276,49 @@ test("real PG: deterministic stale expectedState/expectedVersion → Concurrency
     "Exactly 1 transition-key record (only the successful transition)");
 });
 
+// ── Identical transition replay (idempotent retry) ──────────────────
+test("real PG: identical transition replay is idempotent", async () => {
+  const auditId = randomUUID();
+  const tenantId = "idem-replay";
+  const tKey = randomUUID();
+  const params = {
+    auditId, tenantId,
+    toState: "validated",
+    expectedState: "created",
+    expectedVersion: 1,
+    actor: "system",
+    reason: "test",
+    executionId: "exec-replay",
+    artifactKey: "art-replay",
+    transitionIdempotencyKey: tKey,
+  };
+
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+
+  // First transition
+  const s1 = await svc.transition(params);
+  assert.equal(s1.state, "validated");
+  assert.equal(s1.version, 2);
+
+  // Identical retry
+  const s2 = await svc.transition(params);
+  assert.equal(s2.state, "validated", "Retry returns same state");
+  assert.equal(s2.version, 2, "Retry returns same version");
+
+  // History unchanged
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "Exactly 2 events");
+  assert.equal(events[0].sequence, 0);
+  assert.equal(events[1].sequence, 1);
+
+  // Exactly 1 transition-key record
+  const tkCount = await pgPool.query(
+    "SELECT COUNT(*) AS c FROM prysm.lifecycle_transition_keys WHERE audit_id = $1",
+    [auditId]);
+  assert.equal(parseInt(tkCount.rows[0].c), 1,
+    "Exactly 1 transition-key record");
+});
+
 // ── UPDATE proof ─────────────────────────────────────────────────────
 test("real PG: UPDATE succeeds", async () => {
   const auditId = randomUUID();
