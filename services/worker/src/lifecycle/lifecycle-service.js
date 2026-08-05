@@ -115,6 +115,17 @@ export function createLifecycleService(repository) {
       });
     }
 
+    // STEP 3.5: Check optimistic-concurrency guards BEFORE validation.
+    // A serialized stale request (expectedState/expectedVersion no longer
+    // match the current projection) must return ConcurrencyConflictError
+    // rather than InvalidTransitionError.
+    if (expectedState !== undefined && expectedState !== current.state) {
+      throw new ConcurrencyConflictError(auditId, { expectedState, actualState: current.state });
+    }
+    if (expectedVersion !== undefined && expectedVersion !== current.version) {
+      throw new ConcurrencyConflictError(auditId, { expectedVersion, actualVersion: current.version });
+    }
+
     // STEP 4: Validate transition
     if (!isValidTransition(current.state, toState)) {
       throw new InvalidTransitionError(auditId, current.state, toState);

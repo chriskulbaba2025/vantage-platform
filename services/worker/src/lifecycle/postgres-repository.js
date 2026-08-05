@@ -136,43 +136,55 @@ export function createPostgresLifecycleRepository({ pool }) {
   }
 
   async function appendEventAtomic({ event, fingerprint, expectedState, expectedVersion }) {
-    await withTransaction(async (db) => {
-      const lockResult = await db.query(SQL.lockAudit, [event.auditId]);
-      if (lockResult.rows.length === 0) throw new AuditNotFoundError(event.auditId);
+    try {
+      await withTransaction(async (db) => {
+        const lockResult = await db.query(SQL.lockAudit, [event.auditId]);
+        if (lockResult.rows.length === 0) throw new AuditNotFoundError(event.auditId);
 
-      const existingTk = await db.query(SQL.loadTransitionKey, [event.auditId, event.transitionIdempotencyKey]);
-      if (existingTk.rows.length > 0) {
-        const row = existingTk.rows[0];
-        if (row.request_fingerprint === fingerprint && row.next_state === event.nextState) return;
-        throw new TransitionIdempotencyConflictError(event.auditId, event.transitionIdempotencyKey, {
-          existingNextState: row.next_state, existingFingerprint: row.request_fingerprint,
-          requestedFingerprint: fingerprint,
+        const existingTk = await db.query(SQL.loadTransitionKey, [event.auditId, event.transitionIdempotencyKey]);
+        if (existingTk.rows.length > 0) {
+          const row = existingTk.rows[0];
+          if (row.request_fingerprint === fingerprint && row.next_state === event.nextState) return;
+          throw new TransitionIdempotencyConflictError(event.auditId, event.transitionIdempotencyKey, {
+            existingNextState: row.next_state, existingFingerprint: row.request_fingerprint,
+            requestedFingerprint: fingerprint,
+          });
+        }
+
+        const latestResult = await db.query(SQL.latestEvent, [event.auditId]);
+        const currentVersion = latestResult.rows.length > 0 ? latestResult.rows[0].sequence + 1 : 0;
+        const currentState = latestResult.rows.length > 0 ? latestResult.rows[0].next_state : null;
+
+        if (expectedVersion !== undefined && expectedVersion !== currentVersion) {
+          throw new ConcurrencyConflictError(event.auditId, { expectedVersion, actualVersion: currentVersion });
+        }
+        if (expectedState !== undefined && expectedState !== currentState) {
+          throw new ConcurrencyConflictError(event.auditId, { expectedState, actualState: currentState });
+        }
+
+        await db.query(SQL.insertEvent, [
+          event.eventId, event.auditId, event.tenantId, event.clientId,
+          event.sequence, event.priorState, event.nextState,
+          event.timestamp, event.actor, event.reason,
+          event.executionId || null, event.codeVersion,
+          event.artifactKey || null, event.transitionIdempotencyKey || null,
+        ]);
+
+        await db.query(SQL.insertTransitionKey, [
+          event.auditId, event.transitionIdempotencyKey, event.eventId, fingerprint,
+        ]);
+      });
+    } catch (err) {
+      // Duplicate event (audit_id, sequence) after a concurrent race past
+      // the service-layer optimistic checks → ConcurrencyConflictError.
+      // Needed for pg-mem where SELECT … FOR UPDATE is a non-blocking no-op.
+      if (err.code === "23505" || (err.message && err.message.includes("duplicate"))) {
+        throw new ConcurrencyConflictError(event.auditId, {
+          expectedVersion, duplicateSequence: event.sequence,
         });
       }
-
-      const latestResult = await db.query(SQL.latestEvent, [event.auditId]);
-      const currentVersion = latestResult.rows.length > 0 ? latestResult.rows[0].sequence + 1 : 0;
-      const currentState = latestResult.rows.length > 0 ? latestResult.rows[0].next_state : null;
-
-      if (expectedVersion !== undefined && expectedVersion !== currentVersion) {
-        throw new ConcurrencyConflictError(event.auditId, { expectedVersion, actualVersion: currentVersion });
-      }
-      if (expectedState !== undefined && expectedState !== currentState) {
-        throw new ConcurrencyConflictError(event.auditId, { expectedState, actualState: currentState });
-      }
-
-      await db.query(SQL.insertEvent, [
-        event.eventId, event.auditId, event.tenantId, event.clientId,
-        event.sequence, event.priorState, event.nextState,
-        event.timestamp, event.actor, event.reason,
-        event.executionId || null, event.codeVersion,
-        event.artifactKey || null, event.transitionIdempotencyKey || null,
-      ]);
-
-      await db.query(SQL.insertTransitionKey, [
-        event.auditId, event.transitionIdempotencyKey, event.eventId, fingerprint,
-      ]);
-    });
+      throw err;
+    }
   }
 
   async function executeUpdate(auditId, newClientId) {

@@ -220,10 +220,10 @@ test("real PG: mid-transaction event-insert failure rolls back ALL creation rows
 });
 
 // ── Concurrent transition ────────────────────────────────────────────
-// On fast hardware the two transitions may serialize, producing
-// InvalidTransitionError instead of ConcurrencyConflictError.
-// Both outcomes prove the state machine rejects the conflict.
-test("real PG: concurrent transitions — exactly 1 succeeds, 1 fails, 2 events", async () => {
+// The service-level optimistic-concurrency check (STEP 3.5) now fires
+// before isValidTransition, so a serialized stale request reliably
+// returns ConcurrencyConflictError.
+test("real PG: concurrent transitions — 1 success, 1 ConcurrencyConflictError, 2 events", async () => {
   const auditId = randomUUID();
   const tenantId = "concur-trans";
   await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
@@ -236,8 +236,44 @@ test("real PG: concurrent transitions — exactly 1 succeeds, 1 fails, 2 events"
     "Exactly 1 transition must succeed");
   assert.equal(results.filter(r => r.status === "rejected").length, 1,
     "Exactly 1 transition must be rejected");
-  assert.equal((await svc.history(auditId, tenantId)).length, 2,
-    "Exactly 2 events after concurrent transition");
+  const failure = results.find(r => r.status === "rejected");
+  assert.ok(failure.reason instanceof ConcurrencyConflictError,
+    `Expected ConcurrencyConflictError, got ${failure.reason?.constructor?.name}`);
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "Exactly 2 events after concurrent transition");
+  assert.equal(events[0].sequence, 0, "Event 0 sequence = 0");
+  assert.equal(events[1].sequence, 1, "Event 1 sequence = 1");
+});
+
+// ── Deterministic stale-request ─────────────────────────────────────
+test("real PG: deterministic stale expectedState/expectedVersion → ConcurrencyConflictError", async () => {
+  const auditId = randomUUID();
+  const tenantId = "stale-real";
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+  await svc.transition({ auditId, tenantId, toState: "validated", transitionIdempotencyKey: randomUUID() });
+
+  await assert.rejects(
+    () => svc.transition({
+      auditId, tenantId, toState: "validated",
+      expectedState: "created",
+      expectedVersion: 1,
+      transitionIdempotencyKey: randomUUID(),
+    }),
+    (err) => err instanceof ConcurrencyConflictError,
+    "Stale expectedState/expectedVersion must throw ConcurrencyConflictError",
+  );
+
+  // Verify no side effects
+  const cs = await svc.currentState(auditId, tenantId);
+  assert.equal(cs.state, "validated", "State must remain validated");
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "No additional event appended");
+  // Verify no transition-key record was created for the rejected request
+  const allRows = await pgPool.query(
+    "SELECT COUNT(*) AS c FROM prysm.lifecycle_transition_keys WHERE audit_id = $1",
+    [auditId]);
+  assert.equal(parseInt(allRows.rows[0].c), 1,
+    "Exactly 1 transition-key record (only the successful transition)");
 });
 
 // ── UPDATE proof ─────────────────────────────────────────────────────

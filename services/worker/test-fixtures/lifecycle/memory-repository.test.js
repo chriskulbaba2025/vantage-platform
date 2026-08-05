@@ -13,7 +13,7 @@ import { ConcurrencyConflictError, DuplicateAuditError } from "../../src/lifecyc
 runLifecycleContractTests("memory", () => createMemoryLifecycleRepository());
 
 // Concurrent transitions
-test("memory: concurrent transitions — exactly 1 succeeds, 1 fails, 2 events", async () => {
+test("memory: concurrent transitions — 1 success, 1 ConcurrencyConflictError, 2 events", async () => {
   const repo = createMemoryLifecycleRepository();
   const svc = createLifecycleService(repo);
   const auditId = randomUUID(); const tenantId = "race";
@@ -25,8 +25,42 @@ test("memory: concurrent transitions — exactly 1 succeeds, 1 fails, 2 events",
     "Exactly 1 transition must succeed");
   assert.equal(results.filter(r => r.status === "rejected").length, 1,
     "Exactly 1 transition must be rejected");
-  assert.equal((await svc.history(auditId, tenantId)).length, 2,
-    "Exactly 2 events after concurrent transition");
+  const failure = results.find(r => r.status === "rejected");
+  assert.ok(failure.reason instanceof ConcurrencyConflictError,
+    `Expected ConcurrencyConflictError, got ${failure.reason?.constructor?.name}`);
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "Exactly 2 events after concurrent transition");
+  assert.equal(events[0].sequence, 0, "Event 0 sequence = 0");
+  assert.equal(events[1].sequence, 1, "Event 1 sequence = 1");
+});
+
+// ── Deterministic stale-request (serialized, not timing-dependent) ──
+test("memory: deterministic stale expectedState/expectedVersion → ConcurrencyConflictError", async () => {
+  const repo = createMemoryLifecycleRepository();
+  const svc = createLifecycleService(repo);
+  const auditId = randomUUID(); const tenantId = "stale";
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+
+  // Advance to validated (version 2, state "validated")
+  await svc.transition({ auditId, tenantId, toState: "validated", transitionIdempotencyKey: randomUUID() });
+
+  // Now submit a stale request that expects the old state
+  await assert.rejects(
+    () => svc.transition({
+      auditId, tenantId, toState: "validated",
+      expectedState: "created",
+      expectedVersion: 1,
+      transitionIdempotencyKey: randomUUID(),
+    }),
+    (err) => err instanceof ConcurrencyConflictError,
+    "Stale expectedState/expectedVersion must throw ConcurrencyConflictError",
+  );
+
+  // Verify no side effects
+  const cs = await svc.currentState(auditId, tenantId);
+  assert.equal(cs.state, "validated", "State must remain validated");
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "No additional event appended");
 });
 
 // Concurrent creation — identical

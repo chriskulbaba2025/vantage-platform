@@ -106,7 +106,7 @@ test("postgres (pg-mem): concurrent creation — different clientId throws Dupli
 });
 
 // Concurrent transition
-test("postgres (pg-mem): concurrent transitions — exactly 1 succeeds, 1 fails, 2 events", async () => {
+test("postgres (pg-mem): concurrent transitions — 1 success, 1 ConcurrencyConflictError, 2 events", async () => {
   const repo = createPgMemRepo(); const svc = createLifecycleService(repo);
   const auditId = randomUUID(); const tenantId = "race";
   await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
@@ -117,8 +117,37 @@ test("postgres (pg-mem): concurrent transitions — exactly 1 succeeds, 1 fails,
     "Exactly 1 transition must succeed");
   assert.equal(results.filter(r => r.status === "rejected").length, 1,
     "Exactly 1 transition must be rejected");
-  assert.equal((await svc.history(auditId, tenantId)).length, 2,
-    "Exactly 2 events after concurrent transition");
+  const failure = results.find(r => r.status === "rejected");
+  assert.ok(failure.reason instanceof ConcurrencyConflictError,
+    `Expected ConcurrencyConflictError, got ${failure.reason?.constructor?.name}`);
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2, "Exactly 2 events after concurrent transition");
+  assert.equal(events[0].sequence, 0, "Event 0 sequence = 0");
+  assert.equal(events[1].sequence, 1, "Event 1 sequence = 1");
+});
+
+// ── Deterministic stale-request ──
+test("postgres (pg-mem): deterministic stale expectedState/expectedVersion → ConcurrencyConflictError", async () => {
+  const repo = createPgMemRepo(); const svc = createLifecycleService(repo);
+  const auditId = randomUUID(); const tenantId = "stale";
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+  await svc.transition({ auditId, tenantId, toState: "validated", transitionIdempotencyKey: randomUUID() });
+
+  await assert.rejects(
+    () => svc.transition({
+      auditId, tenantId, toState: "validated",
+      expectedState: "created",
+      expectedVersion: 1,
+      transitionIdempotencyKey: randomUUID(),
+    }),
+    (err) => err instanceof ConcurrencyConflictError,
+    "Stale expectedState/expectedVersion must throw ConcurrencyConflictError",
+  );
+
+  const cs = await svc.currentState(auditId, tenantId);
+  assert.equal(cs.state, "validated");
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2);
 });
 
 // UPDATE proof
