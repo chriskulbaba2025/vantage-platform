@@ -23,7 +23,8 @@ export const PRYSM_CODE_VERSION = "4.0.0";
  * @param {string} [params.reason=""]
  * @param {string} [params.executionId]
  * @param {string} [params.artifactKey]
- * @param {string} [params.transitionIdempotencyKey] - Required for all non-creation events.
+ * @param {string} [params.transitionIdempotencyKey]
+ * @param {string} [params._fingerprint] - Transition-request SHA-256 fingerprint.
  * @returns {object} A frozen lifecycle event.
  */
 export function createLifecycleEvent({
@@ -32,6 +33,7 @@ export function createLifecycleEvent({
   actor = "system", reason = "",
   executionId, artifactKey,
   transitionIdempotencyKey,
+  _fingerprint,
 }) {
   if (!auditId || typeof auditId !== "string") throw new InvalidLifecycleInputError("auditId is required");
   if (!tenantId || typeof tenantId !== "string") throw new InvalidLifecycleInputError("tenantId is required");
@@ -51,6 +53,7 @@ export function createLifecycleEvent({
     codeVersion: PRYSM_CODE_VERSION,
     artifactKey: artifactKey || null,
     transitionIdempotencyKey: transitionIdempotencyKey || null,
+    _fingerprint: _fingerprint || null,
   });
 }
 

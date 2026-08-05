@@ -1,9 +1,5 @@
 /**
  * Memory Lifecycle Repository
- *
- * Implements the full repository contract with tenant isolation,
- * transition idempotency, and optimistic concurrency enforcement.
- *
  * @module lifecycle/memory-repository
  */
 
@@ -14,52 +10,51 @@ import {
 } from "./lifecycle-errors.js";
 
 export function createMemoryLifecycleRepository() {
-  /** @type {Map<string, Array<object>>} auditId → events */
   const eventsStore = new Map();
-
-  /** @type {Map<string, { auditId: string, idempotencyKey: string, tenantId: string }>} tenantId:idempotencyKey → record */
   const idempotencyStore = new Map();
-
-  /** @type {Map<string, object>} auditId:transitionIdempotencyKey → event */
   const transitionKeyStore = new Map();
-
-  /** @type {Map<string, { tenantId: string, clientId: string }>} auditId → audit metadata */
   const auditMeta = new Map();
 
-  function idemKey(tenantId, idempotencyKey) {
-    return `${tenantId}::${idempotencyKey}`;
-  }
-
-  function transKey(auditId, transitionIdempotencyKey) {
-    return `${auditId}::${transitionIdempotencyKey}`;
-  }
+  function idemKey(tenantId, ik) { return `${tenantId}::${ik}`; }
+  function transKey(auditId, tik) { return `${auditId}::${tik}`; }
 
   // ------------------------------------------------------------------
-  // createAudit — atomic
+  // createAudit — concurrent-idempotent
   // ------------------------------------------------------------------
 
   async function createAudit({ auditId, tenantId, clientId, idempotencyKey, event }) {
-    // Check tenant-scoped idempotency
     const ik = idemKey(tenantId, idempotencyKey);
+
     const existing = idempotencyStore.get(ik);
     if (existing) {
-      if (existing.auditId === auditId) return; // idempotent
-      throw new DuplicateAuditError({ tenantId, idempotencyKey, existingAuditId: existing.auditId, newAuditId: auditId });
+      if (existing.auditId === auditId &&
+          existing.tenantId === tenantId &&
+          existing.clientId === clientId) {
+        return true; // idempotent
+      }
+      throw new DuplicateAuditError({
+        tenantId, idempotencyKey,
+        existingAuditId: existing.auditId, newAuditId: auditId,
+      });
     }
 
-    // Check auditId not already claimed
+    // Check auditId collision with different idempotency key
     if (auditMeta.has(auditId)) {
-      throw new DuplicateAuditError({ auditId, reason: "auditId already exists with different idempotency key" });
+      throw new DuplicateAuditError({
+        auditId,
+        reason: "auditId already exists with different idempotency key",
+      });
     }
 
-    // Atomic: both or neither
-    idempotencyStore.set(ik, { auditId, idempotencyKey, tenantId });
+    // Atomic: all or nothing
+    idempotencyStore.set(ik, { auditId, idempotencyKey, tenantId, clientId });
     auditMeta.set(auditId, { tenantId, clientId });
     eventsStore.set(auditId, [event]);
+    return false; // newly created
   }
 
   // ------------------------------------------------------------------
-  // loadEvents — tenant scoped
+  // loadEvents
   // ------------------------------------------------------------------
 
   async function loadEvents(auditId, tenantId) {
@@ -76,12 +71,11 @@ export function createMemoryLifecycleRepository() {
   // ------------------------------------------------------------------
 
   async function loadByIdempotencyKey(tenantId, idempotencyKey) {
-    if (!idempotencyKey) return null;
     return idempotencyStore.get(idemKey(tenantId, idempotencyKey)) || null;
   }
 
   // ------------------------------------------------------------------
-  // loadByTransitionKey
+  // loadByTransitionKey — returns event with _fingerprint
   // ------------------------------------------------------------------
 
   async function loadByTransitionKey(auditId, transitionIdempotencyKey) {
@@ -89,7 +83,7 @@ export function createMemoryLifecycleRepository() {
   }
 
   // ------------------------------------------------------------------
-  // appendEventAtomic — concurrency enforcement
+  // appendEventAtomic
   // ------------------------------------------------------------------
 
   async function appendEventAtomic({ event, expectedState, expectedVersion }) {
@@ -98,50 +92,52 @@ export function createMemoryLifecycleRepository() {
 
     const events = eventsStore.get(event.auditId) || [];
 
-    // Transaction idempotency
+    // Check transition idempotency
     const tk = transKey(event.auditId, event.transitionIdempotencyKey);
-    const existing = transitionKeyStore.get(tk);
-    if (existing) {
-      if (existing.nextState === event.nextState && existing.sequence === event.sequence) {
-        return; // idempotent replay
+    const existingTk = transitionKeyStore.get(tk);
+    if (existingTk) {
+      if (existingTk._fingerprint === event._fingerprint &&
+          existingTk.nextState === event.nextState) {
+        return; // idempotent
       }
       throw new TransitionIdempotencyConflictError(event.auditId, event.transitionIdempotencyKey, {
-        existingNextState: existing.nextState,
+        existingNextState: existingTk.nextState,
+        existingFingerprint: existingTk._fingerprint,
         requestedNextState: event.nextState,
+        requestedFingerprint: event._fingerprint,
       });
     }
 
-    // Optimistic concurrency
+    // Concurrency check
     const currentVersion = events.length;
     const currentState = events.length > 0 ? events[events.length - 1].nextState : null;
 
     if (expectedVersion !== undefined && expectedVersion !== currentVersion) {
-      throw new ConcurrencyConflictError(event.auditId, {
-        expectedVersion, actualVersion: currentVersion,
-      });
+      throw new ConcurrencyConflictError(event.auditId, { expectedVersion, actualVersion: currentVersion });
     }
     if (expectedState !== undefined && expectedState !== currentState) {
-      throw new ConcurrencyConflictError(event.auditId, {
-        expectedState, actualState: currentState,
-      });
+      throw new ConcurrencyConflictError(event.auditId, { expectedState, actualState: currentState });
     }
-
     if (event.sequence !== currentVersion) {
-      throw new RepositoryFailureError(
-        `Sequence mismatch: expected ${currentVersion}, got ${event.sequence}`
-      );
+      throw new RepositoryFailureError(`Sequence mismatch: expected ${currentVersion}, got ${event.sequence}`);
     }
 
-    // Append event and record transition key
-    events.push(event);
-    transitionKeyStore.set(tk, event);
+    // Store fingerprint on event before freezing
+    const storedEvent = { ...event, _fingerprint: event._fingerprint };
+    events.push(Object.freeze(storedEvent));
+
+    // Record transition key with fingerprint
+    transitionKeyStore.set(tk, Object.freeze({
+      eventId: event.eventId, auditId: event.auditId,
+      nextState: event.nextState, sequence: event.sequence,
+      tenantId: event.tenantId,
+      _fingerprint: event._fingerprint,
+    }));
   }
 
   function _clear() {
-    eventsStore.clear();
-    idempotencyStore.clear();
-    transitionKeyStore.clear();
-    auditMeta.clear();
+    eventsStore.clear(); idempotencyStore.clear();
+    transitionKeyStore.clear(); auditMeta.clear();
   }
 
   return {

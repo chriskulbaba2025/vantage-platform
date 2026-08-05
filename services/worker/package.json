@@ -13,6 +13,7 @@
     "test:schemas": "node --test src/contracts/validator.test.js",
     "test:artifacts": "node --test test-fixtures/artifacts/memory-artifact-store.test.js test-fixtures/artifacts/fs-artifact-store.test.js test-fixtures/artifacts/object-artifact-store.test.js",
     "test:lifecycle": "node --test test-fixtures/lifecycle/memory-repository.test.js test-fixtures/lifecycle/postgres-repository.test.js",
+    "test:lifecycle:postgres": "node --test test-fixtures/lifecycle/memory-repository.test.js test-fixtures/lifecycle/postgres-repository.test.js test-fixtures/lifecycle/postgres-real.test.js",
     "acceptance:wp2": "node scripts/acceptance-wp2.js",
     "acceptance:wp3": "node scripts/acceptance-wp3.js",
     "acceptance:wp4": "node scripts/acceptance-wp4.js",

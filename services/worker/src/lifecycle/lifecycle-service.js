@@ -2,24 +2,52 @@
  * Lifecycle Service — Canonical state-machine boundary.
  *
  * Enforces:
- *   - Tenant-scoped idempotent audit creation
+ *   - Tenant-scoped idempotent audit creation (atomic through repository)
  *   - Transition validation against the authoritative transition map
- *   - Transition idempotency (replay protection)
+ *   - Transition-request fingerprint idempotency
  *   - Optimistic concurrency (expectedState + expectedVersion)
- *   - Tenant isolation on every read and write
+ *   - Tenant isolation verified BEFORE transition-key lookup
  *   - Append-only event recording
- *   - Deterministic current-state projection
  *
  * @module lifecycle/lifecycle-service
  */
 
-import { isKnownState, isValidTransition, LIFECYCLE_STATE } from "./state-enum.js";
+import { createHash } from "node:crypto";
+import { isKnownState, isValidTransition } from "./state-enum.js";
 import { createLifecycleEvent, createAuditCreatedEvent } from "./lifecycle-events.js";
 import {
   AuditNotFoundError, DuplicateAuditError, InvalidTransitionError,
   ConcurrencyConflictError, InvalidLifecycleInputError,
   TransitionIdempotencyConflictError, TenantIsolationError,
 } from "./lifecycle-errors.js";
+
+// ---------------------------------------------------------------------------
+// Transition-request fingerprint
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a deterministic SHA-256 fingerprint from all transition-request
+ * fields that affect the outcome.  Generated values (eventId, timestamp)
+ * are excluded.
+ *
+ * Included fields after defaults/normalization:
+ *   auditId, tenantId, priorState, toState, actor, reason,
+ *   executionId, artifactKey, expectedState, expectedVersion
+ */
+function transitionFingerprint(params) {
+  const canonical = {
+    auditId:      params.auditId,
+    tenantId:     params.tenantId,
+    toState:      params.toState,
+    actor:        params.actor || "system",
+    reason:       params.reason || "",
+    executionId:  params.executionId || null,
+    artifactKey:  params.artifactKey || null,
+    expectedState: params.expectedState ?? null,
+    expectedVersion: params.expectedVersion ?? null,
+  };
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
 
 // ---------------------------------------------------------------------------
 // Projection
@@ -39,14 +67,10 @@ function projectState(events) {
 // Factory
 // ---------------------------------------------------------------------------
 
-/**
- * @param {object} repository — see memory/postgres implementations for contract.
- * @returns {object} Lifecycle service.
- */
 export function createLifecycleService(repository) {
 
   // ------------------------------------------------------------------
-  // create
+  // create — atomic, idempotent by tenant+key
   // ------------------------------------------------------------------
 
   async function create({ auditId, tenantId, clientId, idempotencyKey }) {
@@ -55,29 +79,21 @@ export function createLifecycleService(repository) {
     if (!clientId) throw new InvalidLifecycleInputError("clientId is required");
     if (!idempotencyKey) throw new InvalidLifecycleInputError("idempotencyKey is required");
 
-    const existing = await repository.loadByIdempotencyKey(tenantId, idempotencyKey);
-    if (existing) {
-      if (existing.auditId === auditId) {
-        // Same tenant + same key + same auditId → idempotent
-        const events = await repository.loadEvents(auditId, tenantId);
-        return projectState(events);
-      }
-      // Same tenant + same key + different auditId → conflict
-      throw new DuplicateAuditError({
-        tenantId, idempotencyKey, existingAuditId: existing.auditId, newAuditId: auditId,
-      });
-    }
-
-    // Also check that no other idempotency key exists for this auditId
-    const auditExisting = await repository.loadByIdempotencyKey(tenantId, null);
-    // We need a way to check audit-level.  The repository handles this.
     const event = createAuditCreatedEvent({ auditId, tenantId, clientId });
-    await repository.createAudit({ auditId, tenantId, clientId, idempotencyKey, event });
-    return projectState([event]);
+
+    // Atomic creation: repository handles idempotency internally
+    const created = await repository.createAudit({
+      auditId, tenantId, clientId, idempotencyKey, event,
+    });
+
+    // If repository reports an existing key/audit mismatch, it throws DuplicateAuditError
+    // If the audit already exists with same key → idempotent: repository returns true
+    const events = await repository.loadEvents(auditId, tenantId);
+    return projectState(events);
   }
 
   // ------------------------------------------------------------------
-  // transition
+  // transition — with fingerprint idempotency, tenant verification first
   // ------------------------------------------------------------------
 
   async function transition({
@@ -91,49 +107,58 @@ export function createLifecycleService(repository) {
     if (!isKnownState(toState)) throw new InvalidLifecycleInputError(`Unknown target state: "${toState}"`);
     if (!transitionIdempotencyKey) throw new InvalidLifecycleInputError("transitionIdempotencyKey is required");
 
-    // Check transition idempotency first
-    const existingTransitionEvent = await repository.loadByTransitionKey(auditId, transitionIdempotencyKey);
-    if (existingTransitionEvent) {
-      // Replay — verify the existing event matches
-      if (existingTransitionEvent.nextState === toState &&
-          existingTransitionEvent.tenantId === tenantId) {
-        const events = await repository.loadEvents(auditId, tenantId);
-        return projectState(events);
-      }
-      throw new TransitionIdempotencyConflictError(auditId, transitionIdempotencyKey, {
-        existingNextState: existingTransitionEvent.nextState,
-        requestedToState: toState,
-      });
-    }
-
-    // Load current state with tenant check
+    // STEP 1: Load events with tenant check FIRST
     const events = await repository.loadEvents(auditId, tenantId);
     if (!events || events.length === 0) {
       throw new AuditNotFoundError(auditId);
     }
 
     const current = projectState(events);
-
-    // Verify tenant ownership
     if (current.tenantId !== tenantId) {
       throw new TenantIsolationError({ auditId, tenantId });
     }
 
-    // Optimistic concurrency: delegate to repository transaction
+    // STEP 2: Build transition fingerprint (request-based, not state-based)
+    const fingerprint = transitionFingerprint({
+      auditId, tenantId,
+      toState,
+      actor, reason, executionId, artifactKey,
+      expectedState, expectedVersion,
+    });
+
+    // STEP 3: Check transition idempotency BEFORE validation (replay must win)
+    const existingTk = await repository.loadByTransitionKey(auditId, transitionIdempotencyKey);
+    if (existingTk) {
+      if (existingTk._fingerprint === fingerprint &&
+          existingTk.nextState === toState &&
+          existingTk.tenantId === tenantId) {
+        // Idempotent replay — return current projection
+        return projectState(events);
+      }
+      throw new TransitionIdempotencyConflictError(auditId, transitionIdempotencyKey, {
+        existingNextState: existingTk.nextState,
+        existingFingerprint: existingTk._fingerprint,
+        requestedToState: toState,
+        requestedFingerprint: fingerprint,
+      });
+    }
+
+    // STEP 4: Validate transition
+    if (!isValidTransition(current.state, toState)) {
+      throw new InvalidTransitionError(auditId, current.state, toState);
+    }
+
+    // STEP 5: Build and append event
     const event = createLifecycleEvent({
       auditId: current.auditId, tenantId: current.tenantId, clientId: current.clientId,
       sequence: current.version,
       priorState: current.state, nextState: toState,
       actor, reason, executionId, artifactKey,
       transitionIdempotencyKey,
+      _fingerprint: fingerprint,
     });
 
-    // Validate transition
-    if (!isValidTransition(current.state, toState)) {
-      throw new InvalidTransitionError(auditId, current.state, toState);
-    }
-
-    // Atomic append with concurrency guard
+    // STEP 6: Atomic append with concurrency guard
     await repository.appendEventAtomic({
       event,
       expectedState: expectedState !== undefined ? expectedState : current.state,
