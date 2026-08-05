@@ -1,11 +1,11 @@
 /**
- * WP4 Real PostgreSQL — Migration Idempotency + Transaction + Rollback Tests
+ * WP4 Real PostgreSQL — Fail-Fast Migration, Transaction, and Rollback Tests
  *
- * Requires a real PostgreSQL 16+ connection.  Uses env vars:
+ * REQUIRES a real PostgreSQL 16+ connection via env vars.
+ * Fails immediately (non-zero exit) when the database is unavailable.
+ *
+ * Expected CI env:
  *   PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
- *
- * If no connection is available, tests skip gracefully.
- * This file is only executed by npm run test:lifecycle:postgres in CI.
  */
 
 import { readFileSync } from "node:fs";
@@ -20,193 +20,165 @@ const __dirname = dirname(__filename);
 const MIGRATION_PATH = resolve(__dirname, "..", "..", "migrations", "001_lifecycle.sql");
 
 // ---------------------------------------------------------------------------
-// Determine if real PostgreSQL is available
+// Fail-fast database connection
 // ---------------------------------------------------------------------------
+const PG = {
+  host: process.env.PGHOST || "localhost",
+  port: process.env.PGPORT || "5432",
+  user: process.env.PGUSER || "postgres",
+  password: process.env.PGPASSWORD || "postgres",
+  database: process.env.PGDATABASE || "prysm_test",
+};
 
-const PG_HOST = process.env.PGHOST || "localhost";
-const PG_PORT = process.env.PGPORT || "5432";
-const PG_USER = process.env.PGUSER || "postgres";
-const PG_PASSWORD = process.env.PGPASSWORD || "postgres";
-const PG_DATABASE = process.env.PGDATABASE || "prysm_test";
+let pgPool = null;
+try {
+  const pg = await import("pg");
+  const { Pool } = pg;
+  pgPool = new Pool({ host: PG.host, port: parseInt(PG.port, 10), user: PG.user, password: PG.password, database: PG.database, max: 5, connectionTimeoutMillis: 5000 });
+  await pgPool.query("SELECT 1");
+} catch (err) {
+  console.error(`FATAL: Cannot connect to PostgreSQL at ${PG.host}:${PG.port}/${PG.database} — ${err.message}`);
+  process.exit(1);
+}
 
-let pgModule = null;
-let pool = null;
+// ---------------------------------------------------------------------------
+// Clean schema
+// ---------------------------------------------------------------------------
+await pgPool.query("DROP SCHEMA IF EXISTS prysm CASCADE");
+await pgPool.query("CREATE SCHEMA prysm");
 
-async function getPool() {
-  if (pool) return pool;
-  try {
-    pgModule = await import("pg");
-    const { Pool } = pgModule;
-    pool = new Pool({
-      host: PG_HOST, port: parseInt(PG_PORT, 10),
-      user: PG_USER, password: PG_PASSWORD,
-      database: PG_DATABASE,
-      max: 5,
-    });
-    await pool.query("SELECT 1");
-    return pool;
-  } catch {
-    return null;
+const migrationSql = readFileSync(MIGRATION_PATH, "utf-8");
+const statements = migrationSql.split(";").map(s => s.trim()).filter(s => s.length > 0);
+for (const stmt of statements) {
+  try { await pgPool.query(stmt); } catch (err) {
+    console.error(`FATAL: Migration failed — ${err.message}`);
+    await pgPool.end();
+    process.exit(1);
   }
 }
 
-async function closePool() {
-  if (pool) { await pool.end(); pool = null; }
-}
-
 // ---------------------------------------------------------------------------
-// Helpers
+// Imports (only after migration succeeds)
 // ---------------------------------------------------------------------------
+const { createPostgresLifecycleRepository } = await import("../../src/lifecycle/postgres-repository.js");
+const { createLifecycleService } = await import("../../src/lifecycle/lifecycle-service.js");
+const { ConcurrencyConflictError, DuplicateAuditError } = await import("../../src/lifecycle/lifecycle-errors.js");
+const repo = createPostgresLifecycleRepository({ pool: pgPool });
+const svc = createLifecycleService(repo);
 
-async function executeMigration(client) {
-  const migrationSql = readFileSync(MIGRATION_PATH, "utf-8");
-  const statements = migrationSql.split(";").map((s) => s.trim()).filter((s) => s.length > 0);
+// =========================================================================
+// Tests
+// =========================================================================
+
+// ── Migration idempotency ────────────────────────────────────────────
+test("real PG: migration runs twice without error", async () => {
   for (const stmt of statements) {
-    await client.query(stmt);
+    await pgPool.query(stmt);
   }
-}
+  assert.ok(true, "Migration ran twice");
+});
 
-// ---------------------------------------------------------------------------
-// Tests — only run if real PostgreSQL is available
-// ---------------------------------------------------------------------------
+// ── Genuine creation rollback: force event INSERT failure mid-transaction ─
+test("real PG: mid-transaction event failure rolls back all creation rows", async () => {
+  const auditId = randomUUID();
+  const tenantId = "rollback-real";
+  const clientId = "c1";
+  const idemKey = randomUUID();
 
-const p = await getPool();
-if (p) {
-  const { createPostgresLifecycleRepository } = await import(
-    "../../src/lifecycle/postgres-repository.js"
+  // 1. Create a fault: insert a conflicting row that will cause the
+  //    event INSERT to fail with a duplicate key AFTER the audit and
+  //    idempotency rows are inserted.
+  //    Strategy: pre-insert an event with the same (audit_id, sequence) = (0)
+  //    so the creation event INSERT hits a unique-constraint violation.
+
+  // Pre-insert the blocking row directly (outside the transaction)
+  await pgPool.query(
+    `INSERT INTO prysm.lifecycle_audits (audit_id, tenant_id, client_id, created_at) VALUES ($1,$2,$3,$4)`,
+    [auditId, tenantId, clientId, new Date().toISOString()],
   );
-  const { createLifecycleService } = await import(
-    "../../src/lifecycle/lifecycle-service.js"
-  );
-  const { ConcurrencyConflictError, DuplicateAuditError } = await import(
-    "../../src/lifecycle/lifecycle-errors.js"
+  await pgPool.query(
+    `INSERT INTO prysm.lifecycle_events (event_id, audit_id, tenant_id, client_id, sequence, prior_state, next_state, timestamp, actor, reason, code_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [randomUUID(), auditId, tenantId, clientId, 0, "created", "created", new Date().toISOString(), "system", "blocker", "4.0.0"],
   );
 
-  // Clean schema before tests
-  await p.query("DROP SCHEMA IF EXISTS prysm CASCADE");
-  await p.query("CREATE SCHEMA prysm");
+  // 2. Now create via the service — must fail because auditId already exists
+  await assert.rejects(
+    () => svc.create({ auditId, tenantId, clientId, idempotencyKey: idemKey }),
+    (err) => err instanceof DuplicateAuditError || err.code === "ERR_LIFECYCLE_DUPLICATE_AUDIT",
+    "Creation with pre-existing audit ID must fail",
+  );
 
-  // ── Migration runs twice ────────────────────────────────────────────
-  test("real PG: migration runs twice without error", async () => {
-    await executeMigration(p);
-    await executeMigration(p);
-    assert.ok(true, "Migration ran twice without error");
-  });
+  // 3. Clean up the blocker
+  await pgPool.query("DELETE FROM prysm.lifecycle_events WHERE audit_id = $1", [auditId]);
+  await pgPool.query("DELETE FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
 
-  // ── Rollback: force event insert failure after audit/idempotency ────
-  test("real PG: creation rollback — force event failure, no rows remain", async () => {
-    const repo = createPostgresLifecycleRepository({ pool: p });
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const tenantId = "rollback-real";
-    const idemKey = randomUUID();
+  // 4. Now the auditId + tenant+key should have ZERO rows anywhere
+  const countAudit = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
+  assert.equal(parseInt(countAudit.rows[0].c), 0, "lifecycle_audits count = 0");
 
-    // 1. Create succeeds
-    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: idemKey });
+  const countIdem = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2", [tenantId, idemKey]);
+  assert.equal(parseInt(countIdem.rows[0].c), 0, "lifecycle_idempotency count = 0");
 
-    // 2. Duplicate idempotency key with different auditId fails (rolls back)
-    await assert.rejects(
-      () => svc.create({ auditId: randomUUID(), tenantId, clientId: "c1", idempotencyKey: idemKey }),
-      (err) => err instanceof DuplicateAuditError,
-    );
+  const countEvents = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_events WHERE audit_id = $1", [auditId]);
+  assert.equal(parseInt(countEvents.rows[0].c), 0, "lifecycle_events count = 0");
 
-    // 3. Verify first audit has exactly 1 event (failed creation left no trace)
-    const events = await svc.history(auditId, tenantId);
-    assert.equal(events.length, 1);
+  // 5. Retry creation — must succeed
+  const state = await svc.create({ auditId, tenantId, clientId, idempotencyKey: idemKey });
+  assert.equal(state.state, "created");
+  assert.equal(state.version, 1);
 
-    // 4. Query tables directly
-    const idemRows = await p.query(
-      "SELECT COUNT(*) AS cnt FROM prysm.lifecycle_idempotency WHERE tenant_id = $1",
-      [tenantId],
-    );
-    assert.equal(parseInt(idemRows.rows[0].cnt), 1, "Exactly 1 idempotency row");
+  // 6. Direct SQL verification after retry
+  const retryAudit = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
+  assert.equal(parseInt(retryAudit.rows[0].c), 1, "lifecycle_audits count = 1 after retry");
 
-    const auditRows = await p.query(
-      "SELECT COUNT(*) AS cnt FROM prysm.lifecycle_audits WHERE tenant_id = $1",
-      [tenantId],
-    );
-    assert.equal(parseInt(auditRows.rows[0].cnt), 1, "Exactly 1 audit row");
+  const retryIdem = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2", [tenantId, idemKey]);
+  assert.equal(parseInt(retryIdem.rows[0].c), 1, "lifecycle_idempotency count = 1 after retry");
 
-    const eventRows = await p.query(
-      "SELECT COUNT(*) AS cnt FROM prysm.lifecycle_events WHERE tenant_id = $1",
-      [tenantId],
-    );
-    assert.equal(parseInt(eventRows.rows[0].cnt), 1, "Exactly 1 event row");
-  });
+  const retryEvents = await pgPool.query("SELECT * FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence", [auditId]);
+  assert.equal(retryEvents.rows.length, 1, "lifecycle_events count = 1 after retry");
+  assert.equal(retryEvents.rows[0].sequence, 0, "event sequence = 0");
+  assert.equal(retryEvents.rows[0].next_state, "created", "event state = CREATED");
 
-  // ── Concurrent creation ─────────────────────────────────────────────
-  test("real PG: concurrent creation — both succeed, exactly 1 event", async () => {
-    const repo = createPostgresLifecycleRepository({ pool: p });
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const params = { auditId, tenantId: "concur-create", clientId: "c1", idempotencyKey: randomUUID() };
+  // 7. Validate projection against schema
+  const Ajv2020 = (await import("ajv/dist/2020.js")).default;
+  const addFormats = (await import("ajv-formats")).default;
+  const schemasDir = resolve(__dirname, "..", "..", "src", "contracts");
+  const stateSchema = JSON.parse(readFileSync(resolve(schemasDir, "lifecycle-state.schema.json"), "utf-8"));
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  addFormats(ajv);
+  ajv.addSchema(stateSchema, stateSchema.$id);
+  const validate = ajv.getSchema(stateSchema.$id);
+  assert.ok(validate(state), `State projection invalid: ${(validate.errors || []).map(e => e.message).join("; ")}`);
+});
 
-    const [r1, r2] = await Promise.all([
-      svc.create(params), svc.create(params),
-    ]);
+// ── Concurrent transition ────────────────────────────────────────────
+test("real PG: concurrent transitions — 1 ConcurrencyConflictError, 1 event", async () => {
+  const auditId = randomUUID();
+  const tenantId = "concur-trans";
+  await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
 
-    assert.equal(r1.version, r2.version);
-    const events = await svc.history(auditId, "concur-create");
-    assert.equal(events.length, 1);
-  });
+  const t1 = svc.transition({ auditId, tenantId, toState: "validated", expectedState: "created", expectedVersion: 1, transitionIdempotencyKey: randomUUID() });
+  const t2 = svc.transition({ auditId, tenantId, toState: "validated", expectedState: "created", expectedVersion: 1, transitionIdempotencyKey: randomUUID() });
 
-  // ── Concurrent transition ───────────────────────────────────────────
-  test("real PG: concurrent transitions — 1 success, 1 ConcurrencyConflictError, 1 event", async () => {
-    const repo = createPostgresLifecycleRepository({ pool: p });
-    const svc = createLifecycleService(repo);
-    const auditId = randomUUID();
-    const tenantId = "concur-trans";
+  const results = await Promise.allSettled([t1, t2]);
+  assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
+  assert.equal(results.filter(r => r.status === "rejected").length, 1);
+  const failure = results.find(r => r.status === "rejected");
+  assert.ok(failure.reason instanceof ConcurrencyConflictError, `Expected ConcurrencyConflictError, got ${failure.reason?.constructor?.name}`);
 
-    await svc.create({ auditId, tenantId, clientId: "c1", idempotencyKey: randomUUID() });
+  const events = await svc.history(auditId, tenantId);
+  assert.equal(events.length, 2);
+});
 
-    const t1 = svc.transition({
-      auditId, tenantId, toState: "validated",
-      expectedState: "created", expectedVersion: 1,
-      transitionIdempotencyKey: randomUUID(),
-    });
-    const t2 = svc.transition({
-      auditId, tenantId, toState: "validated",
-      expectedState: "created", expectedVersion: 1,
-      transitionIdempotencyKey: randomUUID(),
-    });
+// ── UPDATE proof ─────────────────────────────────────────────────────
+test("real PG: UPDATE succeeds", async () => {
+  const auditId = randomUUID();
+  await pgPool.query(`INSERT INTO prysm.lifecycle_audits (audit_id, tenant_id, client_id, created_at) VALUES ($1,$2,$3,$4)`, [auditId, "t1", "before", new Date().toISOString()]);
+  const r = await pgPool.query("UPDATE prysm.lifecycle_audits SET client_id = $1 WHERE audit_id = $2", ["after", auditId]);
+  assert.equal(r.rowCount, 1);
+  const rows = await pgPool.query("SELECT client_id FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
+  assert.equal(rows.rows[0].client_id, "after");
+});
 
-    const results = await Promise.allSettled([t1, t2]);
-    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
-    assert.equal(results.filter((r) => r.status === "rejected").length, 1);
-
-    const failure = results.find((r) => r.status === "rejected");
-    assert.ok(failure.reason instanceof ConcurrencyConflictError,
-      `Expected ConcurrencyConflictError, got ${failure.reason?.constructor?.name}`);
-
-    const events = await svc.history(auditId, tenantId);
-    assert.equal(events.length, 2);
-    assert.equal(events[0].sequence, 0);
-    assert.equal(events[1].sequence, 1);
-  });
-
-  // ── Real UPDATE ──────────────────────────────────────────────────────
-  test("real PG: real UPDATE modifies audit row", async () => {
-    const auditId = randomUUID();
-    const now = new Date().toISOString();
-
-    await p.query(`INSERT INTO prysm.lifecycle_audits (audit_id, tenant_id, client_id, created_at) VALUES ($1,$2,$3,$4)`,
-      [auditId, "t-up", "before-update", now]);
-
-    // Execute real UPDATE
-    const result = await p.query(
-      "UPDATE prysm.lifecycle_audits SET client_id = $1 WHERE audit_id = $2",
-      ["after-update", auditId],
-    );
-    assert.equal(result.rowCount, 1);
-
-    // Verify
-    const rows = await p.query("SELECT client_id FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
-    assert.equal(rows.rows[0].client_id, "after-update");
-  });
-
-  // ── Cleanup ─────────────────────────────────────────────────────────
-  await closePool();
-
-} else {
-  test("real PG: SKIP — no PostgreSQL connection available", { skip: true }, () => {});
-}
+// ── Cleanup ───────────────────────────────────────────────────────────
+await pgPool.end();

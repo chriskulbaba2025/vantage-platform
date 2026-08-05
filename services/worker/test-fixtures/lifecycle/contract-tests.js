@@ -225,16 +225,21 @@ export function runLifecycleContractTests(label, repoFactory) {
           assert.ok(err instanceof TenantIsolationError || err instanceof AuditNotFoundError,
             `Expected isolation for "${name}", got ${err.constructor.name}`);
         } else {
-          // Accept either TransitionIdempotencyConflictError or InvalidTransitionError
-          // (if the changed toState is an invalid transition, that fires before replay check)
+          // Require exactly TransitionIdempotencyConflictError — idempotency
+          // check fires BEFORE validation in the service, so even an invalid
+          // toState should receive TransitionIdempotencyConflictError.
           assert.ok(
-            err instanceof TransitionIdempotencyConflictError || err instanceof InvalidTransitionError,
-            `Expected conflict for "${name}", got ${err.constructor.name}: ${err.message}`,
+            err instanceof TransitionIdempotencyConflictError,
+            `Expected TransitionIdempotencyConflictError for "${name}", got ${err.constructor.name}: ${err.message}`,
           );
         }
       }
       const afterEvents = await svc.history(auditId, tenantId);
       assert.equal(afterEvents.length, beforeLen, `Event count unchanged for "${name}"`);
+      // Current state unchanged
+      const cs = await svc.currentState(auditId, tenantId);
+      assert.equal(cs.state, "validated", `Current state must remain "validated" after replay conflict`);
+      // No additional transition-key record (proven by event count + state unchanged)
     });
   }
 
