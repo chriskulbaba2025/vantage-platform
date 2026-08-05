@@ -345,6 +345,11 @@ console.log("\n─ Behavioral: PostgreSQL rollback proof ─");
   }
 
   if (pgPool) {
+    const auditId = randomUUID();
+    const tenantId = "accept-rollback";
+    const clientId = "c1";
+    const idemKey = randomUUID();
+
     try {
       // Ensure fault-injection infrastructure exists
       await pgPool.query("CREATE TABLE IF NOT EXISTS prysm._fault_target (audit_id UUID PRIMARY KEY)");
@@ -372,11 +377,6 @@ console.log("\n─ Behavioral: PostgreSQL rollback proof ─");
 
       const repo = createPostgresLifecycleRepository({ pool: pgPool });
       const svc = createLifecycleService(repo);
-
-      const auditId = randomUUID();
-      const tenantId = "accept-rollback";
-      const clientId = "c1";
-      const idemKey = randomUUID();
 
       // ── Phase 1: Arm fault, attempt creation, prove total rollback ──
       await pgPool.query("INSERT INTO prysm._fault_target (audit_id) VALUES ($1)", [auditId]);
@@ -489,6 +489,16 @@ console.log("\n─ Behavioral: PostgreSQL rollback proof ─");
     } catch (err) {
       fail(`PG rollback proof error: ${err.message}`);
     } finally {
+      // Remove test data rows
+      await pgPool.query("DELETE FROM prysm.lifecycle_events WHERE audit_id = $1", [auditId]).catch(() => {});
+      await pgPool.query("DELETE FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2",
+        [tenantId, idemKey]).catch(() => {});
+      await pgPool.query("DELETE FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]).catch(() => {});
+
+      // Remove fault-injection infrastructure in dependency order
+      await pgPool.query("DROP TRIGGER IF EXISTS trg_fault_event ON prysm.lifecycle_events").catch(() => {});
+      await pgPool.query("DROP FUNCTION IF EXISTS prysm._fault_event_insert()").catch(() => {});
+      await pgPool.query("DROP TABLE IF EXISTS prysm._fault_target").catch(() => {});
       await pgPool.end().catch(() => {});
     }
   }

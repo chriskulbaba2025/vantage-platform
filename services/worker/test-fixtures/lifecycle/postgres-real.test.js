@@ -59,6 +59,14 @@ try {
 }
 
 // ---------------------------------------------------------------------------
+// Deterministic pool teardown — registered BEFORE any test so the pool
+// remains open for every registered test.
+// ---------------------------------------------------------------------------
+test.after(async () => {
+  await pgPool.end();
+});
+
+// ---------------------------------------------------------------------------
 // Clean schema + migration
 // ---------------------------------------------------------------------------
 await pgPool.query("DROP SCHEMA IF EXISTS prysm CASCADE");
@@ -73,34 +81,6 @@ for (const stmt of statements) {
     process.exit(1);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Fault-injection infrastructure
-// ---------------------------------------------------------------------------
-
-// Temp table to hold the audit_id that should trigger a fault
-await pgPool.query("CREATE TABLE IF NOT EXISTS prysm._fault_target (audit_id UUID PRIMARY KEY)");
-
-// Create a trigger function that raises an exception for targeted audits
-await pgPool.query(`
-  CREATE OR REPLACE FUNCTION prysm._fault_event_insert()
-  RETURNS TRIGGER AS $$
-  BEGIN
-    IF EXISTS (SELECT 1 FROM prysm._fault_target WHERE audit_id = NEW.audit_id) THEN
-      RAISE EXCEPTION 'FAULT INJECTED: event insert blocked for audit %', NEW.audit_id;
-    END IF;
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql
-`);
-
-// Attach trigger to lifecycle_events (BEFORE INSERT)
-await pgPool.query("DROP TRIGGER IF EXISTS trg_fault_event ON prysm.lifecycle_events");
-await pgPool.query(`
-  CREATE TRIGGER trg_fault_event
-  BEFORE INSERT ON prysm.lifecycle_events
-  FOR EACH ROW EXECUTE FUNCTION prysm._fault_event_insert()
-`);
 
 // ---------------------------------------------------------------------------
 // Imports
@@ -124,66 +104,119 @@ test("real PG: migration runs twice without error", async () => {
 });
 
 // ── Genuine mid-transaction creation rollback via trigger ─────────────
+//
+// The fault-injection infrastructure (trigger, function, table) is created
+// inside the test body and removed in the finally block.  No persistent
+// test-only database objects survive the test.
 test("real PG: mid-transaction event-insert failure rolls back ALL creation rows", async () => {
   const auditId = randomUUID();
   const tenantId = "rollback-real";
   const clientId = "c1";
   const idemKey = randomUUID();
 
-  // 1. Arm the fault trigger for this specific audit
-  await pgPool.query("INSERT INTO prysm._fault_target (audit_id) VALUES ($1)", [auditId]);
+  try {
+    // ── Setup: create fault-injection infrastructure ──
+    await pgPool.query("CREATE TABLE IF NOT EXISTS prysm._fault_target (audit_id UUID PRIMARY KEY)");
 
-  // 2. Attempt creation — the service's withTransaction does:
-  //    BEGIN → INSERT lifecycle_audits → INSERT lifecycle_idempotency →
-  //    INSERT lifecycle_events → TRIGGER FIRES → RAISE EXCEPTION →
-  //    ROLLBACK (audit + idempotency rows are removed)
-  await assert.rejects(
-    () => svc.create({ auditId, tenantId, clientId, idempotencyKey: idemKey }),
-    (err) => err.code === "ERR_LIFECYCLE_REPOSITORY_FAILURE" ||
-             (err.message && err.message.includes("FAULT INJECTED")),
-    "Creation must fail due to injected fault trigger",
-  );
+    await pgPool.query(`
+      CREATE OR REPLACE FUNCTION prysm._fault_event_insert()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM prysm._fault_target WHERE audit_id = NEW.audit_id) THEN
+          RAISE EXCEPTION 'FAULT INJECTED: event insert blocked for audit %', NEW.audit_id;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
 
-  // 3. Direct SQL: all three tables must have ZERO rows
-  const rAudit = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
-  assert.equal(parseInt(rAudit.rows[0].c), 0, "lifecycle_audits count = 0 after rollback");
+    await pgPool.query("DROP TRIGGER IF EXISTS trg_fault_event ON prysm.lifecycle_events");
+    await pgPool.query(`
+      CREATE TRIGGER trg_fault_event
+      BEFORE INSERT ON prysm.lifecycle_events
+      FOR EACH ROW EXECUTE FUNCTION prysm._fault_event_insert()
+    `);
 
-  const rIdem = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2", [tenantId, idemKey]);
-  assert.equal(parseInt(rIdem.rows[0].c), 0, "lifecycle_idempotency count = 0 after rollback");
+    // ── Phase 1: Arm fault, attempt creation, prove total rollback ──
+    await pgPool.query("INSERT INTO prysm._fault_target (audit_id) VALUES ($1)", [auditId]);
 
-  const rEvents = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_events WHERE audit_id = $1", [auditId]);
-  assert.equal(parseInt(rEvents.rows[0].c), 0, "lifecycle_events count = 0 after rollback");
+    // The service's withTransaction does:
+    //   BEGIN → INSERT lifecycle_audits → INSERT lifecycle_idempotency →
+    //   INSERT lifecycle_events → TRIGGER FIRES → RAISE EXCEPTION →
+    //   ROLLBACK (audit + idempotency rows are removed)
+    await assert.rejects(
+      () => svc.create({ auditId, tenantId, clientId, idempotencyKey: idemKey }),
+      (err) => err.code === "ERR_LIFECYCLE_REPOSITORY_FAILURE" ||
+               (err.message && err.message.includes("FAULT INJECTED")),
+      "Creation must fail due to injected fault trigger",
+    );
 
-  // 4. Disarm the fault
-  await pgPool.query("DELETE FROM prysm._fault_target WHERE audit_id = $1", [auditId]);
+    // Direct SQL: all three tables must have ZERO rows
+    const rAudit = await pgPool.query(
+      "SELECT COUNT(*) AS c FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
+    assert.equal(parseInt(rAudit.rows[0].c), 0, "lifecycle_audits count = 0 after rollback");
 
-  // 5. Retry — must succeed
-  const state = await svc.create({ auditId, tenantId, clientId, idempotencyKey: idemKey });
-  assert.equal(state.state, "created");
-  assert.equal(state.version, 1);
+    const rIdem = await pgPool.query(
+      "SELECT COUNT(*) AS c FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2",
+      [tenantId, idemKey]);
+    assert.equal(parseInt(rIdem.rows[0].c), 0, "lifecycle_idempotency count = 0 after rollback");
 
-  // 6. Direct SQL after retry: all three tables must have exactly ONE row
-  const r2Audit = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
-  assert.equal(parseInt(r2Audit.rows[0].c), 1, "lifecycle_audits count = 1 after retry");
+    const rEvents = await pgPool.query(
+      "SELECT COUNT(*) AS c FROM prysm.lifecycle_events WHERE audit_id = $1", [auditId]);
+    assert.equal(parseInt(rEvents.rows[0].c), 0, "lifecycle_events count = 0 after rollback");
 
-  const r2Idem = await pgPool.query("SELECT COUNT(*) AS c FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2", [tenantId, idemKey]);
-  assert.equal(parseInt(r2Idem.rows[0].c), 1, "lifecycle_idempotency count = 1 after retry");
+    // ── Phase 2: Disarm fault, retry exact same creation ──
+    await pgPool.query("DELETE FROM prysm._fault_target WHERE audit_id = $1", [auditId]);
 
-  const r2Events = await pgPool.query("SELECT * FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence", [auditId]);
-  assert.equal(r2Events.rows.length, 1, "lifecycle_events count = 1 after retry");
-  assert.equal(r2Events.rows[0].sequence, 0, "event sequence = 0");
-  assert.equal(r2Events.rows[0].next_state, "created", "event state = CREATED");
+    // Retry — must succeed with no changed fields
+    const state = await svc.create({ auditId, tenantId, clientId, idempotencyKey: idemKey });
+    assert.equal(state.state, "created");
+    assert.equal(state.version, 1);
 
-  // 7. Validate projection against lifecycle-state schema
-  const Ajv2020 = (await import("ajv/dist/2020.js")).default;
-  const addFormats = (await import("ajv-formats")).default;
-  const schemasDir = resolve(__dirname, "..", "..", "src", "contracts");
-  const stateSchema = JSON.parse(readFileSync(resolve(schemasDir, "lifecycle-state.schema.json"), "utf-8"));
-  const ajv = new Ajv2020({ strict: false, allErrors: true });
-  addFormats(ajv);
-  ajv.addSchema(stateSchema, stateSchema.$id);
-  const v = ajv.getSchema(stateSchema.$id);
-  assert.ok(v(state), `State projection invalid: ${(v.errors || []).map(e => e.message).join("; ")}`);
+    // Direct SQL after retry: all three tables must have exactly ONE row
+    const r2Audit = await pgPool.query(
+      "SELECT COUNT(*) AS c FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
+    assert.equal(parseInt(r2Audit.rows[0].c), 1, "lifecycle_audits count = 1 after retry");
+
+    const r2Idem = await pgPool.query(
+      "SELECT COUNT(*) AS c FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2",
+      [tenantId, idemKey]);
+    assert.equal(parseInt(r2Idem.rows[0].c), 1, "lifecycle_idempotency count = 1 after retry");
+
+    const r2Events = await pgPool.query(
+      "SELECT * FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence", [auditId]);
+    assert.equal(r2Events.rows.length, 1, "lifecycle_events count = 1 after retry");
+    assert.equal(r2Events.rows[0].sequence, 0, "event sequence = 0");
+    assert.equal(r2Events.rows[0].next_state, "created", "event state = CREATED");
+
+    // Validate projection against lifecycle-state schema
+    const Ajv2020 = (await import("ajv/dist/2020.js")).default;
+    const addFormats = (await import("ajv-formats")).default;
+    const schemasDir = resolve(__dirname, "..", "..", "src", "contracts");
+    const stateSchema = JSON.parse(readFileSync(resolve(schemasDir, "lifecycle-state.schema.json"), "utf-8"));
+    const ajv = new Ajv2020({ strict: false, allErrors: true });
+    addFormats(ajv);
+    ajv.addSchema(stateSchema, stateSchema.$id);
+    const v = ajv.getSchema(stateSchema.$id);
+    assert.ok(v(state), `State projection invalid: ${(v.errors || []).map(e => e.message).join("; ")}`);
+
+  } finally {
+    // ── Deterministic cleanup — runs on success, assertion failure, or any throw ──
+
+    // 1. Remove test data rows (may not exist if creation never reached the DB)
+    await pgPool.query("DELETE FROM prysm._fault_target WHERE audit_id = $1", [auditId]).catch(() => {});
+    await pgPool.query("DELETE FROM prysm.lifecycle_events WHERE audit_id = $1", [auditId]).catch(() => {});
+    await pgPool.query(
+      "DELETE FROM prysm.lifecycle_idempotency WHERE tenant_id = $1 AND idempotency_key = $2",
+      [tenantId, idemKey],
+    ).catch(() => {});
+    await pgPool.query("DELETE FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]).catch(() => {});
+
+    // 2. Remove fault-injection infrastructure in dependency order
+    await pgPool.query("DROP TRIGGER IF EXISTS trg_fault_event ON prysm.lifecycle_events").catch(() => {});
+    await pgPool.query("DROP FUNCTION IF EXISTS prysm._fault_event_insert()").catch(() => {});
+    await pgPool.query("DROP TABLE IF EXISTS prysm._fault_target").catch(() => {});
+  }
 });
 
 // ── Concurrent transition ────────────────────────────────────────────
@@ -219,6 +252,3 @@ test("real PG: UPDATE succeeds", async () => {
   const rows = await pgPool.query("SELECT client_id FROM prysm.lifecycle_audits WHERE audit_id = $1", [auditId]);
   assert.equal(rows.rows[0].client_id, "after");
 });
-
-// ── Cleanup ───────────────────────────────────────────────────────────
-await pgPool.end();
