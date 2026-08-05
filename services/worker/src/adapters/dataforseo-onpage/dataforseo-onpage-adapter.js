@@ -20,8 +20,6 @@
  * scoring, reporting, and module gates work without modification.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { domainOf } from "../../utils.js";
 import {
@@ -1303,12 +1301,14 @@ export async function crawlWithDataforseo(target, options = {}) {
     loginBlocked,
   });
 
-  // ── Persist raw artifact ───────────────────────────────────────────────
-  const artifactRoot = options.artifactRoot || null;
+  // ── Package raw artifact bytes for caller persistence ─────────────────
+  // WP3: adapters return raw bytes to their caller; they no longer own
+  // permanent artifact writes. The caller persists through the governed
+  // Artifact Store.
   const artifactSlug = options.artifactSlug || null;
   const artifactRunId = options.artifactRunId || null;
 
-  if (artifactRoot && artifactSlug && artifactRunId && rawTaskId) {
+  if (artifactSlug && artifactRunId && rawTaskId) {
     try {
       const rawPayload = {
         adapterVersion: ADAPTER_VERSION,
@@ -1331,16 +1331,13 @@ export async function crawlWithDataforseo(target, options = {}) {
       const rawHash = createHash("sha256").update(rawJson).digest("hex");
       const rawBytes = Buffer.byteLength(rawJson, "utf8");
 
-      const artifactDir = resolve(artifactRoot, "raw");
-      await mkdir(artifactDir, { recursive: true });
-      const artifactPath = resolve(artifactDir, `${artifactRunId}.json`);
-      await writeFile(artifactPath, rawJson, "utf8");
-
       result._rawSha256 = rawHash;
       result._rawBytes = rawBytes;
-      result.rawArtifactRef = `${artifactSlug}/${artifactRunId}/raw/${artifactRunId}.json?sha256=${rawHash}`;
-    } catch (rawWriteError) {
-      result._rawWriteError = rawWriteError.message;
+      result._rawArtifactBytes = Buffer.from(rawJson, "utf-8");
+      result._rawArtifactName = `${artifactRunId}.json`;
+      result._rawArtifactContentType = "application/json";
+    } catch (rawError) {
+      result._rawError = rawError.message;
     }
   }
 

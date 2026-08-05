@@ -23,4 +23,6 @@ jobs:
       - run: npm run check:template
       - run: npm test
       - run: npm run test:schemas
+      - run: npm run test:artifacts
       - run: npm run acceptance:wp2
+      - run: npm run acceptance:wp3

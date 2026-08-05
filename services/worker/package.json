@@ -11,7 +11,9 @@
     "test:backlinks": "node --test src/evidence/backlinks-provider.test.js",
     "check:template": "node src/report/verify-template.js",
     "test:schemas": "node --test src/contracts/validator.test.js",
+    "test:artifacts": "node --test test-fixtures/artifacts/memory-artifact-store.test.js test-fixtures/artifacts/fs-artifact-store.test.js test-fixtures/artifacts/object-artifact-store.test.js",
     "acceptance:wp2": "node scripts/acceptance-wp2.js",
+    "acceptance:wp3": "node scripts/acceptance-wp3.js",
     "acceptance:task7": "node scripts/acceptance-task7.js",
     "acceptance:task9": "node scripts/acceptance-task9.js",
     "acceptance:task10": "node scripts/acceptance-task10.js"

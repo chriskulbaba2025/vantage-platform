@@ -1,16 +1,16 @@
 /**
  * Backlink Artifact Writer
  *
- * Writes the four output artifacts for a backlink test run:
+ * Builds the four output artifacts for a backlink test run:
  *   1. raw-backlinks.json       — Raw DataForSEO response data
  *   2. normalized-backlinks.json — Normalized and classified records
  *   3. backlink-summary.json    — Human-readable summary
  *   4. backlink-manifest.json   — Stable contract for downstream consumers
  *
- * Default local output path: artifacts/local/backlink-tests/
- *
- * File I/O is delegated to the artifact store (storage/artifact-store.js)
- * so the adapter is not coupled to a specific storage backend.
+ * WP3: This module no longer owns permanent writes.  When a governed
+ * `store` is passed, artifacts are persisted through the canonical
+ * Artifact Store interface.  When omitted, artifact payloads are
+ * returned in-memory so the caller decides how to persist them.
  */
 
 import { resolve } from "node:path";
@@ -604,7 +604,111 @@ function buildSummary(normalizedRecords, runMeta) {
 // ---------------------------------------------------------------------------
 
 /**
- * Write all backlink test artifacts to disk.
+ * Write backlink artifacts through the WP3 governed Artifact Store.
+ *
+ * Persists all four artifacts through the canonical interface and returns
+ * validated Artifact Records alongside the built payloads.
+ *
+ * @param {object} params
+ * @param {Array<object>} params.rawBacklinks  - Raw DataForSEO backlink records.
+ * @param {object} params.rawSummary           - Raw DataForSEO summary data.
+ * @param {Array<object>} params.normalizedBacklinks - Normalized & classified records.
+ * @param {object} params.runMeta              - Run metadata.
+ * @param {object} params.store                - WP3 governed ArtifactStore (put/get/exists/verify).
+ * @param {object} params.scope                - { tenantId, clientId, auditId }.
+ * @param {Error|null} [params.fetchError]     - Captured fetch error.
+ * @returns {Promise<object>} Artifact Records and built payloads.
+ */
+export async function writeArtifactsGoverned({
+  rawBacklinks,
+  rawSummary,
+  normalizedBacklinks,
+  runMeta,
+  store,
+  scope,
+  fetchError = null,
+}) {
+  const rawPayload = {
+    _description: "Raw backlink data from DataForSEO (or fixture source).",
+    targetDomain: runMeta.targetDomain,
+    competitorDomains: runMeta.competitorDomains || [],
+    mode: runMeta.mode || "fixture",
+    createdAt: new Date().toISOString(),
+    summary: rawSummary,
+    backlinks: rawBacklinks,
+  };
+
+  const normalizedPayload = {
+    _description: "Normalized and classified backlink records per Vantage PRD §11.2.",
+    targetDomain: runMeta.targetDomain,
+    competitorDomains: runMeta.competitorDomains || [],
+    mode: runMeta.mode || "fixture",
+    createdAt: new Date().toISOString(),
+    totalRecords: normalizedBacklinks.length,
+    records: normalizedBacklinks.map((r) => {
+      const { _missingFields, _spamScoreMissing, _isSpammyAnchor, _isDuplicate, ...clean } = r;
+      return clean;
+    }),
+  };
+
+  const summary = buildSummary(normalizedBacklinks, runMeta);
+
+  const outputPaths = { rawPath: null, normalizedPath: null, summaryPath: null };
+  const manifest = buildManifest(summary, runMeta, rawSummary, outputPaths, fetchError);
+
+  const rawRecord = await store.put({
+    bytes: JSON.stringify(rawPayload, null, 2),
+    contentType: "application/json",
+    scope: { ...scope, category: "raw", artifactName: "raw-backlinks.json" },
+    source: "dataforseo-backlinks",
+  });
+  outputPaths.rawPath = rawRecord.key;
+
+  const normalizedRecord = await store.put({
+    bytes: JSON.stringify(normalizedPayload, null, 2),
+    contentType: "application/json",
+    scope: { ...scope, category: "normalized", artifactName: "normalized-backlinks.json" },
+    source: "dataforseo-backlinks",
+  });
+  outputPaths.normalizedPath = normalizedRecord.key;
+
+  const summaryRecord = await store.put({
+    bytes: JSON.stringify(summary, null, 2),
+    contentType: "application/json",
+    scope: { ...scope, category: "normalized", artifactName: "backlink-summary.json" },
+    source: "dataforseo-backlinks",
+  });
+  outputPaths.summaryPath = summaryRecord.key;
+
+  const finalManifest = buildManifest(summary, runMeta, rawSummary, outputPaths, fetchError);
+  const manifestRecord = await store.put({
+    bytes: JSON.stringify(finalManifest, null, 2),
+    contentType: "application/json",
+    scope: { ...scope, category: "manifests", artifactName: "backlink-manifest.json" },
+    source: "dataforseo-backlinks",
+  });
+
+  return {
+    rawPayload,
+    normalizedPayload,
+    summary,
+    manifest: finalManifest,
+    rawRecord,
+    normalizedRecord,
+    summaryRecord,
+    manifestRecord,
+    rawPath: rawRecord.key,
+    normalizedPath: normalizedRecord.key,
+    summaryPath: summaryRecord.key,
+    manifestPath: manifestRecord.key,
+  };
+}
+
+/**
+ * Write all backlink test artifacts to disk via the legacy artifact store.
+ *
+ * Preserved for backward compatibility.  New governed callers should use
+ * {@link writeArtifactsGoverned} with an injected WP3 ArtifactStore.
  *
  * @param {object} params
  * @param {Array<object>} params.rawBacklinks  - Raw DataForSEO backlink records.
@@ -613,7 +717,7 @@ function buildSummary(normalizedRecords, runMeta) {
  * @param {object} params.runMeta              - Run metadata (targetDomain, competitorDomains, mode, etc.).
  * @param {string} [params.outPath]            - Output directory. Defaults to artifacts/local/backlink-tests/.
  * @param {Error|null} [params.fetchError]     - Captured fetch error for credential-blocker detection.
- * @returns {{ rawPath: string, normalizedPath: string, summaryPath: string, manifestPath: string, summary: object }}
+ * @returns {{ rawPath: string, normalizedPath: string, summaryPath: string, manifestPath: string, summary: object, manifest: object }}
  */
 export function writeArtifacts({
   rawBacklinks,
@@ -627,8 +731,7 @@ export function writeArtifacts({
 
   // 1. Raw artifact
   const rawPayload = {
-    _description:
-      "Raw backlink data from DataForSEO (or fixture source).",
+    _description: "Raw backlink data from DataForSEO (or fixture source).",
     targetDomain: runMeta.targetDomain,
     competitorDomains: runMeta.competitorDomains || [],
     mode: runMeta.mode || "fixture",
@@ -636,68 +739,38 @@ export function writeArtifacts({
     summary: rawSummary,
     backlinks: rawBacklinks,
   };
-  const rawPath = writeJsonArtifact(
-    outputDir,
-    "raw-backlinks.json",
-    rawPayload,
-  );
+  const rawPath = writeJsonArtifact(outputDir, "raw-backlinks.json", rawPayload);
 
   // 2. Normalized artifact
   const normalizedPayload = {
-    _description:
-      "Normalized and classified backlink records per Vantage PRD §11.2.",
+    _description: "Normalized and classified backlink records per Vantage PRD §11.2.",
     targetDomain: runMeta.targetDomain,
     competitorDomains: runMeta.competitorDomains || [],
     mode: runMeta.mode || "fixture",
     createdAt: new Date().toISOString(),
     totalRecords: normalizedBacklinks.length,
     records: normalizedBacklinks.map((r) => {
-      // Strip internal-only fields from output
       const { _missingFields, _spamScoreMissing, _isSpammyAnchor, _isDuplicate, ...clean } = r;
       return clean;
     }),
   };
-  const normalizedPath = writeJsonArtifact(
-    outputDir,
-    "normalized-backlinks.json",
-    normalizedPayload,
-  );
+  const normalizedPath = writeJsonArtifact(outputDir, "normalized-backlinks.json", normalizedPayload);
 
   // 3. Summary artifact
   const summary = buildSummary(normalizedBacklinks, runMeta);
-  const summaryPath = writeJsonArtifact(
-    outputDir,
-    "backlink-summary.json",
-    summary,
-  );
+  const summaryPath = writeJsonArtifact(outputDir, "backlink-summary.json", summary);
 
-  // 4. Manifest artifact — stable contract for downstream consumers
+  // 4. Manifest artifact
   const outputPaths = { rawPath, normalizedPath, summaryPath };
-  const manifest = buildManifest(
-    summary,
-    runMeta,
-    rawSummary,
-    outputPaths,
-    fetchError,
-  );
-  const manifestPath = writeJsonArtifact(
-    outputDir,
-    "backlink-manifest.json",
-    manifest,
-  );
+  const manifest = buildManifest(summary, runMeta, rawSummary, outputPaths, fetchError);
+  const manifestPath = writeJsonArtifact(outputDir, "backlink-manifest.json", manifest);
 
-  return {
-    rawPath,
-    normalizedPath,
-    summaryPath,
-    manifestPath,
-    summary,
-    manifest,
-  };
+  return { rawPath, normalizedPath, summaryPath, manifestPath, summary, manifest };
 }
 
 export default {
   writeArtifacts,
+  writeArtifactsGoverned,
   validateRequiredFields,
   validateRawArtifact,
   validateNormalizedArtifact,
