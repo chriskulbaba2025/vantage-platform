@@ -1,45 +1,86 @@
-## Vantage Platform Current Status
+Prysm Governed Rebuild — Current Status
+
+
 
 Authoritative specification:
 
-- docs/Vantage_Production_PRD_v3.md
+docs/Vantage\_Production\_PRD\_v3.md
 
-Completed:
 
-- Task 1: PageSpeed live access verified
-- Task 2: V3 canonical source-status and evidence contracts merged in PR #4
-- Task 3: DataForSEO On-Page adapter merged in PR #5
-- Task 4: Production crawling switched from legacy crawler to DataForSEO as part of PR #5
-- Task 5: V3 scoring model and module gates merged in PR #6
-- Task 6: Human review gate and approved multi-page reports merged in PR #7
-- Task 7: PageSpeed-to-Lighthouse production fallback merged in PR #8
-- Task 8: GA4 and GSC OAuth connections merged in PR #9
-- Task 9: V3 competitor opportunity layer merged in PR #10
-- Task 10: V3 internal-link opportunity module merged in PR #11
-- feat/per-audit-google-properties: per-audit GA4/GSC property selection (current)
 
-Railway variables configured:
+Governing acceleration standard:
 
-- GOOGLE_PAGESPEED_API_KEY
-- VANTAGE_WEBHOOK_SECRET
-- DATAFORSEO_LOGIN
-- DATAFORSEO_PASSWORD
-- GOOGLE_CLIENT_ID
-- GOOGLE_CLIENT_SECRET
-- GOOGLE_REDIRECT_URI
-- VANTAGE_ENCRYPTION_KEY
+docs/prysm-governance/PRYSM\_REBUILD\_ACCELERATION\_STANDARD\_v1.0.md
 
-Current task:
 
-- Do not begin the next task. Main is current and clean.
+
+Repository:
+
+chriskulbaba2025/vantage-platform
+
+
+
+Current branch:
+
+feat/prysm-wp5-deterministic-reporting
+
+
+
+Current PR:
+
+\#35 — OPEN / DRAFT / UNMERGED
+
+
+
+Current verified starting head:
+
+f39c14e50eba6fac072d622235416ebea888d21f
+
+
+
+Current work package:
+
+WP5 closure
+
+
 
 Execution rules:
 
-- Read the full PRD before changing code.
-- Implement one task at a time.
-- Do not begin the next task.
-- Audit the final diff against the PRD.
-- Fix defects before reporting completion.
-- Run the full test suite and verification.
-- Do not commit or push until explicitly instructed.
-- Do not change reporting logic unless required by PRD v3 or a proven defect.
+Read the full PRD before changing code.
+
+Read and obey the Prysm Rebuild Acceleration Standard before changing code.
+
+Complete one governed work package at a time.
+
+Do not begin WP6.
+
+Audit the actual final diff against the governing sources.
+
+Fix confirmed WP5 checklist defects before reporting completion.
+
+Run the full required verification sequence.
+
+Do not merge without explicit authorization.
+
+Do not change reporting logic, report templates, golden-master files, scoring, findings, schemas, WP2-WP4 governed modules, CI configuration, or deployment files unless explicitly authorized by the frozen work-package scope.
+
+
+
+\# Prysm Governing Rules
+
+
+
+Before performing any Prysm planning, implementation, correction, testing, audit, or merge work:
+
+
+
+1\. Read `docs/prysm-governance/PRYSM\_REBUILD\_ACCELERATION\_STANDARD\_v1.0.md`.
+
+2\. Treat it as a governing source rule.
+
+3\. Its requirements override implementation suggestions and task-level shortcuts.
+
+4\. Do not begin implementation until the current work-package checklist, branch, PR, and exact starting SHA have been verified.
+
+5\. Do not merge or begin the next work package without explicit authorization.
+
