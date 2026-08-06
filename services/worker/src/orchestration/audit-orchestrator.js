@@ -1,5 +1,5 @@
 /**
- * WP5 Audit Orchestrator — Governed audit execution boundary with recovery.
+ * WP5 Audit Orchestrator — Governed audit execution with recovery and failure boundaries.
  * @module orchestration/audit-orchestrator
  */
 
@@ -44,6 +44,43 @@ function artifactScope({ tenantId, clientId, auditId, category, artifactName }) 
   return { tenantId, clientId, auditId, category, artifactName };
 }
 
+// ---------------------------------------------------------------------------
+// Source execution identity — stable deterministic key across runs
+// ---------------------------------------------------------------------------
+function stableJsonStringify(obj) {
+  if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
+  if (Array.isArray(obj)) return `[${obj.map(stableJsonStringify).join(",")}]`;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map(k => `${JSON.stringify(k)}:${stableJsonStringify(obj[k])}`).join(",")}}`;
+}
+
+/**
+ * Build a deterministic source execution identity.
+ * Includes all request values that can affect source output.
+ * Excludes volatile values (executionId, timestamps, retry attempt, idempotencyKey).
+ */
+function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) {
+  const config = {
+    targetUrl: auditRequest.targetUrl || null,
+    language: auditRequest.language || null,
+    market: auditRequest.market || null,
+    services: auditRequest.services || [],
+    competitors: auditRequest.competitors || [],
+    ga4PropertyId: auditRequest.ga4?.propertyId || null,
+    gscSiteUrl: auditRequest.gsc?.siteUrl || null,
+    maxPages: auditRequest.crawl?.maxPages || 500,
+    enableJavascript: auditRequest.crawl?.enableJavascript || false,
+  };
+  const normalizedConfig = stableJsonStringify(config);
+  const configHash = sha256(Buffer.from(normalizedConfig, "utf-8"));
+  return {
+    adapterVersion,
+    normalizedConfig,
+    configHash,
+    sourceExecutionKey: sourceExecutionKey({ auditId: auditRequest.auditId, source, adapterVersion, configHash }),
+  };
+}
+
 // =========================================================================
 // Factory
 // =========================================================================
@@ -59,9 +96,7 @@ export function createAuditOrchestrator({
   // -------------------------------------------------------------------
   async function validateRequest(auditRequest) {
     const { valid, errors } = validateContract(
-      "https://vantage-platform.io/prysm/contracts/v1/audit-request.schema.json",
-      auditRequest,
-    );
+      "https://vantage-platform.io/prysm/contracts/v1/audit-request.schema.json", auditRequest);
     return { valid, errors };
   }
 
@@ -77,32 +112,29 @@ export function createAuditOrchestrator({
           source, provider: "unknown", adapterVersion: "0.0.0",
           status: "NOT_APPLICABLE",
           startedAt: c.now(), completedAt: c.now(),
-          retryCount: 0,
-          coverage: { requested: 0, completed: 0, failed: 0 },
+          retryCount: 0, coverage: { requested: 0, completed: 0, failed: 0 },
           limitations: [`No adapter registered for source: ${source}`],
         },
       };
     }
 
-    const key = sourceExecutionKey({
-      auditId: auditRequest.auditId, source,
-      adapterVersion: "1.0.0",
-      configHash: sha256(Buffer.from(JSON.stringify({ source, auditId: auditRequest.auditId }))),
-    });
-
+    const identity = buildSourceExecutionIdentity({ auditRequest, source, adapterVersion: "1.0.0" });
     const policy = resolveSourcePolicy({ policyResolver: retryPolicyResolver, source });
 
-    return executeWithRetry({
+    const result = await executeWithRetry({
       policy, clock: c,
       executeFn: async (sig, att) => adapter.execute({
         auditRequest, source, executionId,
-        sourceExecutionKey: key, signal: sig, attempt: att,
+        sourceExecutionKey: identity.sourceExecutionKey,
+        signal: sig, attempt: att,
       }),
     });
+
+    return { ...result, identity };
   }
 
   // -------------------------------------------------------------------
-  // Persist raw bytes + read-back verify
+  // Persist raw bytes + read-back verify (throws on any failure)
   // -------------------------------------------------------------------
   async function persistRaw({ auditRequest, source, executionId, rawBytes, contentType }) {
     if (!rawBytes || rawBytes.length === 0) return null;
@@ -113,14 +145,14 @@ export function createAuditOrchestrator({
     });
     const record = await artifactStore.put({ bytes: rawBytes, contentType, scope, source, executionId });
     const rb = await artifactStore.get(record.key);
-    if (!rb || rb.length !== rawBytes.length) throw new Error(`Raw byte mismatch for ${source}`);
-    if (record.sha256 !== sha256(rawBytes)) throw new Error(`Raw SHA mismatch for ${source}`);
-    if (!(await artifactStore.verify(record))) throw new Error(`Raw verification failed for ${source}`);
+    if (!rb || rb.length !== rawBytes.length) throw new Error(`Raw artifact byte mismatch for ${source}`);
+    if (record.sha256 !== sha256(rawBytes)) throw new Error(`Raw artifact SHA mismatch for ${source}`);
+    if (!(await artifactStore.verify(record))) throw new Error(`Raw artifact verification failed for ${source}`);
     return record;
   }
 
   // -------------------------------------------------------------------
-  // Persist normalized + read-back verify
+  // Persist normalized result + read-back verify (throws on any failure)
   // -------------------------------------------------------------------
   async function persistNormalized({ auditRequest, source, sourceResult }) {
     const bytes = Buffer.from(JSON.stringify(sourceResult), "utf-8");
@@ -131,92 +163,121 @@ export function createAuditOrchestrator({
     });
     const record = await artifactStore.put({ bytes, contentType: "application/json", scope, source });
     const rb = await artifactStore.get(record.key);
-    if (!rb || rb.length !== bytes.length) throw new Error(`Normalized byte mismatch for ${source}`);
-    if (record.sha256 !== sha256(bytes)) throw new Error(`Normalized SHA mismatch for ${source}`);
-    if (!(await artifactStore.verify(record))) throw new Error(`Normalized verification failed for ${source}`);
+    if (!rb || rb.length !== bytes.length) throw new Error(`Normalized artifact byte mismatch for ${source}`);
+    if (record.sha256 !== sha256(bytes)) throw new Error(`Normalized artifact SHA mismatch for ${source}`);
+    if (!(await artifactStore.verify(record))) throw new Error(`Normalized artifact verification failed for ${source}`);
     return record;
   }
 
   // -------------------------------------------------------------------
-  // Process one source (new execution or restored-from-checkpoint)
+  // Process one source: execute adapter → validate → persist → manifest
+  // Throws on infrastructure failure (any exception here is infrastructure)
   // -------------------------------------------------------------------
-  async function processOneSource({ auditRequest, item, executionId, restoredResult }) {
-    let sourceResult, rawRecord, normalizedRecord;
+  async function processOneSource({ auditRequest, item, executionId, identity }) {
+    // Execute adapter via retry boundary
+    const execResult = await executeSource({ auditRequest, source: item.source, executionId });
+    const { rawBytes, contentType, sourceResult: rawResult, identity: actualIdentity } = execResult;
 
-    if (restoredResult) {
-      // Restore from verified checkpoint — do NOT call adapter
-      sourceResult = restoredResult.sourceResult;
-      normalizedRecord = restoredResult.normalizedRecord;
-      rawRecord = restoredResult.rawRecord;
-    } else {
-      // Execute adapter
-      const execResult = await executeSource({ auditRequest, source: item.source, executionId });
-      const { rawBytes, contentType, sourceResult: rawResult } = execResult;
+    // Build complete source result
+    const sourceResult = {
+      contractVersion: "1.0.0", schemaVersion: "1.0.0",
+      source: item.source,
+      provider: rawResult.provider || "mock",
+      adapterVersion: rawResult.adapterVersion || "1.0.0",
+      status: rawResult.status || "AVAILABLE",
+      startedAt: rawResult.startedAt || c.now(),
+      completedAt: rawResult.completedAt || c.now(),
+      retryCount: rawResult.retryCount || 0,
+      expectedRecords: rawResult.expectedRecords || 0,
+      returnedRecords: rawResult.returnedRecords || 0,
+      coverage: rawResult.coverage || { requested: 0, completed: 0, failed: 0 },
+      limitations: rawResult.limitations || [],
+      evidence: rawResult.evidence || {},
+    };
+    if (rawResult.requestId) sourceResult.requestId = rawResult.requestId;
+    if (rawResult.errorCategory) sourceResult.errorCategory = rawResult.errorCategory;
 
-      // Build complete source result
-      sourceResult = {
-        contractVersion: "1.0.0", schemaVersion: "1.0.0",
-        source: item.source,
-        provider: rawResult.provider || "mock",
-        adapterVersion: rawResult.adapterVersion || "1.0.0",
-        status: rawResult.status || "AVAILABLE",
-        startedAt: rawResult.startedAt || c.now(),
-        completedAt: rawResult.completedAt || c.now(),
-        retryCount: rawResult.retryCount || 0,
-        expectedRecords: rawResult.expectedRecords || 0,
-        returnedRecords: rawResult.returnedRecords || 0,
-        coverage: rawResult.coverage || { requested: 0, completed: 0, failed: 0 },
-        limitations: rawResult.limitations || [],
-        evidence: rawResult.evidence || {},
-      };
-      if (rawResult.requestId) sourceResult.requestId = rawResult.requestId;
-      if (rawResult.errorCategory) sourceResult.errorCategory = rawResult.errorCategory;
-
-      // Validate
-      const sv = validateContract(
-        "https://vantage-platform.io/prysm/contracts/v1/source-result.schema.json", sourceResult);
-      if (!sv.valid) {
-        throw Object.assign(
-          new Error(`Source result validation failed for ${item.source}`),
-          { infrastructureFailure: true },
-        );
-      }
-
-      // Persist raw
-      rawRecord = null;
-      if (rawBytes && rawBytes.length > 0) {
-        rawRecord = await persistRaw({ auditRequest, source: item.source, executionId, rawBytes, contentType: contentType || "application/json" });
-        sourceResult.artifact = { key: rawRecord.key, sha256: rawRecord.sha256, bytes: rawRecord.bytes, contentType: rawRecord.contentType };
-      }
-
-      // Persist normalized
-      normalizedRecord = await persistNormalized({ auditRequest, source: item.source, sourceResult });
-
-      // Persist checkpoint manifest
-      await persistSourceCheckpointManifest({
-        store: artifactStore,
-        scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
-        source: item.source,
-        sourceExecutionKey: sourceExecutionKey({ auditId: auditRequest.auditId, source: item.source, adapterVersion: "1.0.0", configHash: "" }),
-        completedAt: c.now(),
-        normalizedRecord,
-        rawRecord,
-      });
+    // Validate source result — any failure here is infrastructure
+    const sv = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/source-result.schema.json", sourceResult);
+    if (!sv.valid) {
+      throw new Error(`Source result validation failed for ${item.source}`);
     }
 
-    return { sourceResult, rawRecord, normalizedRecord };
+    // Persist raw bytes (throws on failure)
+    let rawRecord = null;
+    if (rawBytes && rawBytes.length > 0) {
+      rawRecord = await persistRaw({ auditRequest, source: item.source, executionId, rawBytes, contentType: contentType || "application/json" });
+      sourceResult.artifact = { key: rawRecord.key, sha256: rawRecord.sha256, bytes: rawRecord.bytes, contentType: rawRecord.contentType };
+    }
+
+    // Persist normalized result (throws on failure)
+    const normalizedRecord = await persistNormalized({ auditRequest, source: item.source, sourceResult });
+
+    // Persist source checkpoint manifest (throws on failure)
+    const identityForManifest = actualIdentity || identity || buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: "1.0.0" });
+    await persistSourceCheckpointManifest({
+      store: artifactStore,
+      scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
+      source: item.source,
+      sourceExecutionKey: identityForManifest.sourceExecutionKey,
+      completedAt: c.now(),
+      normalizedRecord,
+      rawRecord,
+    });
+
+    return { sourceResult, rawRecord, normalizedRecord, identity: identityForManifest };
   }
 
   // -------------------------------------------------------------------
-  // Assemble canonical evidence
+  // Restore a completed source from verified manifest (no adapter call)
   // -------------------------------------------------------------------
-  async function assembleAndPersistCanonical({ auditRequest, allSourceResults }) {
+  async function restoreSource({ auditRequest, source, restoredEntry }) {
+    const identity = buildSourceExecutionIdentity({ auditRequest, source, adapterVersion: "1.0.0" });
+
+    // Verify source execution key matches expected
+    if (restoredEntry.manifest.sourceExecutionKey !== identity.sourceExecutionKey) {
+      throw new Error(`Source execution key mismatch for ${source}: manifest key does not match current expected key`);
+    }
+
+    return {
+      sourceResult: restoredEntry.sourceResult,
+      rawRecord: restoredEntry.rawRecord,
+      normalizedRecord: restoredEntry.normalizedRecord,
+      identity,
+    };
+  }
+
+  // -------------------------------------------------------------------
+  // Discover verified checkpoints from persisted manifests
+  // -------------------------------------------------------------------
+  async function discoverCheckpoints(auditRequest, plan) {
+    const completed = [];
+    for (const item of plan) {
+      const restored = await loadAndVerifySourceCheckpointManifest({
+        store: artifactStore,
+        scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
+        source: item.source,
+        validateContract,
+        expectedSourceExecutionKey: buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: "1.0.0" }).sourceExecutionKey,
+      });
+      if (restored) {
+        completed.push({ source: item.source, completed: true, restored });
+      }
+    }
+    return completed;
+  }
+
+  // -------------------------------------------------------------------
+  // Assemble canonical evidence (throws on failure)
+  // -------------------------------------------------------------------
+  async function assembleCanonical({ auditRequest, allSourceResults }) {
     const sources = {};
     for (const entry of allSourceResults) {
       const ek = SOURCE_EVIDENCE_MAP[entry.source];
       if (!ek) continue;
       const sr = entry.sourceResult;
-      const se = { source: entry.source, status: sr.status, collectedAt: c.now() };
+      const se = { source: entry.source, status: sr.status, collectedAt: sr.completedAt || c.now() };
       if (FULL_SOURCES.has(ek)) {
         se.provider = sr.provider || "unknown";
         se.adapterVersion = sr.adapterVersion || "0.0.0";
@@ -236,6 +297,12 @@ export function createAuditOrchestrator({
       sources[ek] = se;
     }
 
+    // Use last source's completedAt as canonical timestamp for determinism
+    const lastCompletedAt = allSourceResults.reduce((latest, e) => {
+      const t = e.sourceResult?.completedAt;
+      return t && t > latest ? t : latest;
+    }, "");
+
     const evidence = {
       contractVersion: "1.0.0", evidenceVersion: "1.0.0",
       auditId: auditRequest.auditId,
@@ -251,11 +318,11 @@ export function createAuditOrchestrator({
         source: e.source, key: e.rawRecord.key, sha256: e.rawRecord.sha256, bytes: e.rawRecord.bytes, contentType: e.rawRecord.contentType,
       })),
       adapterVersions: Object.fromEntries(allSourceResults.map(e => [e.source, e.sourceResult.adapterVersion || "1.0.0"])),
-      createdAt: c.now(),
+      createdAt: lastCompletedAt || c.now(),
     };
 
     const sv = validateContract("https://vantage-platform.io/prysm/contracts/v1/canonical-evidence.schema.json", evidence);
-    if (!sv.valid) throw Object.assign(new Error("Canonical evidence validation failed"), { infrastructureFailure: true });
+    if (!sv.valid) throw new Error(`Canonical evidence validation failed`);
 
     const evidenceBytes = Buffer.from(JSON.stringify(evidence), "utf-8");
     const scope = artifactScope({
@@ -264,53 +331,137 @@ export function createAuditOrchestrator({
     });
     const canonicalRecord = await artifactStore.put({ bytes: evidenceBytes, contentType: "application/json", scope });
     const rb = await artifactStore.get(canonicalRecord.key);
-    if (!rb || rb.length !== evidenceBytes.length) throw Object.assign(new Error("Canonical evidence byte mismatch"), { infrastructureFailure: true });
-    if (canonicalRecord.sha256 !== sha256(evidenceBytes)) throw Object.assign(new Error("Canonical evidence SHA mismatch"), { infrastructureFailure: true });
-    if (!(await artifactStore.verify(canonicalRecord))) throw Object.assign(new Error("Canonical evidence verification failed"), { infrastructureFailure: true });
+    if (!rb || rb.length !== evidenceBytes.length) throw new Error("Canonical evidence byte mismatch");
+    if (canonicalRecord.sha256 !== sha256(evidenceBytes)) throw new Error("Canonical evidence SHA mismatch");
+    if (!(await artifactStore.verify(canonicalRecord))) throw new Error("Canonical evidence verification failed");
 
     return { evidence, canonicalRecord };
   }
 
   // -------------------------------------------------------------------
-  // Transition helper — wraps lifecycle with deterministic idempotency key
+  // Governed collection sequence — all inside failure boundary
   // -------------------------------------------------------------------
-  async function doTransition(auditId, tenantId, toState, keySuffix) {
+  async function governedCollection(auditRequest, executionId) {
+    const { auditId, tenantId, clientId } = auditRequest;
+    const scope = { tenantId, clientId, auditId };
+
+    // 1. Build source plan
+    const plan = buildSourcePlan({
+      auditId,
+      hasGa4: !!(auditRequest.ga4?.propertyId),
+      hasGsc: !!(auditRequest.gsc?.siteUrl),
+    });
+
+    // 2. Discover verified checkpoints
+    const verifiedCheckpoints = await discoverCheckpoints(auditRequest, plan);
+    const verifiedSources = new Set(verifiedCheckpoints.map(c => c.source));
+    const isResumed = verifiedCheckpoints.length > 0;
+
+    // 3. Build checkpoint ledger
+    const checkpointRecords = verifiedCheckpoints.map(c => ({
+      source: c.source, completed: true,
+      artifactKey: c.restored.normalizedRecord?.key,
+    }));
+    const ledger = buildCheckpointLedger(plan, checkpointRecords);
+
+    // 4. Execute or restore sources
+    const allSourceResults = [];
+
+    for (const item of ledger.checkpoints) {
+      const vcp = verifiedCheckpoints.find(c => c.source === item.source);
+
+      if (vcp && item.completed) {
+        const restored = await restoreSource({ auditRequest, source: item.source, restoredEntry: vcp.restored });
+        allSourceResults.push({
+          source: item.source,
+          sourceResult: restored.sourceResult,
+          rawRecord: restored.rawRecord,
+          normalizedRecord: restored.normalizedRecord,
+        });
+        continue;
+      }
+
+      // Execute adapter — any exception here is infrastructure failure
+      const identity = buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: "1.0.0" });
+      const result = await processOneSource({ auditRequest, item, executionId, identity });
+      allSourceResults.push({
+        source: item.source,
+        sourceResult: result.sourceResult,
+        rawRecord: result.rawRecord,
+        normalizedRecord: result.normalizedRecord,
+      });
+    }
+
+    // 5. Assemble canonical evidence
+    const { canonicalRecord } = await assembleCanonical({ auditRequest, allSourceResults });
+
+    // 6. Persist canonical record manifest
+    const manifestRecord = await persistCanonicalRecordManifest({
+      store: artifactStore, scope, createdAt: canonicalRecord.writtenAt || c.now(), canonicalRecord,
+    });
+    const manifestKey = manifestRecord.key;
+
+    // 7. collecting → evidence_stored
+    await lifecycleService.transition({
+      auditId, tenantId, toState: T.EVIDENCE_STORED,
+      transitionIdempotencyKey: `${auditId}-evidence-stored`,
+      artifactKey: manifestKey,
+    });
+
+    // 8. evidence_stored → evidence_locked
+    await lifecycleService.transition({
+      auditId, tenantId, toState: T.EVIDENCE_LOCKED,
+      transitionIdempotencyKey: `${auditId}-evidence-locked`,
+      artifactKey: manifestKey,
+    });
+
+    return { allSourceResults, canonicalRecord, isResumed };
+  }
+
+  // -------------------------------------------------------------------
+  // Transition to collection_failed — re-reads current state
+  // -------------------------------------------------------------------
+  async function failCollection(auditId, tenantId, originalError) {
+    const cs = await lifecycleService.currentState(auditId, tenantId);
+    if (!cs) throw originalError;
+    if (cs.state !== T.COLLECTING) {
+      const err = new Error(`Cannot transition to collection_failed: current state is ${cs.state}, not collecting`);
+      err.cause = originalError;
+      throw err;
+    }
+    try {
+      await lifecycleService.transition({
+        auditId, tenantId, toState: T.COLLECTION_FAILED,
+        expectedState: T.COLLECTING,
+        expectedVersion: cs.version,
+        transitionIdempotencyKey: `${auditId}-collection-failed`,
+      });
+    } catch (transitionErr) {
+      const err = new Error(`Failed to transition to collection_failed: ${transitionErr.message}`);
+      err.cause = originalError;
+      throw err;
+    }
+    throw originalError;
+  }
+
+  // -------------------------------------------------------------------
+  // Lifecycle helper
+  // -------------------------------------------------------------------
+  async function doTransition(auditId, tenantId, toState, suffix, artifactKey) {
     await lifecycleService.transition({
       auditId, tenantId, toState,
-      transitionIdempotencyKey: `${auditId}-${keySuffix}`,
+      transitionIdempotencyKey: `${auditId}-${suffix}`,
+      ...(artifactKey ? { artifactKey } : {}),
     });
   }
 
   // -------------------------------------------------------------------
-  // Discover verified checkpoints from persisted manifests
-  // -------------------------------------------------------------------
-  async function discoverCheckpoints(auditRequest, plan) {
-    const completed = [];
-    for (const item of plan) {
-      const restored = await loadAndVerifySourceCheckpointManifest({
-        store: artifactStore,
-        scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
-        source: item.source,
-        validateContract,
-      });
-      if (restored) {
-        completed.push({
-          source: item.source,
-          completed: true,
-          restored,
-        });
-      }
-    }
-    return completed;
-  }
-
-  // -------------------------------------------------------------------
-  // Build concise execution summary
+  // Build summary
   // -------------------------------------------------------------------
   function buildSummary({ auditRequest, executionId, finalState, resumed, allSourceResults, canonicalRecord, startedAt }) {
     const sc = { total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 };
     const sources = allSourceResults.map(e => {
-      const s = e.sourceResult.status.toLowerCase();
+      const s = (e.sourceResult.status || "NOT_APPLICABLE").toLowerCase();
       sc.total++;
       if (sc[s] !== undefined) sc[s]++;
       return Object.freeze({ source: e.source, status: e.sourceResult.status, retryCount: e.sourceResult.retryCount || 0, artifactKey: e.normalizedRecord?.key || null });
@@ -323,9 +474,9 @@ export function createAuditOrchestrator({
     });
   }
 
-  // -------------------------------------------------------------------
+  // ===================================================================
   // MAIN EXECUTE
-  // -------------------------------------------------------------------
+  // ===================================================================
   async function execute(auditRequest, opts = {}) {
     const executionId = opts.executionId || randomUUID();
     const startedAt = c.now();
@@ -337,7 +488,8 @@ export function createAuditOrchestrator({
     if (!validation.valid) {
       try { await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey }); } catch {}
       try { await doTransition(auditId, tenantId, T.VALIDATION_FAILED, "validation-failed"); } catch {}
-      return buildSummary({ auditRequest, executionId, finalState: T.VALIDATION_FAILED, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
+      const cs = await lifecycleService.currentState(auditId, tenantId);
+      return buildSummary({ auditRequest, executionId, finalState: cs?.state || T.VALIDATION_FAILED, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
     }
 
     // 2. Create or locate audit
@@ -347,33 +499,56 @@ export function createAuditOrchestrator({
       if (err.code !== "ERR_LIFECYCLE_DUPLICATE_AUDIT") throw err;
     }
 
-    // 3. Determine current state (re-read after create for accurate state)
+    // 3. Read current state
     const cs = await lifecycleService.currentState(auditId, tenantId);
     if (!cs) throw new Error("Lifecycle state not found after create");
 
-    // 3a. EVIDENCE_LOCKED — locked replay
+    // 3a. EVIDENCE_LOCKED — locked replay via lifecycle artifact key
     if (cs.state === T.EVIDENCE_LOCKED) {
-      const canonicalKey = buildCanonicalRecordManifestKey(scope);
+      const events = await lifecycleService.history(auditId, tenantId);
+      const elEvent = [...events].reverse().find(e => e.nextState === T.EVIDENCE_LOCKED);
+      const esEvent = [...events].reverse().find(e => e.nextState === T.EVIDENCE_STORED);
+      const manifestKey = elEvent?.artifactKey || esEvent?.artifactKey;
+      if (!manifestKey) throw new Error("Lifecycle event missing artifactKey for evidence_locked replay");
+
+      // Validate the key
+      const parsed = (await import("../storage/artifact-key.js")).parseArtifactKey(manifestKey);
+      if (parsed.tenantId !== tenantId || parsed.clientId !== clientId || parsed.auditId !== auditId) {
+        throw new Error(`Cross-tenant artifact key in lifecycle event: ${manifestKey}`);
+      }
+      if (parsed.category !== "manifests" || parsed.artifactName !== "canonical-evidence-record.json") {
+        throw new Error(`Invalid artifact key in lifecycle event: ${manifestKey}`);
+      }
+
       const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-      return buildSummary({
-        auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: false,
-        allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt,
-      });
+      return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: false, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
     }
 
-    // 3b. EVIDENCE_STORED — recover → evidence_locked
+    // 3b. EVIDENCE_STORED — recover via lifecycle event artifactKey
     if (cs.state === T.EVIDENCE_STORED) {
-      // Locate artifactKey from the evidence_stored lifecycle event
       const events = await lifecycleService.history(auditId, tenantId);
       const storedEvent = [...events].reverse().find(e => e.nextState === T.EVIDENCE_STORED);
-      const manifestKey = storedEvent?.artifactKey || buildCanonicalRecordManifestKey(scope);
+      const manifestKey = storedEvent?.artifactKey;
+      if (!manifestKey) throw new Error("Lifecycle evidence_stored event missing artifactKey");
+
+      // Validate key
+      const parsed = (await import("../storage/artifact-key.js")).parseArtifactKey(manifestKey);
+      if (parsed.tenantId !== tenantId || parsed.clientId !== clientId || parsed.auditId !== auditId) {
+        throw new Error(`Cross-tenant artifact key in lifecycle event: ${manifestKey}`);
+      }
+      if (parsed.category !== "manifests" || parsed.artifactName !== "canonical-evidence-record.json") {
+        throw new Error(`Invalid artifact key category/name in lifecycle event: ${manifestKey}`);
+      }
+
+      // Verify expected key matches
+      const expectedKey = buildCanonicalRecordManifestKey(scope);
+      if (manifestKey !== expectedKey) {
+        throw new Error(`Lifecycle artifact key ${manifestKey} does not match expected ${expectedKey}`);
+      }
 
       const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-      await doTransition(auditId, tenantId, T.EVIDENCE_LOCKED, "evidence-locked");
-      return buildSummary({
-        auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: true,
-        allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt,
-      });
+      await doTransition(auditId, tenantId, T.EVIDENCE_LOCKED, "evidence-locked", manifestKey);
+      return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: true, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
     }
 
     // 3c. COLLECTION_FAILED — recover → collecting
@@ -381,7 +556,7 @@ export function createAuditOrchestrator({
       await doTransition(auditId, tenantId, T.COLLECTING, "collection-failed-recovery");
     }
 
-    // 3d. CREATED — transition to validated → collecting (only for genuinely new audits)
+    // 3d. CREATED — transition to validated → collecting
     if (cs.state === T.CREATED) {
       await doTransition(auditId, tenantId, T.VALIDATED, "validated");
       await doTransition(auditId, tenantId, T.COLLECTING, "collecting");
@@ -392,143 +567,26 @@ export function createAuditOrchestrator({
       await doTransition(auditId, tenantId, T.COLLECTING, "collecting");
     }
 
-    // 3f. Already COLLECTING — no entry transition needed
-    // (falls through to source execution below)
-
-    // 3g. Unsupported state
+    // 3f. Unsupported
     const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED]);
     if (!SUPPORTED.has(cs.state)) {
       throw new Error(`Unsupported lifecycle state for orchestrator: ${cs.state}`);
     }
 
-    // 4. Build source plan
-    const plan = buildSourcePlan({
-      auditId,
-      hasGa4: !!(auditRequest.ga4?.propertyId),
-      hasGsc: !!(auditRequest.gsc?.siteUrl),
-    });
-
-    // 5. Discover verified checkpoints from persisted manifests
-    const verifiedCheckpoints = await discoverCheckpoints(auditRequest, plan);
-    const verifiedSources = new Set(verifiedCheckpoints.map(c => c.source));
-    const isResumed = verifiedCheckpoints.length > 0;
-
-    // Validate caller-supplied checkpoints against verified manifests
-    if (opts.checkpoints) {
-      for (const cp of opts.checkpoints) {
-        if (cp.completed && !verifiedSources.has(cp.source)) {
-          throw Object.assign(
-            new Error(`Caller-supplied checkpoint for ${cp.source} has no matching verified manifest`),
-            { infrastructureFailure: true },
-          );
-        }
-      }
+    // 4. Governed collection — all failures inside this boundary → collection_failed
+    try {
+      const { allSourceResults, canonicalRecord, isResumed } = await governedCollection(auditRequest, executionId);
+      return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: isResumed, allSourceResults, canonicalRecord, startedAt });
+    } catch (err) {
+      // Any exception inside the governed collection boundary → collection_failed
+      await failCollection(auditId, tenantId, err);
+      // failCollection always throws — this line is unreachable
+      throw err;
     }
-
-    // Build checkpoint ledger from verified manifests
-    const checkpointRecords = verifiedCheckpoints.map(c => ({
-      source: c.source,
-      completed: true,
-      artifactKey: c.restored.normalizedRecord?.key,
-    }));
-    const ledger = buildCheckpointLedger(plan, checkpointRecords);
-
-    // 6. Execute or restore sources
-    const allSourceResults = [];
-    let infrastructureFailed = false;
-    let infrastructureError = null;
-
-    for (const item of ledger.checkpoints) {
-      // Check for verified checkpoint
-      const vcp = verifiedCheckpoints.find(c => c.source === item.source);
-
-      if (vcp && item.completed) {
-        // Restore from verified manifest — do NOT call adapter
-        allSourceResults.push({
-          source: item.source,
-          sourceResult: vcp.restored.sourceResult,
-          rawRecord: vcp.restored.rawRecord,
-          normalizedRecord: vcp.restored.normalizedRecord,
-        });
-        continue;
-      }
-
-      // Execute adapter
-      try {
-        const result = await processOneSource({
-          auditRequest, item, executionId,
-          restoredResult: null,
-        });
-        allSourceResults.push({
-          source: item.source,
-          sourceResult: result.sourceResult,
-          rawRecord: result.rawRecord,
-          normalizedRecord: result.normalizedRecord,
-        });
-      } catch (err) {
-        if (err.infrastructureFailure) {
-          infrastructureFailed = true;
-          infrastructureError = err;
-          break; // Stop processing sources immediately
-        }
-        // Source-level failure — record and continue
-        allSourceResults.push({
-          source: item.source,
-          sourceResult: {
-            contractVersion: "1.0.0", schemaVersion: "1.0.0",
-            source: item.source, provider: "unknown", adapterVersion: "0.0.0",
-            status: "FAILED", startedAt: c.now(), completedAt: c.now(),
-            retryCount: 0,
-            coverage: { requested: 0, completed: 0, failed: 0 },
-            limitations: [`Source execution error: ${err.message}`],
-            errorCategory: "internal",
-          },
-          rawRecord: null, normalizedRecord: null,
-        });
-      }
-    }
-
-    // 7. Handle infrastructure failure
-    if (infrastructureFailed) {
-      if (cs.state === T.COLLECTING || cs.state === T.COLLECTION_FAILED) {
-        try {
-          await doTransition(auditId, tenantId, T.COLLECTION_FAILED, "collection-failed");
-        } catch {}
-      }
-      throw infrastructureError;
-    }
-
-    // 8. Assemble and persist canonical evidence
-    const { canonicalRecord } = await assembleAndPersistCanonical({ auditRequest, allSourceResults });
-
-    // 9. Persist canonical record manifest
-    const manifestRecord = await persistCanonicalRecordManifest({
-      store: artifactStore, scope, createdAt: c.now(), canonicalRecord,
-    });
-    const manifestKey = manifestRecord.key;
-
-    // 10. COLLECTING → EVIDENCE_STORED (with manifest key as artifactKey)
-    await lifecycleService.transition({
-      auditId, tenantId, toState: T.EVIDENCE_STORED,
-      transitionIdempotencyKey: `${auditId}-evidence-stored`,
-      artifactKey: manifestKey,
-    });
-
-    // 11. EVIDENCE_STORED → EVIDENCE_LOCKED
-    await lifecycleService.transition({
-      auditId, tenantId, toState: T.EVIDENCE_LOCKED,
-      transitionIdempotencyKey: `${auditId}-evidence-locked`,
-      artifactKey: manifestKey,
-    });
-
-    return buildSummary({
-      auditRequest, executionId, finalState: T.EVIDENCE_LOCKED,
-      resumed: isResumed, allSourceResults, canonicalRecord, startedAt,
-    });
   }
 
   return Object.freeze({ execute });
 }
 
-export { CANONICAL_SOURCES, SOURCE_EVIDENCE_MAP };
+export { CANONICAL_SOURCES, SOURCE_EVIDENCE_MAP, buildSourceExecutionIdentity };
 export default { createAuditOrchestrator };

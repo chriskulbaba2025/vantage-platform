@@ -80,10 +80,8 @@ export async function persistSourceCheckpointManifest({
     sourceExecutionKey,
     completedAt,
     normalizedArtifact: normalizedRecord,
+    rawArtifact: rawRecord || null,
   };
-  if (rawRecord) {
-    manifest.rawArtifact = rawRecord;
-  }
 
   const bytes = Buffer.from(JSON.stringify(manifest), "utf-8");
   const record = await store.put({
@@ -125,7 +123,7 @@ export async function persistSourceCheckpointManifest({
  * @returns {Promise<{ manifest: object, sourceResult: object, rawRecord: object|null, normalizedRecord: object }>}
  */
 export async function loadAndVerifySourceCheckpointManifest({
-  store, scope, source, validateContract,
+  store, scope, source, validateContract, expectedSourceExecutionKey,
 }) {
   const key = buildSourceCheckpointManifestKey(scope, source);
   const exists = await store.exists(key);
@@ -154,6 +152,11 @@ export async function loadAndVerifySourceCheckpointManifest({
   if (manifest.completed !== true) throw new Error(`Source checkpoint not marked completed for ${source}`);
   if (!manifest.sourceExecutionKey) throw new Error(`Source checkpoint missing sourceExecutionKey for ${source}`);
 
+  // Verify sourceExecutionKey matches expected when provided
+  if (expectedSourceExecutionKey && manifest.sourceExecutionKey !== expectedSourceExecutionKey) {
+    throw new Error(`Source execution key mismatch for ${source}: manifest=${manifest.sourceExecutionKey} expected=${expectedSourceExecutionKey}`);
+  }
+
   // 4. Verify normalized Artifact Record
   const normalizedRecord = manifest.normalizedArtifact;
   if (!normalizedRecord || !normalizedRecord.key) {
@@ -163,6 +166,8 @@ export async function loadAndVerifySourceCheckpointManifest({
   // Validate record structure
   const normValid = validateArtifactRecord(normalizedRecord);
   if (!normValid) throw new Error(`Source checkpoint normalized artifact record invalid for ${source}`);
+  if (normalizedRecord.contentType !== "application/json") throw new Error(`Source checkpoint normalized content type must be application/json for ${source}`);
+  if (normalizedRecord.source !== source) throw new Error(`Source checkpoint normalized record source mismatch for ${source}`);
 
   // Parse key to verify category and tenant scope
   const parsedNorm = parseArtifactKey(normalizedRecord.key);
@@ -211,6 +216,8 @@ export async function loadAndVerifySourceCheckpointManifest({
   if (manifest.rawArtifact) {
     rawRecord = manifest.rawArtifact;
     if (!rawRecord.key) throw new Error(`Source checkpoint rawArtifact missing key for ${source}`);
+    if (!validateArtifactRecord(rawRecord)) throw new Error(`Source checkpoint rawArtifact record invalid for ${source}`);
+    if (rawRecord.source !== source) throw new Error(`Source checkpoint rawArtifact source mismatch for ${source}`);
 
     const parsedRaw = parseArtifactKey(rawRecord.key);
     if (parsedRaw.category !== "raw") throw new Error(`Source checkpoint raw key not in raw category for ${source}`);
