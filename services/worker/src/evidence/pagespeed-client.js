@@ -795,3 +795,166 @@ export async function collectPerformanceForPages(urls, options = {}) {
 }
 
 export { normalizeLighthouse };
+
+// ---------------------------------------------------------------------------
+// Coverage sanitizer — strips non-schema fields (usableScores, pagesTested, etc.)
+// ---------------------------------------------------------------------------
+function sanitizeCoverage(cov) {
+  if (!cov) return null;
+  return {
+    requested: typeof cov.requested === "number" ? cov.requested : 0,
+    completed: typeof cov.completed === "number" ? cov.completed : 0,
+    failed: typeof cov.failed === "number" ? cov.failed : 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Governed execute() contract — WP6 universal adapter interface
+// ---------------------------------------------------------------------------
+
+const PAGESPEED_ADAPTER_VERSION = "1.1.0";
+
+/**
+ * Execute the PageSpeed + Lighthouse adapter behind the universal source contract.
+ *
+ * Conforms to the WP6 `execute({ auditRequest, source, executionId,
+ * sourceExecutionKey, signal, attempt })` interface.
+ *
+ * Extracts the target URL from auditRequest and uses the first URL for
+ * performance testing. Multi-page testing can be configured via
+ * auditRequest.performance settings.
+ */
+export async function execute({ auditRequest, source, executionId, sourceExecutionKey, signal, attempt }) {
+  const startedAt = new Date().toISOString();
+  const targetUrl = auditRequest.targetUrl;
+  const perfConfig = auditRequest.performance || {};
+
+  // Build options from audit request
+  const options = {
+    apiKey: perfConfig.pagespeedApiKey || process.env.PAGESPEED_API_KEY || "",
+    cruxApiKey: perfConfig.cruxApiKey || process.env.CRUX_API_KEY || "",
+    disableCache: true,
+    captureDiagnosticEvidence: true,
+    fetchImpl: perfConfig.fetchImpl || null,
+    localRunner: perfConfig.localRunner || null,
+  };
+
+  // Fast-fail: without an API key AND without a fetchImpl mock, live collection
+  // would hang or throw asynchronously (Chrome launch for Lighthouse fallback).
+  // When fetchImpl is injected (test mode), proceed normally — the mock controls
+  // the HTTP and Lighthouse behaviour.
+  if (!options.apiKey && !perfConfig.fetchImpl) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: PAGESPEED_ADAPTER_VERSION,
+        status: "NOT_CONNECTED",
+        startedAt,
+        completedAt,
+        retryCount: 0,
+        expectedRecords: 2,
+        returnedRecords: 0,
+        coverage: { requested: 2, completed: 0, failed: 2 },
+        limitations: ["PageSpeed API key not configured. Performance testing requires PAGESPEED_API_KEY."],
+        errorCategory: "not_configured",
+        evidence: { sourceStatus: "NOT_CONNECTED", intendedProvider: "pagespeed-insights" },
+      },
+    };
+  }
+
+  try {
+    let envelope;
+    const urls = perfConfig.urls || [targetUrl];
+
+    if (urls.length > 1) {
+      envelope = await collectPerformanceForPages(urls, options);
+    } else {
+      envelope = await collectPerformance(targetUrl, options);
+    }
+
+    // Serialize raw evidence for artifact storage
+    const rawPayload = {
+      adapterVersion: PAGESPEED_ADAPTER_VERSION,
+      collectedAt: envelope.collectedAt,
+      mobile: envelope.mobile ? {
+        source: envelope.mobile.source,
+        scores: envelope.mobile.scores,
+        metrics: envelope.mobile.metrics,
+      } : null,
+      desktop: envelope.desktop ? {
+        source: envelope.desktop.source,
+        scores: envelope.desktop.scores,
+        metrics: envelope.desktop.metrics,
+      } : null,
+      fieldData: envelope.fieldData,
+    };
+    const rawBytes = Buffer.from(JSON.stringify(rawPayload), "utf-8");
+
+    const sourceStatus = envelope._sourceStatus || {};
+    const sourceResult = {
+      contractVersion: "1.0.0",
+      schemaVersion: "1.0.0",
+      source,
+      provider: envelope.source || sourceStatus.provider || "Google",
+      adapterVersion: PAGESPEED_ADAPTER_VERSION,
+      status: envelope.sourceStatus || envelope.status || "AVAILABLE",
+      startedAt: sourceStatus.startedAt || startedAt,
+      completedAt: sourceStatus.completedAt || envelope.collectedAt || new Date().toISOString(),
+      ...(sourceStatus.requestId ? { requestId: sourceStatus.requestId } : {}),
+      retryCount: sourceStatus.retryCount || 0,
+      expectedRecords: sourceStatus.expectedRecordCount ?? envelope.coverage?.requested ?? 2,
+      returnedRecords: sourceStatus.returnedRecordCount ?? envelope.coverage?.completed ?? 0,
+      coverage: sanitizeCoverage(envelope.coverage) || { requested: 2, completed: 0, failed: 2 },
+      limitations: envelope.limitations || [],
+      evidence: {
+        sourceStatus: envelope.sourceStatus || envelope.status,
+        fallbackUsed: envelope.fallbackUsed || false,
+        primarySource: envelope.source,
+        intendedProvider: envelope.intendedProvider || "pagespeed-insights",
+        mobileStatus: envelope.mobile?.status || null,
+        desktopStatus: envelope.desktop?.status || null,
+      },
+    };
+
+    if (sourceStatus.errorCategory) {
+      sourceResult.errorCategory = sourceStatus.errorCategory;
+    }
+    if (envelope.mobile?.scores?.performance != null) {
+      sourceResult.evidence.mobilePerformanceScore = envelope.mobile.scores.performance;
+    }
+    if (envelope.desktop?.scores?.performance != null) {
+      sourceResult.evidence.desktopPerformanceScore = envelope.desktop.scores.performance;
+    }
+
+    return { rawBytes, contentType: "application/json", sourceResult };
+  } catch (error) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: PAGESPEED_ADAPTER_VERSION,
+        status: "FAILED",
+        startedAt,
+        completedAt,
+        retryCount: attempt - 1,
+        expectedRecords: 2,
+        returnedRecords: 0,
+        coverage: { requested: 2, completed: 0, failed: 2 },
+        limitations: [`Performance collection failed: ${error.message}`],
+        errorCategory: error.errorCategory || "internal",
+        evidence: {},
+      },
+    };
+  }
+}

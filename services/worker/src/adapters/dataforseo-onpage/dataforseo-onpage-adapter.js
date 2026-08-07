@@ -1436,9 +1436,132 @@ function buildFailedEnvelope({
 }
 
 // ---------------------------------------------------------------------------
+// Governed execute() contract — WP6 universal adapter interface
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute the DataForSEO On-Page adapter behind the universal source contract.
+ *
+ * Conforms to the WP6 `execute({ auditRequest, source, executionId,
+ * sourceExecutionKey, signal, attempt })` interface expected by the
+ * AuditOrchestrator.
+ *
+ * @param {object} args
+ * @param {object} args.auditRequest — full audit request with targetUrl, crawl config, etc.
+ * @param {string} args.source — "dataforseo-onpage"
+ * @param {string} args.executionId — unique execution ID for this run
+ * @param {string} args.sourceExecutionKey — deterministic source execution key
+ * @param {AbortSignal} args.signal — abort signal for timeout
+ * @param {number} args.attempt — current attempt number (1-based)
+ * @returns {Promise<{ rawBytes: Buffer|null, contentType: string|null, sourceResult: object }>}
+ */
+export async function execute({ auditRequest, source, executionId, sourceExecutionKey, signal, attempt }) {
+  const startedAt = new Date().toISOString();
+  const target = auditRequest.targetUrl;
+  const crawl = auditRequest.crawl || {};
+
+  // Build crawl options from audit request
+  const crawlOptions = {
+    maxPages: crawl.maxPages ?? DEFAULTS.maxPages,
+    maxDepth: crawl.maxDepth,
+    enableJavascript: crawl.enableJavascript ?? DEFAULTS.enableJavascript,
+    enableBrowserRendering: crawl.enableBrowserRendering ?? DEFAULTS.enableBrowserRendering,
+    loadResources: crawl.loadResources ?? DEFAULTS.loadResources,
+    includePatterns: crawl.includePatterns,
+    excludePatterns: crawl.excludePatterns,
+    maxExternalResources: crawl.maxExternalResources,
+    pollTimeoutMs: crawl.pollTimeoutMs ?? DEFAULTS.pollTimeoutMs,
+    pollIntervalMs: crawl.pollIntervalMs ?? DEFAULTS.pollIntervalMs,
+    clientOptions: {
+      mode: crawl.fixtures || crawl.fetchImpl ? (crawl.fixtures ? "fixture" : "live") : "live",
+      fixtures: crawl.fixtures || null,
+      fetchImpl: crawl.fetchImpl || null,
+    },
+    artifactSlug: auditRequest.auditId,
+    artifactRunId: executionId,
+  };
+
+  try {
+    const envelope = await crawlWithDataforseo(target, crawlOptions);
+
+    // Build the schema-valid source result from the envelope
+    const sourceStatus = envelope._sourceStatus || {};
+    const rawData = envelope._raw || {};
+
+    // Serialize raw provider payload for artifact storage
+    let rawBytes = null;
+    if (envelope._rawArtifactBytes) {
+      rawBytes = envelope._rawArtifactBytes;
+    } else if (rawData.taskId) {
+      const rawPayload = JSON.stringify(rawData);
+      rawBytes = Buffer.from(rawPayload, "utf-8");
+    }
+
+    const sourceResult = {
+      contractVersion: "1.0.0",
+      schemaVersion: "1.0.0",
+      source,
+      provider: "DataForSEO",
+      adapterVersion: ADAPTER_VERSION,
+      status: envelope.sourceStatus || envelope.status || "AVAILABLE",
+      startedAt: sourceStatus.startedAt || startedAt,
+      completedAt: sourceStatus.completedAt || envelope.collectedAt || new Date().toISOString(),
+      ...(sourceStatus.requestId || rawData.taskId ? { requestId: sourceStatus.requestId || rawData.taskId } : {}),
+      retryCount: sourceStatus.retryCount || 0,
+      expectedRecords: sourceStatus.expectedRecordCount ?? envelope.pageCount,
+      returnedRecords: sourceStatus.returnedRecordCount ?? envelope.pageCount,
+      coverage: envelope.coverage || {
+        requested: envelope.pageCount,
+        completed: envelope.pageCount,
+        failed: 0,
+      },
+      limitations: envelope.limitations || [],
+      evidence: {
+        sourceStatus: envelope.sourceStatus || envelope.status,
+        pageCount: envelope.pageCount,
+        domain: envelope.domain,
+        statusCounts: envelope.statusCounts || {},
+      },
+    };
+
+    if (sourceStatus.errorCategory) {
+      sourceResult.errorCategory = sourceStatus.errorCategory;
+    }
+
+    return { rawBytes, contentType: "application/json", sourceResult };
+  } catch (error) {
+    const completedAt = new Date().toISOString();
+    const isQuota = error.category === "rate_limit" || /429|quota|rate.limit/i.test(error.message);
+    const isAuth = error.category === "auth" || /401|403|unauthorized|authentication/i.test(error.message);
+
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "DataForSEO",
+        adapterVersion: ADAPTER_VERSION,
+        status: "FAILED",
+        startedAt,
+        completedAt,
+        retryCount: attempt - 1,
+        expectedRecords: crawlOptions.maxPages,
+        returnedRecords: 0,
+        coverage: { requested: crawlOptions.maxPages, completed: 0, failed: crawlOptions.maxPages },
+        limitations: [`DataForSEO On-Page execution failed: ${error.message}`],
+        errorCategory: isQuota ? "rate_limit" : isAuth ? "auth" : "internal",
+        evidence: {},
+      },
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export { ADAPTER_VERSION, DEFAULTS, normalizePage, summarizeSite };
 
-export default { crawlWithDataforseo };
+export default { crawlWithDataforseo, execute };

@@ -226,3 +226,131 @@ export async function collectBacklinks(targetUrl, competitors = [], options = {}
   const completedAt = new Date().toISOString();
   return summarize([...dedup.values()], firstResult(summaryBody), competitorDomains, requestCount, startedAt, completedAt);
 }
+
+// ---------------------------------------------------------------------------
+// Governed execute() contract — WP6 universal adapter interface
+// ---------------------------------------------------------------------------
+
+const BACKLINKS_ADAPTER_VERSION = "1.0.0";
+
+/**
+ * Execute the backlinks adapter behind the universal source contract.
+ */
+export async function execute({ auditRequest, source, executionId, sourceExecutionKey, signal, attempt }) {
+  const startedAt = new Date().toISOString();
+  const targetUrl = auditRequest.targetUrl;
+  const competitors = Array.isArray(auditRequest.competitors)
+    ? auditRequest.competitors
+    : [];
+
+  const services = auditRequest.services || [];
+  const topicKeywords = services.length > 0
+    ? services.map(s => typeof s === "string" ? s : s.name || s.service || "").filter(Boolean)
+    : [];
+
+  const options = {
+    login: process.env.DATAFORSEO_LOGIN || "",
+    password: process.env.DATAFORSEO_PASSWORD || "",
+    topicKeywords,
+  };
+
+  if (!options.login || !options.password) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "DataForSEO",
+        adapterVersion: BACKLINKS_ADAPTER_VERSION,
+        status: "NOT_CONNECTED",
+        startedAt,
+        completedAt,
+        retryCount: 0,
+        expectedRecords: 0,
+        returnedRecords: 0,
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        limitations: ["DataForSEO credentials not configured for backlinks."],
+        errorCategory: "not_configured",
+        evidence: {},
+      },
+    };
+  }
+
+  try {
+    const envelope = await collectBacklinks(targetUrl, competitors, options);
+    const envelopeStatus = envelope._sourceStatus || {};
+
+    // Serialize evidence for artifact storage
+    const rawPayload = {
+      adapterVersion: BACKLINKS_ADAPTER_VERSION,
+      collectedAt: envelope.collectedAt,
+      totalBacklinksReviewed: envelope.totalBacklinksReviewed,
+      goodCount: envelope.goodCount,
+      badCount: envelope.badCount,
+      worthPursuingCount: envelope.worthPursuingCount,
+      authoritySummary: envelope.authoritySummary,
+      topGoodLinks: envelope.topGoodLinks,
+      topWorthPursuingDomains: envelope.topWorthPursuingDomains,
+    };
+    const rawBytes = Buffer.from(JSON.stringify(rawPayload), "utf-8");
+
+    const sourceResult = {
+      contractVersion: "1.0.0",
+      schemaVersion: "1.0.0",
+      source,
+      provider: "DataForSEO",
+      adapterVersion: BACKLINKS_ADAPTER_VERSION,
+      status: envelope.sourceStatus || envelope.status || "AVAILABLE",
+      startedAt: envelopeStatus.startedAt || startedAt,
+      completedAt: envelopeStatus.completedAt || envelope.collectedAt || new Date().toISOString(),
+      ...(envelopeStatus.requestId ? { requestId: envelopeStatus.requestId } : {}),
+      retryCount: envelopeStatus.retryCount || 0,
+      expectedRecords: envelopeStatus.expectedRecordCount ?? envelope.totalBacklinksReviewed ?? 0,
+      returnedRecords: envelopeStatus.returnedRecordCount ?? envelope.totalBacklinksReviewed,
+      coverage: envelope.coverage || {
+        requested: envelope.totalBacklinksReviewed || 0,
+        completed: envelope.totalBacklinksReviewed || 0,
+        failed: 0,
+      },
+      limitations: [],
+      evidence: {
+        sourceStatus: envelope.sourceStatus || envelope.status,
+        totalBacklinksReviewed: envelope.totalBacklinksReviewed,
+        goodCount: envelope.goodCount,
+        authoritySummary: envelope.authoritySummary,
+      },
+    };
+
+    if (envelopeStatus.errorCategory) {
+      sourceResult.errorCategory = envelopeStatus.errorCategory;
+    }
+
+    return { rawBytes, contentType: "application/json", sourceResult };
+  } catch (error) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "DataForSEO",
+        adapterVersion: BACKLINKS_ADAPTER_VERSION,
+        status: "FAILED",
+        startedAt,
+        completedAt,
+        retryCount: attempt - 1,
+        expectedRecords: 0,
+        returnedRecords: 0,
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        limitations: [`Backlinks collection failed: ${error.message}`],
+        errorCategory: error.category || "internal",
+        evidence: {},
+      },
+    };
+  }
+}
