@@ -1473,8 +1473,9 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     pollTimeoutMs: crawl.pollTimeoutMs ?? DEFAULTS.pollTimeoutMs,
     pollIntervalMs: crawl.pollIntervalMs ?? DEFAULTS.pollIntervalMs,
     clientOptions: {
-      mode: "live",
-      fetchImpl: null, // use default fetch
+      mode: crawl.fixtures || crawl.fetchImpl ? (crawl.fixtures ? "fixture" : "live") : "live",
+      fixtures: crawl.fixtures || null,
+      fetchImpl: crawl.fetchImpl || null,
     },
     artifactSlug: auditRequest.auditId,
     artifactRunId: executionId,

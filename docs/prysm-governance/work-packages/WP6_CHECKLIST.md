@@ -1,6 +1,6 @@
 # Prysm WP6 Checklist — Adapter Migration
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Branch:** feat/prysm-wp6-adapter-migration
 **PR:** TBD
 **Required starting SHA:** c3edc3d0781ecdf54214d2932e7f5a03fad972f5
@@ -19,6 +19,7 @@
 - [x] `services/worker/src/evidence/backlinks-provider.js`
 - [x] `services/worker/src/orchestration/retry-policy.js`
 - [x] `services/worker/test-fixtures/orchestration/mock-adapters.js`
+- [x] `services/worker/src/adapters/wp6-adapter-contract.test.js` (v1.0.1 correction)
 - [x] `services/worker/scripts/acceptance-wp6.js` (new WP6 verification script)
 - [x] `services/worker/package.json` (WP6 npm script only)
 - [x] `docs/prysm-governance/work-packages/WP6_CHECKLIST.md`

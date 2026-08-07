@@ -797,6 +797,18 @@ export async function collectPerformanceForPages(urls, options = {}) {
 export { normalizeLighthouse };
 
 // ---------------------------------------------------------------------------
+// Coverage sanitizer — strips non-schema fields (usableScores, pagesTested, etc.)
+// ---------------------------------------------------------------------------
+function sanitizeCoverage(cov) {
+  if (!cov) return null;
+  return {
+    requested: typeof cov.requested === "number" ? cov.requested : 0,
+    completed: typeof cov.completed === "number" ? cov.completed : 0,
+    failed: typeof cov.failed === "number" ? cov.failed : 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Governed execute() contract — WP6 universal adapter interface
 // ---------------------------------------------------------------------------
 
@@ -823,11 +835,15 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     cruxApiKey: perfConfig.cruxApiKey || process.env.CRUX_API_KEY || "",
     disableCache: true,
     captureDiagnosticEvidence: true,
+    fetchImpl: perfConfig.fetchImpl || null,
+    localRunner: perfConfig.localRunner || null,
   };
 
-  // Fast-fail: without an API key and without Chrome, live collection would hang
-  // or throw asynchronously.  Return FAILED immediately.
-  if (!options.apiKey) {
+  // Fast-fail: without an API key AND without a fetchImpl mock, live collection
+  // would hang or throw asynchronously (Chrome launch for Lighthouse fallback).
+  // When fetchImpl is injected (test mode), proceed normally — the mock controls
+  // the HTTP and Lighthouse behaviour.
+  if (!options.apiKey && !perfConfig.fetchImpl) {
     const completedAt = new Date().toISOString();
     return {
       rawBytes: null,
@@ -894,7 +910,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       retryCount: sourceStatus.retryCount || 0,
       expectedRecords: sourceStatus.expectedRecordCount ?? envelope.coverage?.requested ?? 2,
       returnedRecords: sourceStatus.returnedRecordCount ?? envelope.coverage?.completed ?? 0,
-      coverage: envelope.coverage || { requested: 2, completed: 0, failed: 2 },
+      coverage: sanitizeCoverage(envelope.coverage) || { requested: 2, completed: 0, failed: 2 },
       limitations: envelope.limitations || [],
       evidence: {
         sourceStatus: envelope.sourceStatus || envelope.status,
