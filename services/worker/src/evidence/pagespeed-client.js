@@ -825,6 +825,33 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     captureDiagnosticEvidence: true,
   };
 
+  // Fast-fail: without an API key and without Chrome, live collection would hang
+  // or throw asynchronously.  Return FAILED immediately.
+  if (!options.apiKey) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: PAGESPEED_ADAPTER_VERSION,
+        status: "NOT_CONNECTED",
+        startedAt,
+        completedAt,
+        retryCount: 0,
+        expectedRecords: 2,
+        returnedRecords: 0,
+        coverage: { requested: 2, completed: 0, failed: 2 },
+        limitations: ["PageSpeed API key not configured. Performance testing requires PAGESPEED_API_KEY."],
+        errorCategory: "not_configured",
+        evidence: { sourceStatus: "NOT_CONNECTED", intendedProvider: "pagespeed-insights" },
+      },
+    };
+  }
+
   try {
     let envelope;
     const urls = perfConfig.urls || [targetUrl];
@@ -863,7 +890,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       status: envelope.sourceStatus || envelope.status || "AVAILABLE",
       startedAt: sourceStatus.startedAt || startedAt,
       completedAt: sourceStatus.completedAt || envelope.collectedAt || new Date().toISOString(),
-      requestId: sourceStatus.requestId || null,
+      ...(sourceStatus.requestId ? { requestId: sourceStatus.requestId } : {}),
       retryCount: sourceStatus.retryCount || 0,
       expectedRecords: sourceStatus.expectedRecordCount ?? envelope.coverage?.requested ?? 2,
       returnedRecords: sourceStatus.returnedRecordCount ?? envelope.coverage?.completed ?? 0,
@@ -904,7 +931,6 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         status: "FAILED",
         startedAt,
         completedAt,
-        requestId: null,
         retryCount: attempt - 1,
         expectedRecords: 2,
         returnedRecords: 0,

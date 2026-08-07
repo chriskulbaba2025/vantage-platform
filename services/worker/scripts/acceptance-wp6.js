@@ -180,10 +180,9 @@ console.log("\n─ C. Orchestrator integration (WP6-ADP-17) ─");
 // ── D. One adapter failure does not corrupt others ──
 console.log("\n─ D. Independent adapter failure (WP6-ADP-17) ─");
 {
-  // Use an adapter that always throws (not retryable) so the orchestrator
-  // surfaces the failure.  After all retries are exhausted, executeWithRetry
-  // returns a FAILED source result instead of throwing.
-  // The FAILED adapter's source should be recorded as FAILED while others succeed.
+  // An adapter that always throws.  After all retries are exhausted,
+  // executeWithRetry returns a FAILED source result.  The governed behaviour
+  // is: the FAILED source must not corrupt the other sources.
   let callCount = 0;
   const alwaysThrowAdapter = {
     adapterVersion: "1.0.0",
@@ -193,7 +192,6 @@ console.log("\n─ D. Independent adapter failure (WP6-ADP-17) ─");
       err.category = "internal";
       throw err;
     },
-    getCallCount: () => callCount,
   };
 
   const adapters = createBaseMockAdapters();
@@ -207,26 +205,17 @@ console.log("\n─ D. Independent adapter failure (WP6-ADP-17) ─");
     adapters, validateContract, clock: mockClock(),
   });
 
-  try {
-    const summary = await orch.execute(baReq());
-    // The retry-policy will retry the throwing adapter up to maxAttempts (3),
-    // then return a FAILED source result. The orchestration should complete
-    // with that source as FAILED and others as AVAILABLE.
-    assert(summary.sourceCounts.failed >= 1,
-      "ADP-17: at least one source FAILED");
-    assert(summary.sourceCounts.available >= 3,
-      `ADP-17: remaining sources still AVAILABLE (got ${summary.sourceCounts.available})`);
-    assert(callCount > 0,
-      `ADP-17: failing adapter was called (${callCount} times)`);
-    assertEq(summary.finalState, T.EVIDENCE_LOCKED,
-      "ADP-17: orchestration completes to EVIDENCE_LOCKED despite one FAILED source");
-  } catch (err) {
-    // If the failure propagates (e.g. infrastructure failure), that's also valid.
-    // The key invariant: other adapters were not affected.
-    assert(callCount > 0,
-      `ADP-17: failing adapter was called before orchestration threw`);
-    pass("ADP-17: orchestration threw on adapter failure (valid fail-closed)");
-  }
+  // Governed behaviour: retries exhausted → FAILED source result.
+  // The orchestration completes with FAILED source, others AVAILABLE.
+  const summary = await orch.execute(baReq());
+  assert(summary.sourceCounts.failed >= 1,
+    "ADP-17: at least one source FAILED");
+  assert(summary.sourceCounts.available >= 3,
+    `ADP-17: remaining sources still AVAILABLE (got ${summary.sourceCounts.available})`);
+  assert(callCount > 0,
+    `ADP-17: failing adapter was called (${callCount} times)`);
+  assertEq(summary.finalState, T.EVIDENCE_LOCKED,
+    "ADP-17: orchestration completes to EVIDENCE_LOCKED despite one FAILED source");
 }
 
 // ── E. NOT_CONNECTED for optional sources ──
