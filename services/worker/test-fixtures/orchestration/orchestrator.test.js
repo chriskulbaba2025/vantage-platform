@@ -204,14 +204,17 @@ test("WP5-CLOSE-VAL-04: validation_failed transition failure rejects, no summary
 // WP5-CLOSE-IDEM-01 — Failure transition key is execution-scoped
 // ===================================================================
 test("WP5-CLOSE-IDEM-01: collection_failed key is execution-scoped", async () => {
+  // Use ONE fixed controlled auditId across all executions
+  const auditId = randomUUID();
+  const tenantId = "t1";
+  const clientId = "c1";
+  const idempotencyKey = randomUUID();
+  const req = { contractVersion: "1.0.0", auditId, tenantId, clientId, idempotencyKey, targetUrl: "https://example.com" };
+
   const capturedKeys = [];
 
-  // Execution 1 with ex1 — infrastructure failure triggers collection_failed
-  {
-    const store = createGovernedArtifactStore({ type: "memory" });
-    const repo = createMemoryLifecycleRepository();
-    const baseLc = createLifecycleService(repo);
-    const lc = {
+  function makeLc(baseLc) {
+    return {
       create: async (args) => baseLc.create(args),
       transition: async (args) => {
         if (args.toState === T.COLLECTION_FAILED) capturedKeys.push(args.transitionIdempotencyKey);
@@ -220,98 +223,130 @@ test("WP5-CLOSE-IDEM-01: collection_failed key is execution-scoped", async () =>
       currentState: async (aid, tid) => baseLc.currentState(aid, tid),
       history: async (aid, tid) => baseLc.history(aid, tid),
     };
+  }
 
-    const req = baReq();
-    const { auditId, tenantId, clientId } = req;
-    await baseLc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
-    await baseLc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:ex1:validated` });
-    await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:ex1:collecting` });
-
-    // Inject raw artifact failure to trigger collection_failed (outside retry boundary)
+  function injectRawFailure(store) {
     const realPut = store.put.bind(store);
     store.put = async (input) => {
       if (input.scope?.category === "raw") throw new Error("raw write failure");
       return realPut(input);
     };
-
-    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
-    await assert.rejects(() => orch.execute(req, { executionId: "ex1" }));
+    return store;
   }
 
-  // Execution 2 with ex2 — different executionId
+  // Set up lifecycle once — created → validated → collecting
+  const repo = createMemoryLifecycleRepository();
+  const baseLc = createLifecycleService(repo);
+  await baseLc.create({ auditId, tenantId, clientId, idempotencyKey });
+  await baseLc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:setup:validated` });
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:setup:collecting` });
+
+  // Execution exec-a (first time) → collection_failed
   {
-    const store = createGovernedArtifactStore({ type: "memory" });
-    const repo = createMemoryLifecycleRepository();
-    const baseLc = createLifecycleService(repo);
-    const lc = {
-      create: async (args) => baseLc.create(args),
-      transition: async (args) => {
-        if (args.toState === T.COLLECTION_FAILED) capturedKeys.push(args.transitionIdempotencyKey);
-        return baseLc.transition(args);
-      },
-      currentState: async (aid, tid) => baseLc.currentState(aid, tid),
-      history: async (aid, tid) => baseLc.history(aid, tid),
-    };
-
-    const req = baReq();
-    const { auditId, tenantId, clientId } = req;
-    await baseLc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
-    await baseLc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:ex2:validated` });
-    await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:ex2:collecting` });
-
-    const realPut = store.put.bind(store);
-    store.put = async (input) => {
-      if (input.scope?.category === "raw") throw new Error("raw write failure");
-      return realPut(input);
-    };
-
+    const store = injectRawFailure(createGovernedArtifactStore({ type: "memory" }));
+    const lc = makeLc(baseLc);
     const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
-    await assert.rejects(() => orch.execute(req, { executionId: "ex2" }));
+    await assert.rejects(() => orch.execute(req, { executionId: "exec-a" }));
   }
+  const sameExecutionKey1 = capturedKeys[0];
 
-  assert.equal(capturedKeys.length, 2, "two collection_failed transitions captured");
-  assert.ok(capturedKeys[0].includes("ex1"), `key 0 should contain ex1: ${capturedKeys[0]}`);
-  assert.ok(capturedKeys[1].includes("ex2"), `key 1 should contain ex2: ${capturedKeys[1]}`);
-  assert.notEqual(capturedKeys[0], capturedKeys[1], "keys must differ for different executionIds");
+  // Reset to collecting, execute exec-b (different executionId) → collection_failed
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:reset1:collection-failed-recovery` });
+  {
+    const store = injectRawFailure(createGovernedArtifactStore({ type: "memory" }));
+    const lc = makeLc(baseLc);
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
+    await assert.rejects(() => orch.execute(req, { executionId: "exec-b" }));
+  }
+  const differentExecutionKey = capturedKeys[1];
+
+  // Reset to collecting, execute exec-a again (same executionId) → collection_failed
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:reset2:collection-failed-recovery` });
+  {
+    const store = injectRawFailure(createGovernedArtifactStore({ type: "memory" }));
+    const lc = makeLc(baseLc);
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
+    await assert.rejects(() => orch.execute(req, { executionId: "exec-a" }));
+  }
+  const sameExecutionKey2 = capturedKeys[2];
+
+  // Exact equality assertions
+  assert.equal(sameExecutionKey1, sameExecutionKey2, "same auditId + same executionId → identical keys");
+  assert.equal(sameExecutionKey1, `${auditId}:exec-a:collection-failed`, "key format is exactly {auditId}:{executionId}:collection-failed");
+  assert.notEqual(sameExecutionKey1, differentExecutionKey, "different executionIds → different keys");
+  assert.equal(differentExecutionKey, `${auditId}:exec-b:collection-failed`, "different key format is exactly {auditId}:{executionId}:collection-failed");
 });
 
 // ===================================================================
 // WP5-CLOSE-IDEM-02 — Recovery transition key is execution-scoped
 // ===================================================================
 test("WP5-CLOSE-IDEM-02: collection_failed → collecting recovery key is execution-scoped", async () => {
-  const store = createGovernedArtifactStore({ type: "memory" });
-  const repo = createMemoryLifecycleRepository();
+  // Use ONE fixed controlled auditId across all recoveries
+  const auditId = randomUUID();
+  const tenantId = "t1";
+  const clientId = "c1";
+  const idempotencyKey = randomUUID();
+  const req = { contractVersion: "1.0.0", auditId, tenantId, clientId, idempotencyKey, targetUrl: "https://example.com" };
   const capturedKeys = [];
+
+  // Set up lifecycle once
+  const repo = createMemoryLifecycleRepository();
   const baseLc = createLifecycleService(repo);
-  const lc = {
-    create: async (args) => baseLc.create(args),
-    transition: async (args) => {
-      if (args.toState === T.COLLECTING && capturedKeys.length < 2) {
-        // Capture initial collecting transitions
-      }
-      if (args.toState === T.COLLECTING) capturedKeys.push({ key: args.transitionIdempotencyKey, to: args.toState });
-      return baseLc.transition(args);
-    },
-    currentState: async (aid, tid) => baseLc.currentState(aid, tid),
-    history: async (aid, tid) => baseLc.history(aid, tid),
-  };
+  await baseLc.create({ auditId, tenantId, clientId, idempotencyKey });
+  await baseLc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:setup:validated` });
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:setup:collecting` });
 
-  const req = baReq();
-  const { auditId, tenantId, clientId } = req;
-  await baseLc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
-  await baseLc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v1:validated` });
-  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:v1:collecting` });
-  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTION_FAILED, transitionIdempotencyKey: `${auditId}:v1:collection-failed` });
+  function makeRecoveryLc() {
+    return {
+      create: async (args) => baseLc.create(args),
+      transition: async (args) => {
+        // Capture only the collection-failed-recovery transitions
+        if (args.toState === T.COLLECTING && args.transitionIdempotencyKey.includes("collection-failed-recovery")) {
+          capturedKeys.push(args.transitionIdempotencyKey);
+        }
+        return baseLc.transition(args);
+      },
+      currentState: async (aid, tid) => baseLc.currentState(aid, tid),
+      history: async (aid, tid) => baseLc.history(aid, tid),
+    };
+  }
 
-  // Now the recovery from collection_failed → collecting should use executionId
-  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
-  const summary = await orch.execute(req, { executionId: "recovery-ex1" });
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  // Helper: run a recovery that immediately fails during collection (keeps state as collection_failed)
+  async function runFailingRecovery(executionId) {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    // Inject raw artifact failure so the recovery starts but collection fails
+    const realPut = store.put.bind(store);
+    store.put = async (input) => {
+      if (input.scope?.category === "raw") throw new Error("raw write failure");
+      return realPut(input);
+    };
+    const lc = makeRecoveryLc();
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
+    await assert.rejects(() => orch.execute(req, { executionId }));
+  }
 
-  const recoveryKeys = capturedKeys.filter(k => k.key.includes("collection-failed-recovery"));
-  assert.equal(recoveryKeys.length, 1, "one recovery transition");
-  assert.ok(recoveryKeys[0].key.includes("recovery-ex1"), `recovery key should include executionId: ${recoveryKeys[0].key}`);
-  assert.ok(recoveryKeys[0].key.includes(auditId), `recovery key should include auditId: ${recoveryKeys[0].key}`);
+  // Transition to collection_failed, then recover with exec-a (failing recovery)
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTION_FAILED, transitionIdempotencyKey: `${auditId}:fake1:collection-failed` });
+  await runFailingRecovery("exec-a");
+  const sameRecoveryKey1 = capturedKeys[0];
+
+  // Reset to collecting (from collection_failed), transition to collection_failed, recover with exec-b
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:reset1:collection-failed-recovery` });
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTION_FAILED, transitionIdempotencyKey: `${auditId}:fake2:collection-failed` });
+  await runFailingRecovery("exec-b");
+  const differentRecoveryKey = capturedKeys[1];
+
+  // Reset, transition to collection_failed, recover with exec-a again (same)
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:reset2:collection-failed-recovery` });
+  await baseLc.transition({ auditId, tenantId, toState: T.COLLECTION_FAILED, transitionIdempotencyKey: `${auditId}:fake3:collection-failed` });
+  await runFailingRecovery("exec-a");
+  const sameRecoveryKey2 = capturedKeys[2];
+
+  // Exact equality assertions
+  assert.equal(sameRecoveryKey1, sameRecoveryKey2, "same auditId + same executionId → identical recovery keys");
+  assert.equal(sameRecoveryKey1, `${auditId}:exec-a:collection-failed-recovery`, "recovery key format is exactly {auditId}:{executionId}:collection-failed-recovery");
+  assert.notEqual(sameRecoveryKey1, differentRecoveryKey, "different executionIds → different recovery keys");
+  assert.equal(differentRecoveryKey, `${auditId}:exec-b:collection-failed-recovery`, "different recovery key format is exactly {auditId}:{executionId}:collection-failed-recovery");
 });
 
 // ===================================================================
