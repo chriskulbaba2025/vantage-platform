@@ -17,15 +17,19 @@ const GA4_EVIDENCE = { ga4: { sessions: 1000 } };
 const GSC_EVIDENCE = { gsc: { clicks: 500 } };
 
 function mockResult(source, overrides = {}) {
+  const now = new Date().toISOString();
   const base = {
     rawBytes: Buffer.from(JSON.stringify({ source, mock: true }), "utf-8"),
     contentType: "application/json",
     sourceResult: {
+      contractVersion: "1.0.0",
+      schemaVersion: "1.0.0",
+      source,
       provider: "MockProvider",
       adapterVersion: "1.0.0",
       status: "AVAILABLE",
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
+      startedAt: now,
+      completedAt: now,
       requestId: `mock-${source}-${Date.now()}`,
       retryCount: 0,
       expectedRecords: 1,
@@ -171,6 +175,20 @@ export function createFailingAdapter(source, opts = {}) {
 }
 
 /**
+ * Create a mock adapter that throws a specific error without retry.
+ */
+export function createErrorAdapter(source, errorMessage, errorCategory = "internal") {
+  return {
+    adapterVersion: "1.0.0",
+    execute: async () => {
+      const err = new Error(errorMessage);
+      err.category = errorCategory;
+      throw err;
+    },
+  };
+}
+
+/**
  * Create a mock adapter that times out.
  */
 export function createTimeoutAdapter(source) {
@@ -277,7 +295,7 @@ const STATUS_RESULTS = {
   FAILED: { errorCategory: "internal" },
   BLOCKED: { errorCategory: "auth", limitations: ["Access blocked"] },
   UNAVAILABLE: { errorCategory: "no_data", limitations: ["No data returned"] },
-  NOT_CONNECTED: { errorCategory: "auth", limitations: ["Not connected"] },
+  NOT_CONNECTED: { errorCategory: "not_configured", limitations: ["Not connected"] },
   NOT_APPLICABLE: { limitations: ["Not applicable"] },
 };
 

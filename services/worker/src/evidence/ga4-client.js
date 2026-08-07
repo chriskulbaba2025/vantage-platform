@@ -385,3 +385,124 @@ export async function collectGa4(options = {}) {
     }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Governed execute() contract — WP6 universal adapter interface
+// ---------------------------------------------------------------------------
+
+const GA4_ADAPTER_VERSION = "1.0.0";
+
+/**
+ * Execute the GA4 adapter behind the universal source contract.
+ *
+ * Returns NOT_CONNECTED when no GA4 property is configured.
+ * Stores aggregate evidence only — no user-level records.
+ */
+export async function execute({ auditRequest, source, executionId, sourceExecutionKey, signal, attempt }) {
+  const startedAt = new Date().toISOString();
+  const ga4Config = auditRequest.ga4 || {};
+
+  if (!ga4Config.propertyId) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: GA4_ADAPTER_VERSION,
+        status: "NOT_CONNECTED",
+        startedAt,
+        completedAt,
+        requestId: null,
+        retryCount: 0,
+        expectedRecords: null,
+        returnedRecords: 0,
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        limitations: ["GA4 property ID not configured."],
+        errorCategory: "not_configured",
+        evidence: {},
+      },
+    };
+  }
+
+  const options = {
+    propertyId: ga4Config.propertyId,
+    serviceAccountJson: ga4Config.serviceAccountJson || process.env.GOOGLE_SERVICE_ACCOUNT_JSON || "",
+    fetchImpl: null,
+  };
+
+  try {
+    const envelope = await collectGa4(options);
+
+    // Serialize aggregate-only evidence for artifact storage (no user-level data)
+    const rawPayload = {
+      adapterVersion: GA4_ADAPTER_VERSION,
+      collectedAt: envelope.collectedAt,
+      sourceStatus: envelope.sourceStatus,
+      totals: envelope.totals || null,
+      engagementRate: envelope.engagementRate,
+      conversionRate: envelope.conversionRate,
+      measurementReadiness: envelope.measurementReadiness || null,
+      included: envelope.included,
+    };
+    const rawBytes = envelope.sourceStatus === "NOT_CONNECTED" ? null
+      : Buffer.from(JSON.stringify(rawPayload), "utf-8");
+
+    const sourceStatus = envelope._sourceStatus || {};
+    const sourceResult = {
+      contractVersion: "1.0.0",
+      schemaVersion: "1.0.0",
+      source,
+      provider: "Google",
+      adapterVersion: GA4_ADAPTER_VERSION,
+      status: envelope.sourceStatus || envelope.status || "AVAILABLE",
+      startedAt: sourceStatus.startedAt || startedAt,
+      completedAt: sourceStatus.completedAt || envelope.collectedAt || new Date().toISOString(),
+      requestId: sourceStatus.requestId || null,
+      retryCount: sourceStatus.retryCount || 0,
+      expectedRecords: sourceStatus.expectedRecordCount ?? null,
+      returnedRecords: sourceStatus.returnedRecordCount ?? 0,
+      coverage: envelope.coverage || { requested: 0, completed: 0, failed: 0 },
+      limitations: envelope.note ? [envelope.note] : [],
+      evidence: {
+        sourceStatus: envelope.sourceStatus || envelope.status,
+        included: envelope.included,
+        affectsScore: envelope.affectsScore,
+        measurementReadiness: envelope.measurementReadiness || null,
+      },
+    };
+
+    if (sourceStatus.errorCategory) {
+      sourceResult.errorCategory = sourceStatus.errorCategory;
+    }
+
+    return { rawBytes, contentType: rawBytes ? "application/json" : null, sourceResult };
+  } catch (error) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: GA4_ADAPTER_VERSION,
+        status: "FAILED",
+        startedAt,
+        completedAt,
+        requestId: null,
+        retryCount: attempt - 1,
+        expectedRecords: null,
+        returnedRecords: 0,
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        limitations: [`GA4 collection failed: ${error.message}`],
+        errorCategory: error.category || "internal",
+        evidence: {},
+      },
+    };
+  }
+}

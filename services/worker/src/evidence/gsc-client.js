@@ -345,3 +345,132 @@ export async function collectGsc(siteUrl, options = {}) {
     }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Governed execute() contract — WP6 universal adapter interface
+// ---------------------------------------------------------------------------
+
+const GSC_ADAPTER_VERSION = "1.0.0";
+
+/**
+ * Execute the GSC adapter behind the universal source contract.
+ *
+ * Returns NOT_CONNECTED when no GSC site is configured.
+ * Low-volume evidence follows the sufficiency threshold.
+ */
+export async function execute({ auditRequest, source, executionId, sourceExecutionKey, signal, attempt }) {
+  const startedAt = new Date().toISOString();
+  const gscConfig = auditRequest.gsc || {};
+
+  if (!gscConfig.siteUrl) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: GSC_ADAPTER_VERSION,
+        status: "NOT_CONNECTED",
+        startedAt,
+        completedAt,
+        requestId: null,
+        retryCount: 0,
+        expectedRecords: null,
+        returnedRecords: 0,
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        limitations: ["GSC site URL not configured."],
+        errorCategory: "not_configured",
+        evidence: {},
+      },
+    };
+  }
+
+  const options = {
+    serviceAccountJson: gscConfig.serviceAccountJson || process.env.GOOGLE_SERVICE_ACCOUNT_JSON || "",
+    fetchImpl: null,
+    sufficiencyThreshold: gscConfig.sufficiencyThreshold ?? 100,
+  };
+
+  try {
+    const envelope = await collectGsc(gscConfig.siteUrl, options);
+
+    // Serialize evidence for artifact storage
+    const rawPayload = {
+      adapterVersion: GSC_ADAPTER_VERSION,
+      collectedAt: envelope.collectedAt,
+      sourceStatus: envelope.sourceStatus,
+      totals: envelope.totals || null,
+      sufficiency: envelope.sufficiency || null,
+      topQueries: envelope.topQueries || [],
+      topPages: envelope.topPages || [],
+      included: envelope.included,
+    };
+    const rawBytes = envelope.sourceStatus === "NOT_CONNECTED" ? null
+      : Buffer.from(JSON.stringify(rawPayload), "utf-8");
+
+    const sourceStatus = envelope._sourceStatus || {};
+    const sourceResult = {
+      contractVersion: "1.0.0",
+      schemaVersion: "1.0.0",
+      source,
+      provider: "Google",
+      adapterVersion: GSC_ADAPTER_VERSION,
+      status: envelope.sourceStatus || envelope.status || "AVAILABLE",
+      startedAt: sourceStatus.startedAt || startedAt,
+      completedAt: sourceStatus.completedAt || envelope.collectedAt || new Date().toISOString(),
+      requestId: sourceStatus.requestId || null,
+      retryCount: sourceStatus.retryCount || 0,
+      expectedRecords: sourceStatus.expectedRecordCount ?? null,
+      returnedRecords: sourceStatus.returnedRecordCount ?? 0,
+      coverage: envelope.coverage || { requested: 0, completed: 0, failed: 0 },
+      limitations: envelope.limitations || [],
+      evidence: {
+        sourceStatus: envelope.sourceStatus || envelope.status,
+        included: envelope.included,
+        sufficiency: envelope.sufficiency || null,
+        totals: envelope.totals || null,
+      },
+    };
+
+    if (sourceStatus.errorCategory) {
+      sourceResult.errorCategory = sourceStatus.errorCategory;
+    }
+    // Low-volume GSC evidence → PARTIAL with limitation
+    if (sourceResult.status === "AVAILABLE" && envelope.sufficiency && !envelope.sufficiency.sufficient) {
+      sourceResult.status = "PARTIAL";
+      sourceResult.limitations.push(
+        `GSC data below sufficiency threshold (${envelope.sufficiency.threshold} impressions). ` +
+        `Actual: ${envelope.totals?.impressions || 0} impressions. Findings are directional only.`,
+      );
+    }
+
+    return { rawBytes, contentType: rawBytes ? "application/json" : null, sourceResult };
+  } catch (error) {
+    const completedAt = new Date().toISOString();
+    return {
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source,
+        provider: "Google",
+        adapterVersion: GSC_ADAPTER_VERSION,
+        status: "FAILED",
+        startedAt,
+        completedAt,
+        requestId: null,
+        retryCount: attempt - 1,
+        expectedRecords: null,
+        returnedRecords: 0,
+        coverage: { requested: 0, completed: 0, failed: 0 },
+        limitations: [`GSC collection failed: ${error.message}`],
+        errorCategory: error.category || "internal",
+        evidence: {},
+      },
+    };
+  }
+}
