@@ -307,7 +307,7 @@ function determineReadinessStatus(assessedWeight, conversionReadiness) {
 // Build Not-Assessed model (no crawl evidence)
 // ---------------------------------------------------------------------------
 
-function buildNotAssessedModel(input, evidence) {
+function buildNotAssessedModel(input, evidence, scoredAt) {
   const perfScore = scorePerformance(evidence.performance);
   const renderingDiagnostics = classifyRenderingDiagnostics(evidence.performance);
 
@@ -315,7 +315,7 @@ function buildNotAssessedModel(input, evidence) {
   const perfEvidenceScore = hasPerformance ? 25 : 0;
 
   // Evidence confidence with crawl unavailable
-  const evidenceConfidence = calculateEvidenceConfidence(evidence, []);
+  const evidenceConfidence = calculateEvidenceConfidence(evidence, [], scoredAt);
   const coreEvidence = [
     0, // crawl unavailable
     perfEvidenceScore,
@@ -350,9 +350,10 @@ function buildNotAssessedModel(input, evidence) {
   }
 
   return {
+    contractVersion: "1.0.0",
     reportVersion: SCORING_VERSION,
     scoringVersion: SCORING_VERSION,
-    generatedAt: new Date().toISOString(),
+    generatedAt: scoredAt,
     input,
     scores: {
       trust: null,
@@ -417,13 +418,48 @@ function buildNotAssessedModel(input, evidence) {
 // Main scoring entry point
 // ---------------------------------------------------------------------------
 
-export function scoreAudit(input, evidence) {
+/**
+ * Derive a deterministic scoring timestamp from locked canonical evidence.
+ *
+ * Uses the latest `collectedAt` across all evidence sources.  When an
+ * explicit `scoredAt` is provided (e.g. from the orchestrator's lifecycle
+ * clock), that value is used instead.
+ *
+ * This replaces `new Date().toISOString()` so identical evidence always
+ * produces identical `generatedAt` — required by WP7 determinism.
+ */
+function deriveScoredAt(evidence, explicitScoredAt) {
+  if (explicitScoredAt) return explicitScoredAt;
+
+  const timestamps = [];
+  const sources = ["site", "performance", "ga4", "gsc", "backlinks"];
+  for (const key of sources) {
+    const ev = evidence[key];
+    const ts = ev?.collectedAt || ev?._sourceStatus?.completedAt;
+    if (ts) timestamps.push(new Date(ts).getTime());
+  }
+  // Also check competitors array
+  const competitors = evidence.competitors || [];
+  for (const c of competitors) {
+    if (c.collectedAt) timestamps.push(new Date(c.collectedAt).getTime());
+  }
+
+  if (timestamps.length === 0) {
+    // Fallback: use site timestamp or a fixed epoch
+    return new Date(0).toISOString();
+  }
+
+  return new Date(Math.max(...timestamps)).toISOString();
+}
+
+export function scoreAudit(input, evidence, opts = {}) {
   const site = evidence.site;
   const performance = evidence.performance;
+  const scoredAt = deriveScoredAt(evidence, opts.scoredAt);
 
   // ── Crawl gate (PRD v3.0 §8.6) ────────────────────────────────────
   if (!isCrawlViable(site)) {
-    return buildNotAssessedModel(input, evidence);
+    return buildNotAssessedModel(input, evidence, scoredAt);
   }
 
   // ── Score modules with source gates ────────────────────────────────
@@ -463,7 +499,7 @@ export function scoreAudit(input, evidence) {
   findings.sort((a, b) => b.finalPriority - a.finalPriority);
 
   // ── Evidence confidence ────────────────────────────────────────────
-  const evidenceConfidence = calculateEvidenceConfidence(evidence, findings);
+  const evidenceConfidence = calculateEvidenceConfidence(evidence, findings, scoredAt);
 
   // ── Readiness status (PRD §15.3) ───────────────────────────────────
   const readinessState = determineReadinessStatus(
@@ -524,9 +560,10 @@ export function scoreAudit(input, evidence) {
 
   // ── Assemble model ─────────────────────────────────────────────────
   return {
+    contractVersion: "1.0.0",
     reportVersion: SCORING_VERSION,
     scoringVersion: SCORING_VERSION,
-    generatedAt: new Date().toISOString(),
+    generatedAt: scoredAt,
     input,
 
     // Scores (backward-compatible legacy fields + new dimension fields)

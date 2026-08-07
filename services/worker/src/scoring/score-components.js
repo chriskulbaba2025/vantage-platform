@@ -389,7 +389,7 @@ export function generateFindingId(ruleId, affectedUrls, evidenceRecords) {
  *
  * Returns 0–100.
  */
-export function calculateEvidenceConfidence(evidence, findings) {
+export function calculateEvidenceConfidence(evidence, findings, now = null) {
   const factors = {};
 
   // 1. Source availability (0–100)
@@ -471,13 +471,13 @@ export function calculateEvidenceConfidence(evidence, findings) {
   }
 
   // 4. Data freshness (0–100)
-  const now = Date.now();
+  const scoringNow = now ? new Date(now).getTime() : Date.now();
   const freshnessScores = [];
   for (const src of sources) {
     const ev = evidence[src.key];
     const collectedAt = ev?.collectedAt;
     if (!collectedAt) continue;
-    const ageMs = now - new Date(collectedAt).getTime();
+    const ageMs = scoringNow - new Date(collectedAt).getTime();
     const ageHours = ageMs / (1000 * 60 * 60);
     // 100% if < 1h old, 50% if 24h old, 0% if > 72h old
     if (ageHours < 1) freshnessScores.push(100);
@@ -681,6 +681,7 @@ export function buildFindings(site, performance, gsc) {
     });
 
     findings.push({
+      contractVersion: "1.0.0",
       findingId,
       ruleId: opts.ruleId,
       ruleVersion: RULE_VERSION,
@@ -1197,6 +1198,7 @@ export function buildRenderingDiagnosticFindings(diagnostics, site) {
     ];
 
     findings.push({
+      contractVersion: "1.0.0",
       findingId: generateFindingId(ruleId, affectedUrls, evidenceRecords),
       ruleId,
       ruleVersion: "1.0.0",
