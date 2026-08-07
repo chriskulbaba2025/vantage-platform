@@ -28,6 +28,17 @@ const SOURCE_EVIDENCE_MAP = Object.freeze({
 const FULL_SOURCES = new Set(["website", "performance"]);
 const MID_SOURCES = new Set(["backlinks", "ga4", "gsc"]);
 
+// WP5-CLOSE-STAT-01: Explicit immutable status-to-counter-key mapping
+const STATUS_COUNTER_KEY = Object.freeze({
+  AVAILABLE:      "available",
+  PARTIAL:        "partial",
+  FAILED:         "failed",
+  BLOCKED:        "blocked",
+  UNAVAILABLE:    "unavailable",
+  NOT_CONNECTED:  "notConnected",
+  NOT_APPLICABLE: "notApplicable",
+});
+
 function defaultClock() {
   return {
     now: () => new Date().toISOString(),
@@ -101,6 +112,15 @@ export function createAuditOrchestrator({
   }
 
   // -------------------------------------------------------------------
+  // Get registered adapter version for a source
+  // -------------------------------------------------------------------
+  function getAdapterVersion(source) {
+    const adapter = adapters[source];
+    if (!adapter) return null;
+    return adapter.adapterVersion || null;
+  }
+
+  // -------------------------------------------------------------------
   // Execute one source via retry boundary
   // -------------------------------------------------------------------
   async function executeSource({ auditRequest, source, executionId }) {
@@ -118,7 +138,13 @@ export function createAuditOrchestrator({
       };
     }
 
-    const identity = buildSourceExecutionIdentity({ auditRequest, source, adapterVersion: "1.0.0" });
+    // WP5-CLOSE-ADP-01: Validate adapterVersion before execution
+    const registeredVersion = adapter.adapterVersion;
+    if (!registeredVersion || registeredVersion === "") {
+      throw new Error(`Adapter for ${source} has no valid adapterVersion`);
+    }
+
+    const identity = buildSourceExecutionIdentity({ auditRequest, source, adapterVersion: registeredVersion });
     const policy = resolveSourcePolicy({ policyResolver: retryPolicyResolver, source });
 
     const result = await executeWithRetry({
@@ -178,12 +204,19 @@ export function createAuditOrchestrator({
     const execResult = await executeSource({ auditRequest, source: item.source, executionId });
     const { rawBytes, contentType, sourceResult: rawResult, identity: actualIdentity } = execResult;
 
+    // WP5-CLOSE-ADP-03: Verify returned adapterVersion matches registered version
+    const registeredVersion = getAdapterVersion(item.source);
+    const returnedVersion = rawResult.adapterVersion;
+    if (registeredVersion && returnedVersion && returnedVersion !== registeredVersion) {
+      throw new Error(`Adapter version mismatch for ${item.source}: registered=${registeredVersion}, returned=${returnedVersion}`);
+    }
+
     // Build complete source result
     const sourceResult = {
       contractVersion: "1.0.0", schemaVersion: "1.0.0",
       source: item.source,
       provider: rawResult.provider || "mock",
-      adapterVersion: rawResult.adapterVersion || "1.0.0",
+      adapterVersion: returnedVersion || registeredVersion || "1.0.0",
       status: rawResult.status || "AVAILABLE",
       startedAt: rawResult.startedAt || c.now(),
       completedAt: rawResult.completedAt || c.now(),
@@ -215,7 +248,7 @@ export function createAuditOrchestrator({
     const normalizedRecord = await persistNormalized({ auditRequest, source: item.source, sourceResult });
 
     // Persist source checkpoint manifest (throws on failure)
-    const identityForManifest = actualIdentity || identity || buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: "1.0.0" });
+    const identityForManifest = actualIdentity || identity || buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion || "1.0.0" });
     await persistSourceCheckpointManifest({
       store: artifactStore,
       scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
@@ -233,7 +266,8 @@ export function createAuditOrchestrator({
   // Restore a completed source from verified manifest (no adapter call)
   // -------------------------------------------------------------------
   async function restoreSource({ auditRequest, source, restoredEntry }) {
-    const identity = buildSourceExecutionIdentity({ auditRequest, source, adapterVersion: "1.0.0" });
+    const registeredVersion = getAdapterVersion(source) || "1.0.0";
+    const identity = buildSourceExecutionIdentity({ auditRequest, source, adapterVersion: registeredVersion });
 
     // Verify source execution key matches expected
     if (restoredEntry.manifest.sourceExecutionKey !== identity.sourceExecutionKey) {
@@ -254,12 +288,13 @@ export function createAuditOrchestrator({
   async function discoverCheckpoints(auditRequest, plan) {
     const completed = [];
     for (const item of plan) {
+      const registeredVersion = getAdapterVersion(item.source) || "1.0.0";
       const restored = await loadAndVerifySourceCheckpointManifest({
         store: artifactStore,
         scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
         source: item.source,
         validateContract,
-        expectedSourceExecutionKey: buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: "1.0.0" }).sourceExecutionKey,
+        expectedSourceExecutionKey: buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion }).sourceExecutionKey,
       });
       if (restored) {
         completed.push({ source: item.source, completed: true, restored });
@@ -382,7 +417,8 @@ export function createAuditOrchestrator({
       }
 
       // Execute adapter — any exception here is infrastructure failure
-      const identity = buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: "1.0.0" });
+      const registeredVersion = getAdapterVersion(item.source) || "1.0.0";
+      const identity = buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion });
       const result = await processOneSource({ auditRequest, item, executionId, identity });
       allSourceResults.push({
         source: item.source,
@@ -404,14 +440,14 @@ export function createAuditOrchestrator({
     // 7. collecting → evidence_stored
     await lifecycleService.transition({
       auditId, tenantId, toState: T.EVIDENCE_STORED,
-      transitionIdempotencyKey: `${auditId}-evidence-stored`,
+      transitionIdempotencyKey: `${auditId}:${executionId}:evidence-stored`,
       artifactKey: manifestKey,
     });
 
     // 8. evidence_stored → evidence_locked
     await lifecycleService.transition({
       auditId, tenantId, toState: T.EVIDENCE_LOCKED,
-      transitionIdempotencyKey: `${auditId}-evidence-locked`,
+      transitionIdempotencyKey: `${auditId}:${executionId}:evidence-locked`,
       artifactKey: manifestKey,
     });
 
@@ -421,7 +457,7 @@ export function createAuditOrchestrator({
   // -------------------------------------------------------------------
   // Transition to collection_failed — re-reads current state
   // -------------------------------------------------------------------
-  async function failCollection(auditId, tenantId, originalError) {
+  async function failCollection(auditId, tenantId, executionId, originalError) {
     const cs = await lifecycleService.currentState(auditId, tenantId);
     if (!cs) throw originalError;
     if (cs.state !== T.COLLECTING) {
@@ -434,7 +470,7 @@ export function createAuditOrchestrator({
         auditId, tenantId, toState: T.COLLECTION_FAILED,
         expectedState: T.COLLECTING,
         expectedVersion: cs.version,
-        transitionIdempotencyKey: `${auditId}-collection-failed`,
+        transitionIdempotencyKey: `${auditId}:${executionId}:collection-failed`,
       });
     } catch (transitionErr) {
       const err = new Error(`Failed to transition to collection_failed: ${transitionErr.message}`);
@@ -445,25 +481,26 @@ export function createAuditOrchestrator({
   }
 
   // -------------------------------------------------------------------
-  // Lifecycle helper
+  // Lifecycle helper — execution-scoped idempotency keys
   // -------------------------------------------------------------------
-  async function doTransition(auditId, tenantId, toState, suffix, artifactKey) {
+  async function doTransition(auditId, tenantId, executionId, toState, suffix, artifactKey) {
     await lifecycleService.transition({
       auditId, tenantId, toState,
-      transitionIdempotencyKey: `${auditId}-${suffix}`,
+      transitionIdempotencyKey: `${auditId}:${executionId}:${suffix}`,
       ...(artifactKey ? { artifactKey } : {}),
     });
   }
 
   // -------------------------------------------------------------------
-  // Build summary
+  // Build summary — explicit status mapping
   // -------------------------------------------------------------------
   function buildSummary({ auditRequest, executionId, finalState, resumed, allSourceResults, canonicalRecord, startedAt }) {
     const sc = { total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 };
     const sources = allSourceResults.map(e => {
-      const s = (e.sourceResult.status || "NOT_APPLICABLE").toLowerCase();
+      const status = e.sourceResult.status || "NOT_APPLICABLE";
+      const counterKey = STATUS_COUNTER_KEY[status];
       sc.total++;
-      if (sc[s] !== undefined) sc[s]++;
+      if (counterKey !== undefined) sc[counterKey]++;
       return Object.freeze({ source: e.source, status: e.sourceResult.status, retryCount: e.sourceResult.retryCount || 0, artifactKey: e.normalizedRecord?.key || null });
     });
     return Object.freeze({
@@ -486,8 +523,19 @@ export function createAuditOrchestrator({
     // 1. Validate request
     const validation = await validateRequest(auditRequest);
     if (!validation.valid) {
-      try { await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey }); } catch {}
-      try { await doTransition(auditId, tenantId, T.VALIDATION_FAILED, "validation-failed"); } catch {}
+      // WP5-CLOSE-VAL-03: Create failure must reject (no silent suppression)
+      try {
+        await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey });
+      } catch (err) {
+        if (err.code !== "ERR_LIFECYCLE_DUPLICATE_AUDIT") throw err;
+      }
+
+      // WP5-CLOSE-VAL-04: Transition failure must reject (no silent suppression)
+      await lifecycleService.transition({
+        auditId, tenantId, toState: T.VALIDATION_FAILED,
+        transitionIdempotencyKey: `${auditId}:${executionId}:validation-failed`,
+      });
+
       const cs = await lifecycleService.currentState(auditId, tenantId);
       return buildSummary({ auditRequest, executionId, finalState: cs?.state || T.VALIDATION_FAILED, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
     }
@@ -547,24 +595,24 @@ export function createAuditOrchestrator({
       }
 
       const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-      await doTransition(auditId, tenantId, T.EVIDENCE_LOCKED, "evidence-locked", manifestKey);
+      await doTransition(auditId, tenantId, executionId, T.EVIDENCE_LOCKED, "evidence-locked", manifestKey);
       return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: true, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
     }
 
     // 3c. COLLECTION_FAILED — recover → collecting
     if (cs.state === T.COLLECTION_FAILED) {
-      await doTransition(auditId, tenantId, T.COLLECTING, "collection-failed-recovery");
+      await doTransition(auditId, tenantId, executionId, T.COLLECTING, "collection-failed-recovery");
     }
 
     // 3d. CREATED — transition to validated → collecting
     if (cs.state === T.CREATED) {
-      await doTransition(auditId, tenantId, T.VALIDATED, "validated");
-      await doTransition(auditId, tenantId, T.COLLECTING, "collecting");
+      await doTransition(auditId, tenantId, executionId, T.VALIDATED, "validated");
+      await doTransition(auditId, tenantId, executionId, T.COLLECTING, "collecting");
     }
 
     // 3e. VALIDATED — transition to collecting
     if (cs.state === T.VALIDATED) {
-      await doTransition(auditId, tenantId, T.COLLECTING, "collecting");
+      await doTransition(auditId, tenantId, executionId, T.COLLECTING, "collecting");
     }
 
     // 3f. Unsupported
@@ -579,7 +627,7 @@ export function createAuditOrchestrator({
       return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: isResumed, allSourceResults, canonicalRecord, startedAt });
     } catch (err) {
       // Any exception inside the governed collection boundary → collection_failed
-      await failCollection(auditId, tenantId, err);
+      await failCollection(auditId, tenantId, executionId, err);
       // failCollection always throws — this line is unreachable
       throw err;
     }

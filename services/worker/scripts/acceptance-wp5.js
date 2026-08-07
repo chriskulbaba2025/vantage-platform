@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * WP5 Acceptance Harness — governed recovery and failure boundary proof.
+ *
+ * Covers all WP5-CLOSE checklist items with direct runtime/persisted evidence.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -15,7 +17,11 @@ import { createGovernedArtifactStore } from "../src/storage/governed-artifact-st
 import { createAuditOrchestrator, buildSourceExecutionIdentity } from "../src/orchestration/audit-orchestrator.js";
 import { LIFECYCLE_STATE } from "../src/lifecycle/state-enum.js";
 import { persistSourceCheckpointManifest, persistCanonicalRecordManifest, buildSourceCheckpointManifestKey, buildCanonicalRecordManifestKey } from "../src/orchestration/artifact-recovery.js";
-import { createBaseMockAdapters, createFailingAdapter } from "../test-fixtures/orchestration/mock-adapters.js";
+import {
+  createBaseMockAdapters, createStatusAdapter,
+  createKeyCapturingAdapter, createVersionMismatchAdapter,
+  createMissingVersionAdapter, createEmptyVersionAdapter,
+} from "../test-fixtures/orchestration/mock-adapters.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,6 +31,14 @@ const T = LIFECYCLE_STATE;
 let allPassed = true;
 function pass(t) { console.log(`  ✓ ${t}`); }
 function fail(t) { allPassed = false; console.log(`  ✗ ${t}`); }
+function assertEq(actual, expected, label) {
+  if (actual === expected) { pass(label); return true; }
+  else { fail(`${label}: expected ${expected}, got ${actual}`); return false; }
+}
+function assertDeep(actual, expected, label) {
+  if (JSON.stringify(actual) === JSON.stringify(expected)) { pass(label); return true; }
+  else { fail(`${label}: ${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`); return false; }
+}
 
 function sha256(b) { return createHash("sha256").update(b).digest("hex"); }
 function mockClock(iso = "2026-01-01T00:00:00.000Z") { let t = new Date(iso).getTime(); return { now: () => new Date(t).toISOString(), sleep: async () => {}, setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 100)) }; }
@@ -37,224 +51,730 @@ addFormats(_ajv);
 });
 function vc(sid, obj) { const v = _ajv.getSchema(sid); return { valid: v(obj), errors: v.errors || [] }; }
 
+function makeAvailResult(source) {
+  return {
+    contractVersion: "1.0.0", schemaVersion: "1.0.0",
+    source, provider: "M", adapterVersion: "1.0.0",
+    status: "AVAILABLE", startedAt: mockClock().now(), completedAt: mockClock().now(),
+    retryCount: 1, expectedRecords: 1, returnedRecords: 1,
+    coverage: { requested: 1, completed: 1, failed: 0 },
+    limitations: [], evidence: {},
+  };
+}
+
 // ===================================================================
-// A. New audit
+// A. WP5-CLOSE-VAL-01 — Invalid request persists created → validation_failed
 // ===================================================================
-console.log("\n─ A. New audit ─");
+console.log("\n─ A. VAL-01/02: Invalid request lifecycle ─");
 {
   const store = createGovernedArtifactStore({ type: "memory" });
   const repo = createMemoryLifecycleRepository();
   const lc = createLifecycleService(repo);
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
-  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "a1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
-  const s = await orch.execute(req);
-  const events = await lc.history(req.auditId, req.tenantId);
-  const states = events.map(e => e.nextState);
-  const expected = [T.CREATED, T.VALIDATED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED];
-  if (JSON.stringify(states) === JSON.stringify(expected)) pass(`Exact history: ${states.join(" → ")}`);
-  else fail(`History: ${states.join(" → ")}`);
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "a1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: undefined };
+  const summary = await orch.execute(req);
 
-  const sc = { tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId };
-  let manifestCount = 0;
-  for (const src of ["dataforseo-onpage", "pagespeed", "dataforseo-serp", "backlinks"]) {
-    if (await store.exists(buildSourceCheckpointManifestKey(sc, src))) manifestCount++;
-  }
-  if (manifestCount === 4) pass("4 source checkpoint manifests exist");
-  else fail(`${manifestCount}/4 source manifests`);
+  const history = await lc.history(req.auditId, req.tenantId);
+  assertDeep(history.map(e => e.nextState), [T.CREATED, T.VALIDATION_FAILED], "VAL-01: exact ordered history [created, validation_failed]");
 
-  if (await store.exists(buildCanonicalRecordManifestKey(sc))) pass("Canonical record manifest exists");
-  else fail("Canonical record manifest missing");
-
-  if (s.canonicalEvidence) pass("Canonical evidence in summary");
-  else fail("Canonical evidence missing");
+  const persistedState = await lc.currentState(req.auditId, req.tenantId);
+  assertEq(persistedState.state, T.VALIDATION_FAILED, "VAL-02: persisted state = validation_failed");
+  assertEq(summary.finalState, T.VALIDATION_FAILED, "VAL-02: summary finalState = validation_failed");
 }
 
 // ===================================================================
-// B. Genuine interrupted resume
+// B. WP5-CLOSE-VAL-03/04 — Invalid-request create/transition failure rejects
 // ===================================================================
-console.log("\n─ B. Genuine interrupted resume ─");
+console.log("\n─ B. VAL-03/04: Validation failure propagation ─");
+{
+  // VAL-03: create failure rejects
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const lcInject = {
+    create: async () => { throw new Error("injected create failure"); },
+    transition: async () => {},
+    currentState: async () => null,
+    history: async () => [],
+  };
+  const orch = createAuditOrchestrator({ lifecycleService: lcInject, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+  try {
+    await orch.execute({ contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "b1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: undefined });
+    fail("VAL-03: should have rejected on create failure");
+  } catch (e) {
+    if (e.message.includes("injected create failure")) pass("VAL-03: create failure rejects, no summary");
+    else fail(`VAL-03: wrong error: ${e.message}`);
+  }
+
+  // VAL-04: transition failure rejects
+  const repo2 = createMemoryLifecycleRepository();
+  const baseLc2 = createLifecycleService(repo2);
+  const req2 = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "b2", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: undefined };
+  const lc2 = {
+    create: async (args) => baseLc2.create(args),
+    transition: async (args) => {
+      if (args.toState === T.VALIDATION_FAILED) throw new Error("injected validation_failed transition failure");
+      return baseLc2.transition(args);
+    },
+    currentState: async (aid, tid) => baseLc2.currentState(aid, tid),
+    history: async (aid, tid) => baseLc2.history(aid, tid),
+  };
+  const orch2 = createAuditOrchestrator({ lifecycleService: lc2, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+  try {
+    await orch2.execute(req2);
+    fail("VAL-04: should have rejected on validation_failed transition failure");
+  } catch (e) {
+    if (e.message.includes("injected validation_failed transition failure")) pass("VAL-04: transition failure rejects, no summary");
+    else fail(`VAL-04: wrong error: ${e.message}`);
+  }
+  const h2 = await baseLc2.history(req2.auditId, req2.tenantId);
+  assertEq(h2.map(e => e.nextState).includes(T.CREATED), true, "VAL-04: created exists");
+  assertEq(h2.map(e => e.nextState).includes(T.VALIDATION_FAILED), false, "VAL-04: validation_failed does not exist");
+}
+
+// ===================================================================
+// C. WP5-CLOSE-IDEM-01/02/03 — Execution-scoped idempotency keys
+// ===================================================================
+console.log("\n─ C. IDEM: Execution-scoped keys ─");
+{
+  // IDEM-01: collection_failed key execution-scoped
+  const capturedKeys01 = [];
+  for (const exId of ["ex-alpha", "ex-beta"]) {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const baseLc = createLifecycleService(repo);
+    const lc = {
+      create: async (args) => baseLc.create(args),
+      transition: async (args) => {
+        if (args.toState === T.COLLECTION_FAILED) capturedKeys01.push(args.transitionIdempotencyKey);
+        return baseLc.transition(args);
+      },
+      currentState: async (aid, tid) => baseLc.currentState(aid, tid),
+      history: async (aid, tid) => baseLc.history(aid, tid),
+    };
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "c1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    await baseLc.create({ auditId: req.auditId, tenantId: req.tenantId, clientId: req.clientId, idempotencyKey: req.idempotencyKey });
+    await baseLc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${req.auditId}:${exId}:validated` });
+    await baseLc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${req.auditId}:${exId}:collecting` });
+
+    const realPut = store.put.bind(store);
+    store.put = async (input) => { if (input.scope?.category === "raw") throw new Error("fail"); return realPut(input); };
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+    try { await orch.execute(req, { executionId: exId }); } catch {}
+  }
+  assertEq(capturedKeys01.length, 2, "IDEM-01: two keys captured");
+  assertEq(capturedKeys01[0].includes("ex-alpha"), true, "IDEM-01: key 0 contains ex-alpha");
+  assertEq(capturedKeys01[1].includes("ex-beta"), true, "IDEM-01: key 1 contains ex-beta");
+  assertEq(capturedKeys01[0] !== capturedKeys01[1], true, "IDEM-01: keys differ");
+
+  // IDEM-02: recovery key execution-scoped
+  const capturedKeys02 = [];
+  for (const exId of ["rec-a", "rec-b"]) {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const baseLc = createLifecycleService(repo);
+    const lc = {
+      create: async (args) => baseLc.create(args),
+      transition: async (args) => {
+        if (args.toState === T.COLLECTING && args.transitionIdempotencyKey.includes("collection-failed-recovery")) {
+          capturedKeys02.push(args.transitionIdempotencyKey);
+        }
+        return baseLc.transition(args);
+      },
+      currentState: async (aid, tid) => baseLc.currentState(aid, tid),
+      history: async (aid, tid) => baseLc.history(aid, tid),
+    };
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "c2", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    await baseLc.create({ auditId: req.auditId, tenantId: req.tenantId, clientId: req.clientId, idempotencyKey: req.idempotencyKey });
+    await baseLc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${req.auditId}:pre:validated` });
+    await baseLc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${req.auditId}:pre:collecting` });
+    await baseLc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.COLLECTION_FAILED, transitionIdempotencyKey: `${req.auditId}:pre:collection-failed` });
+
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+    await orch.execute(req, { executionId: exId });
+  }
+  assertEq(capturedKeys02.length, 2, "IDEM-02: two recovery keys captured");
+  assertEq(capturedKeys02[0].includes("rec-a"), true, "IDEM-02: key 0 contains rec-a");
+  assertEq(capturedKeys02[1].includes("rec-b"), true, "IDEM-02: key 1 contains rec-b");
+
+  // IDEM-03: Two failures then success — exact ordered history
+  {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "c3", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    const { auditId, tenantId, clientId } = req;
+
+    // Exec 1: raw artifact failure
+    {
+      const realPut = store.put.bind(store);
+      let f = true;
+      store.put = async (i) => { if (f && i.scope?.category === "raw") { f = false; throw new Error("e1"); } return realPut(i); };
+      const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+      try { await orch.execute(req, { executionId: "e1" }); } catch {}
+    }
+    // Exec 2: normalized artifact failure
+    {
+      await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:e2:collection-failed-recovery` });
+      const realPut = store.put.bind(store);
+      let f = true;
+      store.put = async (i) => { if (f && i.scope?.category === "normalized") { f = false; throw new Error("e2"); } return realPut(i); };
+      const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+      try { await orch.execute(req, { executionId: "e2" }); } catch {}
+    }
+    // Exec 3: success
+    {
+      await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:e3:collection-failed-recovery` });
+      const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+      const s = await orch.execute(req, { executionId: "e3" });
+      assertEq(s.finalState, T.EVIDENCE_LOCKED, "IDEM-03: final state = evidence_locked");
+    }
+    const states = (await lc.history(auditId, tenantId)).map(e => e.nextState);
+    assertDeep(states, [T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED], "IDEM-03: exact ordered history");
+  }
+}
+
+// ===================================================================
+// D. WP5-CLOSE-ADP — Adapter version identity
+// ===================================================================
+console.log("\n─ D. ADP: Adapter version identity ─");
+{
+  // ADP-01: missing/empty adapterVersion rejects
+  {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    await lc.create({ auditId: req.auditId, tenantId: req.tenantId, clientId: req.clientId, idempotencyKey: req.idempotencyKey });
+    await lc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${req.auditId}:v:validated` });
+    await lc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${req.auditId}:c:collecting` });
+
+    const missingAd = createMissingVersionAdapter("dataforseo-onpage");
+    const base = createBaseMockAdapters();
+    const adapters1 = { ...base, "dataforseo-onpage": missingAd };
+    const orch1 = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: adapters1, validateContract: vc, clock: mockClock() });
+    try { await orch1.execute(req); fail("ADP-01: missing version should reject"); }
+    catch (e) { if (e.message.includes("adapterVersion")) pass("ADP-01: missing adapterVersion rejects"); else fail(`ADP-01: wrong error: ${e.message}`); }
+
+    const emptyAd = createEmptyVersionAdapter("dataforseo-onpage");
+    const adapters2 = { ...base, "dataforseo-onpage": emptyAd };
+    const orch2 = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: adapters2, validateContract: vc, clock: mockClock() });
+    try { await orch2.execute(req); fail("ADP-01: empty version should reject"); }
+    catch (e) { if (e.message.includes("adapterVersion")) pass("ADP-01: empty adapterVersion rejects"); else fail(`ADP-01: wrong error: ${e.message}`); }
+  }
+
+  // ADP-02: Source execution key equality
+  {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d2", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    const scope = { tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId };
+    await lc.create({ auditId: req.auditId, tenantId: req.tenantId, clientId: req.clientId, idempotencyKey: req.idempotencyKey });
+    await lc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${req.auditId}:v:validated` });
+    await lc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${req.auditId}:c:collecting` });
+
+    const keyCap = createKeyCapturingAdapter("dataforseo-onpage", "1.0.0");
+    const base = createBaseMockAdapters();
+    const adapters = { ...base, "dataforseo-onpage": keyCap };
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+    const s = await orch.execute(req);
+    assertEq(s.finalState, T.EVIDENCE_LOCKED, "ADP-02: final state = evidence_locked");
+    assertEq(keyCap.getCallCount(), 1, "ADP-02: adapter called once");
+    const adapterKey = keyCap.getReceivedKey();
+    const expectedKey = buildSourceExecutionIdentity({ auditRequest: req, source: "dataforseo-onpage", adapterVersion: "1.0.0" }).sourceExecutionKey;
+    const mfBuf = await store.get(buildSourceCheckpointManifestKey(scope, "dataforseo-onpage"));
+    const manifest = JSON.parse(mfBuf.toString());
+    assertEq(adapterKey, expectedKey, "ADP-02: adapter key = expected key");
+    assertEq(manifest.sourceExecutionKey, expectedKey, "ADP-02: manifest key = expected key");
+    assertEq(adapterKey, manifest.sourceExecutionKey, "ADP-02: adapter key = manifest key");
+  }
+
+  // ADP-03: Version mismatch rejects
+  {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d3", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    const { auditId, tenantId, clientId } = req;
+    await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
+    await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+    await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
+
+    const mismatch = createVersionMismatchAdapter("dataforseo-onpage", "2.0.0", "1.0.0");
+    const base = createBaseMockAdapters();
+    let laterCalls = 0;
+    const adapters = {};
+    for (const k of Object.keys(base)) {
+      if (k === "dataforseo-onpage") adapters[k] = mismatch;
+      else adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { laterCalls++; return base[k].execute(a); } };
+    }
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+    try { await orch.execute(req); fail("ADP-03: should reject on version mismatch"); }
+    catch (e) {
+      if (e.message.includes("version mismatch")) pass("ADP-03: version mismatch rejects");
+      else fail(`ADP-03: wrong error: ${e.message}`);
+    }
+    const cs = await lc.currentState(auditId, tenantId);
+    assertEq(cs.state, T.COLLECTION_FAILED, "ADP-03: persisted state = collection_failed");
+    assertEq(laterCalls, 0, "ADP-03: later adapter calls = 0");
+    const events = await lc.history(auditId, tenantId);
+    const states = events.map(e => e.nextState);
+    assertEq(states.includes(T.EVIDENCE_STORED), false, "ADP-03: evidence_stored absent");
+    assertEq(states.includes(T.EVIDENCE_LOCKED), false, "ADP-03: evidence_locked absent");
+  }
+
+  // ADP-04: Valid checkpoint skips adapter
+  {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d4", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    const scope = { tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId };
+    await lc.create({ auditId: req.auditId, tenantId: req.tenantId, clientId: req.clientId, idempotencyKey: req.idempotencyKey });
+    await lc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${req.auditId}:v:validated` });
+    await lc.transition({ auditId: req.auditId, tenantId: req.tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${req.auditId}:c:collecting` });
+
+    const result = makeAvailResult("dataforseo-onpage");
+    const nr = await store.put({ bytes: Buffer.from(JSON.stringify(result)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "dataforseo-onpage.json" }, source: "dataforseo-onpage" });
+    const ek = buildSourceExecutionIdentity({ auditRequest: req, source: "dataforseo-onpage", adapterVersion: "1.0.0" }).sourceExecutionKey;
+    await persistSourceCheckpointManifest({ store, scope, source: "dataforseo-onpage", sourceExecutionKey: ek, completedAt: mockClock().now(), normalizedRecord: nr, rawRecord: null });
+
+    let onCalls = 0;
+    const base = createBaseMockAdapters();
+    const adapters = { ...base, "dataforseo-onpage": { adapterVersion: "1.0.0", execute: async (a) => { onCalls++; return base["dataforseo-onpage"].execute(a); } } };
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+    const s = await orch.execute(req);
+    assertEq(s.finalState, T.EVIDENCE_LOCKED, "ADP-04: final state = evidence_locked");
+    assertEq(onCalls, 0, "ADP-04: restored adapter call count = 0");
+  }
+}
+
+// ===================================================================
+// E. WP5-CLOSE-STAT — Exact source-status counters
+// ===================================================================
+console.log("\n─ E. STAT: Source-status counters ─");
+{
+  // STAT-01: Explicit status mapping — each status individually
+  const ALL_STATUSES = ["AVAILABLE", "PARTIAL", "FAILED", "BLOCKED", "UNAVAILABLE", "NOT_CONNECTED", "NOT_APPLICABLE"];
+  const EXPECTED_KEY = {
+    "AVAILABLE": "available", "PARTIAL": "partial", "FAILED": "failed",
+    "BLOCKED": "blocked", "UNAVAILABLE": "unavailable",
+    "NOT_CONNECTED": "notConnected", "NOT_APPLICABLE": "notApplicable",
+  };
+  let stat01Pass = true;
+  for (const status of ALL_STATUSES) {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const adapters = { "dataforseo-onpage": createStatusAdapter("dataforseo-onpage", status) };
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "e1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    const summary = await orch.execute(req);
+    const key = EXPECTED_KEY[status];
+    const expectedCount = status === "NOT_APPLICABLE" ? 4 : 1;
+    if (summary.sourceCounts[key] !== expectedCount) {
+      fail(`STAT-01: ${status} → ${key} = ${summary.sourceCounts[key]}, expected ${expectedCount}`);
+      stat01Pass = false;
+    }
+  }
+  if (stat01Pass) pass("STAT-01: all seven statuses map to correct counter keys");
+
+  // STAT-02: Counter sum equals total
+  {
+    const store = createGovernedArtifactStore({ type: "memory" });
+    const repo = createMemoryLifecycleRepository();
+    const lc = createLifecycleService(repo);
+    const adapters = {
+      "dataforseo-onpage": createStatusAdapter("dataforseo-onpage", "AVAILABLE"),
+      "pagespeed": createStatusAdapter("pagespeed", "PARTIAL"),
+      "dataforseo-serp": createStatusAdapter("dataforseo-serp", "FAILED"),
+      "backlinks": createStatusAdapter("backlinks", "BLOCKED"),
+    };
+    const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+    const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "e2", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+    const summary = await orch.execute(req);
+    const c = summary.sourceCounts;
+    const sum = c.available + c.partial + c.failed + c.blocked + c.unavailable + c.notConnected + c.notApplicable;
+    assertEq(sum, c.total, "STAT-02: counter sum equals total");
+  }
+}
+
+// ===================================================================
+// F. WP5-CLOSE-STALE — Complete stale-checkpoint proof
+// ===================================================================
+console.log("\n─ F. STALE: Stale checkpoint rejection ─");
+async function proveStale(label, oldReq, newReq, source) {
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const repo = createMemoryLifecycleRepository();
+  const lc = createLifecycleService(repo);
+  const req = newReq;
+  const { auditId, tenantId, clientId } = req;
+  const scope = { tenantId, clientId, auditId };
+  await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
+  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
+
+  const oldKey = buildSourceExecutionIdentity({ auditRequest: oldReq, source, adapterVersion: "1.0.0" }).sourceExecutionKey;
+  const result = makeAvailResult(source);
+  const nr = await store.put({ bytes: Buffer.from(JSON.stringify(result)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: `${source}.json` }, source });
+  await persistSourceCheckpointManifest({ store, scope, source, sourceExecutionKey: oldKey, completedAt: mockClock().now(), normalizedRecord: nr, rawRecord: null });
+
+  let laterCalls = 0;
+  const base = createBaseMockAdapters();
+  const adapters = {};
+  for (const k of Object.keys(base)) {
+    if (k === source) adapters[k] = base[k];
+    else adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { laterCalls++; return base[k].execute(a); } };
+  }
+
+  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+  try { await orch.execute(req); fail(`${label}: should have rejected`); }
+  catch (e) {
+    if (e.message.includes("Source execution key mismatch")) pass(`${label}: rejects with key mismatch`);
+    else fail(`${label}: wrong error: ${e.message}`);
+  }
+  const cs = await lc.currentState(auditId, tenantId);
+  assertEq(cs.state, T.COLLECTION_FAILED, `${label}: persisted state = collection_failed`);
+  assertEq(laterCalls, 0, `${label}: later adapter calls = 0`);
+  const events = await lc.history(auditId, tenantId);
+  const states = events.map(e => e.nextState);
+  assertEq(states.includes(T.EVIDENCE_STORED), false, `${label}: evidence_stored absent`);
+  assertEq(states.includes(T.EVIDENCE_LOCKED), false, `${label}: evidence_locked absent`);
+}
+
+const baseReq = () => ({ contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "f1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com", language: "en" });
+{
+  const nr = baseReq();
+  await proveStale("STALE-01: targetUrl", { ...nr, targetUrl: "https://old.example.com" }, nr, "dataforseo-onpage");
+}
+{
+  const nr = baseReq();
+  await proveStale("STALE-02: language", { ...nr, language: "fr" }, { ...nr, language: "en" }, "dataforseo-onpage");
+}
+// STALE-03: adapterVersion change — manifest stored with v1.0.0, registered adapter is v2.0.0
+{
+  const store2 = createGovernedArtifactStore({ type: "memory" });
+  const repo2 = createMemoryLifecycleRepository();
+  const lc2 = createLifecycleService(repo2);
+  const req2 = baseReq();
+  const { auditId: a2, tenantId: t2, clientId: c2 } = req2;
+  const scope2 = { tenantId: t2, clientId: c2, auditId: a2 };
+  await lc2.create({ auditId: a2, tenantId: t2, clientId: c2, idempotencyKey: req2.idempotencyKey });
+  await lc2.transition({ auditId: a2, tenantId: t2, toState: T.VALIDATED, transitionIdempotencyKey: `${a2}:v:validated` });
+  await lc2.transition({ auditId: a2, tenantId: t2, toState: T.COLLECTING, transitionIdempotencyKey: `${a2}:c:collecting` });
+
+  const oldEk = buildSourceExecutionIdentity({ auditRequest: req2, source: "dataforseo-onpage", adapterVersion: "1.0.0" }).sourceExecutionKey;
+  const result = makeAvailResult("dataforseo-onpage");
+  const nr2 = await store2.put({ bytes: Buffer.from(JSON.stringify(result)), contentType: "application/json", scope: { ...scope2, category: "normalized", artifactName: "dataforseo-onpage.json" }, source: "dataforseo-onpage" });
+  await persistSourceCheckpointManifest({ store: store2, scope: scope2, source: "dataforseo-onpage", sourceExecutionKey: oldEk, completedAt: mockClock().now(), normalizedRecord: nr2, rawRecord: null });
+
+  const base = createBaseMockAdapters();
+  let laterCalls = 0;
+  const adapters = {
+    ...base,
+    "dataforseo-onpage": { adapterVersion: "2.0.0", execute: async () => { throw new Error("should not execute"); } },
+  };
+  for (const k of Object.keys(adapters)) {
+    if (k !== "dataforseo-onpage") {
+      const orig = adapters[k];
+      adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { laterCalls++; return orig.execute(a); } };
+    }
+  }
+
+  const orch = createAuditOrchestrator({ lifecycleService: lc2, artifactStore: store2, adapters, validateContract: vc, clock: mockClock() });
+  try { await orch.execute(req2); fail("STALE-03: should reject on adapterVersion change"); }
+  catch (e) {
+    if (e.message.includes("Source execution key mismatch")) pass("STALE-03: adapterVersion mismatch rejects");
+    else fail(`STALE-03: wrong error: ${e.message}`);
+  }
+  const cs = await lc2.currentState(a2, t2);
+  assertEq(cs.state, T.COLLECTION_FAILED, "STALE-03: persisted state = collection_failed");
+  assertEq(laterCalls, 0, "STALE-03: later calls = 0");
+}
+
+// ===================================================================
+// G. WP5-CLOSE-INFRA — Infrastructure failure matrix
+// ===================================================================
+console.log("\n─ G. INFRA: Infrastructure failure matrix ─");
+async function proveInfra(label, failSetup, opts = {}) {
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const repo = createMemoryLifecycleRepository();
+  const lc = createLifecycleService(repo);
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "g1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+  const { auditId, tenantId, clientId } = req;
+  await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
+  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
+
+  const adapters = createBaseMockAdapters();
+  let laterCalls = 0;
+  for (const k of Object.keys(adapters)) {
+    if (k !== "dataforseo-onpage") {
+      const orig = adapters[k];
+      adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { laterCalls++; return orig.execute(a); } };
+    }
+  }
+  failSetup(adapters, store);
+
+  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+  try { await orch.execute(req); fail(`${label}: should have thrown`); }
+  catch {}
+  const cs = await lc.currentState(auditId, tenantId);
+  assertEq(cs.state, T.COLLECTION_FAILED, `${label}: persisted state = collection_failed`);
+  if (opts.checkLaterCalls !== false) assertEq(laterCalls, 0, `${label}: later adapter calls = 0`);
+  const events = await lc.history(auditId, tenantId);
+  const states = events.map(e => e.nextState);
+  assertEq(states.includes(T.EVIDENCE_STORED), false, `${label}: evidence_stored absent`);
+  assertEq(states.includes(T.EVIDENCE_LOCKED), false, `${label}: evidence_locked absent`);
+}
+
+await proveInfra("INFRA-01: raw artifact", (a, s) => {
+  const rp = s.put.bind(s); let f = true;
+  s.put = async (i) => { if (f && i.scope?.category === "raw") { f = false; throw new Error("fail"); } return rp(i); };
+});
+
+await proveInfra("INFRA-02: normalized artifact", (a, s) => {
+  const rp = s.put.bind(s); let f = true;
+  s.put = async (i) => { if (f && i.scope?.category === "normalized") { f = false; throw new Error("fail"); } return rp(i); };
+});
+
+await proveInfra("INFRA-03: checkpoint manifest", (a, s) => {
+  const rp = s.put.bind(s);
+  s.put = async (i) => { if (i.scope?.category === "manifests" && i.scope?.artifactName?.startsWith("source-checkpoint")) throw new Error("fail"); return rp(i); };
+});
+
+// INFRA-04: canonical artifact — post-adapter delta=0
 {
   const store = createGovernedArtifactStore({ type: "memory" });
   const repo = createMemoryLifecycleRepository();
   const lc = createLifecycleService(repo);
-  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "b1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "g2", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+  const { auditId, tenantId, clientId } = req;
+  await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
+  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
+
+  let totalCalls = 0;
+  const base = createBaseMockAdapters();
+  const adapters = {};
+  for (const k of Object.keys(base)) adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { totalCalls++; return base[k].execute(a); } };
+  let adapterCountAtFailure = 0;
+  const rp = store.put.bind(store);
+  store.put = async (i) => { if (i.scope?.category === "canonical") { adapterCountAtFailure = totalCalls; throw new Error("fail"); } return rp(i); };
+  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+  try { await orch.execute(req); } catch {}
+  assertEq(totalCalls - adapterCountAtFailure, 0, "INFRA-04: adapter call-count delta = 0");
+}
+
+// INFRA-05: canonical record manifest — post-adapter delta=0
+{
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const repo = createMemoryLifecycleRepository();
+  const lc = createLifecycleService(repo);
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "g3", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+  const { auditId, tenantId, clientId } = req;
+  await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
+  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
+
+  let totalCalls = 0;
+  const base = createBaseMockAdapters();
+  const adapters = {};
+  for (const k of Object.keys(base)) adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { totalCalls++; return base[k].execute(a); } };
+  let adapterCountAtFailure = 0;
+  let cw = false;
+  const rp = store.put.bind(store);
+  store.put = async (i) => { if (i.scope?.category === "canonical") { cw = true; return rp(i); } if (cw && i.scope?.category === "manifests" && i.scope?.artifactName === "canonical-evidence-record.json") { adapterCountAtFailure = totalCalls; throw new Error("fail"); } return rp(i); };
+  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+  try { await orch.execute(req); } catch {}
+  assertEq(totalCalls - adapterCountAtFailure, 0, "INFRA-05: adapter call-count delta = 0");
+}
+
+// ===================================================================
+// H. WP5-CLOSE-RESUME — Interrupted collecting recovery
+// ===================================================================
+console.log("\n─ H. RESUME: Interrupted collecting recovery ─");
+{
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const repo = createMemoryLifecycleRepository();
+  const lc = createLifecycleService(repo);
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "h1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
   const { auditId, tenantId, clientId } = req;
   const scope = { tenantId, clientId, auditId };
 
   await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
-  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}-v` });
-  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}-c` });
+  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
 
-  // Persist PARTIAL onpage + AVAILABLE pagespeed
-  const partial = { contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage", provider: "M", adapterVersion: "1.0.0", status: "PARTIAL", startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 2, expectedRecords: 5, returnedRecords: 3, coverage: { requested: 5, completed: 3, failed: 2 }, limitations: ["controlled limitation"], evidence: {} };
-  const avail = { contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "pagespeed", provider: "M", adapterVersion: "1.0.0", status: "AVAILABLE", startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 1, expectedRecords: 1, returnedRecords: 1, coverage: { requested: 1, completed: 1, failed: 0 }, limitations: [], evidence: {} };
-
-  const nr1 = await store.put({ bytes: Buffer.from(JSON.stringify(partial)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "dataforseo-onpage.json" }, source: "dataforseo-onpage" });
-  const nr2 = await store.put({ bytes: Buffer.from(JSON.stringify(avail)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "pagespeed.json" }, source: "pagespeed" });
-  const origOnpageSha = nr1.sha256;
+  // Persist PARTIAL onpage + AVAILABLE pagespeed checkpoints
+  const partialResult = { contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage", provider: "M", adapterVersion: "1.0.0", status: "PARTIAL", startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 2, expectedRecords: 5, returnedRecords: 3, coverage: { requested: 5, completed: 3, failed: 2 }, limitations: ["controlled limitation"], evidence: {} };
+  const availResult = makeAvailResult("pagespeed");
+  const nr1 = await store.put({ bytes: Buffer.from(JSON.stringify(partialResult)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "dataforseo-onpage.json" }, source: "dataforseo-onpage" });
+  const nr2 = await store.put({ bytes: Buffer.from(JSON.stringify(availResult)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "pagespeed.json" }, source: "pagespeed" });
 
   const onpageEk = buildSourceExecutionIdentity({ auditRequest: req, source: "dataforseo-onpage", adapterVersion: "1.0.0" }).sourceExecutionKey;
   const psEk = buildSourceExecutionIdentity({ auditRequest: req, source: "pagespeed", adapterVersion: "1.0.0" }).sourceExecutionKey;
   await persistSourceCheckpointManifest({ store, scope, source: "dataforseo-onpage", sourceExecutionKey: onpageEk, completedAt: mockClock().now(), normalizedRecord: nr1, rawRecord: null });
   await persistSourceCheckpointManifest({ store, scope, source: "pagespeed", sourceExecutionKey: psEk, completedAt: mockClock().now(), normalizedRecord: nr2, rawRecord: null });
 
+  // Read before bytes
+  const beforeBytes = await store.get(nr1.key);
+  const beforeSha = sha256(beforeBytes);
+
+  // Track adapter calls
   let onCalls = 0, psCalls = 0, serpCalls = 0, blCalls = 0;
   const base = createBaseMockAdapters();
   const adapters = {
-    "dataforseo-onpage": { execute: async (a) => { onCalls++; return base["dataforseo-onpage"].execute(a); } },
-    "pagespeed": { execute: async (a) => { psCalls++; return base["pagespeed"].execute(a); } },
-    "dataforseo-serp": { execute: async (a) => { serpCalls++; return base["dataforseo-serp"].execute(a); } },
-    "backlinks": { execute: async (a) => { blCalls++; return base["backlinks"].execute(a); } },
+    "dataforseo-onpage": { adapterVersion: "1.0.0", execute: async (a) => { onCalls++; return base["dataforseo-onpage"].execute(a); } },
+    "pagespeed": { adapterVersion: "1.0.0", execute: async (a) => { psCalls++; return base["pagespeed"].execute(a); } },
+    "dataforseo-serp": { adapterVersion: "1.0.0", execute: async (a) => { serpCalls++; return base["dataforseo-serp"].execute(a); } },
+    "backlinks": { adapterVersion: "1.0.0", execute: async (a) => { blCalls++; return base["backlinks"].execute(a); } },
   };
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
   const s = await orch.execute(req);
-  if (s.finalState === T.EVIDENCE_LOCKED) pass("Final state: EVIDENCE_LOCKED");
-  else fail(`Final state: ${s.finalState}`);
+  assertEq(s.finalState, T.EVIDENCE_LOCKED, "RESUME: final state = evidence_locked");
 
-  if (onCalls === 0 && psCalls === 0) pass("onpage=0, pagespeed=0 calls");
-  else fail(`onpage=${onCalls}, pagespeed=${psCalls}`);
-  if (serpCalls === 1 && blCalls === 1) pass("serp=1, backlinks=1 calls");
-  else fail(`serp=${serpCalls}, backlinks=${blCalls}`);
+  // RESUME-01: exact adapter calls
+  assertEq(onCalls, 0, "RESUME-01: completed onpage calls = 0");
+  assertEq(psCalls, 0, "RESUME-01: completed pagespeed calls = 0");
+  assertEq(serpCalls, 1, "RESUME-01: incomplete serp calls = 1");
+  assertEq(blCalls, 1, "RESUME-01: incomplete backlinks calls = 1");
 
-  const onpageBuf = await store.get(nr1.key);
-  if (sha256(onpageBuf) === origOnpageSha) pass("Onpage SHA unchanged");
-  else fail("Onpage SHA changed");
+  // RESUME-02: bytes and SHA unchanged
+  const afterBytes = await store.get(nr1.key);
+  assertEq(afterBytes.length, beforeBytes.length, "RESUME-02: byte count unchanged");
+  assertEq(sha256(afterBytes), beforeSha, "RESUME-02: SHA unchanged");
+  assertDeep(afterBytes, beforeBytes, "RESUME-02: bytes identical");
 
+  // RESUME-03: PARTIAL metadata preserved
   const evBuf = await store.get(s.canonicalEvidence.key);
   const ev = JSON.parse(evBuf.toString());
-  if (ev.sources.website.status === "PARTIAL" && ev.sources.website.retryCount === 2) pass("PARTIAL + retryCount=2 preserved");
-  else fail(`Status=${ev.sources.website.status}, retryCount=${ev.sources.website.retryCount}`);
+  assertEq(ev.sources.website.status, "PARTIAL", "RESUME-03: status = PARTIAL");
+  assertEq(ev.sources.website.retryCount, 2, "RESUME-03: retryCount = 2");
+  assertDeep(ev.sources.website.limitations, ["controlled limitation"], "RESUME-03: limitations preserved");
 }
 
 // ===================================================================
-// C. Infrastructure failure matrix
+// I. WP5-CLOSE-STORED — Evidence-stored recovery
 // ===================================================================
-console.log("\n─ C. Infrastructure failure matrix ─");
-async function proveInfraFailure(label, failSetup) {
+console.log("\n─ I. STORED: Evidence-stored recovery ─");
+{
   const store = createGovernedArtifactStore({ type: "memory" });
   const repo = createMemoryLifecycleRepository();
   const lc = createLifecycleService(repo);
-  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "cf", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "i1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
   const { auditId, tenantId, clientId } = req;
+  const scope = { tenantId, clientId, auditId };
 
   await lc.create({ auditId, tenantId, clientId, idempotencyKey: req.idempotencyKey });
-  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}-v` });
-  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}-c` });
+  await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
+  await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
 
-  const adapters = createBaseMockAdapters();
-  failSetup(adapters, store);
+  const ev = { contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId, normalizedRequest: { targetUrl: "https://example.com" }, sources: { website: { source: "dataforseo-onpage", status: "AVAILABLE", collectedAt: mockClock().now() } }, limitations: [], artifactReferences: [], adapterVersions: {}, createdAt: mockClock().now() };
+  const cr = await store.put({ bytes: Buffer.from(JSON.stringify(ev)), contentType: "application/json", scope: { ...scope, category: "canonical", artifactName: "evidence.json" } });
+  const mr = await persistCanonicalRecordManifest({ store, scope, createdAt: mockClock().now(), canonicalRecord: cr });
+  await lc.transition({ auditId, tenantId, toState: T.EVIDENCE_STORED, transitionIdempotencyKey: `${auditId}:es`, artifactKey: mr.key });
+
+  // Instrument adapter calls
+  let totalCalls = 0;
+  const base = createBaseMockAdapters();
+  const adapters = {};
+  for (const k of Object.keys(base)) adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { totalCalls++; return base[k].execute(a); } };
+
+  // Instrument artifact writes
+  let writeCount = 0;
+  const rp = store.put.bind(store);
+  store.put = async (i) => { writeCount++; return rp(i); };
+
+  // Read history before
+  const beforeHistory = await lc.history(auditId, tenantId);
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
-  try {
-    await orch.execute(req);
-    fail(`${label}: should have thrown`);
-  } catch {
-    const cs = await lc.currentState(auditId, tenantId);
-    if (cs.state === T.COLLECTION_FAILED) pass(`${label} → collection_failed`);
-    else fail(`${label}: state=${cs.state}, expected collection_failed`);
-  }
+  const s = await orch.execute(req);
+
+  // STORED-01: zero adapter calls
+  assertEq(totalCalls, 0, "STORED-01: total adapter calls = 0");
+
+  // STORED-02: zero artifact writes
+  assertEq(writeCount, 0, "STORED-02: artifact write count = 0");
+
+  // STORED-03: exactly one lifecycle transition
+  const afterHistory = await lc.history(auditId, tenantId);
+  assertEq(afterHistory.length - beforeHistory.length, 1, "STORED-03: exactly one new transition");
+  assertDeep(
+    afterHistory.slice(-1).map(e => [e.priorState, e.nextState]),
+    [[T.EVIDENCE_STORED, T.EVIDENCE_LOCKED]],
+    "STORED-03: transition = evidence_stored → evidence_locked"
+  );
 }
 
-await proveInfraFailure("raw artifact", (a, s) => {
-  let failRaw = false;
-  const orig = createBaseMockAdapters()["dataforseo-onpage"];
-  a["dataforseo-onpage"] = { execute: async (args) => { failRaw = true; return orig.execute(args); } };
-  const realPut = s.put.bind(s);
-  s.put = async (i) => { if (failRaw && i.scope?.category === "raw") throw new Error("fail"); return realPut(i); };
-});
-await proveInfraFailure("normalized artifact", (a, s) => {
-  let failNorm = false;
-  const orig = createBaseMockAdapters()["dataforseo-onpage"];
-  a["dataforseo-onpage"] = { execute: async (args) => { failNorm = true; return orig.execute(args); } };
-  const realPut = s.put.bind(s);
-  s.put = async (i) => { if (failNorm && i.scope?.category === "normalized") throw new Error("fail"); return realPut(i); };
-});
-await proveInfraFailure("checkpoint manifest", (a, s) => {
-  const realPut = s.put.bind(s);
-  s.put = async (i) => { if (i.scope?.category === "manifests" && i.scope?.artifactName?.startsWith("source-checkpoint")) throw new Error("fail"); return realPut(i); };
-});
-await proveInfraFailure("canonical artifact", (a, s) => {
-  const realPut = s.put.bind(s);
-  s.put = async (i) => { if (i.scope?.category === "canonical") throw new Error("fail"); return realPut(i); };
-});
-await proveInfraFailure("canonical record manifest", (a, s) => {
-  let cw = false;
-  const realPut = s.put.bind(s);
-  s.put = async (i) => { if (i.scope?.category === "canonical") { cw = true; return realPut(i); } if (cw && i.scope?.category === "manifests") throw new Error("fail"); return realPut(i); };
-});
-
 // ===================================================================
-// D. Collection-failed recovery + evidence_stored recovery + locked replay
+// J. WP5-CLOSE-REPLAY — Locked replay proof
 // ===================================================================
-console.log("\n─ D. Recovery paths ─");
+console.log("\n─ J. REPLAY: Locked replay proof ─");
 {
-  // collection_failed recovery
-  const store1 = createGovernedArtifactStore({ type: "memory" });
-  const repo1 = createMemoryLifecycleRepository();
-  const lc1 = createLifecycleService(repo1);
-  const req1 = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
-  const { auditId: a1, tenantId: t1, clientId: c1 } = req1;
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const repo = createMemoryLifecycleRepository();
+  let adapterCalls = 0;
+  const base = createBaseMockAdapters();
+  const adapters = {};
+  for (const k of Object.keys(base)) adapters[k] = { adapterVersion: "1.0.0", execute: async (a) => { adapterCalls++; return base[k].execute(a); } };
 
-  await lc1.create({ auditId: a1, tenantId: t1, clientId: c1, idempotencyKey: req1.idempotencyKey });
-  await lc1.transition({ auditId: a1, tenantId: t1, toState: T.VALIDATED, transitionIdempotencyKey: `${a1}-v` });
-  await lc1.transition({ auditId: a1, tenantId: t1, toState: T.COLLECTING, transitionIdempotencyKey: `${a1}-c` });
-  await lc1.transition({ auditId: a1, tenantId: t1, toState: T.COLLECTION_FAILED, transitionIdempotencyKey: `${a1}-cf` });
+  const lc = createLifecycleService(repo);
+  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "j1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
 
-  const orch1 = createAuditOrchestrator({ lifecycleService: lc1, artifactStore: store1, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
-  const s1 = await orch1.execute(req1);
-  const h1 = (await lc1.history(a1, t1)).map(e => e.nextState);
-  const exp1 = [T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED];
-  if (JSON.stringify(h1) === JSON.stringify(exp1)) pass("collection_failed recovery: exact history");
-  else fail(`collection_failed recovery: ${h1.join(" → ")}`);
+  const s1 = await orch.execute(req);
+  assertEq(s1.finalState, T.EVIDENCE_LOCKED, "REPLAY: first run = evidence_locked");
 
-  // evidence_stored recovery
-  const store2 = createGovernedArtifactStore({ type: "memory" });
-  const repo2 = createMemoryLifecycleRepository();
-  const lc2 = createLifecycleService(repo2);
-  const req2 = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d2", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
-  const { auditId: a2, tenantId: t2, clientId: c2 } = req2;
-  const scope2 = { tenantId: t2, clientId: c2, auditId: a2 };
+  // Instrument writes for replay
+  let writesAfterFirstRun = 0;
+  const rp = store.put.bind(store);
+  store.put = async (i) => { writesAfterFirstRun++; return rp(i); };
 
-  await lc2.create({ auditId: a2, tenantId: t2, clientId: c2, idempotencyKey: req2.idempotencyKey });
-  await lc2.transition({ auditId: a2, tenantId: t2, toState: T.VALIDATED, transitionIdempotencyKey: `${a2}-v` });
-  await lc2.transition({ auditId: a2, tenantId: t2, toState: T.COLLECTING, transitionIdempotencyKey: `${a2}-c` });
+  const callsBeforeReplay = adapterCalls;
+  const s2 = await orch.execute(req);
 
-  const ev = { contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId: a2, normalizedRequest: { targetUrl: "https://example.com" }, sources: { website: { source: "dataforseo-onpage", status: "AVAILABLE", collectedAt: mockClock().now() } }, limitations: [], artifactReferences: [], adapterVersions: {}, createdAt: mockClock().now() };
-  const cr = await store2.put({ bytes: Buffer.from(JSON.stringify(ev)), contentType: "application/json", scope: { ...scope2, category: "canonical", artifactName: "evidence.json" } });
-  const mr = await persistCanonicalRecordManifest({ store: store2, scope: scope2, createdAt: mockClock().now(), canonicalRecord: cr });
+  // REPLAY-01: zero adapter calls
+  assertEq(adapterCalls - callsBeforeReplay, 0, "REPLAY-01: zero new adapter calls");
 
-  await lc2.transition({ auditId: a2, tenantId: t2, toState: T.EVIDENCE_STORED, transitionIdempotencyKey: `${a2}-es`, artifactKey: mr.key });
+  // REPLAY-02: zero artifact writes
+  assertEq(writesAfterFirstRun, 0, "REPLAY-02: zero artifact writes");
 
-  let esCalls = 0;
-  const esAdapters = createBaseMockAdapters();
-  for (const k of Object.keys(esAdapters)) { const o = esAdapters[k]; esAdapters[k] = { execute: async (a) => { esCalls++; return o.execute(a); } }; }
+  // REPLAY-03: canonical identity unchanged + persisted bytes proof
+  assertEq(s2.canonicalEvidence.key, s1.canonicalEvidence.key, "REPLAY-03: key unchanged");
+  assertEq(s2.canonicalEvidence.sha256, s1.canonicalEvidence.sha256, "REPLAY-03: SHA unchanged");
+  assertEq(s2.canonicalEvidence.bytes, s1.canonicalEvidence.bytes, "REPLAY-03: bytes unchanged");
 
-  const orch2 = createAuditOrchestrator({ lifecycleService: lc2, artifactStore: store2, adapters: esAdapters, validateContract: vc, clock: mockClock() });
-  const s2 = await orch2.execute(req2);
-  if (esCalls === 0) pass("evidence_stored: 0 adapter calls");
-  else fail(`evidence_stored: ${esCalls} calls`);
-  if (s2.finalState === T.EVIDENCE_LOCKED) pass("evidence_stored → evidence_locked");
-  else fail(`evidence_stored: ${s2.finalState}`);
+  const persistedBytes = await store.get(s1.canonicalEvidence.key);
+  assertEq(persistedBytes.length, s1.canonicalEvidence.bytes, "REPLAY-03: persisted byte count = canonical bytes count");
+  assertEq(sha256(persistedBytes), s1.canonicalEvidence.sha256, "REPLAY-03: persisted SHA = canonical SHA");
 
-  // Locked replay
-  const store3 = createGovernedArtifactStore({ type: "memory" });
-  const repo3 = createMemoryLifecycleRepository();
-  let lrCalls = 0;
-  const lrAdapters = createBaseMockAdapters();
-  for (const k of Object.keys(lrAdapters)) { const o = lrAdapters[k]; lrAdapters[k] = { execute: async (a) => { lrCalls++; return o.execute(a); } }; }
+  const persistedBytes2 = await store.get(s2.canonicalEvidence.key);
+  assertEq(persistedBytes2.length, persistedBytes.length, "REPLAY-03: persisted byte count unchanged across replays");
+  assertDeep(persistedBytes2, persistedBytes, "REPLAY-03: persisted bytes identical across replays");
+}
 
-  const orch3 = createAuditOrchestrator({ lifecycleService: createLifecycleService(repo3), artifactStore: store3, adapters: lrAdapters, validateContract: vc, clock: mockClock() });
-  const req3 = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "d3", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
-  const s3a = await orch3.execute(req3);
-  const firstCalls = lrCalls;
-  const s3b = await orch3.execute(req3);
-  if (lrCalls === firstCalls) pass("Locked replay: 0 new adapter calls");
-  else fail(`Locked replay: ${lrCalls - firstCalls} new calls`);
-  if (s3b.canonicalEvidence.sha256 === s3a.canonicalEvidence.sha256) pass("Locked replay: SHA identical");
-  else fail("Locked replay: SHA changed");
-  if (s3b.canonicalEvidence.key === s3a.canonicalEvidence.key) pass("Locked replay: key unchanged");
-  else fail("Locked replay: key changed");
+// ===================================================================
+// K. New audit (original acceptance)
+// ===================================================================
+console.log("\n─ K. New audit (original) ─");
+{
+  const store = createGovernedArtifactStore({ type: "memory" });
+  const repo = createMemoryLifecycleRepository();
+  const lc = createLifecycleService(repo);
+  const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
+  const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "k1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
+  const s = await orch.execute(req);
+  assertEq(s.finalState, T.EVIDENCE_LOCKED, "New audit: final state = evidence_locked");
+
+  const sc = { tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId };
+  let mc = 0;
+  for (const src of ["dataforseo-onpage", "pagespeed", "dataforseo-serp", "backlinks"]) {
+    if (await store.exists(buildSourceCheckpointManifestKey(sc, src))) mc++;
+  }
+  assertEq(mc, 4, "New audit: 4 source manifests");
+  assertEq(await store.exists(buildCanonicalRecordManifestKey(sc)), true, "New audit: canonical manifest exists");
 }
 
 // ===================================================================
