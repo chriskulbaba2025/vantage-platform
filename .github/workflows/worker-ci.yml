@@ -51,3 +51,5 @@ jobs:
       - run: npm run acceptance:wp2
       - run: npm run acceptance:wp3
       - run: npm run acceptance:wp4
+      - run: npm run test:orchestrator
+      - run: npm run acceptance:wp5

@@ -17,6 +17,8 @@
     "acceptance:wp2": "node scripts/acceptance-wp2.js",
     "acceptance:wp3": "node scripts/acceptance-wp3.js",
     "acceptance:wp4": "node scripts/acceptance-wp4.js",
+    "test:orchestrator": "node --test test-fixtures/orchestration/orchestrator.test.js",
+    "acceptance:wp5": "node scripts/acceptance-wp5.js",
     "acceptance:task7": "node scripts/acceptance-task7.js",
     "acceptance:task9": "node scripts/acceptance-task9.js",
     "acceptance:task10": "node scripts/acceptance-task10.js"
