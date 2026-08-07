@@ -10,7 +10,7 @@ docs/Vantage\_Production\_PRD\_v3.md
 
 Governing acceleration standard:
 
-docs/prysm-governance/PRYSM\_REBUILD\_ACCELERATION\_STANDARD\_v1.0.md
+docs/prysm-governance/PRYSM\_REBUILD\_ACCELERATION\_STANDARD\_v1.1.md
 
 
 
@@ -74,7 +74,7 @@ Before performing any Prysm planning, implementation, correction, testing, audit
 
 
 
-1\. Read `docs/prysm-governance/PRYSM\_REBUILD\_ACCELERATION\_STANDARD\_v1.0.md`.
+1\. Read `docs/prysm-governance/PRYSM\_REBUILD\_ACCELERATION\_STANDARD\_v1.1.md`.
 
 2\. Treat it as a governing source rule.
 
