@@ -22,25 +22,19 @@ chriskulbaba2025/vantage-platform
 
 Current branch:
 
-feat/prysm-wp5-deterministic-reporting
-
-
+feat/prysm-wp7-deterministic-findings-scores
 
 Current PR:
 
-\#35 — OPEN / DRAFT / UNMERGED
-
-
+TBD
 
 Current verified starting head:
 
-f39c14e50eba6fac072d622235416ebea888d21f
-
-
+46653ea4fc5a1df594156997419b473600cfae59
 
 Current work package:
 
-WP5 closure
+WP7 — Deterministic Findings and Scores
 
 
 

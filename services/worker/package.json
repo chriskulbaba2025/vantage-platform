@@ -25,7 +25,9 @@
     "acceptance:wp6": "node scripts/acceptance-wp6.js",
     "test:wp7": "node --test src/scoring/vantage-score.test.js",
     "acceptance:wp7": "node scripts/acceptance-wp7.js",
-    "wp7:verify": "node --test src/scoring/vantage-score.test.js && node scripts/acceptance-wp7.js"
+    "wp7:preflight": "node scripts/wp7-preflight.js",
+    "wp7:scope-check": "node scripts/wp7-scope-check.js",
+    "wp7:verify": "node scripts/wp7-verify.js"
   },
   "engines": {
     "node": ">=20.0.0"
