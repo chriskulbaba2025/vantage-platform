@@ -77,12 +77,11 @@ function generateMockNarrative(reportPkg, modelId) {
       priorityFixNarrative: 20,
     },
     usage: {
-      modelId: modelId || "mock",
       inputTokens: 0,
       outputTokens: 0,
-      cachedInputTokens: 0,
       estimatedCost: 0,
-      actualCost: 0,
+      retryNumber: 0,
+      cacheHit: false,
     },
   };
 }

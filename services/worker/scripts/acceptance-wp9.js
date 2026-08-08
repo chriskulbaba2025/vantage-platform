@@ -62,7 +62,7 @@ else fail("COST-01");
 header("4. Validation");
 const v = validateNarrativeResponse(mockResult.narrative, reportPackage);
 if (v.valid) pass("VALID-01: Mock narrative passes schema + content validation");
-else fail("VALID-01", JSON.stringify(v.errors));
+else { console.error("Validation errors: " + JSON.stringify(v.errors)); fail("VALID-01", JSON.stringify(v.errors).slice(0, 200)); }
 
 // 5. Ledger
 header("5. Ledger");
