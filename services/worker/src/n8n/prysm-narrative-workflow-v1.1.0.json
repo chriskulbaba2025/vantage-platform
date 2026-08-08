@@ -15,8 +15,10 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "prysm-narrative",
-        "responseMode": "lastNode"
-      }
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      },
+      "notes": "SSRF defense: authentication required. Only the Prysm worker may invoke this webhook. The worker injects modelEndpoint from server-side config, NOT from the webhook body."
     },
     {
       "id": "validate-input",
@@ -80,10 +82,19 @@
       }
     },
     {
+      "id": "validate-endpoint",
+      "name": "Validate Model Endpoint",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 600],
+      "parameters": {
+        "jsCode": "// SSRF defense: validate modelEndpoint against strict allowlist.\n// Only permitted model API hosts may be called.\nconst ALLOWED_HOSTS = [\n  'api.openai.com',\n  'api.anthropic.com',\n  // Add additional approved model hosts here after governance review\n];\nconst endpoint = $json.modelEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('modelEndpoint is required and must be a string');\n}\ntry {\n  const url = new URL(endpoint);\n  if (!ALLOWED_HOSTS.some(h => url.hostname === h || url.hostname.endsWith('.' + h))) {\n    throw new Error('modelEndpoint host not in allowlist: ' + url.hostname);\n  }\n  if (url.protocol !== 'https:') {\n    throw new Error('modelEndpoint must use HTTPS');\n  }\n} catch (e) {\n  if (e.message.includes('Invalid URL')) throw e;\n  throw new Error('modelEndpoint validation failed: ' + e.message);\n}\nreturn [{ json: $json }];"
+      }
+    },
+    {
       "id": "primary-call",
       "name": "Primary Narrative Call",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [1250, 600],
+      "position": [1450, 700],
       "parameters": {
         "method": "POST",
         "url": "={{ $json.modelEndpoint }}",
@@ -175,11 +186,12 @@
       "main": [
         [{ "node": "Mock Narrative", "type": "main", "index": 0 }],
         [{ "node": "Replay Narrative", "type": "main", "index": 0 }],
-        [{ "node": "Primary Narrative Call", "type": "main", "index": 0 }]
+        [{ "node": "Validate Model Endpoint", "type": "main", "index": 0 }]
       ]
     },
     "Mock Narrative": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
     "Replay Narrative": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Validate Model Endpoint": { "main": [[ { "node": "Primary Narrative Call", "type": "main", "index": 0 } ]] },
     "Primary Narrative Call": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
     "Response Validation": { "main": [[ { "node": "Repair?", "type": "main", "index": 0 } ]] },
     "Repair?": {
