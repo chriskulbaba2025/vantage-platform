@@ -22,7 +22,7 @@ chriskulbaba2025/vantage-platform
 
 Current branch:
 
-feat/prysm-wp7-deterministic-findings-scores
+feat/prysm-wp8-report-content-package
 
 Current PR:
 
@@ -30,11 +30,11 @@ TBD
 
 Current verified starting head:
 
-46653ea4fc5a1df594156997419b473600cfae59
+be9b53f2688cb3d0aa63ae3daba7e0d0c248a933
 
 Current work package:
 
-WP7 — Deterministic Findings and Scores
+WP8 — Compact Report Content Package
 
 
 

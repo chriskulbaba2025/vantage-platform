@@ -27,7 +27,12 @@
     "acceptance:wp7": "node scripts/acceptance-wp7.js",
     "wp7:preflight": "node scripts/wp7-preflight.js",
     "wp7:scope-check": "node scripts/wp7-scope-check.js",
-    "wp7:verify": "node scripts/wp7-verify.js"
+    "wp7:verify": "node scripts/wp7-verify.js",
+    "test:wp8": "node --test src/report-content/build-package.test.js",
+    "acceptance:wp8": "node scripts/acceptance-wp8.js",
+    "wp8:preflight": "node scripts/wp8-preflight.js",
+    "wp8:scope-check": "node scripts/wp8-scope-check.js",
+    "wp8:verify": "node scripts/wp8-verify.js"
   },
   "engines": {
     "node": ">=20.0.0"
