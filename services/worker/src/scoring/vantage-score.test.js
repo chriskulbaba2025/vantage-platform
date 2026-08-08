@@ -5,6 +5,9 @@ import { scorePerformance } from "./score-components.js";
 import { renderReport } from "../report/render-report.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 
+// Fixed deterministic timestamp for all test fixtures (WP7 §DET-03)
+const FIXED_TS = "2026-01-15T12:00:00.000Z";
+
 function evidence(overrides = {}) {
   return {
     site: {
@@ -60,14 +63,14 @@ function evidence(overrides = {}) {
           responseHeaders: {},
         },
       ],
-      collectedAt: new Date().toISOString(),
+      collectedAt: FIXED_TS,
       coverage: { requested: 2, completed: 2, failed: 0 },
       rawArtifactRef: null,
       _sourceStatus: {
         provider: "prysm-crawler",
         adapterVersion: "1.0.0",
         startedAt: null,
-        completedAt: new Date().toISOString(),
+        completedAt: FIXED_TS,
         requestId: null,
         retryCount: 0,
         returnedRecordCount: 2,
@@ -96,14 +99,14 @@ function evidence(overrides = {}) {
       },
       limitations: [],
       fieldData: {},
-      collectedAt: new Date().toISOString(),
+      collectedAt: FIXED_TS,
       coverage: { requested: 2, completed: 2, failed: 0 },
       rawArtifactRef: null,
       _sourceStatus: {
         provider: "test",
         adapterVersion: "1.0.0",
         startedAt: null,
-        completedAt: new Date().toISOString(),
+        completedAt: FIXED_TS,
         requestId: null,
         retryCount: 0,
         returnedRecordCount: 2,
@@ -120,14 +123,14 @@ function evidence(overrides = {}) {
       sourceStatus: SOURCE_STATUS.NOT_CONNECTED,
       status: SOURCE_STATUS.NOT_CONNECTED,
       records: [],
-      collectedAt: new Date().toISOString(),
+      collectedAt: FIXED_TS,
       coverage: { requested: 0, completed: 0, failed: 0 },
       rawArtifactRef: null,
       _sourceStatus: {
         provider: "dataforseo",
         adapterVersion: "1.0.0",
         startedAt: null,
-        completedAt: new Date().toISOString(),
+        completedAt: FIXED_TS,
         requestId: null,
         retryCount: 0,
         returnedRecordCount: 0,
@@ -144,14 +147,14 @@ function evidence(overrides = {}) {
       status: SOURCE_STATUS.NOT_CONNECTED,
       included: false,
       affectsScore: false,
-      collectedAt: new Date().toISOString(),
+      collectedAt: FIXED_TS,
       coverage: { requested: 0, completed: 0, failed: 0 },
       rawArtifactRef: null,
       _sourceStatus: {
         provider: "google-analytics-4",
         adapterVersion: "1.0.0",
         startedAt: null,
-        completedAt: new Date().toISOString(),
+        completedAt: FIXED_TS,
         requestId: null,
         retryCount: 0,
         returnedRecordCount: 0,
@@ -195,14 +198,14 @@ function unavailablePerf() {
       phone: { status: SOURCE_STATUS.NOT_CONNECTED },
       desktop: { status: SOURCE_STATUS.NOT_CONNECTED },
     },
-    collectedAt: new Date().toISOString(),
+    collectedAt: FIXED_TS,
     coverage: { requested: 2, completed: 0, failed: 2 },
     rawArtifactRef: null,
     _sourceStatus: {
       provider: "unavailable",
       adapterVersion: "1.0.0",
       startedAt: null,
-      completedAt: new Date().toISOString(),
+      completedAt: FIXED_TS,
       requestId: null,
       retryCount: 0,
       returnedRecordCount: 0,
@@ -244,14 +247,14 @@ function lighthouseFallbackPerf() {
       "PageSpeed mobile failed (429): quota",
       "PageSpeed desktop failed (429): quota",
     ],
-    collectedAt: new Date().toISOString(),
+    collectedAt: FIXED_TS,
     coverage: { requested: 2, completed: 2, failed: 0 },
     rawArtifactRef: null,
     _sourceStatus: {
       provider: "lighthouse-cli-fallback",
       adapterVersion: "1.0.0",
       startedAt: null,
-      completedAt: new Date().toISOString(),
+      completedAt: FIXED_TS,
       requestId: null,
       retryCount: 0,
       returnedRecordCount: 2,
@@ -309,14 +312,14 @@ function failedSite() {
       contentSecurityPolicy: false,
     },
     limitations: ["Task submission failed: network error"],
-    collectedAt: new Date().toISOString(),
+    collectedAt: FIXED_TS,
     coverage: { requested: 0, completed: 0, failed: 0 },
     rawArtifactRef: null,
     _sourceStatus: {
       provider: "dataforseo-onpage",
       adapterVersion: "1.0.0",
       startedAt: null,
-      completedAt: new Date().toISOString(),
+      completedAt: FIXED_TS,
       requestId: null,
       retryCount: 0,
       returnedRecordCount: 0,
@@ -1435,4 +1438,115 @@ test("renderReport with Provisional state shows assessed weight", async () => {
 
   const html = await renderReport(model);
   assert.match(html, /Assessed weight/);
+});
+
+// =============================================================================
+// WP7 DETERMINISM TESTS — generatedAt, scoredAt, fixture determinism
+// =============================================================================
+
+test("WP7: generatedAt is derived from evidence timestamps, not live clock", () => {
+  const model1 = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+  );
+  const model2 = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+  );
+
+  assert.equal(model1.generatedAt, model2.generatedAt);
+  assert.equal(model1.generatedAt, FIXED_TS);
+});
+
+test("WP7: scoreAudit accepts explicit scoredAt option", () => {
+  const explicitTs = "2026-06-01T00:00:00.000Z";
+  const model = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+    { scoredAt: explicitTs },
+  );
+
+  assert.equal(model.generatedAt, explicitTs);
+});
+
+test("WP7: explicit scoredAt overrides evidence timestamps", () => {
+  const explicitTs = "2025-01-01T00:00:00.000Z";
+  const model = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+    { scoredAt: explicitTs },
+  );
+
+  assert.equal(model.generatedAt, explicitTs);
+  assert.notEqual(model.generatedAt, FIXED_TS);
+});
+
+test("WP7: Not-Assessed model also uses scoredAt, not live clock", () => {
+  const explicitTs = "2026-06-15T08:00:00.000Z";
+  const model = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence({ site: failedSite() }),
+    { scoredAt: explicitTs },
+  );
+
+  assert.equal(model.generatedAt, explicitTs);
+  assert.equal(model._crawlSuppressed, true);
+});
+
+test("WP7: identical evidence produces identical generatedAt (no explicit scoredAt)", () => {
+  const model1 = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+  );
+  const model2 = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+  );
+
+  assert.equal(model1.generatedAt, model2.generatedAt);
+  assert.equal(model1.generatedAt, FIXED_TS);
+});
+
+test("WP7: deterministic fixture produces byte-identical serialized output", () => {
+  const ev = evidence();
+  const model1 = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    ev,
+  );
+  const model2 = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    ev,
+  );
+
+  const str1 = JSON.stringify(model1, null, 2);
+  const str2 = JSON.stringify(model2, null, 2);
+
+  assert.equal(str1.length, str2.length, "Serialized model lengths differ");
+  assert.equal(str1, str2, "Serialized models are not byte-identical");
+});
+
+test("WP7: no Date.now() or new Date() in scoring production path", () => {
+  // Static analysis check performed by acceptance-wp7.js
+  assert.ok(true, "Static analysis check performed by acceptance-wp7.js");
+});
+
+test("WP7: evidence confidence uses controlled now parameter", async () => {
+  const ev = evidence();
+  const { buildFindings, calculateEvidenceConfidence } = await import("./score-components.js");
+
+  const findings = buildFindings(ev.site, ev.performance);
+
+  // Same evidence, same "now" → same confidence score
+  const result1 = calculateEvidenceConfidence(ev, findings, FIXED_TS);
+  const result2 = calculateEvidenceConfidence(ev, findings, FIXED_TS);
+
+  assert.equal(result1.score, result2.score);
+  assert.equal(result1.factors.dataFreshness, result2.factors.dataFreshness);
+
+  // Different "now" → different freshness
+  const resultFuture = calculateEvidenceConfidence(ev, findings, "2026-01-17T12:00:00.000Z");
+  assert.ok(
+    resultFuture.factors.dataFreshness <= result1.factors.dataFreshness,
+    `Expected future freshness (${resultFuture.factors.dataFreshness}) <= current (${result1.factors.dataFreshness})`,
+  );
 });

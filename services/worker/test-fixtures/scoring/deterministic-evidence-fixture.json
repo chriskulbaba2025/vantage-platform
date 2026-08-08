@@ -1,0 +1,337 @@
+{
+  "site": {
+    "evidenceVersion": "1.0.0",
+    "source": "dataforseo-onpage",
+    "sourceStatus": "AVAILABLE",
+    "targetUrl": "https://example.com/",
+    "domain": "example.com",
+    "pageCount": 8,
+    "totalWords": 3200,
+    "averageWords": 400,
+    "missingTitles": 0,
+    "missingDescriptions": 3,
+    "missingCanonicals": 2,
+    "h1Missing": 1,
+    "h1Multiple": 1,
+    "imageCount": 12,
+    "imagesMissingAlt": 4,
+    "imagesMissingDimensions": 6,
+    "schemaTypes": [
+      "Organization",
+      "LocalBusiness",
+      "FAQ"
+    ],
+    "forms": [
+      {
+        "id": "contact",
+        "type": "contact"
+      }
+    ],
+    "ctas": [
+      {
+        "text": "Book Consultation",
+        "url": "https://cal.example/book",
+        "kind": "link"
+      },
+      {
+        "text": "Call Now",
+        "url": "tel:+15551234567",
+        "kind": "phone"
+      }
+    ],
+    "externalCtas": [],
+    "socialLinks": [
+      "https://linkedin.com/company/example"
+    ],
+    "internalLinkCount": 45,
+    "brokenInternalLinks": [],
+    "platform": "WordPress",
+    "services": [
+      "Executive Coaching",
+      "Team Training",
+      "Strategy Consulting",
+      "Workshops"
+    ],
+    "topicKeywords": [
+      "leadership development",
+      "executive coaching",
+      "team performance",
+      "strategy consulting",
+      "professional development",
+      "management training"
+    ],
+    "securityHeaders": {
+      "xFrameOptions": true,
+      "xContentTypeOptions": true,
+      "referrerPolicy": false,
+      "contentSecurityPolicy": false
+    },
+    "trust": {
+      "testimonials": true,
+      "credentials": true,
+      "caseStudies": false,
+      "faq": true,
+      "pricing": false,
+      "policies": true,
+      "contact": true
+    },
+    "limitations": [],
+    "pages": [
+      {
+        "title": "Executive Coaching Services",
+        "language": "en-CA",
+        "headings": {
+          "h1": [
+            "Executive Coaching"
+          ],
+          "h2": [
+            "Services",
+            "Approach"
+          ],
+          "h3": [],
+          "h4": []
+        },
+        "description": "Professional executive coaching services",
+        "responseHeaders": {}
+      },
+      {
+        "title": "About Us",
+        "language": "en-CA",
+        "headings": {
+          "h1": [
+            "About Our Team"
+          ],
+          "h2": [
+            "Mission",
+            "Team"
+          ],
+          "h3": [],
+          "h4": []
+        },
+        "description": "Learn about our coaching team",
+        "responseHeaders": {}
+      },
+      {
+        "title": "Contact",
+        "language": "en-CA",
+        "headings": {
+          "h1": [
+            "Contact Us"
+          ],
+          "h2": [
+            "Get In Touch"
+          ],
+          "h3": [],
+          "h4": []
+        },
+        "description": "Contact our team today",
+        "responseHeaders": {}
+      }
+    ],
+    "_contentEvidenceAvailable": true,
+    "_responseHeadersAvailable": true,
+    "collectedAt": "2026-01-15T12:00:00.000Z",
+    "coverage": {
+      "requested": 500,
+      "completed": 8,
+      "failed": 0
+    },
+    "rawArtifactRef": "artifact://onpage-raw-bytes",
+    "_sourceStatus": {
+      "provider": "dataforseo-onpage",
+      "adapterVersion": "1.0.0",
+      "startedAt": "2026-01-15T11:55:00.000Z",
+      "completedAt": "2026-01-15T12:00:00.000Z",
+      "requestId": "task-abc123",
+      "retryCount": 0,
+      "returnedRecordCount": 8,
+      "expectedRecordCount": 8,
+      "errorCategory": null,
+      "limitation": null,
+      "rawArtifactRef": "artifact://onpage-raw-bytes"
+    }
+  },
+  "performance": {
+    "evidenceVersion": "1.0.0",
+    "source": "pagespeed-insights",
+    "sourceStatus": "AVAILABLE",
+    "status": "AVAILABLE",
+    "mobile": {
+      "status": "AVAILABLE",
+      "source": "pagespeed-insights",
+      "scores": {
+        "performance": 62,
+        "accessibility": 88,
+        "bestPractices": 96,
+        "seo": 85
+      },
+      "metrics": {
+        "lcpMs": 3200,
+        "fcpMs": 1400,
+        "tbtMs": 180,
+        "cls": 0.08
+      }
+    },
+    "desktop": {
+      "status": "AVAILABLE",
+      "source": "pagespeed-insights",
+      "scores": {
+        "performance": 91,
+        "accessibility": 92,
+        "bestPractices": 100,
+        "seo": 90
+      },
+      "metrics": {
+        "lcpMs": 1100,
+        "fcpMs": 500,
+        "tbtMs": 45,
+        "cls": 0.02
+      }
+    },
+    "limitations": [],
+    "fieldData": {},
+    "collectedAt": "2026-01-15T12:00:00.000Z",
+    "coverage": {
+      "requested": 2,
+      "completed": 2,
+      "failed": 0
+    },
+    "rawArtifactRef": "artifact://pagespeed-raw-bytes",
+    "_sourceStatus": {
+      "provider": "pagespeed-insights",
+      "adapterVersion": "1.0.0",
+      "startedAt": "2026-01-15T11:58:00.000Z",
+      "completedAt": "2026-01-15T12:00:00.000Z",
+      "requestId": null,
+      "retryCount": 0,
+      "returnedRecordCount": 2,
+      "expectedRecordCount": 2,
+      "errorCategory": null,
+      "limitation": null,
+      "rawArtifactRef": "artifact://pagespeed-raw-bytes"
+    }
+  },
+  "competitors": [],
+  "backlinks": {
+    "evidenceVersion": "1.0.0",
+    "source": "dataforseo",
+    "sourceStatus": "NOT_CONNECTED",
+    "status": "NOT_CONNECTED",
+    "records": [],
+    "collectedAt": "2026-01-15T12:00:00.000Z",
+    "coverage": {
+      "requested": 0,
+      "completed": 0,
+      "failed": 0
+    },
+    "rawArtifactRef": null,
+    "_sourceStatus": {
+      "provider": "dataforseo",
+      "adapterVersion": "1.0.0",
+      "startedAt": null,
+      "completedAt": "2026-01-15T12:00:00.000Z",
+      "requestId": null,
+      "retryCount": 0,
+      "returnedRecordCount": 0,
+      "expectedRecordCount": null,
+      "errorCategory": "not_configured",
+      "limitation": null,
+      "rawArtifactRef": null
+    }
+  },
+  "ga4": {
+    "evidenceVersion": "1.0.0",
+    "source": "google-analytics-4",
+    "sourceStatus": "NOT_CONNECTED",
+    "status": "NOT_CONNECTED",
+    "included": false,
+    "affectsScore": false,
+    "collectedAt": "2026-01-15T12:00:00.000Z",
+    "coverage": {
+      "requested": 0,
+      "completed": 0,
+      "failed": 0
+    },
+    "rawArtifactRef": null,
+    "_sourceStatus": {
+      "provider": "google-analytics-4",
+      "adapterVersion": "1.0.0",
+      "startedAt": null,
+      "completedAt": "2026-01-15T12:00:00.000Z",
+      "requestId": null,
+      "retryCount": 0,
+      "returnedRecordCount": 0,
+      "expectedRecordCount": null,
+      "errorCategory": "not_configured",
+      "limitation": null,
+      "rawArtifactRef": null
+    }
+  },
+  "gsc": {
+    "evidenceVersion": "1.0.0",
+    "source": "google-search-console",
+    "sourceStatus": "AVAILABLE",
+    "status": "AVAILABLE",
+    "rows": [
+      {
+        "query": "executive coaching",
+        "page": "https://example.com/",
+        "impressions": 250,
+        "clicks": 15,
+        "ctr": 0.06,
+        "position": 4.5
+      },
+      {
+        "query": "leadership training",
+        "page": "https://example.com/",
+        "impressions": 180,
+        "clicks": 8,
+        "ctr": 0.044,
+        "position": 8.2
+      },
+      {
+        "query": "team workshop",
+        "page": "https://example.com/",
+        "impressions": 120,
+        "clicks": 3,
+        "ctr": 0.025,
+        "position": 12.1
+      }
+    ],
+    "topQueries": [
+      "executive coaching",
+      "leadership training",
+      "team workshop",
+      "strategy consultant",
+      "management coach"
+    ],
+    "totals": {
+      "impressions": 850,
+      "clicks": 45
+    },
+    "sufficiency": {
+      "threshold": 100,
+      "sufficient": true
+    },
+    "collectedAt": "2026-01-15T12:00:00.000Z",
+    "coverage": {
+      "requested": 3,
+      "completed": 3,
+      "failed": 0
+    },
+    "rawArtifactRef": "artifact://gsc-raw-bytes",
+    "_sourceStatus": {
+      "provider": "google-search-console",
+      "adapterVersion": "1.0.0",
+      "startedAt": "2026-01-15T11:56:00.000Z",
+      "completedAt": "2026-01-15T12:00:00.000Z",
+      "requestId": null,
+      "retryCount": 0,
+      "returnedRecordCount": 3,
+      "expectedRecordCount": null,
+      "errorCategory": null,
+      "limitation": null,
+      "rawArtifactRef": "artifact://gsc-raw-bytes"
+    }
+  }
+}
