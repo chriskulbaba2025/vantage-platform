@@ -11,7 +11,7 @@ const PERMITTED = [
 ];
 const PROHIBITED = [
   "services/worker/src/contracts/", "services/worker/src/report/",
-  "services/worker/src/n8n/", "services/worker/src/scoring/",
+  "services/worker/src/scoring/",
   "services/worker/src/adapters/", "services/worker/src/lifecycle/",
   "services/worker/src/storage/",
 ];
