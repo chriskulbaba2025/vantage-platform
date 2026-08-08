@@ -15,6 +15,7 @@ const PERMITTED_PATTERNS = [
   "services/worker/src/scoring/",
   "services/worker/src/orchestration/audit-orchestrator.js",
   "services/worker/test-fixtures/orchestration/orchestrator.test.js",
+  "services/worker/test-fixtures/scoring/",
   "services/worker/test-fixtures/wp7/",
   "services/worker/scripts/acceptance-wp7.js",
   "services/worker/scripts/wp7-",
