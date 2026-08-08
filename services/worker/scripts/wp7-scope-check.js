@@ -17,10 +17,13 @@ const PERMITTED_PATTERNS = [
   "services/worker/test-fixtures/orchestration/orchestrator.test.js",
   "services/worker/test-fixtures/scoring/",
   "services/worker/test-fixtures/wp7/",
+  "services/worker/scripts/acceptance-wp5.js",
+  "services/worker/scripts/acceptance-wp6.js",
   "services/worker/scripts/acceptance-wp7.js",
   "services/worker/scripts/wp7-",
   "services/worker/package.json",
   ".github/workflows/worker-ci.yml",
+  "services/worker/src/scoring/vantage-score.test.js",
 ];
 
 const PROHIBITED_PATTERNS = [
