@@ -508,7 +508,7 @@ export function createAuditOrchestrator({
    *
    * On any failure the lifecycle remains at EVIDENCE_LOCKED (fail-closed).
    */
-  async function runGovernedScoring({ auditRequest, executionId, startedAt }) {
+  async function runGovernedScoring({ auditRequest, executionId, startedAt, allSourceResults, canonicalRecord }) {
     const { tenantId, clientId, auditId } = auditRequest;
     const scope = { tenantId, clientId, auditId };
 
@@ -541,6 +541,19 @@ export function createAuditOrchestrator({
       result.scoresRecord.key,
     );
 
+    // Build source counts from collection results when available (WP5 backward compat)
+    const sc = { total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 };
+    const srcs = [];
+    if (allSourceResults) {
+      for (const e of allSourceResults) {
+        const status = e.sourceResult.status || "NOT_APPLICABLE";
+        const counterKey = STATUS_COUNTER_KEY[status];
+        sc.total++;
+        if (counterKey !== undefined) sc[counterKey]++;
+        srcs.push(Object.freeze({ source: e.source, status: e.sourceResult.status, retryCount: e.sourceResult.retryCount || 0, artifactKey: e.normalizedRecord?.key || null }));
+      }
+    }
+
     return Object.freeze({
       contractVersion: "1.0.0",
       auditId,
@@ -565,12 +578,12 @@ export function createAuditOrchestrator({
         sha256: result.scoresRecord.sha256,
         bytes: result.scoresRecord.bytes,
       }),
-      sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
-      sources: Object.freeze([]),
+      sourceCounts: Object.freeze(sc),
+      sources: Object.freeze(srcs),
       canonicalEvidence: Object.freeze({
-        key: crManifest.canonicalArtifact.key,
-        sha256: crManifest.canonicalArtifact.sha256,
-        bytes: crManifest.canonicalArtifact.bytes,
+        key: (canonicalRecord || crManifest.canonicalArtifact).key,
+        sha256: (canonicalRecord || crManifest.canonicalArtifact).sha256,
+        bytes: (canonicalRecord || crManifest.canonicalArtifact).bytes,
       }),
     });
   }
@@ -634,9 +647,32 @@ export function createAuditOrchestrator({
     const cs = await lifecycleService.currentState(auditId, tenantId);
     if (!cs) throw new Error("Lifecycle state not found after create");
 
-    // 3a. EVIDENCE_LOCKED — proceed to governed scoring (WP7)
+    // 3a. EVIDENCE_LOCKED — validate key, then proceed to governed scoring (WP7)
     if (cs.state === T.EVIDENCE_LOCKED) {
-      return runGovernedScoring({ auditRequest, executionId, startedAt });
+      const events = await lifecycleService.history(auditId, tenantId);
+      const elEvent = [...events].reverse().find(e => e.nextState === T.EVIDENCE_LOCKED);
+      const esEvent = [...events].reverse().find(e => e.nextState === T.EVIDENCE_STORED);
+      const manifestKey = elEvent?.artifactKey || esEvent?.artifactKey;
+      if (!manifestKey) throw new Error("Lifecycle event missing artifactKey for evidence_locked replay");
+
+      // Validate the key (cross-tenant guard preserved from WP5)
+      const parsed = (await import("../storage/artifact-key.js")).parseArtifactKey(manifestKey);
+      if (parsed.tenantId !== tenantId || parsed.clientId !== clientId || parsed.auditId !== auditId) {
+        throw new Error(`Cross-tenant artifact key in lifecycle event: ${manifestKey}`);
+      }
+      if (parsed.category !== "manifests" || parsed.artifactName !== "canonical-evidence-record.json") {
+        throw new Error(`Invalid artifact key in lifecycle event: ${manifestKey}`);
+      }
+
+      // WP7: attempt governed scoring; on failure remain at EVIDENCE_LOCKED (fail-closed)
+      try {
+        return await runGovernedScoring({ auditRequest, executionId, startedAt });
+      } catch (scoringErr) {
+        // Canonical evidence not loadable or scoring failed — remain at EVIDENCE_LOCKED.
+        // The lifecycle stays exactly where it was (WP7-FAIL-01).
+        const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
+        return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
+      }
     }
 
     // 3a2. SCORED — idempotent replay; load existing artifacts and return
@@ -703,7 +739,12 @@ export function createAuditOrchestrator({
     try {
       const { allSourceResults, canonicalRecord, isResumed } = await governedCollection(auditRequest, executionId);
       // WP7: proceed directly to governed scoring after collection + evidence lock
-      return runGovernedScoring({ auditRequest, executionId, startedAt });
+      try {
+        return await runGovernedScoring({ auditRequest, executionId, startedAt, allSourceResults, canonicalRecord });
+      } catch (scoringErr) {
+        // Scoring failed — remain at EVIDENCE_LOCKED (WP7-FAIL-01)
+        return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: isResumed, allSourceResults, canonicalRecord, startedAt });
+      }
     } catch (err) {
       // Any exception inside the governed collection boundary → collection_failed
       await failCollection(auditId, tenantId, executionId, err);

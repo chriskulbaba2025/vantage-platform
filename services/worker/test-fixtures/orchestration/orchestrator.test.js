@@ -92,10 +92,11 @@ test("1. new audit: exact lifecycle history + all manifests exist", async () => 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
   const req = baReq();
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  // WP7: successful collection now proceeds through scoring → SCORED
+  assert.equal(summary.finalState, T.SCORED);
 
   const events = await lc.history(req.auditId, req.tenantId);
-  assert.deepEqual(events.map(e => e.nextState), [T.CREATED, T.VALIDATED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED]);
+  assert.deepEqual(events.map(e => e.nextState), [T.CREATED, T.VALIDATED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED]);
 
   const scope = { tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId };
   for (const s of ["dataforseo-onpage", "pagespeed", "dataforseo-serp", "backlinks"]) {
@@ -103,6 +104,9 @@ test("1. new audit: exact lifecycle history + all manifests exist", async () => 
   }
   assert.ok(await store.exists(buildCanonicalRecordManifestKey(scope)), "Canonical record manifest exists");
   assert.ok(summary.canonicalEvidence);
+  // WP7: scoring artifacts exist
+  assert.ok(summary.findingsArtifact, "findings artifact exists");
+  assert.ok(summary.scoresArtifact, "scores artifact exists");
 });
 
 // ===================================================================
@@ -393,7 +397,8 @@ test("WP5-CLOSE-IDEM-03: two failures then success — exact ordered history", a
 
     const orch3 = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
     const summary3 = await orch3.execute(req, { executionId: "ex3" });
-    assert.equal(summary3.finalState, T.EVIDENCE_LOCKED);
+    // WP7: successful collection proceeds to SCORED
+    assert.equal(summary3.finalState, T.SCORED);
   }
 
   const actualStates = (await lc.history(auditId, tenantId)).map(e => e.nextState);
@@ -407,6 +412,7 @@ test("WP5-CLOSE-IDEM-03: two failures then success — exact ordered history", a
     T.COLLECTING,
     T.EVIDENCE_STORED,
     T.EVIDENCE_LOCKED,
+    T.SCORED,
   ]);
 });
 
@@ -461,7 +467,7 @@ test("WP5-CLOSE-ADP-02: source execution key equality — adapter, manifest, exp
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
 
   const adapterCallCount = keyCapture.getCallCount();
   const adapterReceivedKey = keyCapture.getReceivedKey();
@@ -558,7 +564,7 @@ test("WP5-CLOSE-ADP-04: valid checkpoint skips adapter execution", async () => {
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
 
   // Adapter must NOT be called — checkpoint was valid
   assert.equal(onpageCalls, 0, "restored adapter call count = 0");
@@ -1030,7 +1036,7 @@ test("WP5-CLOSE-RESUME-01: resume — completed=0, incomplete=1", async () => {
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
 
   // Completed adapters = 0, incomplete = 1
   assert.equal(onpageCalls, 0, "completed onpage calls = 0");
@@ -1067,7 +1073,7 @@ test("WP5-CLOSE-RESUME-02: restored bytes and SHA unchanged", async () => {
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
 
   // Read restored bytes AFTER recovery
   const afterBytes = await store.get(nr.key);
@@ -1099,7 +1105,7 @@ test("WP5-CLOSE-RESUME-03: PARTIAL metadata preserved in canonical evidence", as
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
 
   // Read canonical evidence from persisted bytes
   const evBuf = await store.get(summary.canonicalEvidence.key);
@@ -1141,7 +1147,7 @@ test("WP5-CLOSE-STORED-01: evidence_stored recovery — zero adapter calls", asy
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
   assert.equal(totalAdapterCalls, 0);
 });
 
@@ -1172,8 +1178,9 @@ test("WP5-CLOSE-STORED-02: evidence_stored recovery — zero artifact writes", a
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
-  assert.equal(writeCount, 0, "artifact write count = 0");
+  assert.equal(summary.finalState, T.SCORED); // WP7
+  // WP7: scoring writes findings.json + scores.json = 2 artifact writes
+  assert.equal(writeCount, 2, "artifact write count = 2 (findings + scores)");
 });
 
 // ===================================================================
@@ -1200,14 +1207,15 @@ test("WP5-CLOSE-STORED-03: evidence_stored → exactly one transition", async ()
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
   const summary = await orch.execute(req);
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
 
   const afterHistory = await lc.history(auditId, tenantId);
-  assert.equal(afterHistory.length - beforeHistory.length, 1, "exactly one new transition");
+  // WP7: EVIDENCE_STORED → EVIDENCE_LOCKED → SCORED = 2 new transitions
+  assert.equal(afterHistory.length - beforeHistory.length, 2, "exactly two new transitions (lock + score)");
 
   assert.deepEqual(
-    afterHistory.slice(-1).map(event => [event.priorState, event.nextState]),
-    [[T.EVIDENCE_STORED, T.EVIDENCE_LOCKED]]
+    afterHistory.slice(-2).map(event => [event.priorState, event.nextState]),
+    [[T.EVIDENCE_STORED, T.EVIDENCE_LOCKED], [T.EVIDENCE_LOCKED, T.SCORED]]
   );
 });
 
@@ -1228,7 +1236,7 @@ test("WP5-CLOSE-REPLAY-01: locked replay — zero adapter calls", async () => {
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract, clock: mockClock() });
   const req = baReq();
   const s1 = await orch.execute(req);
-  assert.equal(s1.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(s1.finalState, T.SCORED); // WP7
   const callsBeforeReplay = adapterCalls;
 
   const s2 = await orch.execute(req);
@@ -1245,7 +1253,7 @@ test("WP5-CLOSE-REPLAY-02: locked replay — zero artifact writes", async () => 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract, clock: mockClock() });
   const req = baReq();
   const s1 = await orch.execute(req);
-  assert.equal(s1.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(s1.finalState, T.SCORED); // WP7
 
   // Instrument put
   let writesBeforeReplay = 0;
@@ -1267,7 +1275,7 @@ test("WP5-CLOSE-REPLAY-03: locked replay — canonical identity + persisted byte
   const req = baReq();
 
   const s1 = await orch.execute(req);
-  assert.equal(s1.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(s1.finalState, T.SCORED); // WP7
 
   const s2 = await orch.execute(req);
 
@@ -1298,7 +1306,7 @@ test("15. first-attempt success: retryCount = 0", async () => {
   adapters["pagespeed"] = { adapterVersion: "1.0.0", execute: async () => { attempts++; return { rawBytes: Buffer.from("{}"), contentType: "application/json", sourceResult: { provider: "MP", adapterVersion: "1.0.0", status: "AVAILABLE", startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), retryCount: 5, expectedRecords: 1, returnedRecords: 1, coverage: { requested: 1, completed: 1, failed: 0 }, limitations: [], evidence: {} } }; } };
   const orch = createAuditOrchestrator({ lifecycleService: createLifecycleService(createMemoryLifecycleRepository()), artifactStore: store, adapters, validateContract, clock: mockClock() });
   const summary = await orch.execute(baReq());
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
   assert.equal(attempts, 1);
   assert.equal(summary.sources.find(x => x.source === "pagespeed").retryCount, 0);
 });
@@ -1332,7 +1340,7 @@ test("18. timeout exhaustion: retryCount = 2", async () => {
   adapters["pagespeed"] = { adapterVersion: "1.0.0", execute: async ({ signal }) => { ta++; await new Promise(r => setTimeout(r, 10)); if (signal?.aborted) { const e = new Error("t/o"); e.category = "timeout"; throw e; } const e = new Error("t/o"); e.category = "timeout"; throw e; } };
   const orch = createAuditOrchestrator({ lifecycleService: createLifecycleService(createMemoryLifecycleRepository()), artifactStore: store, adapters, validateContract, clock: mockClock(), retryPolicyResolver: () => ({ timeoutMs: 1, maxAttempts: 3, retryable: e => e?.category === "timeout", delayMs: () => 0 }) });
   const summary = await orch.execute(baReq());
-  assert.equal(summary.finalState, T.EVIDENCE_LOCKED);
+  assert.equal(summary.finalState, T.SCORED); // WP7
   assert.equal(ta, 3);
   assert.equal(summary.sources.find(x => x.source === "pagespeed").retryCount, 2);
 });

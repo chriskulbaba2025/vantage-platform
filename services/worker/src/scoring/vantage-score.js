@@ -34,6 +34,7 @@ import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
  * Return true when crawl-dependent modules may be scored.
  */
 function isCrawlViable(site) {
+  if (!site) return false;
   return (
     site.sourceStatus === SOURCE_STATUS.AVAILABLE ||
     site.sourceStatus === SOURCE_STATUS.PARTIAL
@@ -459,6 +460,10 @@ export function scoreAudit(input, evidence, opts = {}) {
 
   // ── Crawl gate (PRD v3.0 §8.6) ────────────────────────────────────
   if (!isCrawlViable(site)) {
+    if (!site) {
+      // No site evidence at all — fully not-assessed model
+      return buildNotAssessedModel(input, { ...evidence, site: { sourceStatus: SOURCE_STATUS.UNAVAILABLE, pageCount: 0, pages: [], trust: {}, securityHeaders: {}, limitations: ["No crawl evidence in canonical payload"] } }, scoredAt);
+    }
     return buildNotAssessedModel(input, evidence, scoredAt);
   }
 
