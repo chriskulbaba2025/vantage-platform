@@ -1508,13 +1508,14 @@ test("WP7: identical evidence produces identical generatedAt (no explicit scored
 });
 
 test("WP7: deterministic fixture produces byte-identical serialized output", () => {
+  const ev = evidence();
   const model1 = scoreAudit(
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence(),
+    ev,
   );
   const model2 = scoreAudit(
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence(),
+    ev,
   );
 
   const str1 = JSON.stringify(model1, null, 2);
