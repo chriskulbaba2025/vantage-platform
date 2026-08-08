@@ -7,6 +7,7 @@ const PERMITTED = [
   "services/worker/scripts/acceptance-wp9.js", "services/worker/scripts/wp9-",
   "services/worker/package.json", ".github/workflows/worker-ci.yml",
   "services/worker/src/orchestration/audit-orchestrator.js",
+  "services/worker/src/n8n/prysm-narrative-workflow-v1.1.0.json",
 ];
 const PROHIBITED = [
   "services/worker/src/contracts/", "services/worker/src/report/",
