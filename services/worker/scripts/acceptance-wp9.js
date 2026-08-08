@@ -51,10 +51,11 @@ else fail("REPLAY-01");
 
 // 3. Cost preflight
 header("3. Cost preflight");
-const pf = runCostPreflight({ reportPackage, budget: { hardBudgetUsd: 100 } });
+const testPriceTable = { inputPricePer1K: 0.003, outputPricePer1K: 0.015 };
+const pf = runCostPreflight({ reportPackage, priceTable: testPriceTable, budget: { hardBudgetUsd: 100 } });
 if (pf.allowed && pf.estimate.inputTokens > 0) pass("COST-01: Preflight passes within budget");
 else fail("COST-01");
-const pfReject = runCostPreflight({ reportPackage, budget: { hardBudgetUsd: 0.0001 } });
+const pfReject = runCostPreflight({ reportPackage, priceTable: testPriceTable, budget: { hardBudgetUsd: 0.0001 } });
 if (!pfReject.allowed) pass("COST-01: Rejected above hard budget");
 else fail("COST-01");
 
