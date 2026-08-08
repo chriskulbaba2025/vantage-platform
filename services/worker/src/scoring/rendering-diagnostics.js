@@ -939,7 +939,7 @@ export function classifyRenderingDiagnostics(performance, options = {}) {
   const dedupedRecords = options.skipDedup ? rawRecords : deduplicateDiagnostics(rawRecords);
 
   // Build final diagnostic records
-  const now = new Date().toISOString();
+  const now = options.now || new Date().toISOString();
   const diagnostics = dedupedRecords.map((r) =>
     buildDiagnostic({
       diagnosticCode: r.code,

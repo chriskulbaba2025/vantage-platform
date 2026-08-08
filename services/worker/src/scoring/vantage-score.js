@@ -310,7 +310,7 @@ function determineReadinessStatus(assessedWeight, conversionReadiness) {
 
 function buildNotAssessedModel(input, evidence, scoredAt) {
   const perfScore = scorePerformance(evidence.performance);
-  const renderingDiagnostics = classifyRenderingDiagnostics(evidence.performance);
+  const renderingDiagnostics = classifyRenderingDiagnostics(evidence.performance, { now: scoredAt });
 
   const hasPerformance = isPerformanceViable(evidence.performance);
   const perfEvidenceScore = hasPerformance ? 25 : 0;
@@ -486,7 +486,7 @@ export function scoreAudit(input, evidence, opts = {}) {
   const funnelScores = computeFunnelScores(site, dimensionScores);
 
   // ── Rendering-integrity diagnostics ─────────────────────────────────
-  const renderingDiagnostics = classifyRenderingDiagnostics(performance);
+  const renderingDiagnostics = classifyRenderingDiagnostics(performance, { now: scoredAt });
 
   // ── Build findings ─────────────────────────────────────────────────
   const gsc = evidence.gsc;
