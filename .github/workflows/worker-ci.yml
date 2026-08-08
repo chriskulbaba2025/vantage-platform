@@ -60,3 +60,6 @@ jobs:
       - run: npm run test:wp8
       - run: npm run acceptance:wp8
       - run: npm run wp8:scope-check
+      - run: npm run test:wp9
+      - run: npm run acceptance:wp9
+      - run: npm run wp9:scope-check
