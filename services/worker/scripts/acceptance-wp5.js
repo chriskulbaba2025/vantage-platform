@@ -283,10 +283,10 @@ console.log("\n─ C. IDEM: Execution-scoped keys ─");
       await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:e3:collection-failed-recovery` });
       const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
       const s = await orch.execute(req, { executionId: "e3" });
-      assertEq(s.finalState, T.EVIDENCE_LOCKED, "IDEM-03: final state = evidence_locked");
+      assertEq(s.finalState, T.SCORED, "IDEM-03: final state = scored (WP7)");
     }
     const states = (await lc.history(auditId, tenantId)).map(e => e.nextState);
-    assertDeep(states, [T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED], "IDEM-03: exact ordered history");
+    assertDeep(states, [T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.COLLECTION_FAILED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED], "IDEM-03: exact ordered history (WP7: +SCORED)");
   }
 }
 
@@ -335,7 +335,7 @@ console.log("\n─ D. ADP: Adapter version identity ─");
     const adapters = { ...base, "dataforseo-onpage": keyCap };
     const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
     const s = await orch.execute(req);
-    assertEq(s.finalState, T.EVIDENCE_LOCKED, "ADP-02: final state = evidence_locked");
+    assertEq(s.finalState, T.SCORED, "ADP-02: final state = scored (WP7)");
     assertEq(keyCap.getCallCount(), 1, "ADP-02: adapter called once");
     const adapterKey = keyCap.getReceivedKey();
     const expectedKey = buildSourceExecutionIdentity({ auditRequest: req, source: "dataforseo-onpage", adapterVersion: "1.0.0" }).sourceExecutionKey;
@@ -401,7 +401,7 @@ console.log("\n─ D. ADP: Adapter version identity ─");
     const adapters = { ...base, "dataforseo-onpage": { adapterVersion: "1.0.0", execute: async (a) => { onCalls++; return base["dataforseo-onpage"].execute(a); } } };
     const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
     const s = await orch.execute(req);
-    assertEq(s.finalState, T.EVIDENCE_LOCKED, "ADP-04: final state = evidence_locked");
+    assertEq(s.finalState, T.SCORED, "ADP-04: final state = scored (WP7)");
     assertEq(onCalls, 0, "ADP-04: restored adapter call count = 0");
   }
 }
@@ -690,7 +690,7 @@ console.log("\n─ H. RESUME: Interrupted collecting recovery ─");
 
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters, validateContract: vc, clock: mockClock() });
   const s = await orch.execute(req);
-  assertEq(s.finalState, T.EVIDENCE_LOCKED, "RESUME: final state = evidence_locked");
+  assertEq(s.finalState, T.SCORED, "RESUME: final state = scored (WP7)");
 
   // RESUME-01: exact adapter calls
   assertEq(onCalls, 0, "RESUME-01: completed onpage calls = 0");
@@ -753,16 +753,16 @@ console.log("\n─ I. STORED: Evidence-stored recovery ─");
   // STORED-01: zero adapter calls
   assertEq(totalCalls, 0, "STORED-01: total adapter calls = 0");
 
-  // STORED-02: zero artifact writes
-  assertEq(writeCount, 0, "STORED-02: artifact write count = 0");
+  // STORED-02: WP7 scoring writes findings.json + scores.json = 2 artifact writes
+  assertEq(writeCount, 2, "STORED-02: artifact write count = 2 (findings + scores)");
 
-  // STORED-03: exactly one lifecycle transition
+  // STORED-03: WP7: EVIDENCE_STORED → EVIDENCE_LOCKED → SCORED = 2 transitions
   const afterHistory = await lc.history(auditId, tenantId);
-  assertEq(afterHistory.length - beforeHistory.length, 1, "STORED-03: exactly one new transition");
+  assertEq(afterHistory.length - beforeHistory.length, 2, "STORED-03: exactly two new transitions (lock + score)");
   assertDeep(
-    afterHistory.slice(-1).map(e => [e.priorState, e.nextState]),
-    [[T.EVIDENCE_STORED, T.EVIDENCE_LOCKED]],
-    "STORED-03: transition = evidence_stored → evidence_locked"
+    afterHistory.slice(-2).map(e => [e.priorState, e.nextState]),
+    [[T.EVIDENCE_STORED, T.EVIDENCE_LOCKED], [T.EVIDENCE_LOCKED, T.SCORED]],
+    "STORED-03: transitions = evidence_stored → evidence_locked → scored"
   );
 }
 
@@ -783,7 +783,7 @@ console.log("\n─ J. REPLAY: Locked replay proof ─");
   const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "j1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
 
   const s1 = await orch.execute(req);
-  assertEq(s1.finalState, T.EVIDENCE_LOCKED, "REPLAY: first run = evidence_locked");
+  assertEq(s1.finalState, T.SCORED, "REPLAY: first run = scored (WP7)");
 
   // Instrument writes for replay
   let writesAfterFirstRun = 0;
@@ -824,7 +824,7 @@ console.log("\n─ K. New audit (original) ─");
   const orch = createAuditOrchestrator({ lifecycleService: lc, artifactStore: store, adapters: createBaseMockAdapters(), validateContract: vc, clock: mockClock() });
   const req = { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "k1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com" };
   const s = await orch.execute(req);
-  assertEq(s.finalState, T.EVIDENCE_LOCKED, "New audit: final state = evidence_locked");
+  assertEq(s.finalState, T.SCORED, "New audit: final state = scored (WP7)");
 
   const sc = { tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId };
   let mc = 0;

@@ -53,3 +53,6 @@ jobs:
       - run: npm run acceptance:wp4
       - run: npm run test:orchestrator
       - run: npm run acceptance:wp5
+      - run: npm run acceptance:wp6
+      - run: npm run acceptance:wp7
+      - run: npm run wp7:scope-check
