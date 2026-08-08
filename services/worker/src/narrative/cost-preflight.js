@@ -1,95 +1,93 @@
 /**
- * WP9 — Cost Preflight
+ * WP9 — Cost Preflight (v1.1.0 corrected)
  *
- * Estimates token counts and cost before any live model call.
- * Rejects execution if hard budget ceilings are exceeded.
+ * Deterministic cost estimation with injected price table, input-token
+ * ceiling, cumulative daily budget tracking.
  *
- * Tests inject a fixed price table. No external pricing API calls.
- *
- * @module narrative/cost-preflight
+ * NO hardcoded vendor prices in governed logic.
+ * Tests inject a fixed price table.
  */
 
 // ---------------------------------------------------------------------------
-// Default price table (injectable for tests)
-// ---------------------------------------------------------------------------
-
-const DEFAULT_PRICE_TABLE = Object.freeze({
-  inputPricePer1K: 0.003,   // $0.003 per 1K input tokens
-  outputPricePer1K: 0.015,  // $0.015 per 1K output tokens
-});
-
-// ---------------------------------------------------------------------------
-// Token estimation (conservative — overestimate)
+// Token estimation
 // ---------------------------------------------------------------------------
 
 function estimateInputTokens(reportPackage) {
-  // Rough estimate: ~1.3 tokens per character for English text
   const jsonStr = JSON.stringify(reportPackage);
   return Math.ceil(jsonStr.length * 1.3);
 }
 
-function estimateOutputTokens() {
-  // Conservative: assume max output
-  return 2000;
+function estimateOutputTokens(modelConfig) {
+  return modelConfig?.maxOutputTokens || 2000;
 }
 
 function estimateCost(inputTokens, outputTokens, priceTable) {
-  const pt = priceTable || DEFAULT_PRICE_TABLE;
-  return (inputTokens / 1000) * pt.inputPricePer1K +
-         (outputTokens / 1000) * pt.outputPricePer1K;
+  if (!priceTable) {
+    throw new Error("priceTable is required for cost estimation");
+  }
+  return (inputTokens / 1000) * (priceTable.inputPricePer1K || 0) +
+         (outputTokens / 1000) * (priceTable.outputPricePer1K || 0);
 }
 
 // ---------------------------------------------------------------------------
-// Main entry point
+// Main entry
 // ---------------------------------------------------------------------------
 
-/**
- * Run cost preflight before a live model call.
- *
- * @param {object} opts
- * @param {object} opts.reportPackage — WP8 ReportContentPackage
- * @param {object} [opts.priceTable] — { inputPricePer1K, outputPricePer1K }
- * @param {object} [opts.budget] — { softBudgetUsd, hardBudgetUsd, dailyHardBudgetUsd }
- * @returns {{ allowed: boolean, reason?: string, estimate: object }}
- */
-export function runCostPreflight({ reportPackage, priceTable, budget }) {
+export function runCostPreflight({ reportPackage, priceTable, budget, modelConfig }) {
+  const errors = [];
+
+  if (!priceTable && budget) {
+    // If budget is configured, priceTable is required
+    throw new Error("priceTable is required when budget is configured");
+  }
+
   const inputTokens = estimateInputTokens(reportPackage);
-  const outputTokens = estimateOutputTokens();
-  const maxCost = estimateCost(inputTokens, outputTokens, priceTable);
+  const outputTokens = estimateOutputTokens(modelConfig);
+  const maxCost = priceTable
+    ? Math.round(estimateCost(inputTokens, outputTokens, priceTable) * 10000) / 10000
+    : 0;
 
-  const estimate = {
-    inputTokens,
-    maxOutputTokens: outputTokens,
-    maxCostUsd: Math.round(maxCost * 10000) / 10000,
-  };
+  const estimate = { inputTokens, maxOutputTokens: outputTokens, maxCostUsd: maxCost };
 
-  // Budget checks (only if budget is configured)
-  if (budget) {
-    if (budget.hardBudgetUsd !== undefined && maxCost > budget.hardBudgetUsd) {
-      return {
-        allowed: false,
-        reason: `Estimated cost $${estimate.maxCostUsd} exceeds hard budget $${budget.hardBudgetUsd}`,
-        estimate,
-      };
-    }
+  // Input token ceiling
+  if (modelConfig?.maxInputTokens && inputTokens > modelConfig.maxInputTokens) {
+    return {
+      allowed: false,
+      reason: `Estimated ${inputTokens} input tokens exceeds ceiling ${modelConfig.maxInputTokens}`,
+      estimate,
+    };
+  }
 
-    if (budget.dailyHardBudgetUsd !== undefined && maxCost > budget.dailyHardBudgetUsd) {
-      return {
-        allowed: false,
-        reason: `Estimated cost $${estimate.maxCostUsd} exceeds daily hard budget $${budget.dailyHardBudgetUsd}`,
-        estimate,
-      };
-    }
+  if (!budget) return { allowed: true, estimate };
 
-    if (budget.softBudgetUsd !== undefined && maxCost > budget.softBudgetUsd) {
-      // Soft budget — warn but allow
-      return {
-        allowed: true,
-        reason: `Cost $${estimate.maxCostUsd} exceeds soft budget $${budget.softBudgetUsd} — allowed but flagged`,
-        estimate,
-        warning: true,
-      };
-    }
+  // Audit hard budget
+  if (budget.hardBudgetUsd !== undefined && maxCost > budget.hardBudgetUsd) {
+    return {
+      allowed: false,
+      reason: `Cost $${maxCost} exceeds audit hard budget $${budget.hardBudgetUsd}`,
+      estimate,
+    };
+  }
+
+  // Daily cumulative budget
+  const dailySpend = budget.dailySpendUsd || 0;
+  if (budget.dailyHardBudgetUsd !== undefined &&
+      dailySpend + maxCost > budget.dailyHardBudgetUsd) {
+    return {
+      allowed: false,
+      reason: `Cumulative daily $${dailySpend + maxCost} exceeds daily hard budget $${budget.dailyHardBudgetUsd}`,
+      estimate,
+    };
+  }
+
+  // Soft budget warning
+  if (budget.softBudgetUsd !== undefined && maxCost > budget.softBudgetUsd) {
+    return {
+      allowed: true,
+      reason: `Cost $${maxCost} exceeds soft budget $${budget.softBudgetUsd}`,
+      estimate,
+      warning: true,
+    };
   }
 
   return { allowed: true, estimate };

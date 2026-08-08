@@ -1,10 +1,13 @@
 /**
- * WP9 — Narrative Response Validator
+ * WP9 — Narrative Response Validator (v1.1.0 corrected)
  *
- * Validates NarrativeResponse against the frozen narrative-response.schema.json
- * and governed content rules (no new findings, URLs, scores, HTML, CSS).
- *
- * @module narrative/validate-narrative
+ * Validates NarrativeResponse against frozen narrative-response.schema.json
+ * plus governed content rules:
+ *  - URL allowlist (only URLs from ReportContentPackage)
+ *  - Finding ID integrity
+ *  - HTML/CSS rejection
+ *  - Actual word-count enforcement
+ *  - fieldWordCounts accuracy
  */
 
 import { readFileSync } from "node:fs";
@@ -16,7 +19,6 @@ import addFormats from "ajv-formats";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = resolve(__dirname, "..", "contracts", "narrative-response.schema.json");
 
-// Lazy-loaded schema validator
 let _validate = null;
 function getValidator() {
   if (_validate) return _validate;
@@ -28,15 +30,49 @@ function getValidator() {
 }
 
 // ---------------------------------------------------------------------------
-// Content validation
+// URL allowlist extraction
+// ---------------------------------------------------------------------------
+
+function extractAllowedURLs(reportPackage) {
+  const urls = new Set();
+  const business = reportPackage.business || {};
+  if (business.domain) {
+    urls.add(`https://${business.domain}`);
+    urls.add(`http://${business.domain}`);
+  }
+  for (const f of reportPackage.findings || []) {
+    for (const u of f.affectedUrls || []) {
+      if (u) urls.add(u);
+    }
+  }
+  for (const c of reportPackage.competitors || []) {
+    if (c.url) urls.add(c.url);
+  }
+  return urls;
+}
+
+// ---------------------------------------------------------------------------
+// Word counting
+// ---------------------------------------------------------------------------
+
+function countWords(text) {
+  if (!text) return 0;
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+// ---------------------------------------------------------------------------
+// Content checks
 // ---------------------------------------------------------------------------
 
 function checkHTML_CSS(narrative) {
   const str = JSON.stringify(narrative);
-  const patterns = [/<div/i, /<html/i, /<style/i, /<script/i, /<body/i, /<head/i,
-    /font-size/, /margin:/, /padding:/, /color:\s*#/, /display:/, /@media/];
+  const patterns = [
+    /<div\b/i, /<html\b/i, /<style\b/i, /<script\b/i, /<body\b/i, /<head\b/i,
+    /font-size\s*:/, /margin\s*:/, /padding\s*:/, /color\s*:\s*#/, /display\s*:/,
+    /@media\b/,
+  ];
   const hits = patterns.filter((p) => p.test(str));
-  return hits.length === 0 ? null : `HTML/CSS patterns found: ${hits.map((p) => p.source).join(", ")}`;
+  return hits.length === 0 ? null : `HTML/CSS patterns: ${hits.map((p) => p.source).join(", ")}`;
 }
 
 function checkFindingIds(narrative, reportPackage) {
@@ -48,54 +84,93 @@ function checkFindingIds(narrative, reportPackage) {
   return null;
 }
 
-function checkNoNewURLs(narrative) {
+function checkURLs(narrative, reportPackage) {
+  const allowed = extractAllowedURLs(reportPackage);
   const str = JSON.stringify(narrative);
-  // Check for http/https URLs not already in a controlled format
-  const urlPattern = /https?:\/\/[^\s"']+/g;
-  const urls = str.match(urlPattern) || [];
-  // Allow only URLs that look like they came from the report package
-  // (this is a basic check; real implementation compares against allowed URL set)
-  if (urls.length > 10) return `Excessive URLs in narrative: ${urls.length}`;
+  const urlPattern = /https?:\/\/[^\s"',}<\]]+/g;
+  const found = str.match(urlPattern) || [];
+  for (const u of found) {
+    // Remove trailing punctuation
+    const cleaned = u.replace(/[.,;:'")\]}]+$/, "");
+    if (!allowed.has(cleaned) && !allowed.has(u)) {
+      // Check if it's a substring of an allowed URL
+      let matched = false;
+      for (const a of allowed) {
+        if (cleaned.startsWith(a) || a.startsWith(cleaned)) { matched = true; break; }
+      }
+      if (!matched) return `Unauthorized URL in narrative: ${cleaned}`;
+    }
+  }
   return null;
 }
 
+function checkWordLimits(narrative) {
+  const errors = [];
+  const summaryWords = countWords(narrative.executiveSummary);
+  const fixWords = countWords(narrative.priorityFixNarrative);
+
+  // From schema: executiveSummary maxLength=2000 chars
+  // Governed word limits from prompt contract
+  if (summaryWords > 150) errors.push(`executiveSummary: ${summaryWords} words exceeds 150-word limit`);
+  if (fixWords > 100) errors.push(`priorityFixNarrative: ${fixWords} words exceeds 100-word limit`);
+
+  // fieldWordCounts accuracy
+  const fwc = narrative.fieldWordCounts || {};
+  if (fwc.executiveSummary !== undefined && fwc.executiveSummary !== summaryWords) {
+    errors.push(`fieldWordCounts.executiveSummary=${fwc.executiveSummary} actual=${summaryWords}`);
+  }
+  if (fwc.priorityFixNarrative !== undefined && fwc.priorityFixNarrative !== fixWords) {
+    errors.push(`fieldWordCounts.priorityFixNarrative=${fwc.priorityFixNarrative} actual=${fixWords}`);
+  }
+
+  return errors.length > 0 ? errors.join("; ") : null;
+}
+
+function checkIntegrity(narrative, reportPackage) {
+  const errors = [];
+  if (narrative.auditId !== reportPackage.auditId) {
+    errors.push(`auditId mismatch: ${narrative.auditId} vs ${reportPackage.auditId}`);
+  }
+  if (narrative.promptVersion !== (reportPackage.promptVersion || "1.0.0")) {
+    errors.push(`promptVersion mismatch: ${narrative.promptVersion}`);
+  }
+  return errors.length > 0 ? errors.join("; ") : null;
+}
+
 // ---------------------------------------------------------------------------
-// Main entry point
+// Main entry
 // ---------------------------------------------------------------------------
 
-/**
- * Validate a NarrativeResponse against schema and content rules.
- *
- * @param {object} narrative — Candidate NarrativeResponse
- * @param {object} reportPackage — WP8 ReportContentPackage for finding/URL context
- * @returns {{ valid: boolean, errors: string[] }}
- */
 export function validateNarrativeResponse(narrative, reportPackage) {
   const errors = [];
   const validate = getValidator();
 
-  // 1. Schema validation
-  const schemaValid = validate(narrative);
-  if (!schemaValid) {
+  // Schema
+  if (!validate(narrative)) {
     for (const err of validate.errors || []) {
       errors.push(`Schema: ${err.instancePath || "/"} ${err.message}`);
     }
   }
 
-  // 2. HTML/CSS check
+  // HTML/CSS
   const htmlErr = checkHTML_CSS(narrative);
   if (htmlErr) errors.push(htmlErr);
 
-  // 3. Finding ID check
+  // Finding IDs
   const findingErr = checkFindingIds(narrative, reportPackage);
   if (findingErr) errors.push(findingErr);
 
-  // 4. URL check
-  const urlErr = checkNoNewURLs(narrative);
+  // URLs
+  const urlErr = checkURLs(narrative, reportPackage);
   if (urlErr) errors.push(urlErr);
 
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+  // Word limits
+  const wordErr = checkWordLimits(narrative);
+  if (wordErr) errors.push(wordErr);
+
+  // Integrity
+  const intErr = checkIntegrity(narrative, reportPackage);
+  if (intErr) errors.push(intErr);
+
+  return { valid: errors.length === 0, errors };
 }

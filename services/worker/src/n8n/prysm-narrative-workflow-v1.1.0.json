@@ -1,0 +1,209 @@
+{
+  "name": "Prysm Narrative Workflow v1.1.0",
+  "version": "1.1.0",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "input-webhook",
+      "name": "Receive ReportContentPackage",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prysm-narrative",
+        "responseMode": "lastNode"
+      }
+    },
+    {
+      "id": "validate-input",
+      "name": "Input Validation",
+      "type": "n8n-nodes-base.code",
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// Validate ReportContentPackage against frozen schema\nconst schema = $input.first().json.schema;\nconst pkg = $input.first().json.body;\n// Schema validation happens in worker before n8n webhook\nreturn [{ json: { valid: true, package: pkg } }];"
+      }
+    },
+    {
+      "id": "cache-check",
+      "name": "Cache Check",
+      "type": "n8n-nodes-base.switch",
+      "position": [650, 300],
+      "parameters": {
+        "rules": [
+          { "value": "={{ $json.cacheHit === true }}", "output": 0 },
+          { "value": "={{ $json.cacheHit === false }}", "output": 1 }
+        ]
+      }
+    },
+    {
+      "id": "cost-preflight",
+      "name": "Cost Preflight",
+      "type": "n8n-nodes-base.code",
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Cost preflight executed in worker before this node\nconst estimate = $input.first().json.costEstimate;\nif (!estimate.allowed) {\n  throw new Error('Cost preflight rejected: ' + estimate.reason);\n}\nreturn [{ json: $input.first().json }];"
+      }
+    },
+    {
+      "id": "mode-decision",
+      "name": "Mode Decision",
+      "type": "n8n-nodes-base.switch",
+      "position": [1050, 300],
+      "parameters": {
+        "rules": [
+          { "value": "={{ $json.mode === 'mock' }}", "output": 0 },
+          { "value": "={{ $json.mode === 'replay' }}", "output": 1 },
+          { "value": "={{ $json.mode === 'live' }}", "output": 2 }
+        ]
+      }
+    },
+    {
+      "id": "mock-response",
+      "name": "Mock Narrative",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 200],
+      "parameters": {
+        "jsCode": "// Deterministic mock — worker provides pre-built response\nreturn [{ json: { narrative: $input.first().json.narrative, mode: 'mock' } }];"
+      }
+    },
+    {
+      "id": "replay-response",
+      "name": "Replay Narrative",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 400],
+      "parameters": {
+        "jsCode": "// Validated cached response from worker\nreturn [{ json: { narrative: $input.first().json.narrative, mode: 'replay' } }];"
+      }
+    },
+    {
+      "id": "primary-call",
+      "name": "Primary Narrative Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1250, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.modelEndpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "={{ $json.authType }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [{
+            "name": "prompt",
+            "value": "={{ $json.prompt }}"
+          }]
+        }
+      }
+    },
+    {
+      "id": "validate-response",
+      "name": "Response Validation",
+      "type": "n8n-nodes-base.code",
+      "position": [1450, 300],
+      "parameters": {
+        "jsCode": "// Worker validates NarrativeResponse schema + content\nconst validation = $input.first().json.validation;\nif (!validation.valid) {\n  return [{ json: { ...$input.first().json, needsRepair: true } }];\n}\nreturn [{ json: { ...$input.first().json, needsRepair: false } }];"
+      }
+    },
+    {
+      "id": "repair-decision",
+      "name": "Repair?",
+      "type": "n8n-nodes-base.if",
+      "position": [1650, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [{
+            "value1": "={{ $json.needsRepair }}",
+            "operation": "equals",
+            "value2": true
+          }]
+        }
+      }
+    },
+    {
+      "id": "repair-call",
+      "name": "Single Repair Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1850, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.modelEndpoint }}",
+        "sendBody": true
+      }
+    },
+    {
+      "id": "final-validation",
+      "name": "Final Validation",
+      "type": "n8n-nodes-base.code",
+      "position": [2050, 300],
+      "parameters": {
+        "jsCode": "// After repair or primary success — final validation\nconst result = $input.first().json;\nif (!result.validation?.valid) {\n  throw new Error('Narrative validation failed after repair');\n}\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "persist",
+      "name": "Persistence / Usage Record",
+      "type": "n8n-nodes-base.code",
+      "position": [2250, 300],
+      "parameters": {
+        "jsCode": "// Worker persists narrative.json + usage ledger\nreturn [{ json: { persisted: true, narrative: $input.first().json.narrative } }];"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [2450, 300],
+      "parameters": {
+        "respondWith": "json"
+      }
+    }
+  ],
+  "connections": {
+    "Receive ReportContentPackage": { "main": [[ { "node": "Input Validation", "type": "main", "index": 0 } ]] },
+    "Input Validation": { "main": [[ { "node": "Cache Check", "type": "main", "index": 0 } ]] },
+    "Cache Check": {
+      "main": [
+        [{ "node": "Mock Narrative", "type": "main", "index": 0 }],
+        [{ "node": "Cost Preflight", "type": "main", "index": 0 }]
+      ]
+    },
+    "Cost Preflight": { "main": [[ { "node": "Mode Decision", "type": "main", "index": 0 } ]] },
+    "Mode Decision": {
+      "main": [
+        [{ "node": "Mock Narrative", "type": "main", "index": 0 }],
+        [{ "node": "Replay Narrative", "type": "main", "index": 0 }],
+        [{ "node": "Primary Narrative Call", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mock Narrative": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Replay Narrative": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Primary Narrative Call": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Response Validation": { "main": [[ { "node": "Repair?", "type": "main", "index": 0 } ]] },
+    "Repair?": {
+      "main": [
+        [{ "node": "Final Validation", "type": "main", "index": 0 }],
+        [{ "node": "Single Repair Call", "type": "main", "index": 0 }]
+      ]
+    },
+    "Single Repair Call": { "main": [[ { "node": "Final Validation", "type": "main", "index": 0 } ]] },
+    "Final Validation": { "main": [[ { "node": "Persistence / Usage Record", "type": "main", "index": 0 } ]] },
+    "Persistence / Usage Record": { "main": [[ { "node": "Response", "type": "main", "index": 0 } ]] }
+  },
+  "_prysm_metadata": {
+    "workflowVersion": "1.1.0",
+    "promptVersion": "1.0.0",
+    "inputSchemaVersion": "1.0.0",
+    "outputSchemaVersion": "1.0.0",
+    "configuredModelMechanism": "injected-via-worker",
+    "maxPrimaryCalls": 1,
+    "maxRepairCalls": 1,
+    "maxTotalCalls": 2,
+    "maxInputTokens": 4000,
+    "maxOutputTokens": 2000,
+    "benchmarkStatus": "NOT_RUN",
+    "rollbackReference": "services/worker/src/n8n/prysm-n8n-workflow.json"
+  }
+}
