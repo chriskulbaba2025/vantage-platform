@@ -1,0 +1,35 @@
+{
+  "contractVersion": "1.0.0",
+  "narrativeVersion": "1.0.0",
+  "auditId": "00000000-0000-0000-0000-000000000010",
+  "generatedAt": "2026-08-09T12:00:00.000Z",
+  "modelId": "claude-opus-4-8",
+  "promptVersion": "1.0.0",
+  "cacheKey": "test-cache-key-wp10",
+  "executiveSummary": "Test Business Inc. shows moderate conversion readiness with gaps in trust signaling and technical SEO hygiene.",
+  "priorityFixNarrative": "The highest-priority fix is establishing visible trust credentials on the homepage and service pages. Without professional credentials, visitors cannot verify qualifications, directly undermining conversion confidence.",
+  "conversionPathNarrative": "The primary conversion path through the contact form is functional but weakly supported by trust proof.",
+  "readinessMapNarrative": "Key service topics are present but lack the trust assets needed to move visitors from awareness to conversion.",
+  "contentOpportunityNarrative": "Content depth is moderate. Several high-priority content opportunities exist in the MOFU and BOFU stages.",
+  "competitorNarrative": "Compared to the competitor benchmark, the site shows lighter trust proof and less content depth.",
+  "trustNarrative": "Trust signals are partially present. Testimonials and case studies exist, but credentials and pricing information are missing.",
+  "technicalNarrative": "Technical SEO hygiene requires attention. Several pages are missing meta descriptions and image alt text.",
+  "performanceNarrative": "Performance is adequate but could be improved with image optimization and caching.",
+  "internalLinkNarrative": "Internal linking structure is functional but lacks contextual depth for key service pages.",
+  "limitationsNarrative": "GSC was not connected, limiting search-performance analysis. Backlink data is available.",
+  "referencedFindingIds": ["VAN-TRUST-001-abc1"],
+  "fieldWordCounts": {
+    "executiveSummary": 22,
+    "priorityFixNarrative": 38
+  },
+  "usage": {
+    "inputTokens": 500,
+    "outputTokens": 350,
+    "cachedInputTokens": 0,
+    "estimatedCost": 0.015,
+    "actualCost": 0,
+    "retryNumber": 0,
+    "cacheHit": false,
+    "validationResult": "passed"
+  }
+}

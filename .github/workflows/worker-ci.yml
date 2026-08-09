@@ -62,3 +62,6 @@ jobs:
       - run: npm run test:wp9
       - run: npm run acceptance:wp9
       - run: npm run wp9:scope-check
+      - run: npm run test:wp10
+      - run: npm run acceptance:wp10
+      - run: npm run wp10:scope-check

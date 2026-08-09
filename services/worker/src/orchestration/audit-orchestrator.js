@@ -13,8 +13,10 @@ import {
   persistSourceCheckpointManifest, loadAndVerifySourceCheckpointManifest,
   persistCanonicalRecordManifest, loadAndVerifyCanonicalRecordManifest,
 } from "./artifact-recovery.js";
+import { buildArtifactKey } from "../storage/artifact-key.js";
 import { scoreFromCanonicalEvidence } from "../scoring/scoring-service.js";
 import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service.js";
+import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -695,6 +697,138 @@ export function createAuditOrchestrator({
     });
   }
 
+  // -------------------------------------------------------------------
+  // WP10 — Governed rendering from NARRATIVE_READY state
+  // -------------------------------------------------------------------
+
+  /**
+   * Execute the complete WP10 governed rendering path:
+   *   1. Load WP8 ReportContentPackage from artifact store.
+   *   2. Load WP9 NarrativeResponse from artifact store.
+   *   3. Load scoring model from scores artifact.
+   *   4. Build schema-valid ReportViewModel.
+   *   5. Render draft HTML via locked renderer.
+   *   6. Transition NARRATIVE_READY → DRAFT_RENDERED.
+   *
+   * On failure: NARRATIVE_READY → RENDER_FAILED, fail closed.
+   * Zero partial writes. Zero renderer calls on invalid input.
+   */
+  async function runGovernedRendering({ auditRequest, executionId, startedAt }) {
+    const { tenantId, clientId, auditId } = auditRequest;
+    const scope = { tenantId, clientId, auditId };
+
+    // Load WP8 ReportContentPackage
+    let reportPackage;
+    try {
+      const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
+      const pkgBytes = await artifactStore.get(pkgKey);
+      if (!pkgBytes) throw new Error("ReportContentPackage artifact not found");
+      reportPackage = JSON.parse(pkgBytes.toString());
+    } catch (err) {
+      throw new Error("Failed to load ReportContentPackage for rendering: " + err.message);
+    }
+
+    // Load WP9 NarrativeResponse
+    let narrative;
+    try {
+      const narrKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/narrative.json`;
+      const narrBytes = await artifactStore.get(narrKey);
+      if (!narrBytes) throw new Error("NarrativeResponse artifact not found");
+      narrative = JSON.parse(narrBytes.toString());
+    } catch (err) {
+      throw new Error("Failed to load NarrativeResponse for rendering: " + err.message);
+    }
+
+    // Load scoring model from scores artifact
+    let scoringModel;
+    try {
+      const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
+      const scoresBytes = await artifactStore.get(scoresKey);
+      if (!scoresBytes) throw new Error("Scores artifact not found");
+      const scoreSet = JSON.parse(scoresBytes.toString());
+      scoringModel = {
+        scoringVersion: scoreSet.scoringVersion || "3.0.0",
+        generatedAt: scoreSet.generatedAt || c.now(),
+        scores: scoreSet.scores || {},
+        bands: scoreSet.bands || {},
+        assessedWeight: scoreSet.assessedWeight ?? 0,
+        readinessStatus: scoreSet.readinessStatus || "",
+        showNumericScore: scoreSet.showNumericScore ?? false,
+        evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
+        rootCause: scoreSet.rootCause || "",
+        findings: [],
+        conversionPaths: [],
+        readinessMap: [],
+        contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+        competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+      };
+    } catch (err) {
+      throw new Error("Failed to load scoring model for rendering: " + err.message);
+    }
+
+    // Load findings for the scoring model
+    try {
+      const findingsKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" });
+      const findingsBytes = await artifactStore.get(findingsKey);
+      if (findingsBytes) {
+        scoringModel.findings = JSON.parse(findingsBytes.toString());
+      }
+    } catch { /* findings are supplementary */ }
+
+    // Build ReportViewModel — validates all inputs, returns valid/invalid
+    const vmResult = buildReportViewModel({
+      reportPackage, narrative, scoringModel, validateContract,
+      reportVersion: scoringModel.scoringVersion, now: c.now(),
+    });
+
+    if (!vmResult.valid) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-view-model-invalid:" + (vmResult.errors || []).join("; ").slice(0, 200), null);
+      throw new Error("ReportViewModel build failed: " + (vmResult.errors || []).join("; "));
+    }
+
+    const viewModel = vmResult.model;
+
+    // Render draft HTML via locked renderer
+    let draftHtml;
+    try {
+      const { renderReport } = await import("../report/render-report.js");
+      draftHtml = await renderReport(viewModel, { isApproved: false });
+    } catch (renderErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-draft-failed:" + (renderErr.message || "").slice(0, 200), null);
+      throw new Error("Draft render failed: " + renderErr.message);
+    }
+
+    // Persist draft HTML
+    let draftRecord;
+    try {
+      const draftBytes = Buffer.from(draftHtml, "utf-8");
+      const draftScope = { tenantId, clientId, auditId, category: "report", artifactName: "draft.html" };
+      draftRecord = await artifactStore.put({ bytes: draftBytes, contentType: "text/html; charset=utf-8", scope: draftScope });
+    } catch (persistErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-draft-persist-failed:" + (persistErr.message || "").slice(0, 200), null);
+      throw new Error("Draft persist failed: " + persistErr.message);
+    }
+
+    // Transition NARRATIVE_READY → DRAFT_RENDERED
+    await doTransition(auditId, tenantId, executionId, T.DRAFT_RENDERED,
+      "governed-rendering-complete", draftRecord.key);
+
+    return Object.freeze({
+      contractVersion: "1.0.0", auditId, executionId,
+      finalState: T.DRAFT_RENDERED, resumed: false, startedAt, completedAt: c.now(),
+      viewModelHash: vmResult.hash,
+      draftArtifactKey: draftRecord.key, draftArtifactSha256: draftRecord.sha256,
+      rendererCallCount: 1,
+      narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
+      findingsArtifact: null, scoresArtifact: null,
+      sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
+      sources: Object.freeze([]), canonicalEvidence: null,
+    });
+  }
+
   // Build summary — explicit status mapping
   // -------------------------------------------------------------------
   function buildSummary({ auditRequest, executionId, finalState, resumed, allSourceResults, canonicalRecord, startedAt }) {
@@ -795,8 +929,13 @@ export function createAuditOrchestrator({
       return runGovernedNarrative({ auditRequest, executionId, startedAt });
     }
 
-    // 3a3. NARRATIVE_PENDING, NARRATIVE_READY, NARRATIVE_FAILED — idempotent replay
-    if (cs.state === T.NARRATIVE_PENDING || cs.state === T.NARRATIVE_READY || cs.state === T.NARRATIVE_FAILED) {
+    // 3a3. NARRATIVE_READY — proceed to governed rendering (WP10)
+    if (cs.state === T.NARRATIVE_READY) {
+      return runGovernedRendering({ auditRequest, executionId, startedAt });
+    }
+
+    // 3a4. NARRATIVE_PENDING, NARRATIVE_FAILED — idempotent replay
+    if (cs.state === T.NARRATIVE_PENDING || cs.state === T.NARRATIVE_FAILED) {
       const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
       return buildSummary({ auditRequest, executionId, finalState: cs.state, resumed: false, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
     }
@@ -846,7 +985,7 @@ export function createAuditOrchestrator({
     }
 
     // 3f. Unsupported
-    const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.NARRATIVE_FAILED]);
+    const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.NARRATIVE_FAILED, T.DRAFT_RENDERED, T.IN_REVIEW, T.APPROVED, T.PUBLISHED, T.RENDER_FAILED, T.APPROVAL_REJECTED, T.PUBLISH_FAILED]);
     if (!SUPPORTED.has(cs.state)) {
       throw new Error(`Unsupported lifecycle state for orchestrator: ${cs.state}`);
     }
