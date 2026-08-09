@@ -375,4 +375,12 @@ test("REG-16: n8n workflow — structural integrity", () => {
   // Repair response goes to Final Validation (forward), not back to Response Validation
   const repairConns = wf.connections["Single Repair Call"].main;
   assert.equal(repairConns[0][0].node, "Final Validation");
+  // Repair path MUST go through Validate Model Endpoint (no bypass)
+  const repairInput = wf.connections["Repair?"].main[1];
+  assert.equal(repairInput[0].node, "Validate Model Endpoint", "Repair path must traverse endpoint validation");
+  // Mock and Replay paths must NOT reach endpoint validation
+  const mockDest = wf.connections["Mock Narrative"].main[0][0].node;
+  const replayDest = wf.connections["Replay Narrative"].main[0][0].node;
+  assert.equal(mockDest, "Response Validation", "Mock never reaches endpoint validation");
+  assert.equal(replayDest, "Response Validation", "Replay never reaches endpoint validation");
 });

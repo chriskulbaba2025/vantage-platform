@@ -197,7 +197,7 @@
     "Repair?": {
       "main": [
         [{ "node": "Final Validation", "type": "main", "index": 0 }],
-        [{ "node": "Single Repair Call", "type": "main", "index": 0 }]
+        [{ "node": "Validate Model Endpoint", "type": "main", "index": 0 }]
       ]
     },
     "Single Repair Call": { "main": [[ { "node": "Final Validation", "type": "main", "index": 0 } ]] },
