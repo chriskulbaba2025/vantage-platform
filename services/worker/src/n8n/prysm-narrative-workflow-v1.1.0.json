@@ -1,0 +1,231 @@
+{
+  "name": "Prysm Narrative Workflow v1.1.0",
+  "version": "1.1.0",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "input-webhook",
+      "name": "Receive ReportContentPackage",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prysm-narrative",
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      },
+      "notes": "SSRF defense: authentication required. Only the Prysm worker may invoke this webhook. The worker injects modelEndpoint from server-side config, NOT from the webhook body."
+    },
+    {
+      "id": "validate-input",
+      "name": "Input Validation",
+      "type": "n8n-nodes-base.code",
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "// Fail closed unless worker provides governed validation proof.\n// Preserves ALL downstream fields: package, cache/mode, cost, narrative data.\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('ReportContentPackage not validated by worker — rejecting');\n}\nif (!input.packageHash || typeof input.packageHash !== 'string' || input.packageHash.length !== 64) {\n  throw new Error('Missing or invalid packageHash from worker');\n}\n// Preserve the complete worker envelope for downstream nodes.\n// Worker is authoritative; n8n does not re-validate schema or modify fields.\nreturn [{ json: input }];"
+      }
+    },
+    {
+      "id": "cache-check",
+      "name": "Cache Check",
+      "type": "n8n-nodes-base.switch",
+      "position": [650, 300],
+      "parameters": {
+        "rules": [
+          { "value": "={{ $json.cacheHit === true }}", "output": 1 },
+          { "value": "={{ $json.cacheHit === false }}", "output": 0 }
+        ]
+      }
+    },
+    {
+      "id": "cost-preflight",
+      "name": "Cost Preflight",
+      "type": "n8n-nodes-base.code",
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "// Cost preflight executed in worker before this node\nconst estimate = $input.first().json.costEstimate;\nif (!estimate.allowed) {\n  throw new Error('Cost preflight rejected: ' + estimate.reason);\n}\nreturn [{ json: $input.first().json }];"
+      }
+    },
+    {
+      "id": "mode-decision",
+      "name": "Mode Decision",
+      "type": "n8n-nodes-base.switch",
+      "position": [1050, 300],
+      "parameters": {
+        "rules": [
+          { "value": "={{ $json.mode === 'mock' }}", "output": 0 },
+          { "value": "={{ $json.mode === 'replay' }}", "output": 1 },
+          { "value": "={{ $json.mode === 'live' }}", "output": 2 }
+        ]
+      }
+    },
+    {
+      "id": "mock-response",
+      "name": "Mock Narrative",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 200],
+      "parameters": {
+        "jsCode": "// Deterministic mock — worker provides pre-built response\nreturn [{ json: { narrative: $input.first().json.narrative, mode: 'mock' } }];"
+      }
+    },
+    {
+      "id": "replay-response",
+      "name": "Replay Narrative",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 400],
+      "parameters": {
+        "jsCode": "// Validated cached response from worker\nreturn [{ json: { narrative: $input.first().json.narrative, mode: 'replay' } }];"
+      }
+    },
+    {
+      "id": "validate-endpoint",
+      "name": "Validate Model Endpoint",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 600],
+      "parameters": {
+        "jsCode": "// SSRF defense: strict hostname allowlist + HTTPS-only + block internal addresses.\nconst ALLOWED_HOSTS = new Set([\n  'api.openai.com',\n  'api.anthropic.com',\n  // Add additional approved model hosts here after governance review\n]);\nconst BLOCKED_PATTERNS = [\n  /^localhost$/i, /^127\\./, /^0\\./, /^10\\./, /^172\\.1[6-9]\\./, /^172\\.2[0-9]\\./, /^172\\.3[0-1]\\./, /^192\\.168\\./, /^169\\.254\\./, /^::1$/, /^fc00:/, /^fe80:/\n];\nconst endpoint = $json.modelEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('modelEndpoint is required and must be a string');\n}\nlet url;\ntry { url = new URL(endpoint); } catch (e) {\n  throw new Error('modelEndpoint is not a valid URL: ' + endpoint);\n}\nif (url.protocol !== 'https:') {\n  throw new Error('modelEndpoint must use HTTPS, got: ' + url.protocol);\n}\nif (!ALLOWED_HOSTS.has(url.hostname)) {\n  throw new Error('modelEndpoint host not in strict allowlist: ' + url.hostname);\n}\nfor (const pat of BLOCKED_PATTERNS) {\n  if (pat.test(url.hostname)) {\n    throw new Error('modelEndpoint resolves to blocked address: ' + url.hostname);\n  }\n}\n// Inject validated endpoint back — worker must use this, not webhook-supplied value\n$json._validatedEndpoint = endpoint;\nreturn [{ json: $json }];"
+      }
+    },
+    {
+      "id": "primary-call",
+      "name": "Primary Narrative Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1450, 700],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.modelEndpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "={{ $json.authType }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [{
+            "name": "prompt",
+            "value": "={{ $json.prompt }}"
+          }]
+        }
+      }
+    },
+    {
+      "id": "validate-response",
+      "name": "Response Validation",
+      "type": "n8n-nodes-base.code",
+      "position": [1450, 300],
+      "parameters": {
+        "jsCode": "// Fail closed: require worker-provided validation with hash binding.\n// Worker sends: { workerValidated, narrativeHash, narrative, validation:{valid,errors} }\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('Narrative not worker-validated — rejecting');\n}\nif (!input.narrativeHash || input.narrativeHash.length !== 64) {\n  throw new Error('Missing narrativeHash from worker');\n}\n// The worker is authoritative for validation. n8n enforces the hash binding.\n// Preserve the full envelope for downstream nodes.\nif (!input.validation || !input.validation.valid) {\n  return [{ json: { ...input, needsRepair: true } }];\n}\nreturn [{ json: { ...input, needsRepair: false } }];"
+      }
+    },
+    {
+      "id": "repair-decision",
+      "name": "Repair?",
+      "type": "n8n-nodes-base.if",
+      "position": [1650, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [{
+            "value1": "={{ $json.needsRepair }}",
+            "operation": "equals",
+            "value2": true
+          }]
+        }
+      }
+    },
+    {
+      "id": "validate-repair-endpoint",
+      "name": "Validate Repair Endpoint",
+      "type": "n8n-nodes-base.code",
+      "position": [1850, 500],
+      "parameters": {
+        "jsCode": "// Same SSRF policy as primary. Requires explicit _repairEndpoint.\nconst ALLOWED_HOSTS = new Set([\n  'api.openai.com',\n  'api.anthropic.com'\n]);\nconst BLOCKED_PATTERNS = [\n  /^localhost$/i, /^127\\./, /^0\\./, /^10\\./, /^172\\.1[6-9]\\./, /^172\\.2[0-9]\\./, /^172\\.3[0-1]\\./, /^192\\.168\\./, /^169\\.254\\./, /^::1$/, /^fc00:/, /^fe80:/\n];\nconst endpoint = $json._repairEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('_repairEndpoint is required for repair calls');\n}\nlet url;\ntry { url = new URL(endpoint); } catch (e) {\n  throw new Error('_repairEndpoint is not a valid URL');\n}\nif (url.protocol !== 'https:') throw new Error('_repairEndpoint must use HTTPS');\nif (!ALLOWED_HOSTS.has(url.hostname)) throw new Error('_repairEndpoint host not in allowlist');\nfor (const pat of BLOCKED_PATTERNS) if (pat.test(url.hostname)) throw new Error('_repairEndpoint blocked address');\n$json._validatedRepairEndpoint = endpoint;\nreturn [{ json: $json }];"
+      }
+    },
+    {
+      "id": "repair-call",
+      "name": "Single Repair Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2050, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._validatedRepairEndpoint }}",
+        "sendBody": true
+      }
+    },
+    {
+      "id": "final-validation",
+      "name": "Final Validation",
+      "type": "n8n-nodes-base.code",
+      "position": [2050, 300],
+      "parameters": {
+        "jsCode": "// Final gate after primary success or repair — worker-validated response.\n// Worker sends validated narrative with hash binding. n8n enforces the gate.\nconst result = $input.first().json;\nif (!result.workerValidated) {\n  throw new Error('Final validation: workerValidated missing');\n}\nif (!result.narrativeHash || result.narrativeHash.length !== 64) {\n  throw new Error('Final validation: narrativeHash missing or invalid');\n}\nif (!result.validation || !result.validation.valid) {\n  throw new Error('Final validation failed: ' + (result.validation?.errors || []).join('; '));\n}\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "persist",
+      "name": "Persistence / Usage Record",
+      "type": "n8n-nodes-base.code",
+      "position": [2250, 300],
+      "parameters": {
+        "jsCode": "// Worker persists narrative.json + usage ledger\nreturn [{ json: { persisted: true, narrative: $input.first().json.narrative } }];"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [2450, 300],
+      "parameters": {
+        "respondWith": "json"
+      }
+    }
+  ],
+  "connections": {
+    "Receive ReportContentPackage": { "main": [[ { "node": "Input Validation", "type": "main", "index": 0 } ]] },
+    "Input Validation": { "main": [[ { "node": "Cache Check", "type": "main", "index": 0 } ]] },
+    "Cache Check": {
+      "main": [
+        [{ "node": "Cost Preflight", "type": "main", "index": 0 }],
+        [{ "node": "Replay Narrative", "type": "main", "index": 0 }]
+      ]
+    },
+    "Cost Preflight": { "main": [[ { "node": "Mode Decision", "type": "main", "index": 0 } ]] },
+    "Mode Decision": {
+      "main": [
+        [{ "node": "Mock Narrative", "type": "main", "index": 0 }],
+        [{ "node": "Replay Narrative", "type": "main", "index": 0 }],
+        [{ "node": "Validate Model Endpoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mock Narrative": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Replay Narrative": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Validate Model Endpoint": { "main": [[ { "node": "Primary Narrative Call", "type": "main", "index": 0 } ]] },
+    "Primary Narrative Call": { "main": [[ { "node": "Response Validation", "type": "main", "index": 0 } ]] },
+    "Response Validation": { "main": [[ { "node": "Repair?", "type": "main", "index": 0 } ]] },
+    "Repair?": {
+      "main": [
+        [{ "node": "Final Validation", "type": "main", "index": 0 }],
+        [{ "node": "Validate Repair Endpoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Repair Endpoint": { "main": [[ { "node": "Single Repair Call", "type": "main", "index": 0 } ]] },
+    "Single Repair Call": { "main": [[ { "node": "Final Validation", "type": "main", "index": 0 } ]] },
+    "Final Validation": { "main": [[ { "node": "Persistence / Usage Record", "type": "main", "index": 0 } ]] },
+    "Persistence / Usage Record": { "main": [[ { "node": "Response", "type": "main", "index": 0 } ]] }
+  },
+  "_prysm_metadata": {
+    "workflowVersion": "1.1.0",
+    "promptVersion": "1.0.0",
+    "inputSchemaVersion": "1.0.0",
+    "outputSchemaVersion": "1.0.0",
+    "configuredModelMechanism": "injected-via-worker",
+    "maxPrimaryCalls": 1,
+    "maxRepairCalls": 1,
+    "maxTotalCalls": 2,
+    "maxInputTokens": 4000,
+    "maxOutputTokens": 2000,
+    "benchmarkStatus": "NOT_RUN",
+    "rollbackReference": "services/worker/src/n8n/prysm-n8n-workflow.json"
+  }
+}

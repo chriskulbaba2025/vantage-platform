@@ -14,6 +14,7 @@ import {
   persistCanonicalRecordManifest, loadAndVerifyCanonicalRecordManifest,
 } from "./artifact-recovery.js";
 import { scoreFromCanonicalEvidence } from "../scoring/scoring-service.js";
+import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -588,6 +589,112 @@ export function createAuditOrchestrator({
     });
   }
 
+  // -------------------------------------------------------------------
+  // WP9 — Governed narrative from SCORED state
+  // -------------------------------------------------------------------
+
+  /**
+   * Execute the complete WP9 governed narrative path:
+   *   1. Load WP8 ReportContentPackage from artifact store.
+   *   2. Transition SCORED → NARRATIVE_PENDING.
+   *   3. Execute governed narrative (mock mode in CI/test).
+   *   4. Validate NarrativeResponse schema + content.
+   *   5. Persist narrative artifact + verify.
+   *   6. Transition NARRATIVE_PENDING → NARRATIVE_READY.
+   *
+   * On failure: NARRATIVE_PENDING → NARRATIVE_FAILED, fail closed.
+   * Only the orchestrator changes audit state.
+   */
+  async function runGovernedNarrative({ auditRequest, executionId, startedAt }) {
+    const { tenantId, clientId, auditId } = auditRequest;
+    const scope = { tenantId, clientId, auditId };
+
+    // Load WP8 ReportContentPackage from artifact store
+    let reportPackage;
+    try {
+      const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
+      const pkgBytes = await artifactStore.get(pkgKey);
+      if (!pkgBytes) throw new Error("ReportContentPackage artifact not found at " + pkgKey);
+      reportPackage = JSON.parse(pkgBytes.toString());
+    } catch (err) {
+      throw new Error("Failed to load ReportContentPackage: " + err.message);
+    }
+
+    // Transition SCORED → NARRATIVE_PENDING (orchestrator owns this)
+    await doTransition(
+      auditId, tenantId, executionId,
+      T.NARRATIVE_PENDING,
+      "narrative-execution-start",
+      null,
+    );
+
+    // Execute governed narrative — mock mode (never live in CI/test)
+    let narrativeResult;
+    try {
+      narrativeResult = await executeNarrative({
+        reportPackage,
+        mode: NARRATIVE_MODE.MOCK,
+        modelId: "prysm-wp9-orchestrator",
+        executionId,
+        artifactStore,
+        scope,
+        now: c.now(),
+      });
+    } catch (narrativeErr) {
+      // Narrative execution failed — fail closed
+      await doTransition(
+        auditId, tenantId, executionId,
+        T.NARRATIVE_FAILED,
+        "narrative-execution-failed:" + (narrativeErr.message || "").slice(0, 100),
+        null,
+      );
+      throw narrativeErr;
+    }
+
+    // Validate NarrativeResponse
+    const { validateNarrativeResponse: validateNarrative } = await import("../narrative/validate-narrative.js");
+    const validation = validateNarrative(narrativeResult.narrative, reportPackage);
+    if (!validation.valid) {
+      await doTransition(
+        auditId, tenantId, executionId,
+        T.NARRATIVE_FAILED,
+        "narrative-validation-failed:" + (validation.errors || []).join("; ").slice(0, 200),
+        null,
+      );
+      throw new Error("NarrativeResponse validation failed: " + (validation.errors || []).join("; "));
+    }
+
+    // Transition NARRATIVE_PENDING → NARRATIVE_READY
+    await doTransition(
+      auditId, tenantId, executionId,
+      T.NARRATIVE_READY,
+      "narrative-validated-and-persisted",
+      narrativeResult.narrative.auditId
+        ? `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/narrative.json`
+        : null,
+    );
+
+    return Object.freeze({
+      contractVersion: "1.0.0",
+      auditId,
+      executionId,
+      finalState: T.NARRATIVE_READY,
+      resumed: false,
+      startedAt,
+      completedAt: c.now(),
+      narrativeCacheHit: narrativeResult.cacheHit,
+      narrativeCallsMade: narrativeResult.callsMade,
+      narrativeCost: narrativeResult.cost,
+      narrativeAuditId: narrativeResult.narrative.auditId,
+      narrativeModelId: narrativeResult.narrative.modelId,
+      findingsArtifact: null,
+      scoresArtifact: null,
+      sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
+      sources: Object.freeze([]),
+      canonicalEvidence: null,
+    });
+  }
+
   // Build summary — explicit status mapping
   // -------------------------------------------------------------------
   function buildSummary({ auditRequest, executionId, finalState, resumed, allSourceResults, canonicalRecord, startedAt }) {
@@ -675,14 +782,23 @@ export function createAuditOrchestrator({
       }
     }
 
-    // 3a2. SCORED — idempotent replay; load existing artifacts and return
+    // 3a2. SCORED — proceed to governed narrative (WP9)
     if (cs.state === T.SCORED) {
-      const events = await lifecycleService.history(auditId, tenantId);
-      const scoredEvent = [...events].reverse().find(e => e.nextState === T.SCORED);
-      const manifestKey = scoredEvent?.artifactKey;
-      // Re-load canonical evidence and scoring artifacts for the summary
+      // Pre-check: WP8 package must exist before entering NARRATIVE_PENDING.
+      // If missing, remain at SCORED (backward compatible with WP5-WP7 tests).
+      const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
+      const pkgExists = await artifactStore.exists(pkgKey);
+      if (!pkgExists) {
+        const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
+        return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
+      }
+      return runGovernedNarrative({ auditRequest, executionId, startedAt });
+    }
+
+    // 3a3. NARRATIVE_PENDING, NARRATIVE_READY, NARRATIVE_FAILED — idempotent replay
+    if (cs.state === T.NARRATIVE_PENDING || cs.state === T.NARRATIVE_READY || cs.state === T.NARRATIVE_FAILED) {
       const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-      return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
+      return buildSummary({ auditRequest, executionId, finalState: cs.state, resumed: false, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
     }
 
     // 3b. EVIDENCE_STORED — recover via lifecycle event artifactKey
@@ -730,7 +846,7 @@ export function createAuditOrchestrator({
     }
 
     // 3f. Unsupported
-    const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED]);
+    const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.NARRATIVE_FAILED]);
     if (!SUPPORTED.has(cs.state)) {
       throw new Error(`Unsupported lifecycle state for orchestrator: ${cs.state}`);
     }

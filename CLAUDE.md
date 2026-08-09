@@ -22,7 +22,7 @@ chriskulbaba2025/vantage-platform
 
 Current branch:
 
-feat/prysm-wp8-report-content-package
+feat/prysm-wp9-narrative-workflow
 
 Current PR:
 
@@ -30,11 +30,11 @@ TBD
 
 Current verified starting head:
 
-be9b53f2688cb3d0aa63ae3daba7e0d0c248a933
+7e3a992d23b31a353b225a9b1715b458bd11b00c
 
 Current work package:
 
-WP8 — Compact Report Content Package
+WP9 — Governed Narrative Workflow
 
 
 

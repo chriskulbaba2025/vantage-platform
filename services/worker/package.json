@@ -32,7 +32,12 @@
     "acceptance:wp8": "node scripts/acceptance-wp8.js",
     "wp8:preflight": "node scripts/wp8-preflight.js",
     "wp8:scope-check": "node scripts/wp8-scope-check.js",
-    "wp8:verify": "node scripts/wp8-verify.js"
+    "wp8:verify": "node scripts/wp8-verify.js",
+    "test:wp9": "node --test src/narrative/narrative-service.test.js",
+    "acceptance:wp9": "node scripts/acceptance-wp9.js",
+    "wp9:preflight": "node scripts/wp9-preflight.js",
+    "wp9:scope-check": "node scripts/wp9-scope-check.js",
+    "wp9:verify": "node scripts/wp9-verify.js"
   },
   "engines": {
     "node": ">=20.0.0"
