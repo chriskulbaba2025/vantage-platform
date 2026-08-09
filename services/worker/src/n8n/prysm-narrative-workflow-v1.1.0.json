@@ -139,7 +139,7 @@
       "type": "n8n-nodes-base.code",
       "position": [1850, 500],
       "parameters": {
-        "jsCode": "// Same SSRF policy as primary endpoint validation.\nconst ALLOWED_HOSTS = new Set([\n  'api.openai.com',\n  'api.anthropic.com'\n]);\nconst BLOCKED_PATTERNS = [\n  /^localhost$/i, /^127\\./, /^0\\./, /^10\\./, /^172\\.1[6-9]\\./, /^172\\.2[0-9]\\./, /^172\\.3[0-1]\\./, /^192\\.168\\./, /^169\\.254\\./, /^::1$/, /^fc00:/, /^fe80:/\n];\nconst endpoint = $json._repairEndpoint || $json.modelEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('repairEndpoint is required');\n}\nlet url;\ntry { url = new URL(endpoint); } catch (e) {\n  throw new Error('repairEndpoint is not a valid URL');\n}\nif (url.protocol !== 'https:') throw new Error('repairEndpoint must use HTTPS');\nif (!ALLOWED_HOSTS.has(url.hostname)) throw new Error('repairEndpoint host not in allowlist');\nfor (const pat of BLOCKED_PATTERNS) if (pat.test(url.hostname)) throw new Error('repairEndpoint blocked address');\n$json._validatedRepairEndpoint = endpoint;\nreturn [{ json: $json }];"
+        "jsCode": "// Same SSRF policy as primary. Requires explicit _repairEndpoint.\nconst ALLOWED_HOSTS = new Set([\n  'api.openai.com',\n  'api.anthropic.com'\n]);\nconst BLOCKED_PATTERNS = [\n  /^localhost$/i, /^127\\./, /^0\\./, /^10\\./, /^172\\.1[6-9]\\./, /^172\\.2[0-9]\\./, /^172\\.3[0-1]\\./, /^192\\.168\\./, /^169\\.254\\./, /^::1$/, /^fc00:/, /^fe80:/\n];\nconst endpoint = $json._repairEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('_repairEndpoint is required for repair calls');\n}\nlet url;\ntry { url = new URL(endpoint); } catch (e) {\n  throw new Error('_repairEndpoint is not a valid URL');\n}\nif (url.protocol !== 'https:') throw new Error('_repairEndpoint must use HTTPS');\nif (!ALLOWED_HOSTS.has(url.hostname)) throw new Error('_repairEndpoint host not in allowlist');\nfor (const pat of BLOCKED_PATTERNS) if (pat.test(url.hostname)) throw new Error('_repairEndpoint blocked address');\n$json._validatedRepairEndpoint = endpoint;\nreturn [{ json: $json }];"
       }
     },
     {
@@ -149,7 +149,7 @@
       "position": [2050, 600],
       "parameters": {
         "method": "POST",
-        "url": "={{ $json.modelEndpoint }}",
+        "url": "={{ $json._validatedRepairEndpoint }}",
         "sendBody": true
       }
     },
