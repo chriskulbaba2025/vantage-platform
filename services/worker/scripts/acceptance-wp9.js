@@ -54,10 +54,8 @@ const fixture = JSON.parse(readFileSync(join(ROOT, "test-fixtures", "scoring", "
 const clockIso = "2026-02-01T00:00:00.000Z";
 const mockClock = { now: () => clockIso, sleep: async () => {}, setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 100)) };
 const mockValidateContract = () => ({ valid: true, errors: [] });
-// Instrumented counters
+// Instrumented counters — only counters that wrap actual invoked dependencies
 let providerCallCount = 0;
-let n8nCallCount = 0;
-let rendererCallCount = 0;
 
 // Instrumented adapters — count every execute() call
 const mockAdapters = new Proxy({}, {
@@ -194,14 +192,11 @@ try {
   catch (e) { fail("NARRATIVE_READY count", readyEvents.length); }
 
   // Zero live calls — proven by instrumented counters + summary fields
-  try { assert.equal(providerCallCount, 0); pass("provider call count = 0"); }
+  try { assert.equal(providerCallCount, 0); pass("provider call count = 0 (actual adapter execute instrumentation)"); }
   catch (e) { fail("provider call count", "Expected 0, got " + providerCallCount); }
 
-  try { assert.equal(summary.narrativeCallsMade, 0); pass("live LLM call count = 0 (narrativeCallsMade=0)"); }
-  catch (e) { fail("live LLM call count", "Expected 0, got " + summary.narrativeCallsMade); }
-
-  try { assert.equal(n8nCallCount, 0); pass("live n8n call count = 0"); }
-  catch (e) { fail("live n8n call count", "Expected 0, got " + n8nCallCount); }
+  try { assert.equal(summary.narrativeCallsMade, 0); pass("narrative calls = 0 (actual orchestrator summary)"); }
+  catch (e) { fail("narrative calls", "Expected 0, got " + summary.narrativeCallsMade); }
 
 } catch (err) {
   fail("SUCCESS path", err.message);
@@ -219,14 +214,22 @@ const failStore = createGovernedArtifactStore({ type: "memory" });
 const failRepo = createMemoryLifecycleRepository();
 const failLc = createLifecycleService(failRepo);
 
-// Inject failure: replica store fails on narrative.json PUT
+// Record successful report-category writes during failure execution window
+const successfulReportWritesDuringFailure = [];
+
+// Inject failure: replica store fails on narrative.json PUT.
+// Record every successful write so we can prove zero report writes succeeded.
 const realFailPut = failStore.put.bind(failStore);
 failStore.put = async function(input) {
   const scope = input.scope || {};
   if (scope.category === "report" && scope.artifactName === "narrative.json") {
     throw new Error("INJECTED FAILURE: narrative artifact persistence rejected");
   }
-  return realFailPut(input);
+  const record = await realFailPut(input);
+  if (scope.category === "report") {
+    successfulReportWritesDuringFailure.push({ key: record.key, artifactName: scope.artifactName });
+  }
+  return record;
 };
 
 try {
@@ -240,6 +243,9 @@ try {
   });
 
   const req = { contractVersion: "1.0.0", auditId: failAuditId, tenantId, clientId, idempotencyKey: failAuditId + ":kp", targetUrl: "https://example.com", businessName: "WP9 Failure", competitors: [], language: "en", market: "ca" };
+
+  // Reset observation window to only capture writes during orchestrator execution
+  successfulReportWritesDuringFailure.length = 0;
 
   // Operation must reject
   let rejected = false;
@@ -278,16 +284,10 @@ try {
   try { assert.equal(failReadyEvents.length, 0); pass("FAILURE narrative_ready count = 0"); }
   catch (e) { fail("FAILURE narrative_ready count", failReadyEvents.length); }
 
-  // No renderer/report calls after failure — proven by instrumented counters
-  try { assert.equal(rendererCallCount, 0); pass("renderer call count after failure = 0"); }
-  catch (e) { fail("renderer call count", "Expected 0, got " + rendererCallCount); }
-
-  // Count report-category writes that occurred during the failure path
-  // (the injected failure prevents narrative.json write but earlier writes may exist)
-  const failHistoryEvents = await failLc.history(failAuditId, tenantId);
-  const reportWriteRelated = failHistoryEvents.filter(e => e.nextState === T.NARRATIVE_READY);
-  try { assert.equal(reportWriteRelated.length, 0); pass("report write count after failure = 0 (no NARRATIVE_READY events)"); }
-  catch (e) { fail("report write count", "NARRATIVE_READY events after failure: " + reportWriteRelated.length); }
+  // Successful report-category writes during failure execution = 0
+  // Measured via direct artifactStore.put() observation, not lifecycle inference.
+  try { assert.equal(successfulReportWritesDuringFailure.length, 0); pass("successful report writes during failure = 0 (actual artifactStore.put observation)"); }
+  catch (e) { fail("successful report writes during failure", "Expected 0, got " + successfulReportWritesDuringFailure.length + ": " + JSON.stringify(successfulReportWritesDuringFailure)); }
 
 } catch (err) {
   fail("FAILURE path", err.message);
