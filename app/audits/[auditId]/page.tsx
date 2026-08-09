@@ -23,7 +23,8 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
   try {
     status = await workerClient.getAuditStatus(auditId);
   } catch (e) {
-    fetchError = e instanceof Error ? e.message : "Worker unavailable";
+    console.error("Worker fetch failed:", e);
+    fetchError = "Worker unavailable";
   }
   if (!status && !fetchError) notFound();
 
