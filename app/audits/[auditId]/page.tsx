@@ -18,8 +18,14 @@ const REVIEW_CHECKLIST_ITEMS = [
 
 export default async function AuditDetailPage({ params }: { params: { auditId: string } }) {
   const { auditId } = params;
-  const status = await workerClient.getAuditStatus(auditId);
-  if (!status) notFound();
+  let status;
+  let fetchError = "";
+  try {
+    status = await workerClient.getAuditStatus(auditId);
+  } catch (e) {
+    fetchError = e instanceof Error ? e.message : "Worker unavailable";
+  }
+  if (!status && !fetchError) notFound();
 
   const stateClass = (s: string): string => {
     const st = (s || "").toLowerCase();
@@ -29,18 +35,29 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
     return "status-draft";
   };
 
+  if (fetchError) {
+    return (
+      <div>
+        <h1>Audit Status</h1>
+        <div className="card" style={{ borderColor: "var(--amber)", color: "var(--amber)" }}>
+          <p><strong>Worker unavailable.</strong> The audit engine is temporarily unreachable. Please try again shortly.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex-row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>Audit Status</h1>
-        <span className={`status-badge ${stateClass(status.state)}`}>{status.state}</span>
+        <span className={`status-badge ${stateClass(status!.state)}`}>{status!.state}</span>
       </div>
 
       <div className="card">
         <p><strong>Audit ID:</strong> <code>{auditId}</code></p>
-        <p><strong>Version:</strong> {status.version}</p>
-        <p><strong>Created:</strong> {status.createdAt ? new Date(status.createdAt).toLocaleString() : "—"}</p>
-        <p><strong>Updated:</strong> {status.updatedAt ? new Date(status.updatedAt).toLocaleString() : "—"}</p>
+        <p><strong>Version:</strong> {status!.version}</p>
+        <p><strong>Created:</strong> {status!.createdAt ? new Date(status!.createdAt).toLocaleString() : "—"}</p>
+        <p><strong>Updated:</strong> {status!.updatedAt ? new Date(status!.updatedAt).toLocaleString() : "—"}</p>
       </div>
 
       {/* Lifecycle History */}
@@ -51,7 +68,7 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
             <tr><th>From</th><th>To</th><th>Time</th></tr>
           </thead>
           <tbody>
-            {(status.lifecycle || []).map((e: Record<string, unknown>, i: number) => (
+            {(status!.lifecycle || []).map((e: Record<string, unknown>, i: number) => (
               <tr key={i}>
                 <td>{e.from as string || "—"}</td>
                 <td><span className={`status-badge ${stateClass(e.to as string)}`}>{e.to as string}</span></td>
@@ -63,7 +80,7 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
       </div>
 
       {/* Report Viewer — only for approved/published */}
-      {(status.state === "approved" || status.state === "published") && (
+      {(status!.state === "approved" || status!.state === "published") && (
         <div className="card" style={{ borderColor: "var(--green)" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Approved Report</h2>
           <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Report</a>

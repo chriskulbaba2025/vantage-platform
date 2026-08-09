@@ -30,14 +30,21 @@ class WorkerClient {
 
   private async fetch(path: string, init?: RequestInit): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
-    return fetch(url, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        "x-vantage-secret": this.secret,
-        ...(init?.headers || {}),
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-vantage-secret": this.secret,
+          ...(init?.headers || {}),
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   /** Create and execute a governed audit */

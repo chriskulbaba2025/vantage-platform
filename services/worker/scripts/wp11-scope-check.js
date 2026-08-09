@@ -26,6 +26,7 @@ const ALLOWED = [
   /^tests\/wp11\//,
   /^scripts\/wp11-/,
   /^playwright\.config\.ts$/,
+  /^vercel\.json$/,
   /^services\/worker\/src\/server\.js$/,
   /^services\/worker\/src\/application\//,
   /^services\/worker\/src\/lifecycle\/postgres-repository\.js$/,
