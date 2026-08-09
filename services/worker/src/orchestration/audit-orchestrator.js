@@ -949,6 +949,7 @@ export function createAuditOrchestrator({
       manifestKey: manifestRecord.key,
       manifestRecord,
       pageArtifacts: Object.freeze(persistedArtifacts),
+      renderedPages: rendered.pages,  // Map<filename, html> for store integration
       rendererCallCount,
       narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
       findingsArtifact: null, scoresArtifact: null,
