@@ -25,6 +25,7 @@ export function createRequestHandler({
   runAuditFn,
   submitReviewFn,
   approveAuditFn,
+  auditService,
 }) {
   const _runAudit = runAuditFn || runAudit;
   const _submitReview = submitReviewFn || submitReview;
@@ -250,6 +251,127 @@ export function createRequestHandler({
         const provider = providerRaw === "ga4" ? "google-analytics-4" : providerRaw === "gsc" ? "google-search-console" : null;
         if (!provider) return send(res, 400, { error: "Unknown provider. Use /disconnect/ga4 or /disconnect/gsc" });
         return send(res, 200, await oauthService.disconnect(provider));
+      }
+
+      // -----------------------------------------------------------------------
+      // WP11 Governed API v1 — web application integration
+      // -----------------------------------------------------------------------
+
+      // POST /api/v1/audits — create and execute a governed audit
+      if (req.method === "POST" && url.pathname === "/api/v1/audits") {
+        if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+        if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+        try {
+          const input = await readJson(req);
+          const tenantId = config.vantageTenantId || "default";
+          const result = await auditService.createAudit(input, tenantId);
+          return send(res, 201, result);
+        } catch (err) {
+          return send(res, err.statusCode || 500, { error: err.message, errors: err.errors || null });
+        }
+      }
+
+      // GET /api/v1/audits — tenant-scoped audit history
+      if (req.method === "GET" && url.pathname === "/api/v1/audits") {
+        if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+        if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+        try {
+          const tenantId = config.vantageTenantId || "default";
+          const audits = await auditService.listAudits(tenantId);
+          return send(res, 200, audits);
+        } catch (err) {
+          return send(res, err.statusCode || 500, { error: err.message });
+        }
+      }
+
+      // GET /api/v1/audits/:auditId — audit status
+      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/report\/(.+))?$/);
+      if (wp11AuditMatch) {
+        const auditId = wp11AuditMatch[1];
+        const subPath = wp11AuditMatch[2] || "";
+
+        // GET /api/v1/audits/:auditId
+        if (req.method === "GET" && !subPath) {
+          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+          try {
+            const tenantId = config.vantageTenantId || "default";
+            const status = await auditService.getAuditStatus(auditId, tenantId);
+            if (!status) return send(res, 404, { error: "Audit not found" });
+            return send(res, 200, status);
+          } catch (err) {
+            return send(res, err.statusCode || 500, { error: err.message });
+          }
+        }
+
+        // POST /api/v1/audits/:auditId/review
+        if (req.method === "POST" && subPath === "/review") {
+          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+          try {
+            const payload = await readJson(req);
+            const reviewer = payload.reviewer || req.headers["x-reviewer-identity"] || "";
+            if (!reviewer) return send(res, 422, { error: "Reviewer identity is required" });
+            const tenantId = config.vantageTenantId || "default";
+            const slug = payload.slug;
+            if (!slug) return send(res, 422, { error: "Slug is required" });
+            const result = await auditService.submitReview(auditId, tenantId, slug, reviewer, payload.checklist);
+            return send(res, 200, result);
+          } catch (err) {
+            return send(res, err.statusCode || 500, { error: err.message });
+          }
+        }
+
+        // POST /api/v1/audits/:auditId/approve
+        if (req.method === "POST" && subPath === "/approve") {
+          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+          try {
+            const payload = await readJson(req);
+            const approver = payload.approver || req.headers["x-reviewer-identity"] || "";
+            if (!approver) return send(res, 422, { error: "Approver identity is required" });
+            const tenantId = config.vantageTenantId || "default";
+            const slug = payload.slug;
+            if (!slug) return send(res, 422, { error: "Slug is required" });
+            // Build pages map from payload (for acceptance testing)
+            let pages = null;
+            if (payload.pages && typeof payload.pages === "object") {
+              pages = new Map(Object.entries(payload.pages));
+            }
+            const result = await auditService.approveAudit(auditId, tenantId, slug, approver, pages);
+            return send(res, 200, result);
+          } catch (err) {
+            return send(res, err.statusCode || 500, { error: err.message });
+          }
+        }
+
+        // GET /api/v1/audits/:auditId/report/:filename
+        if (req.method === "GET" && subPath.startsWith("/report/")) {
+          const filename = wp11AuditMatch[3];
+          if (!filename || filename.includes("..") || filename.includes("//") || filename.includes("\\")) {
+            return send(res, 400, { error: "Invalid report path" });
+          }
+          if (!/^[a-z0-9_-]+\.(html|json)$/i.test(filename)) {
+            return send(res, 400, { error: "Invalid report file name" });
+          }
+          if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+          try {
+            const tenantId = config.vantageTenantId || "default";
+            const slug = url.searchParams.get("slug") || "";
+            if (!slug) return send(res, 422, { error: "Slug query parameter is required" });
+            const clientId = url.searchParams.get("clientId") || "";
+            const result = await auditService.getReportPage(tenantId, clientId, auditId, filename, slug);
+            const ct = result.contentType || "text/html; charset=utf-8";
+            const payload = result.bytes;
+            res.writeHead(200, { "content-type": ct, "content-length": Buffer.byteLength(payload), "cache-control": "no-store" });
+            return res.end(payload);
+          } catch (err) {
+            if (err.statusCode === 403) {
+              return send(res, 403, { error: err.message, code: err.code || "REPORT_NOT_APPROVED", lifecycleStatus: err.lifecycleStatus || "unknown" });
+            }
+            return send(res, err.statusCode || 500, { error: err.message });
+          }
+        }
       }
 
       return send(res, 404, { error: "Not found" });
