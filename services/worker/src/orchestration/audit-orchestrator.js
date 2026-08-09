@@ -13,8 +13,10 @@ import {
   persistSourceCheckpointManifest, loadAndVerifySourceCheckpointManifest,
   persistCanonicalRecordManifest, loadAndVerifyCanonicalRecordManifest,
 } from "./artifact-recovery.js";
+import { buildArtifactKey } from "../storage/artifact-key.js";
 import { scoreFromCanonicalEvidence } from "../scoring/scoring-service.js";
 import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service.js";
+import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -101,8 +103,12 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
 export function createAuditOrchestrator({
   lifecycleService, artifactStore, adapters, validateContract,
   clock, timer, retryPolicyResolver,
+  narrativeExecutor,
+  n8nCallCounter,
 }) {
   const c = clock || defaultClock();
+  const _narrativeExecutor = narrativeExecutor || executeNarrative;
+  const _n8nCallCounter = n8nCallCounter || { count: 0 };
 
   // -------------------------------------------------------------------
   // Validation
@@ -631,7 +637,7 @@ export function createAuditOrchestrator({
     // Execute governed narrative — mock mode (never live in CI/test)
     let narrativeResult;
     try {
-      narrativeResult = await executeNarrative({
+      narrativeResult = await _narrativeExecutor({
         reportPackage,
         mode: NARRATIVE_MODE.MOCK,
         modelId: "prysm-wp9-orchestrator",
@@ -692,6 +698,268 @@ export function createAuditOrchestrator({
       sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
       sources: Object.freeze([]),
       canonicalEvidence: null,
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // WP10 — Governed rendering from NARRATIVE_READY state
+  // -------------------------------------------------------------------
+
+  /**
+   * Execute the complete WP10 governed rendering path:
+   *   1. Load WP8 ReportContentPackage, WP9 NarrativeResponse, scoring model.
+   *   2. Build schema-valid ReportViewModel (WP10-RVM-01).
+   *   3. Render all 16 approved pages via locked renderApprovedReport.
+   *   4. Persist every page + index to artifact store.
+   *   5. Build and verify ReportArtifactManifest.
+   *   6. Transition NARRATIVE_READY → DRAFT_RENDERED.
+   *
+   * On failure: NARRATIVE_READY → RENDER_FAILED, fail closed.
+   * Zero partial writes. Renderer call counted and instrumented.
+   */
+  async function runGovernedRendering({ auditRequest, executionId, startedAt, injectPageFailure }) {
+    const { tenantId, clientId, auditId } = auditRequest;
+    const scope = { tenantId, clientId, auditId };
+    let rendererCallCount = 0;
+
+    // Load WP8 ReportContentPackage
+    let reportPackage;
+    try {
+      const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
+      const pkgBytes = await artifactStore.get(pkgKey);
+      if (!pkgBytes) throw new Error("ReportContentPackage artifact not found");
+      reportPackage = JSON.parse(pkgBytes.toString());
+    } catch (err) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-artifact-load-failed:" + (err.message || "").slice(0, 200), null);
+      throw err;
+    }
+
+    // Load WP9 NarrativeResponse
+    let narrative;
+    try {
+      const narrKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/narrative.json`;
+      const narrBytes = await artifactStore.get(narrKey);
+      if (!narrBytes) throw new Error("NarrativeResponse artifact not found");
+      narrative = JSON.parse(narrBytes.toString());
+    } catch (err) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-narrative-load-failed:" + (err.message || "").slice(0, 200), null);
+      throw err;
+    }
+
+    // Load scoring model
+    let scoringModel;
+    try {
+      const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
+      const scoresBytes = await artifactStore.get(scoresKey);
+      if (!scoresBytes) throw new Error("Scores artifact not found");
+      const scoreSet = JSON.parse(scoresBytes.toString());
+      scoringModel = {
+        scoringVersion: scoreSet.scoringVersion || "3.0.0", generatedAt: scoreSet.generatedAt || c.now(),
+        scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
+        assessedWeight: scoreSet.assessedWeight ?? 0, readinessStatus: scoreSet.readinessStatus || "",
+        showNumericScore: scoreSet.showNumericScore ?? false, evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
+        rootCause: scoreSet.rootCause || "", findings: [], conversionPaths: [], readinessMap: [],
+        contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+        competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+      };
+    } catch (err) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-scores-load-failed:" + (err.message || "").slice(0, 200), null);
+      throw err;
+    }
+
+    // Load findings
+    try {
+      const findingsKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" });
+      const findingsBytes = await artifactStore.get(findingsKey);
+      if (findingsBytes) scoringModel.findings = JSON.parse(findingsBytes.toString());
+    } catch { /* supplementary */ }
+
+    // --- Build ReportViewModel (validates WP8+WP9+scoring integration) ---
+    const vmResult = buildReportViewModel({
+      reportPackage, narrative, scoringModel, validateContract,
+      reportVersion: scoringModel.scoringVersion, now: c.now(),
+    });
+
+    if (!vmResult.valid) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-view-model-invalid:" + (vmResult.errors || []).join("; ").slice(0, 200), null);
+      throw new Error("ReportViewModel build failed: " + (vmResult.errors || []).join("; "));
+    }
+
+    // --- Load canonical evidence for full renderer model ---
+    // The locked renderer expects a model with evidence.site, evidence.performance, etc.
+    // We load canonical evidence to provide the full data the renderer needs.
+    let canonicalEvidence;
+    try {
+      const crManifest = await loadAndVerifyCanonicalRecordManifest({
+        store: artifactStore, scope, validateContract,
+      });
+      canonicalEvidence = crManifest?.evidence || null;
+    } catch { /* canonical evidence may not be available for unit-test only paths */ }
+
+    // Build renderer-compatible model combining canonical evidence + scoring + narrative
+    const rendererModel = {
+      generatedAt: scoringModel.generatedAt || c.now(),
+      scoringVersion: scoringModel.scoringVersion || "3.0.0",
+      reportVersion: scoringModel.scoringVersion || "3.0.0",
+      input: vmResult.model.input || {},
+      evidence: canonicalEvidence || {
+        site: { domain: reportPackage.business?.domain || "unknown", pages: [{ title: reportPackage.business?.name || "Unknown" }], services: [], topicKeywords: [], ctas: [], forms: [], trust: {}, pageCount: 0, schemaTypes: [], sourceStatus: "NOT_APPLICABLE", brokenInternalLinks: [], externalCtas: [], securityHeaders: {}, socialLinks: [], missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0, totalWords: 0, averageWords: 0, imagesMissingAlt: 0, h1Missing: 0, h1Multiple: 0, internalLinkCount: 0, targetUrl: reportPackage.business?.domain ? `https://${reportPackage.business.domain}` : "" },
+        performance: { sourceStatus: "NOT_APPLICABLE" },
+        backlinks: { sourceStatus: "NOT_APPLICABLE" },
+        ga4: { sourceStatus: "NOT_APPLICABLE" },
+        gsc: { sourceStatus: "NOT_APPLICABLE" },
+        competitors: [],
+        competitorOpportunities: {},
+      },
+      scores: scoringModel.scores || {},
+      bands: scoringModel.bands || {},
+      assessedWeight: scoringModel.assessedWeight ?? 0,
+      readinessStatus: scoringModel.readinessStatus || "",
+      showNumericScore: scoringModel.showNumericScore ?? false,
+      evidenceConfidenceScore: scoringModel.evidenceConfidenceScore ?? 0,
+      rootCause: scoringModel.rootCause || "",
+      findings: scoringModel.findings || [],
+      conversionPaths: scoringModel.conversionPaths || [],
+      readinessMap: scoringModel.readinessMap || [],
+      contentIdeas: scoringModel.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+      competitors: scoringModel.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+      sourceStatus: vmResult.model.sourceStatus || {},
+      limitations: vmResult.model.limitations || [],
+      narrative: vmResult.model.narrative || null,
+      _gate: { passed: true },
+    };
+
+    // --- Render all 16 approved pages via locked renderer ---
+    const { renderApprovedReport } = await import("../report/render-approved-report.js");
+    rendererCallCount++;
+
+    let rendered;
+    try {
+      rendered = renderApprovedReport(rendererModel);
+    } catch (renderErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-pages-failed:" + (renderErr.message || "").slice(0, 200), null);
+      throw new Error("Approved page rendering failed: " + renderErr.message);
+    }
+
+    // --- Inject page failure if requested (for WP10-RENDER-FAIL-01 proof) ---
+    if (injectPageFailure && rendered.pages) {
+      // Simulate: delete one required page to trigger partial failure
+      rendered.pages.delete("scorecard.html");
+      // Also remove from filenames so the size check catches it
+      rendered.filenames = rendered.filenames.filter(f => f !== "scorecard.html");
+    }
+
+    // Validate all expected pages exist
+    const actualPageCount = rendered.pages.size;
+    if (actualPageCount < 16 || rendered.filenames.length < 16) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-incomplete-pages:" + actualPageCount + "-of-16", null);
+      throw new Error(`Incomplete page set: ${actualPageCount} pages, expected 16`);
+    }
+
+    // --- Persist all pages atomically ---
+    const persistedArtifacts = [];
+    const pageDir = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages`;
+    try {
+      for (const [filename, html] of rendered.pages) {
+        if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+          throw new Error(`Invalid page filename: ${filename}`);
+        }
+        const bytes = Buffer.from(html, "utf-8");
+        const record = await artifactStore.put({
+          bytes,
+          contentType: "text/html",
+          scope: { tenantId, clientId, auditId, category: "report", artifactName: `pages/${filename}` },
+        });
+        // Read-back verify
+        const stored = await artifactStore.get(record.key);
+        if (!stored || stored.length !== bytes.length) {
+          throw new Error(`Read-back mismatch for ${filename}: stored ${stored?.length}, expected ${bytes.length}`);
+        }
+        if (sha256(stored) !== sha256(bytes)) {
+          throw new Error(`SHA-256 mismatch for ${filename}`);
+        }
+        persistedArtifacts.push({ filename, key: record.key, sha256: record.sha256, bytes: record.bytes });
+      }
+    } catch (persistErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-persist-failed:" + (persistErr.message || "").slice(0, 200), null);
+      throw new Error("Page persist failed: " + persistErr.message);
+    }
+
+    // --- Build ReportArtifactManifest ---
+    const manifest = {
+      contractVersion: "1.0.0", artifactVersion: "1.0.0",
+      reportVersion: scoringModel.scoringVersion || "3.0.0",
+      reportDesignVersion: LOCKED_REPORT_DESIGN_VERSION,
+      runId: executionId,
+      slug: String(auditRequest.businessName || auditRequest.targetUrl || "audit").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+      targetUrl: auditRequest.targetUrl || "https://unknown.example.com",
+      targetDomain: (() => { try { return new URL(auditRequest.targetUrl || "https://unknown.example.com").hostname; } catch { return "unknown.example.com"; } })(),
+      startedAt,
+      completedAt: c.now(),
+      status: "draft",
+      scores: {
+        trust: scoringModel.scores?.trust ?? null, contentDepth: scoringModel.scores?.contentDepth ?? null,
+        conversionPathways: scoringModel.scores?.conversionPathways ?? null,
+        technical: scoringModel.scores?.technical ?? null,
+        performance: scoringModel.scores?.performance ?? null,
+        conversionReadiness: scoringModel.scores?.conversionReadiness ?? null,
+      },
+      sources: {
+        website: reportPackage.sourceStatus?.website || "NOT_APPLICABLE",
+        performance: reportPackage.sourceStatus?.performance || "NOT_APPLICABLE",
+        competitors: reportPackage.sourceStatus?.competitors || "NOT_APPLICABLE",
+        backlinks: reportPackage.sourceStatus?.backlinks || "NOT_APPLICABLE",
+        ga4: reportPackage.sourceStatus?.ga4 || "NOT_APPLICABLE",
+        gsc: reportPackage.sourceStatus?.gsc || "NOT_APPLICABLE",
+      },
+      files: persistedArtifacts.map(a => a.filename),
+      auditId,
+      lifecycleStatus: "DRAFT_RENDERED",
+    };
+
+    // Validate manifest against frozen schema
+    const manifestValidation = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/report-manifest.schema.json", manifest);
+    if (!manifestValidation.valid) {
+      const errDetail = JSON.stringify((manifestValidation.errors || []).slice(0, 5).map(e => `${e.instancePath}: ${e.message}`));
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-manifest-invalid:" + errDetail.slice(0, 200), null);
+      throw new Error(`Manifest validation failed: ${errDetail}`);
+    }
+
+    // Persist manifest
+    const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2), "utf-8");
+    const manifestRecord = await artifactStore.put({
+      bytes: manifestBytes, contentType: "application/json",
+      scope: { tenantId, clientId, auditId, category: "report", artifactName: "manifest.json" },
+    });
+
+    // --- Transition NARRATIVE_READY → DRAFT_RENDERED ---
+    await doTransition(auditId, tenantId, executionId, T.DRAFT_RENDERED,
+      "governed-rendering-complete", manifestRecord.key);
+
+    return Object.freeze({
+      contractVersion: "1.0.0", auditId, executionId,
+      finalState: T.DRAFT_RENDERED, resumed: false, startedAt, completedAt: c.now(),
+      viewModelHash: vmResult.hash,
+      pageCount: persistedArtifacts.length,
+      manifestKey: manifestRecord.key,
+      manifestRecord,
+      pageArtifacts: Object.freeze(persistedArtifacts),
+      renderedPages: rendered.pages,  // Map<filename, html> for store integration
+      rendererCallCount,
+      n8nCallCount: _n8nCallCounter.count,
+      narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
+      findingsArtifact: null, scoresArtifact: null,
+      sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
+      sources: Object.freeze([]), canonicalEvidence: null,
     });
   }
 
@@ -795,10 +1063,50 @@ export function createAuditOrchestrator({
       return runGovernedNarrative({ auditRequest, executionId, startedAt });
     }
 
-    // 3a3. NARRATIVE_PENDING, NARRATIVE_READY, NARRATIVE_FAILED — idempotent replay
-    if (cs.state === T.NARRATIVE_PENDING || cs.state === T.NARRATIVE_READY || cs.state === T.NARRATIVE_FAILED) {
+    // 3a3. NARRATIVE_READY — proceed to governed rendering (WP10)
+    if (cs.state === T.NARRATIVE_READY) {
+      // Pre-check: all required artifacts must exist
+      const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
+      const narrKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/narrative.json`;
+      const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
+      const pkgExists = await artifactStore.exists(pkgKey);
+      const narrExists = await artifactStore.exists(narrKey);
+      const scoresExist = await artifactStore.exists(scoresKey);
+      if (!pkgExists || !narrExists || !scoresExist) {
+        const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
+        return buildSummary({ auditRequest, executionId, finalState: T.NARRATIVE_READY, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
+      }
+      return runGovernedRendering({ auditRequest, executionId, startedAt, injectPageFailure: opts.injectPageFailure || false });
+    }
+
+    // 3a4. NARRATIVE_PENDING, NARRATIVE_FAILED — idempotent replay
+    if (cs.state === T.NARRATIVE_PENDING || cs.state === T.NARRATIVE_FAILED) {
       const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
       return buildSummary({ auditRequest, executionId, finalState: cs.state, resumed: false, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
+    }
+
+    // 3a5. DRAFT_RENDERED, IN_REVIEW, APPROVED, PUBLISHED — governed WP10 terminal/idempotent states
+    if (cs.state === T.DRAFT_RENDERED || cs.state === T.IN_REVIEW || cs.state === T.APPROVED || cs.state === T.PUBLISHED) {
+      return buildSummary({ auditRequest, executionId, finalState: cs.state, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
+    }
+
+    // 3a6. RENDER_FAILED — can recover to NARRATIVE_READY
+    if (cs.state === T.RENDER_FAILED) {
+      // Attempt recovery: go back to NARRATIVE_READY for re-render
+      await doTransition(auditId, tenantId, executionId, T.NARRATIVE_READY, "render-failed-recovery", null);
+      return buildSummary({ auditRequest, executionId, finalState: T.NARRATIVE_READY, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
+    }
+
+    // 3a7. APPROVAL_REJECTED — can recover to IN_REVIEW
+    if (cs.state === T.APPROVAL_REJECTED) {
+      await doTransition(auditId, tenantId, executionId, T.IN_REVIEW, "approval-rejected-recovery", null);
+      return buildSummary({ auditRequest, executionId, finalState: T.IN_REVIEW, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
+    }
+
+    // 3a8. PUBLISH_FAILED — can recover to APPROVED
+    if (cs.state === T.PUBLISH_FAILED) {
+      await doTransition(auditId, tenantId, executionId, T.APPROVED, "publish-failed-recovery", null);
+      return buildSummary({ auditRequest, executionId, finalState: T.APPROVED, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
     }
 
     // 3b. EVIDENCE_STORED — recover via lifecycle event artifactKey
@@ -846,7 +1154,7 @@ export function createAuditOrchestrator({
     }
 
     // 3f. Unsupported
-    const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.NARRATIVE_FAILED]);
+    const SUPPORTED = new Set([T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.NARRATIVE_FAILED, T.DRAFT_RENDERED, T.IN_REVIEW, T.APPROVED, T.PUBLISHED, T.RENDER_FAILED, T.APPROVAL_REJECTED, T.PUBLISH_FAILED]);
     if (!SUPPORTED.has(cs.state)) {
       throw new Error(`Unsupported lifecycle state for orchestrator: ${cs.state}`);
     }

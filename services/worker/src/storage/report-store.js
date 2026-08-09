@@ -7,6 +7,52 @@ import {
   committedReviewAgreesWithLifecycle,
 } from "./transaction-helpers.js";
 
+// ---------------------------------------------------------------------------
+// WP10 Governed required page set — must match renderer APPROVED_PAGES + index
+// ---------------------------------------------------------------------------
+export const REQUIRED_APPROVED_PAGE_FILENAMES = Object.freeze([
+  "index.html",
+  "scorecard.html",
+  "priority-fixes.html",
+  "conversion-paths.html",
+  "readiness-map.html",
+  "content-ideas.html",
+  "competitor-benchmark.html",
+  "trust-eeat.html",
+  "cms-constraints.html",
+  "technical-seo.html",
+  "headings.html",
+  "schema.html",
+  "performance.html",
+  "internal-links.html",
+  "evidence-appendix.html",
+  "deferred.html",
+]);
+const REQUIRED_PAGE_COUNT = REQUIRED_APPROVED_PAGE_FILENAMES.length; // 16
+const REQUIRED_PAGE_SET = new Set(REQUIRED_APPROVED_PAGE_FILENAMES);
+
+function validateApprovedPageSet(pages) {
+  if (!pages || !(pages instanceof Map)) {
+    return `Approval requires a Map of ${REQUIRED_PAGE_COUNT} pages`;
+  }
+  if (pages.size !== REQUIRED_PAGE_COUNT) {
+    return `Approval requires exactly ${REQUIRED_PAGE_COUNT} pages, got ${pages.size}`;
+  }
+  const actual = new Set(pages.keys());
+  for (const required of REQUIRED_APPROVED_PAGE_FILENAMES) {
+    if (!actual.has(required)) {
+      return `Approval rejected — missing required page: ${required}`;
+    }
+  }
+  // Check for extra/unknown pages
+  for (const fn of actual) {
+    if (!REQUIRED_PAGE_SET.has(fn)) {
+      return `Approval rejected — unknown page filename: ${fn}`;
+    }
+  }
+  return null;
+}
+
 function safeSegment(value) {
   const segment = slugify(value);
   if (!segment || segment.includes("..") || segment.includes("/") || segment.includes("\\")) throw new Error(`Invalid artifact path segment: ${value}`);
@@ -441,12 +487,28 @@ export function createLocalReportStore(options = {}) {
         );
       }
 
-      // Validate pages is non-empty
-      if (!pages || !(pages instanceof Map) || pages.size === 0) {
+      // Validate pages is a Map before iterating
+      if (!pages || !(pages instanceof Map)) {
         throw Object.assign(
-          new Error("Approval requires at least one approved page"),
+          new Error(`Approval requires a Map of ${REQUIRED_PAGE_COUNT} pages`),
           { statusCode: 422 },
         );
+      }
+
+      // Path-traversal guard on every filename (security-first)
+      for (const filename of pages.keys()) {
+        if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+          throw Object.assign(
+            new Error(`Invalid page filename: ${filename}`),
+            { statusCode: 422 },
+          );
+        }
+      }
+
+      // Validate exact governed required page set (WP10-APPROVAL-01)
+      const pageError = validateApprovedPageSet(pages);
+      if (pageError) {
+        throw Object.assign(new Error(pageError), { statusCode: 422 });
       }
 
       const dir = reportDir(slug, runId);
@@ -455,10 +517,6 @@ export function createLocalReportStore(options = {}) {
       // Write all pages. On first failure, clean up and throw.
       try {
         for (const [filename, content] of pages) {
-          // Path traversal guard
-          if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
-            throw new Error(`Invalid page filename: ${filename}`);
-          }
           await writeFile(join(dir, filename), content, "utf8");
           pageFilenames.push(filename);
         }
@@ -488,6 +546,92 @@ export function createLocalReportStore(options = {}) {
         artifacts: {
           ...(lc.artifacts || { draft: [] }),
           final: pageFilenames,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
+      await writeLifecycle(slug, runId, updated);
+      return updated;
+    },
+
+    /**
+     * Publish an approved report (WP10-PUBLISH-01).
+     *
+     * Validates every approved artifact exists on disk and is readable,
+     * then transitions APPROVED → PUBLISHED.  On any failure, transitions
+     * to PUBLISH_FAILED and leaves no partial publication.
+     */
+    async publishReport(slug, runId) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+
+      if (lc.status === "published") {
+        return lc; // idempotent
+      }
+
+      if (lc.status !== "approved") {
+        // Transition to PUBLISH_FAILED for wrong starting state
+        const updated = {
+          ...lc,
+          status: "publish_failed",
+          publishError: `Cannot publish from "${lc.status}" — must be "approved"`,
+          updatedAt: new Date().toISOString(),
+        };
+        await writeLifecycle(slug, runId, updated);
+        throw Object.assign(
+          new Error(`Cannot publish audit in "${lc.status}" status`),
+          { statusCode: 409 },
+        );
+      }
+
+      const finalArtifacts = lc.artifacts?.final || [];
+      if (!finalArtifacts.length) {
+        const updated = {
+          ...lc,
+          status: "publish_failed",
+          publishError: "No approved artifacts to publish",
+          updatedAt: new Date().toISOString(),
+        };
+        await writeLifecycle(slug, runId, updated);
+        throw Object.assign(
+          new Error("Publication failed — no approved artifacts"),
+          { statusCode: 422 },
+        );
+      }
+
+      // Validate every approved artifact is readable with correct byte count
+      const dir = reportDir(slug, runId);
+      const verified = [];
+      for (const filename of finalArtifacts) {
+        try {
+          const data = await readFile(join(dir, filename), "utf8");
+          if (!data || data.length === 0) {
+            throw new Error(`Artifact ${filename} is empty`);
+          }
+          verified.push({ filename, bytes: data.length, sha: sha256(data) });
+        } catch (readErr) {
+          const updated = {
+            ...lc,
+            status: "publish_failed",
+            publishError: `Artifact ${filename} unreadable: ${readErr.message}`,
+            updatedAt: new Date().toISOString(),
+          };
+          await writeLifecycle(slug, runId, updated);
+          throw Object.assign(
+            new Error(`Publication failed — artifact "${filename}" unreadable: ${readErr.message}`),
+            { statusCode: 500 },
+          );
+        }
+      }
+
+      // All artifacts verified — transition APPROVED → PUBLISHED
+      const updated = {
+        ...lc,
+        status: "published",
+        publishedAt: new Date().toISOString(),
+        publication: {
+          verifiedArtifacts: verified,
+          artifactCount: verified.length,
         },
         updatedAt: new Date().toISOString(),
       };
@@ -840,8 +984,28 @@ export function createS3ReportStore(options = {}) {
         throw Object.assign(new Error("Approval rejected — review checklist is incomplete"), { statusCode: 422 });
       }
 
-      if (!pages || !(pages instanceof Map) || pages.size === 0) {
-        throw Object.assign(new Error("Approval requires at least one approved page"), { statusCode: 422 });
+      // Validate pages is a Map before iterating
+      if (!pages || !(pages instanceof Map)) {
+        throw Object.assign(
+          new Error(`Approval requires a Map of ${REQUIRED_PAGE_COUNT} pages`),
+          { statusCode: 422 },
+        );
+      }
+
+      // Path-traversal guard on every filename (security-first)
+      for (const filename of pages.keys()) {
+        if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+          throw Object.assign(
+            new Error(`Invalid page filename: ${filename}`),
+            { statusCode: 422 },
+          );
+        }
+      }
+
+      // Validate exact governed required page set (WP10-APPROVAL-01)
+      const pageError = validateApprovedPageSet(pages);
+      if (pageError) {
+        throw Object.assign(new Error(pageError), { statusCode: 422 });
       }
 
       const baseKey = `${prefix}/${safeSegment(slug)}/${safeSegment(runId)}`;
@@ -851,9 +1015,6 @@ export function createS3ReportStore(options = {}) {
       // Write all pages. On failure, clean up written objects and throw.
       try {
         for (const [filename, content] of pages) {
-          if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
-            throw new Error(`Invalid page filename: ${filename}`);
-          }
           const key = `${baseKey}/${filename}`;
           await client.send(new PutObjectCommand({
             Bucket: bucket,
@@ -883,6 +1044,109 @@ export function createS3ReportStore(options = {}) {
         artifacts: { ...(lc.artifacts || { draft: [] }), final: pageFilenames },
         updatedAt: new Date().toISOString(),
       };
+      await writeLifecycle(slug, runId, updated, lc.status);
+      return updated;
+    },
+
+    /**
+     * Publish an approved report (WP10-PUBLISH-01) — S3 variant.
+     *
+     * Validates every approved artifact exists in S3 and is readable,
+     * then transitions APPROVED → PUBLISHED.  On any failure, transitions
+     * to PUBLISH_FAILED and leaves no partial publication.
+     */
+    async publishReport(slug, runId) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+
+      if (lc.status === "published") {
+        return lc; // idempotent
+      }
+
+      if (lc.status !== "approved") {
+        const updated = {
+          ...lc,
+          status: "publish_failed",
+          publishError: `Cannot publish from "${lc.status}" — must be "approved"`,
+          updatedAt: new Date().toISOString(),
+        };
+        await writeLifecycle(slug, runId, updated, lc.status);
+        throw Object.assign(
+          new Error(`Cannot publish audit in "${lc.status}" status`),
+          { statusCode: 409 },
+        );
+      }
+
+      const finalArtifacts = lc.artifacts?.final || [];
+      if (!finalArtifacts.length) {
+        const updated = {
+          ...lc,
+          status: "publish_failed",
+          publishError: "No approved artifacts to publish",
+          updatedAt: new Date().toISOString(),
+        };
+        await writeLifecycle(slug, runId, updated, lc.status);
+        throw Object.assign(
+          new Error("Publication failed — no approved artifacts"),
+          { statusCode: 422 },
+        );
+      }
+
+      // Validate every approved artifact is readable from S3
+      const { GetObjectCommand } = await aws();
+      const baseKey = `${prefix}/${safeSegment(slug)}/${safeSegment(runId)}`;
+      const verified = [];
+      for (const filename of finalArtifacts) {
+        try {
+          const response = await client.send(new GetObjectCommand({
+            Bucket: bucket,
+            Key: `${baseKey}/${filename}`,
+          }));
+          const body = await response.Body.transformToString("utf-8");
+          if (!body || body.length === 0) {
+            throw new Error(`Artifact ${filename} is empty`);
+          }
+          verified.push({ filename, bytes: body.length, sha: sha256(body) });
+        } catch (readErr) {
+          if (readErr.name === "NoSuchKey") {
+            const updated = {
+              ...lc,
+              status: "publish_failed",
+              publishError: `Artifact ${filename} not found in S3`,
+              updatedAt: new Date().toISOString(),
+            };
+            await writeLifecycle(slug, runId, updated, lc.status);
+            throw Object.assign(
+              new Error(`Publication failed — artifact "${filename}" not found`),
+              { statusCode: 500 },
+            );
+          }
+          const updated = {
+            ...lc,
+            status: "publish_failed",
+            publishError: `Artifact ${filename} unreadable: ${readErr.message}`,
+            updatedAt: new Date().toISOString(),
+          };
+          await writeLifecycle(slug, runId, updated, lc.status);
+          throw Object.assign(
+            new Error(`Publication failed — artifact "${filename}" unreadable: ${readErr.message}`),
+            { statusCode: 500 },
+          );
+        }
+      }
+
+      // All artifacts verified — transition APPROVED → PUBLISHED
+      const updated = {
+        ...lc,
+        status: "published",
+        publishedAt: new Date().toISOString(),
+        publication: {
+          verifiedArtifacts: verified,
+          artifactCount: verified.length,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
       await writeLifecycle(slug, runId, updated, lc.status);
       return updated;
     },

@@ -37,7 +37,12 @@
     "acceptance:wp9": "node scripts/acceptance-wp9.js",
     "wp9:preflight": "node scripts/wp9-preflight.js",
     "wp9:scope-check": "node scripts/wp9-scope-check.js",
-    "wp9:verify": "node scripts/wp9-verify.js"
+    "wp9:verify": "node scripts/wp9-verify.js",
+    "test:wp10": "node --test test-fixtures/wp10/build-view-model.test.js",
+    "acceptance:wp10": "node scripts/acceptance-wp10.js",
+    "wp10:preflight": "node scripts/wp10-preflight.js",
+    "wp10:scope-check": "node scripts/wp10-scope-check.js",
+    "wp10:verify": "node scripts/wp10-verify.js"
   },
   "engines": {
     "node": ">=20.0.0"

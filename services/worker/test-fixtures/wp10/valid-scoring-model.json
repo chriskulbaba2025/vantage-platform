@@ -1,0 +1,113 @@
+{
+  "scoringVersion": "3.0.0",
+  "generatedAt": "2026-08-09T12:00:00.000Z",
+  "scores": {
+    "trust": 65,
+    "contentDepth": 58,
+    "conversionPathways": 72,
+    "technical": 55,
+    "performance": 48,
+    "conversionReadiness": 59,
+    "awareness": 60,
+    "consideration": 55,
+    "decision": 50,
+    "aiReadiness": 40
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "Moderate"
+  },
+  "assessedWeight": 75,
+  "readinessStatus": "Provisional",
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 70,
+  "rootCause": "Missing trust credentials on key conversion pages.",
+  "findings": [
+    {
+      "contractVersion": "1.0.0",
+      "findingId": "VAN-TRUST-001-abc1",
+      "ruleId": "VAN-TRUST-001",
+      "ruleVersion": "3.0.0",
+      "dimension": "trust_eeat",
+      "module": "trust_signals",
+      "title": "Missing trust credentials on key conversion pages",
+      "affectedUrls": ["https://testbusiness.com"],
+      "evidence": [
+        { "field": "trust.credentials", "observedValue": false, "source": "dataforseo-onpage" }
+      ],
+      "confidence": 85,
+      "businessImpact": "Visitors cannot verify provider qualifications.",
+      "recommendation": "Add professional credentials to the homepage.",
+      "implementationEffort": "M",
+      "verificationMethod": "Confirm credentials section is visible on homepage.",
+      "scoreBearing": true,
+      "severity": "High",
+      "finalPriority": 92.5
+    }
+  ],
+  "conversionPaths": [
+    {
+      "name": "Primary Path: Contact Form",
+      "cta": { "text": "Get a Quote", "url": "https://testbusiness.com/contact" },
+      "host": "on-site",
+      "steps": ["Land on the homepage", "Locate Get a Quote", "Fill contact form", "Submit"],
+      "blockers": ["no trust proof"],
+      "status": "Weak"
+    }
+  ],
+  "readinessMap": [
+    {
+      "topic": "Web Design",
+      "stage": "TOFU",
+      "blocker": "Doubt",
+      "trustAsset": "Credential",
+      "eeat": "Expertise proof",
+      "cta": "Form",
+      "path": "Weak",
+      "priority": "H"
+    }
+  ],
+  "contentIdeas": {
+    "tofu": [
+      { "idea": "What Is Web Design?", "frame": "Answer-first", "type": "Guide", "question": "What is this?", "priority": "H" }
+    ],
+    "mofu": [
+      { "idea": "Web Design: Options and Fit", "frame": "Comparison/fit", "type": "Comparison page", "question": "Which option is right?", "priority": "H" }
+    ],
+    "bofu": [
+      { "idea": "Pricing and What to Expect", "frame": "Risk-reversal", "type": "Pricing page", "question": "What does it cost?", "priority": "H" }
+    ],
+    "leading": [
+      { "query": "web design for decision making", "rationale": "Connects the offer to an urgent practical use", "priority": "H" }
+    ]
+  },
+  "competitors": {
+    "comparisons": [
+      {
+        "name": "Competitor One",
+        "url": "https://competitor1.com",
+        "topic": "Web Design",
+        "offerClarity": "Strong",
+        "trustProof": "Moderate",
+        "ctaClarity": "Strong",
+        "contentDepth": "Moderate",
+        "eeat": "Moderate",
+        "pathClarity": "Moderate",
+        "status": "AVAILABLE"
+      }
+    ],
+    "opportunities": {
+      "topics": ["web design"],
+      "qualifiedCandidates": [],
+      "excludedCandidates": [],
+      "gaps": [],
+      "allGaps": [],
+      "sources": {},
+      "limitations": []
+    }
+  },
+  "dimensionEligibility": {},
+  "moduleEligibility": {},
+  "suppressedModules": []
+}

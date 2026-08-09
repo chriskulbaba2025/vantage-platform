@@ -1,0 +1,101 @@
+{
+  "contractVersion": "1.0.0",
+  "packageVersion": "1.0.0",
+  "auditId": "00000000-0000-0000-0000-000000000010",
+  "business": {
+    "name": "Test Business Inc.",
+    "domain": "testbusiness.com",
+    "platform": "WordPress"
+  },
+  "scores": {
+    "trust": 65,
+    "contentDepth": 58,
+    "conversionPathways": 72,
+    "technical": 55,
+    "performance": 48,
+    "conversionReadiness": 59,
+    "awareness": 60,
+    "consideration": 55,
+    "decision": 50,
+    "aiReadiness": 40,
+    "conversionPathwaysDimension": 72,
+    "trustEeatDimension": 65,
+    "contentFunnelDimension": 58,
+    "technicalPerformanceDimension": 52,
+    "entitySchemaAiDimension": 40
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "Moderate"
+  },
+  "readinessStatus": "Provisional",
+  "assessedWeight": 75,
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 70,
+  "rootCause": "Missing trust credentials on key conversion pages.",
+  "renderingDiagnostics": [],
+  "sourceStatus": {
+    "website": "AVAILABLE",
+    "performance": "AVAILABLE",
+    "competitors": "AVAILABLE",
+    "backlinks": "AVAILABLE",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  },
+  "competitors": [
+    { "url": "https://competitor1.com", "domain": "competitor1.com", "pageCount": 25, "status": "AVAILABLE" }
+  ],
+  "performanceCoverage": { "requested": 2, "completed": 2, "failed": 0, "pagesTested": 2 },
+  "limitations": ["GSC property not connected"],
+  "findings": [
+    {
+      "findingId": "VAN-TRUST-001-abc1",
+      "ruleId": "VAN-TRUST-001",
+      "title": "Missing trust credentials on key conversion pages",
+      "severity": "High",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Visitors cannot verify provider qualifications.",
+      "recommendation": "Add professional credentials to the homepage.",
+      "verificationMethod": "Confirm credentials section is visible on homepage.",
+      "affectedUrls": ["https://testbusiness.com"],
+      "evidence": [
+        { "field": "trust.credentials", "observedValue": false }
+      ],
+      "implementationEffort": "M"
+    }
+  ],
+  "siteMetrics": {
+    "pageCount": 42,
+    "services": ["Web Design", "SEO"],
+    "topicKeywords": ["website optimization", "conversion rate"],
+    "platform": "WordPress",
+    "hasHttps": true,
+    "schemaCount": 5,
+    "ctaCount": 3,
+    "formCount": 2
+  },
+  "trustFlags": {
+    "testimonials": true,
+    "credentials": false,
+    "caseStudies": true,
+    "faq": false,
+    "pricing": false,
+    "policies": true,
+    "contact": true
+  },
+  "technical": {
+    "missingTitles": 2,
+    "missingDescriptions": 8,
+    "h1Missing": 1,
+    "h1Multiple": 0,
+    "imagesMissingAlt": 15,
+    "internalLinkCount": 128
+  },
+  "gateRecommendation": "Targeted trust and technical remediation is recommended.",
+  "gateNextAction": "Book an implementation scoping session.",
+  "gateServiceCategories": ["content strategy", "technical remediation"],
+  "promptVersion": "1.0.0",
+  "outputSchemaVersion": "1.0.0"
+}
