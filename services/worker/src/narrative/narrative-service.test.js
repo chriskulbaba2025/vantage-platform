@@ -372,15 +372,20 @@ test("REG-16: n8n workflow — structural integrity", () => {
   // Primary/Repair should not feed back to earlier nodes
   const primaryCall = wf.nodes.find((n) => n.name === "Primary Narrative Call");
   const repairCall = wf.nodes.find((n) => n.name === "Single Repair Call");
-  // Repair response goes to Final Validation (forward), not back to Response Validation
+  // Repair response goes to Final Validation (forward)
   const repairConns = wf.connections["Single Repair Call"].main;
   assert.equal(repairConns[0][0].node, "Final Validation");
-  // Repair path MUST go through Validate Model Endpoint (no bypass)
+  // Repair path goes through Validate Repair Endpoint (dedicated repair validator)
   const repairInput = wf.connections["Repair?"].main[1];
-  assert.equal(repairInput[0].node, "Validate Model Endpoint", "Repair path must traverse endpoint validation");
+  assert.equal(repairInput[0].node, "Validate Repair Endpoint", "Repair path must traverse repair endpoint validation");
+  // Primary path goes through Validate Model Endpoint
+  const primaryInput = wf.connections["Validate Model Endpoint"].main[0][0].node;
+  assert.equal(primaryInput, "Primary Narrative Call", "Primary path: endpoint validation → Primary Call");
+  const repairInput2 = wf.connections["Validate Repair Endpoint"].main[0][0].node;
+  assert.equal(repairInput2, "Single Repair Call", "Repair path: repair endpoint validation → Repair Call");
   // Mock and Replay paths must NOT reach endpoint validation
   const mockDest = wf.connections["Mock Narrative"].main[0][0].node;
   const replayDest = wf.connections["Replay Narrative"].main[0][0].node;
-  assert.equal(mockDest, "Response Validation", "Mock never reaches endpoint validation");
-  assert.equal(replayDest, "Response Validation", "Replay never reaches endpoint validation");
+  assert.equal(mockDest, "Response Validation");
+  assert.equal(replayDest, "Response Validation");
 });

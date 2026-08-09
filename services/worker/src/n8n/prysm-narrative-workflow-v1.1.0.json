@@ -26,7 +26,7 @@
       "type": "n8n-nodes-base.code",
       "position": [450, 300],
       "parameters": {
-        "jsCode": "// Fail closed unless worker provides governed validation proof.\n// The worker must send: { workerValidated: true, packageHash: '<sha256>', package: {...} }\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('ReportContentPackage not validated by worker — rejecting');\n}\nif (!input.packageHash || typeof input.packageHash !== 'string' || input.packageHash.length !== 64) {\n  throw new Error('Missing or invalid packageHash from worker');\n}\n// Package hash integrity verified by worker before webhook call.\n// Validation result is worker-signed; n8n does not re-validate schema.\nreturn [{ json: { workerValidated: true, packageHash: input.packageHash, package: input.package } }];"
+        "jsCode": "// Fail closed unless worker provides governed validation proof.\n// Preserves ALL downstream fields: package, cache/mode, cost, narrative data.\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('ReportContentPackage not validated by worker — rejecting');\n}\nif (!input.packageHash || typeof input.packageHash !== 'string' || input.packageHash.length !== 64) {\n  throw new Error('Missing or invalid packageHash from worker');\n}\n// Preserve the complete worker envelope for downstream nodes.\n// Worker is authoritative; n8n does not re-validate schema or modify fields.\nreturn [{ json: input }];"
       }
     },
     {
@@ -115,7 +115,7 @@
       "type": "n8n-nodes-base.code",
       "position": [1450, 300],
       "parameters": {
-        "jsCode": "// Fail closed: require worker-provided validation proof with hash binding.\n// The worker must send: { workerValidated: true, narrativeHash: '<sha256>', narrative: {...}, validation: { valid: true } }\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('NarrativeResponse not validated by worker — rejecting');\n}\nif (!input.narrativeHash || input.narrativeHash.length !== 64) {\n  throw new Error('Missing narrativeHash from worker validation');\n}\nif (!input.validation || !input.validation.valid) {\n  return [{ json: { ...input, needsRepair: true } }];\n}\nreturn [{ json: { ...input, needsRepair: false } }];"
+        "jsCode": "// Fail closed: require worker-provided validation with hash binding.\n// Worker sends: { workerValidated, narrativeHash, narrative, validation:{valid,errors} }\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('Narrative not worker-validated — rejecting');\n}\nif (!input.narrativeHash || input.narrativeHash.length !== 64) {\n  throw new Error('Missing narrativeHash from worker');\n}\n// The worker is authoritative for validation. n8n enforces the hash binding.\n// Preserve the full envelope for downstream nodes.\nif (!input.validation || !input.validation.valid) {\n  return [{ json: { ...input, needsRepair: true } }];\n}\nreturn [{ json: { ...input, needsRepair: false } }];"
       }
     },
     {
@@ -134,10 +134,19 @@
       }
     },
     {
+      "id": "validate-repair-endpoint",
+      "name": "Validate Repair Endpoint",
+      "type": "n8n-nodes-base.code",
+      "position": [1850, 500],
+      "parameters": {
+        "jsCode": "// Same SSRF policy as primary endpoint validation.\nconst ALLOWED_HOSTS = new Set([\n  'api.openai.com',\n  'api.anthropic.com'\n]);\nconst BLOCKED_PATTERNS = [\n  /^localhost$/i, /^127\\./, /^0\\./, /^10\\./, /^172\\.1[6-9]\\./, /^172\\.2[0-9]\\./, /^172\\.3[0-1]\\./, /^192\\.168\\./, /^169\\.254\\./, /^::1$/, /^fc00:/, /^fe80:/\n];\nconst endpoint = $json._repairEndpoint || $json.modelEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('repairEndpoint is required');\n}\nlet url;\ntry { url = new URL(endpoint); } catch (e) {\n  throw new Error('repairEndpoint is not a valid URL');\n}\nif (url.protocol !== 'https:') throw new Error('repairEndpoint must use HTTPS');\nif (!ALLOWED_HOSTS.has(url.hostname)) throw new Error('repairEndpoint host not in allowlist');\nfor (const pat of BLOCKED_PATTERNS) if (pat.test(url.hostname)) throw new Error('repairEndpoint blocked address');\n$json._validatedRepairEndpoint = endpoint;\nreturn [{ json: $json }];"
+      }
+    },
+    {
       "id": "repair-call",
       "name": "Single Repair Call",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [1850, 500],
+      "position": [2050, 600],
       "parameters": {
         "method": "POST",
         "url": "={{ $json.modelEndpoint }}",
@@ -150,7 +159,7 @@
       "type": "n8n-nodes-base.code",
       "position": [2050, 300],
       "parameters": {
-        "jsCode": "// After repair or primary success — final validation\nconst result = $input.first().json;\nif (!result.validation?.valid) {\n  throw new Error('Narrative validation failed after repair');\n}\nreturn [{ json: result }];"
+        "jsCode": "// Final gate after primary success or repair — worker-validated response.\n// Worker sends validated narrative with hash binding. n8n enforces the gate.\nconst result = $input.first().json;\nif (!result.workerValidated) {\n  throw new Error('Final validation: workerValidated missing');\n}\nif (!result.narrativeHash || result.narrativeHash.length !== 64) {\n  throw new Error('Final validation: narrativeHash missing or invalid');\n}\nif (!result.validation || !result.validation.valid) {\n  throw new Error('Final validation failed: ' + (result.validation?.errors || []).join('; '));\n}\nreturn [{ json: result }];"
       }
     },
     {
@@ -197,9 +206,10 @@
     "Repair?": {
       "main": [
         [{ "node": "Final Validation", "type": "main", "index": 0 }],
-        [{ "node": "Validate Model Endpoint", "type": "main", "index": 0 }]
+        [{ "node": "Validate Repair Endpoint", "type": "main", "index": 0 }]
       ]
     },
+    "Validate Repair Endpoint": { "main": [[ { "node": "Single Repair Call", "type": "main", "index": 0 } ]] },
     "Single Repair Call": { "main": [[ { "node": "Final Validation", "type": "main", "index": 0 } ]] },
     "Final Validation": { "main": [[ { "node": "Persistence / Usage Record", "type": "main", "index": 0 } ]] },
     "Persistence / Usage Record": { "main": [[ { "node": "Response", "type": "main", "index": 0 } ]] }

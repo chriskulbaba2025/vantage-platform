@@ -784,15 +784,15 @@ export function createAuditOrchestrator({
 
     // 3a2. SCORED — proceed to governed narrative (WP9)
     if (cs.state === T.SCORED) {
-      try {
-        return await runGovernedNarrative({ auditRequest, executionId, startedAt });
-      } catch (narrativeErr) {
-        // Narrative not available (e.g., WP8 package missing in artifact store) —
-        // remain at SCORED, fail closed (WP9-FAIL-01).
-        // This path preserves backward compatibility with WP5-WP7 tests.
+      // Pre-check: WP8 package must exist before entering NARRATIVE_PENDING.
+      // If missing, remain at SCORED (backward compatible with WP5-WP7 tests).
+      const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
+      const pkgExists = await artifactStore.exists(pkgKey);
+      if (!pkgExists) {
         const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
         return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
       }
+      return runGovernedNarrative({ auditRequest, executionId, startedAt });
     }
 
     // 3a3. NARRATIVE_PENDING, NARRATIVE_READY, NARRATIVE_FAILED — idempotent replay
