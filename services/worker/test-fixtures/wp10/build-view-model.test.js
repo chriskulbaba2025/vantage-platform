@@ -12,7 +12,6 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { createHash } from "node:crypto";
-
 import {
   buildReportViewModel,
   verifyRendererLock,
@@ -237,41 +236,53 @@ test("WP10-REPLAY-01: replay produces zero provider/LLM/n8n calls", () => {
 // WP10-LOCK-01 — Renderer lock verification
 // =============================================================================
 
-test("WP10-LOCK-01: renderer lock computes SHA-256 of all locked files", async () => {
-  // Use fs-based readFile for actual renderer files
+test("WP10-LOCK-01: locked files match WP10 starting baseline SHA-256", async () => {
+  // Compare current file hashes against the WP10 starting commit baseline
+  const { execSync } = await import("node:child_process");
   const { readFile } = await import("node:fs/promises");
-  // __dirname = services/worker/test-fixtures/wp10/
-  // repo root = ../../../../
+
+  const STARTING_SHA = "d3cf84b91a40037466e9cd2d59dd5320717cca23";
   const repoRoot = resolve(__dirname, "..", "..", "..", "..");
 
-  async function readLockedFile(relativePath) {
-    const fullPath = resolve(repoRoot, relativePath);
-    return readFile(fullPath, "utf-8");
+  // Map from RENDERER_LOCK.files (repo-relative) to git paths
+  const gitPathMap = {
+    "services/worker/src/report/karen-leslie-template.html": "services/worker/src/report/karen-leslie-template.html",
+    "services/worker/src/report/render-report.js": "services/worker/src/report/render-report.js",
+    "services/worker/src/report/render-approved-report.js": "services/worker/src/report/render-approved-report.js",
+    "services/worker/src/report/html-helpers.js": "services/worker/src/report/html-helpers.js",
+    "services/worker/src/report/sections-conversion.js": "services/worker/src/report/sections-conversion.js",
+    "services/worker/src/report/sections-trust.js": "services/worker/src/report/sections-trust.js",
+    "services/worker/src/report/sections-seo.js": "services/worker/src/report/sections-seo.js",
+    "services/worker/src/report/sections-performance.js": "services/worker/src/report/sections-performance.js",
+    "services/worker/src/report/sections-internal-links.js": "services/worker/src/report/sections-internal-links.js",
+    "services/worker/src/report/verify-template.js": "services/worker/src/report/verify-template.js",
+  };
+
+  let matchCount = 0;
+  for (const [lockFile, gitPath] of Object.entries(gitPathMap)) {
+    // Current file content — normalize line endings to LF for cross-platform hash
+    const currentPath = resolve(repoRoot, lockFile);
+    const currentRaw = await readFile(currentPath, "utf-8");
+    const currentContent = currentRaw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const currentHash = sha256(currentContent);
+
+    // Baseline content from starting commit (git show returns LF regardless of platform)
+    const baselineContent = execSync(
+      `git show ${STARTING_SHA}:${gitPath}`,
+      { encoding: "utf-8", cwd: repoRoot, stdio: ["pipe", "pipe", "pipe"] },
+    );
+    const baselineHash = sha256(baselineContent);
+
+    const match = currentHash === baselineHash;
+    if (match) matchCount++;
+    assert.equal(
+      currentHash, baselineHash,
+      `Locked file ${lockFile}: current SHA-256 must equal baseline SHA-256 from ${STARTING_SHA}`,
+    );
   }
-
-  const { verified, hashes, errors } = await verifyRendererLock(readLockedFile);
-
-  // All locked files should exist and be readable
-  for (const file of RENDERER_LOCK.files) {
-    assert.ok(hashes.has(file), `Expected hash for ${file}`);
-    const hash = hashes.get(file);
-    assert.equal(hash.length, 64, `SHA-256 for ${file} must be 64 hex chars`);
-  }
-
-  // If any files are missing, report them
-  if (errors.length > 0) {
-    console.log("Lock verification errors:", errors);
-  }
-
-  // The composite lock hash should be computable
-  const compositeHash = computeCompositeLockHash(hashes);
-  assert.equal(compositeHash.length, 64, "Composite lock hash must be 64 hex chars");
-
-  console.log("Renderer lock composite hash:", compositeHash);
-  console.log("Individual file hashes:");
-  for (const [file, hash] of hashes) {
-    console.log(`  ${file}: ${hash}`);
-  }
+  assert.equal(matchCount, Object.keys(gitPathMap).length,
+    `All ${Object.keys(gitPathMap).length} locked files must match baseline`);
+  console.log(`WP10-LOCK-01: ${matchCount}/${Object.keys(gitPathMap).length} locked files match baseline ${STARTING_SHA}`);
 });
 
 test("WP10-LOCK-01: renderer lock hashes are stable across repeated computations", async () => {
@@ -286,11 +297,9 @@ test("WP10-LOCK-01: renderer lock hashes are stable across repeated computations
   const r1 = await verifyRendererLock(readLockedFile2);
   const r2 = await verifyRendererLock(readLockedFile2);
 
-  // Both runs should compute the same hashes
   for (const file of RENDERER_LOCK.files) {
     assert.equal(r1.hashes.get(file), r2.hashes.get(file), `Hash for ${file} must be stable`);
   }
-
   const composite1 = computeCompositeLockHash(r1.hashes);
   const composite2 = computeCompositeLockHash(r2.hashes);
   assert.equal(composite1, composite2, "Composite hash must be stable");

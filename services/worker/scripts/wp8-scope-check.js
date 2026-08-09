@@ -7,14 +7,6 @@ const PERMITTED = [
   "services/worker/scripts/acceptance-wp8.js", "services/worker/scripts/wp8-",
   "services/worker/package.json", ".github/workflows/worker-ci.yml",
   "services/worker/src/orchestration/audit-orchestrator.js",
-  // WP9+ stacked packages (chain tolerance)
-  "docs/prysm-governance/work-packages/WP9_CHECKLIST.md",
-  "services/worker/src/narrative/", "services/worker/test-fixtures/wp9/",
-  "services/worker/scripts/acceptance-wp9.js", "services/worker/scripts/wp9-",
-  "services/worker/src/n8n/prysm-narrative-workflow-v1.1.0.json",
-  "docs/prysm-governance/work-packages/WP10_CHECKLIST.md",
-  "services/worker/src/report-view-model/", "services/worker/test-fixtures/wp10/",
-  "services/worker/scripts/acceptance-wp10.js", "services/worker/scripts/wp10-",
 ];
 const PROHIBITED = [
   "services/worker/src/contracts/", "services/worker/src/report/",

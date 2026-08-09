@@ -44,11 +44,16 @@ function fail(l, d) { console.error("  [ ] FAIL — " + l); if (d) console.error
 
 console.log("WP10 Scope Check\n================");
 
-// Get ALL changed/untracked files relative to repo root
-const diffFiles = execSync("git diff --name-only HEAD", { encoding: "utf-8", cwd: REPO_ROOT }).trim();
+// Get changed files vs origin/main (all WP10 changes)
+// Also include unstaged changes (working tree differences) and untracked files
+const diffFiles = execSync("git diff --name-only origin/main..HEAD", { encoding: "utf-8", cwd: REPO_ROOT }).trim();
+const unstagedDiff = execSync("git diff --name-only", { encoding: "utf-8", cwd: REPO_ROOT }).trim();
 const untrackedFiles = execSync("git ls-files --others --exclude-standard", { encoding: "utf-8", cwd: REPO_ROOT }).trim();
-const allChanged = [...diffFiles.split("\n").filter(Boolean), ...untrackedFiles.split("\n").filter(Boolean)];
-// Deduplicate
+const allChanged = [
+  ...diffFiles.split("\n").filter(Boolean),
+  ...unstagedDiff.split("\n").filter(Boolean),
+  ...untrackedFiles.split("\n").filter(Boolean),
+];
 const uniqueFiles = [...new Set(allChanged)];
 
 console.log(`  Files changed/untracked: ${uniqueFiles.length}`);
