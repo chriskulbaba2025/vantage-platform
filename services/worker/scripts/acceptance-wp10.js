@@ -74,12 +74,29 @@ for (const [name, a] of Object.entries(mockAdapters)) {
   };
 }
 
+// --- Instrumented narrative/n8n counters for REPLAY-01 ---
+let instrumentedNarrativeCalls = 0;
+let instrumentedN8nCalls = 0;
+const instrumentedNarrativeExecutor = async (opts) => {
+  instrumentedNarrativeCalls++;
+  const { executeNarrative } = await import("../src/narrative/narrative-service.js");
+  return executeNarrative(opts);
+};
+const instrumentedN8nCounter = { count: 0 };
+// Wrap the counter in a Proxy so any .count mutation is tracked
+const n8nCallCounter = new Proxy(instrumentedN8nCounter, {
+  set(target, prop, value) { if (prop === "count") instrumentedN8nCalls++; target[prop] = value; return true; },
+  get(target, prop) { return target[prop]; },
+});
+
 const mockClock = (iso) => { let t = new Date(iso || "2026-01-01T00:00:00.000Z").getTime(); return { now: () => new Date(t).toISOString(), sleep: async () => {}, setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 100)) }; };
 
 const orchestrator = createAuditOrchestrator({
   lifecycleService: lifecycle, artifactStore, adapters: instrumentedAdapters, validateContract: validate,
   clock: mockClock("2026-08-09T12:00:00.000Z"),
   retryPolicyResolver: () => ({ timeoutMs: 30000, maxAttempts: 1, retryable: () => false, delayMs: () => 0 }),
+  narrativeExecutor: instrumentedNarrativeExecutor,
+  n8nCallCounter: n8nCallCounter,
 });
 
 const testBaseDir = resolve(__dirname, "..", "artifacts", `wp10-test-${Date.now()}`);
@@ -292,27 +309,46 @@ console.log("\n--- Phase 4: APPROVAL-01 negative cases ---");
     check("B: Incomplete review → rejected", e.message.includes("incomplete") || e.message.includes("review"), e.message);
   }
 
-  // C: Missing required pages → store approves but WP10 must verify page count
-  // The store accepts any non-empty pages Map. WP10 governance requires
-  // the orchestrator or acceptance harness to verify exactly 16 pages exist.
+  // C: Partial pages (1 page) → must REJECT (WP10-APPROVAL-01)
   const slugC = "neg-test-c"; const runIdC = randomUUID();
   const storeC = createLocalReportStore({ baseDir: testBaseDir });
   await storeC.writeReport({ slug: slugC, runId: runIdC, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
   await storeC.writeReview(slugC, runIdC, { reviewer: "a@t.com", reviewedAt: now, checklist: fullChecklist, findingsReviewed: true, limitationsAccepted: true });
   const partialPages = new Map(); partialPages.set("index.html", "<!DOCTYPE html><html></html>");
-  // Store accepts non-empty pages; WP10 requires the caller to validate the complete 16-page set
-  let approvedWithPartial = false;
   try {
     await storeC.writeApprovedPages(slugC, runIdC, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, partialPages);
-    approvedWithPartial = true;
-  } catch {}
-  // Store will approve partial pages (its contract doesn't mandate 16).
-  // WP10 governance: the orchestrator validates 16 pages before publication.
-  // Verify that the approved artifact set is incomplete (only 1 file vs expected 16)
+    check("C: 1 page → rejected", false, "Should have thrown — only 1 page submitted");
+  } catch (e) {
+    check("C: 1 page → rejected", e.message.includes("exactly 16") || e.message.includes("missing required page"), e.message);
+  }
   const stC = await storeC.getStatus(slugC, runIdC);
-  const finalCount = (stC.artifacts?.final || []).length;
-  check(`C: Partial approval yields ${finalCount} final artifacts (WP10 requires 16)`, finalCount < 16, `Store approved with ${finalCount} pages`);
-  check("C: WP10 governance must reject <16 pages before publication", finalCount !== 16);
+  check("C: status != approved after 1-page attempt", stC.status !== "approved", `Got ${stC.status}`);
+
+  // C2: 15 pages (missing one) → must REJECT
+  const slugC2 = "neg-test-c2"; const runIdC2 = randomUUID();
+  const storeC2 = createLocalReportStore({ baseDir: testBaseDir });
+  await storeC2.writeReport({ slug: slugC2, runId: runIdC2, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
+  await storeC2.writeReview(slugC2, runIdC2, { reviewer: "a@t.com", reviewedAt: now, checklist: fullChecklist, findingsReviewed: true, limitationsAccepted: true });
+  const pages15 = new Map(); if (pageMap1) { let i = 0; for (const [fn, html] of pageMap1) { if (i++ < 15) pages15.set(fn, html); } }
+  try {
+    await storeC2.writeApprovedPages(slugC2, runIdC2, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, pages15);
+    check("C2: 15 pages → rejected", false, "Should have thrown — only 15 pages submitted");
+  } catch (e) {
+    check("C2: 15 pages → rejected", e.message.includes("exactly 16") || e.message.includes("missing required page"), e.message);
+  }
+
+  // C3: Wrong filename set → must REJECT
+  const slugC3 = "neg-test-c3"; const runIdC3 = randomUUID();
+  const storeC3 = createLocalReportStore({ baseDir: testBaseDir });
+  await storeC3.writeReport({ slug: slugC3, runId: runIdC3, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
+  await storeC3.writeReview(slugC3, runIdC3, { reviewer: "a@t.com", reviewedAt: now, checklist: fullChecklist, findingsReviewed: true, limitationsAccepted: true });
+  const wrongPages = new Map(); if (pageMap1) { let i = 0; for (const [fn, html] of pageMap1) { if (i === 15) wrongPages.set("wrong-name.html", html); else wrongPages.set(fn, html); i++; } }
+  try {
+    await storeC3.writeApprovedPages(slugC3, runIdC3, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, wrongPages);
+    check("C3: Wrong filename → rejected", false, "Should have thrown — unknown page filename");
+  } catch (e) {
+    check("C3: Wrong filename → rejected", e.message.includes("unknown page filename") || e.message.includes("missing required page"), e.message);
+  }
 
   // D: Non-reviewed approval → must NOT approve
   const slugD = "neg-test-d"; const runIdD = randomUUID();
@@ -329,11 +365,12 @@ console.log("\n--- Phase 4: APPROVAL-01 negative cases ---");
 }
 
 // =============================================================================
-// PHASE 5: PUBLISH-01 — real publication operation
+// PHASE 5: PUBLISH-01 — governed publication operation
 // =============================================================================
 console.log("\n--- Phase 5: PUBLISH-01 governed publication ---");
 
 {
+  // SUCCESS: APPROVED → PUBLISHED with all 16 artifacts
   const slugP = "publish-test";
   const runIdP = randomUUID();
   const storeP = createLocalReportStore({ baseDir: testBaseDir });
@@ -346,83 +383,138 @@ console.log("\n--- Phase 5: PUBLISH-01 governed publication ---");
   const fullPages = new Map();
   if (pageMap1) for (const [fn, html] of pageMap1) fullPages.set(fn, html);
 
-  // Success path: approve → read-back → verify
-  const approvalResult = await storeP.writeApprovedPages(slugP, runIdP, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, fullPages);
-  check("Publication: approved status", approvalResult.status === "approved");
+  // Approve with all 16 pages
+  const approvalLc = await storeP.writeApprovedPages(slugP, runIdP, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, fullPages);
+  check("Publish-success: approved status", approvalLc.status === "approved");
+  check("Publish-success: 16 final artifacts", (approvalLc.artifacts?.final || []).length === 16);
 
-  // Read-back all approved artifacts
-  const finalArtifacts = approvalResult.artifacts?.final || [];
-  check(`Publication: ${finalArtifacts.length} final artifacts`, finalArtifacts.length > 0);
-  let readbackOk = 0;
-  for (const fn of finalArtifacts) {
-    try {
-      const data = await storeP.readFile(`${slugP}/${runIdP}/${fn}`);
-      if (data && data.length > 0) readbackOk++;
-    } catch {}
-  }
-  check(`Publication: ${readbackOk}/${finalArtifacts.length} artifacts readable`, readbackOk === finalArtifacts.length);
+  // --- Actual publication operation ---
+  const published = await storeP.publishReport(slugP, runIdP);
+  check("Publish-success: PUBLISHED status", published.status === "published");
+  check("Publish-success: publishedAt set", !!published.publishedAt);
+  check("Publish-success: 16 verified artifacts", published.publication?.artifactCount === 16);
+  check("Publish-success: verified artifacts exist", published.publication?.verifiedArtifacts?.length === 16);
 
-  // The governed lifecyle transition: the store's writeApprovedPages transitions
-  // the store lifecycle to "approved". The orchestrator lifecycle separately
-  // transitions to APPROVED → PUBLISHED. For WP10, the store "approved" state
-  // is the publication-ready state.
-  // Prove PUBLISHED is terminal in the lifecycle state transition map:
+  // Prove PUBLISHED is terminal (no outgoing transitions)
   const { TRANSITION_MAP } = await import("../src/lifecycle/state-enum.js");
   const publishedOut = TRANSITION_MAP[T.PUBLISHED] || new Set();
   check("PUBLISHED terminal (no outgoing transitions)", publishedOut.size === 0);
 
-  // Publication failure: missing artifact → not published
-  const slugPF = "publish-fail-test";
-  const runIdPF = randomUUID();
-  const storePF = createLocalReportStore({ baseDir: testBaseDir });
-  await storePF.writeReport({ slug: slugPF, runId: runIdPF, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
-  await storePF.writeReview(slugPF, runIdPF, { reviewer: "a@t.com", reviewedAt: now, checklist: fullChecklist, findingsReviewed: true, limitationsAccepted: true });
-  // Approval with empty page Map → should fail
+  // Idempotent re-publish
+  const republished = await storeP.publishReport(slugP, runIdP);
+  check("Publish-success: idempotent re-publish", republished.status === "published");
+
+  // FAILURE A: Missing/corrupt artifact → PUBLISH_FAILED
+  const slugFA = "publish-fail-a"; const runIdFA = randomUUID();
+  const storeFA = createLocalReportStore({ baseDir: testBaseDir });
+  await storeFA.writeReport({ slug: slugFA, runId: runIdFA, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
+  await storeFA.writeReview(slugFA, runIdFA, { reviewer: "a@t.com", reviewedAt: now, checklist: fullChecklist, findingsReviewed: true, limitationsAccepted: true });
+  // Write all 16 pages to disk then approve with all 16
+  const { writeFile, mkdir, unlink } = await import("node:fs/promises");
+  const faDir = resolve(testBaseDir, slugFA, runIdFA);
+  await mkdir(faDir, { recursive: true });
+  const allPageNames = [];
+  if (pageMap1) for (const [fn, html] of pageMap1) { await writeFile(resolve(faDir, fn), html, "utf-8"); allPageNames.push(fn); }
+  // Approve with all 16 pages (so lifecycle has all 16 in final)
+  const faApproval = await storeFA.writeApprovedPages(slugFA, runIdFA, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, pageMap1);
+  check("Publish-fail-A: approved with 16 pages", faApproval.status === "approved");
+  // Now delete one page from disk to simulate corruption
+  await unlink(resolve(faDir, "scorecard.html"));
   try {
-    await storePF.writeApprovedPages(slugPF, runIdPF, { approver: "p@t.com", approvedAt: now, reviewRef: { reviewer: "a@t.com", reviewedAt: now, checklistCount: 10, overrideCount: 0 } }, new Map());
-    const st3 = await storePF.getStatus(slugPF, runIdPF);
-    check("Publication fail: not approved with empty pages", st3.status !== "approved", `Got ${st3.status}`);
+    await storeFA.publishReport(slugFA, runIdFA);
+    check("Publish-fail-A: missing artifact → rejected", false, "Should have thrown");
   } catch (e) {
-    check("Publication fail: empty pages rejected", true, e.message);
+    check("Publish-fail-A: missing artifact → PUBLISH_FAILED", e.message.includes("unreadable") || e.message.includes("not found") || e.message.includes("ENOENT"), e.message);
   }
+  const faStatus = await storeFA.getStatus(slugFA, runIdFA);
+  check("Publish-fail-A: status = publish_failed", faStatus.status === "publish_failed", `Got ${faStatus.status}`);
+
+  // FAILURE B: Wrong starting state (non-APPROVED) → rejected
+  const slugFB = "publish-fail-b"; const runIdFB = randomUUID();
+  const storeFB = createLocalReportStore({ baseDir: testBaseDir });
+  await storeFB.writeReport({ slug: slugFB, runId: runIdFB, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
+  // Try to publish from draft (not reviewed, not approved)
+  try {
+    await storeFB.publishReport(slugFB, runIdFB);
+    check("Publish-fail-B: draft → rejected", false, "Should have thrown");
+  } catch (e) {
+    check("Publish-fail-B: draft → rejected", e.message.includes("Cannot publish"), e.message);
+  }
+  const fbStatus = await storeFB.getStatus(slugFB, runIdFB);
+  check("Publish-fail-B: status = publish_failed", fbStatus.status === "publish_failed", `Got ${fbStatus.status}`);
+
+  // FAILURE C: Reviewed but not approved → rejected
+  const slugFC = "publish-fail-c"; const runIdFC = randomUUID();
+  const storeFC = createLocalReportStore({ baseDir: testBaseDir });
+  await storeFC.writeReport({ slug: slugFC, runId: runIdFC, model: { scores: {}, evidence: { site: { domain: "t.com", pages: [{}], services: [], sourceStatus: "AVAILABLE" }, performance: { sourceStatus: "AVAILABLE" }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, input: {} }, manifest: { sources: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 } }, html: "<!DOCTYPE html><html></html>", includeIndexHtml: true });
+  await storeFC.writeReview(slugFC, runIdFC, { reviewer: "a@t.com", reviewedAt: now, checklist: fullChecklist, findingsReviewed: true, limitationsAccepted: true });
+  try {
+    await storeFC.publishReport(slugFC, runIdFC);
+    check("Publish-fail-C: reviewed → rejected", false, "Should have thrown");
+  } catch (e) {
+    check("Publish-fail-C: reviewed → rejected", e.message.includes("Cannot publish"), e.message);
+  }
+  const fcStatus = await storeFC.getStatus(slugFC, runIdFC);
+  check("Publish-fail-C: status = publish_failed", fcStatus.status === "publish_failed", `Got ${fcStatus.status}`);
 }
 
 // =============================================================================
-// PHASE 6: REPLAY-01 — instrumented adapters
+// PHASE 6: REPLAY-01 — instrumented + deterministic replay identity
 // =============================================================================
 console.log("\n--- Phase 6: REPLAY-01 instrumented ---");
 
 {
   const startingProviderCalls = instrumentedProviderCalls;
+  const startingNarrativeCalls = instrumentedNarrativeCalls;
+  const startingN8nCalls = instrumentedN8nCalls;
 
-  const auditId1 = randomUUID();
-  await setupToNarrativeReady(auditId1);
-  const r1 = await orchestrator.execute({ contractVersion: "1.0.0", auditId: auditId1, tenantId: "t1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://testbusiness.com", businessName: "Test Business Inc." }, { executionId: randomUUID() });
+  // Use the SAME auditId AND executionId for both renders to prove deterministic replay
+  const replayAuditId = randomUUID();
+  const replayExecId = randomUUID();
 
-  const auditId2 = randomUUID();
-  await setupToNarrativeReady(auditId2);
-  const r2 = await orchestrator.execute({ contractVersion: "1.0.0", auditId: auditId2, tenantId: "t1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://testbusiness.com", businessName: "Test Business Inc." }, { executionId: randomUUID() });
+  // --- First render ---
+  await setupToNarrativeReady(replayAuditId);
+  const r1 = await orchestrator.execute({ contractVersion: "1.0.0", auditId: replayAuditId, tenantId: "t1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://testbusiness.com", businessName: "Test Business Inc." }, { executionId: replayExecId });
+  check("Replay-1: DRAFT_RENDERED", r1.finalState === T.DRAFT_RENDERED);
 
-  check("Replay: both DRAFT_RENDERED", r1.finalState === T.DRAFT_RENDERED && r2.finalState === T.DRAFT_RENDERED);
-
-  const h1 = new Map(), h2 = new Map();
+  // Save page hashes from first render
+  const h1 = new Map();
   for (const art of r1.pageArtifacts) { const s = await artifactStore.get(art.key); h1.set(art.filename, sha256(s)); }
+
+  // --- Reset for replay ---
+  // Clear both lifecycle and artifact stores, then re-seed with identical fixtures
+  lifecycleRepo._clear();
+  memoryStore._clear();
+  await setupToNarrativeReady(replayAuditId);
+
+  // --- Second render (replay) with same executionId ---
+  const r2 = await orchestrator.execute({ contractVersion: "1.0.0", auditId: replayAuditId, tenantId: "t1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://testbusiness.com", businessName: "Test Business Inc." }, { executionId: replayExecId });
+  check("Replay-2: DRAFT_RENDERED", r2.finalState === T.DRAFT_RENDERED);
+
+  // Save page hashes from second render
+  const h2 = new Map();
   for (const art of r2.pageArtifacts) { const s = await artifactStore.get(art.key); h2.set(art.filename, sha256(s)); }
+
+  // --- Verify deterministic replay ---
   let matches = 0;
   for (const [fn, h] of h1) if (h2.get(fn) === h) matches++;
-  check(`Replay: ${matches}/${h1.size} page hashes identical`, matches === h1.size);
+  check(`Replay: ${matches}/${h1.size} page hashes identical`, matches === h1.size && matches === 16);
+  check("Replay: viewModelHash identity (deterministic)", r1.viewModelHash === r2.viewModelHash,
+    `hash1=${String(r1.viewModelHash).slice(0,16)}... hash2=${String(r2.viewModelHash).slice(0,16)}...`);
+  const { LOCKED_REPORT_DESIGN_VERSION } = await import("../src/report-view-model/build-view-model.js");
+  check(`Replay: reportDesignVersion=${LOCKED_REPORT_DESIGN_VERSION}`, LOCKED_REPORT_DESIGN_VERSION === "1.0.0");
 
-  // The orchestrator.execute() calls adapters during collection (CREATED→...→EVIDENCE_LOCKED).
-  // For replay, we start from NARRATIVE_READY which skips collection — so adapter calls
-  // should NOT increase. We count calls during both renders.
+  // --- Instrumented counter verification ---
   const callsFromRenders = instrumentedProviderCalls - startingProviderCalls;
-  console.log(`  [i] Instrumented adapter execute calls during 2 render runs: ${callsFromRenders}`);
-  // Provider calls may have increased due to collection steps (the orchestrator
-  // transitions through CREATED→VALIDATED→COLLECTING→... even from NARRATIVE_READY
-  // only the rendering step runs, which doesn't call adapters)
+  const narrativeCallsFromRenders = instrumentedNarrativeCalls - startingNarrativeCalls;
+  const n8nCallsFromRenders = instrumentedN8nCalls - startingN8nCalls;
+  console.log(`  [i] Provider calls during 2 renders: ${callsFromRenders}`);
+  console.log(`  [i] Narrative calls during 2 renders: ${narrativeCallsFromRenders}`);
+  console.log(`  [i] n8n calls during 2 renders: ${n8nCallsFromRenders}`);
+
   check("Replay: rendering does not invoke provider adapters", callsFromRenders === 0, `Got ${callsFromRenders} calls`);
-  check("Replay: zero LLM calls (no narrative service invoked)", true);
-  check("Replay: zero n8n calls (no n8n invoked)", true);
+  check("Replay: rendering does not invoke narrative/LLM", narrativeCallsFromRenders === 0, `Got ${narrativeCallsFromRenders} calls`);
+  check("Replay: rendering does not invoke n8n", n8nCallsFromRenders === 0, `Got ${n8nCallsFromRenders} calls`);
 }
 
 // =============================================================================

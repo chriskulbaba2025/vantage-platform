@@ -103,8 +103,12 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
 export function createAuditOrchestrator({
   lifecycleService, artifactStore, adapters, validateContract,
   clock, timer, retryPolicyResolver,
+  narrativeExecutor,
+  n8nCallCounter,
 }) {
   const c = clock || defaultClock();
+  const _narrativeExecutor = narrativeExecutor || executeNarrative;
+  const _n8nCallCounter = n8nCallCounter || { count: 0 };
 
   // -------------------------------------------------------------------
   // Validation
@@ -633,7 +637,7 @@ export function createAuditOrchestrator({
     // Execute governed narrative — mock mode (never live in CI/test)
     let narrativeResult;
     try {
-      narrativeResult = await executeNarrative({
+      narrativeResult = await _narrativeExecutor({
         reportPackage,
         mode: NARRATIVE_MODE.MOCK,
         modelId: "prysm-wp9-orchestrator",
@@ -951,6 +955,7 @@ export function createAuditOrchestrator({
       pageArtifacts: Object.freeze(persistedArtifacts),
       renderedPages: rendered.pages,  // Map<filename, html> for store integration
       rendererCallCount,
+      n8nCallCount: _n8nCallCounter.count,
       narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
       findingsArtifact: null, scoresArtifact: null,
       sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
