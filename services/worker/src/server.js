@@ -347,6 +347,7 @@ export function createRequestHandler({
 
         // GET /api/v1/audits/:auditId/report/:filename
         if (req.method === "GET" && subPath.startsWith("/report/")) {
+          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
           const filename = wp11AuditMatch[3];
           if (!filename || filename.includes("..") || filename.includes("//") || filename.includes("\\")) {
             return send(res, 400, { error: "Invalid report path" });

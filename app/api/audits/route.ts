@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     if (e instanceof WorkerApiError) {
       return NextResponse.json({ error: e.message, errors: e.errors }, { status: e.statusCode });
     }
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Internal error" }, { status: 500 });
+    console.error("Audit API error:", e);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
