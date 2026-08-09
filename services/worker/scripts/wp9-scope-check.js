@@ -12,6 +12,9 @@ const PERMITTED = [
   "docs/prysm-governance/work-packages/WP10_CHECKLIST.md",
   "services/worker/src/report-view-model/", "services/worker/test-fixtures/wp10/",
   "services/worker/scripts/acceptance-wp10.js", "services/worker/scripts/wp10-",
+  // Scope-check chain fixes (tolerate cross-package scope-check updates)
+  "services/worker/scripts/wp7-scope-check.js",
+  "services/worker/scripts/wp8-scope-check.js",
 ];
 const PROHIBITED = [
   "services/worker/src/contracts/", "services/worker/src/report/",
