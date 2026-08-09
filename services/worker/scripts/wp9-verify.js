@@ -40,26 +40,27 @@ run("2. Schema tests", "node --test src/contracts/validator.test.js");
 run("3. Artifact tests", "node --test test-fixtures/artifacts/memory-artifact-store.test.js");
 run("4. Lifecycle tests", "node --test test-fixtures/lifecycle/memory-repository.test.js");
 run("5. Orchestrator tests", "node --test test-fixtures/orchestration/orchestrator.test.js");
-run("6. WP9 unit tests", "node --test src/narrative/build-package.test.js");
+run("6. WP9 unit tests", "node --test src/narrative/narrative-service.test.js");
 run("7. WP2 acceptance", "node scripts/acceptance-wp2.js");
 run("8. WP3 acceptance", "node scripts/acceptance-wp3.js");
 run("9. WP4 acceptance", "node scripts/acceptance-wp4.js");
 run("10. WP5 acceptance", "node scripts/acceptance-wp5.js");
 run("11. WP6 acceptance", "node scripts/acceptance-wp6.js");
 run("12. WP7 acceptance", "node scripts/acceptance-wp7.js");
-run("13. WP9 acceptance", "node scripts/acceptance-wp9.js");
+run("13. WP8 acceptance", "node scripts/acceptance-wp8.js");
+run("14. WP9 acceptance", "node scripts/acceptance-wp9.js");
 
 // Full regression
-try { run("14. Full worker regression", "npm test"); }
+try { run("15. Full worker regression", "npm test"); }
 catch {
   try {
-    execSync("node --test src/narrative/build-package.test.js src/scoring/vantage-score.test.js", { encoding: "utf-8", cwd: ROOT, stdio: "pipe", timeout: 120_000 });
-    console.log("  [x] PASS -- 14. Full worker regression (core tests)");
-    results.push({ label: "14. Full worker regression", passed: true });
-  } catch (e2) { failures++; results.push({ label: "14. Full worker regression", passed: false }); }
+    execSync("node --test src/narrative/narrative-service.test.js src/scoring/vantage-score.test.js", { encoding: "utf-8", cwd: ROOT, stdio: "pipe", timeout: 120_000 });
+    console.log("  [x] PASS -- 15. Full worker regression (core tests)");
+    results.push({ label: "15. Full worker regression", passed: true });
+  } catch (e2) { failures++; results.push({ label: "15. Full worker regression", passed: false }); }
 }
 
-run("15. Scope check", "node scripts/wp9-scope-check.js");
+run("16. Scope check", "node scripts/wp9-scope-check.js");
 
 console.log("\n" + "=".repeat(60));
 console.log("WP9 VERIFICATION REPORT");
