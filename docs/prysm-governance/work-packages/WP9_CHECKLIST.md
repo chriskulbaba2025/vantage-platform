@@ -1,8 +1,8 @@
 # Prysm WP9 Checklist — Governed Narrative Workflow
 
-**Version:** 1.0.0
+**Version:** 1.1.0  (corrected — v1.0.0 had independently confirmed false-positive audit)
 **Branch:** feat/prysm-wp9-narrative-workflow
-**PR:** TBD
+**PR:** #40
 **Required starting SHA:** 7e3a992d23b31a353b225a9b1715b458bd11b00c
 **Objective:** Implement the governed narrative boundary: ReportContentPackage → NarrativeResponse. Mock/replay/live modes, cache, cost controls, validation, repair, ledger, and SCORED→NARRATIVE_PENDING→NARRATIVE_READY lifecycle.
 **Baseline active cycle time:** 1.9h (median of WP6:1.9h, WP7:4h, WP8:1.5h)
@@ -136,11 +136,11 @@
 - [ ] Implementation boundary: `services/worker/src/narrative/narrative-service.js`
 - [ ] Unit proof: store.put() called with category:"report", artifactName:"narrative.json". store.verify() returns true.
 
-### WP9-LIFE-01 — SCORED → NARRATIVE_PENDING → NARRATIVE_READY
-- [ ] Behaviour: Per pipeline contract §11, WP9 owns SCORED→NARRATIVE_PENDING (narrative requested) and NARRATIVE_PENDING→NARRATIVE_READY (narrative received). Do not alter lifecycle enum or transition map.
-- [ ] Implementation boundary: `services/worker/src/narrative/narrative-service.js` calls lifecycle service.
-- [ ] Unit proof: Successful narrative → lifecycle history shows SCORED→NARRATIVE_PENDING→NARRATIVE_READY.
-- [ ] Acceptance proof: Lifecycle tail verified.
+### WP9-LIFE-01 — Orchestrator owns SCORED → NARRATIVE_PENDING → NARRATIVE_READY
+- [ ] Behaviour: Per pipeline contract §11, ONLY the orchestrator changes audit state. Narrative-service validates, executes, and returns governed success/failure. Orchestrator invokes narrative execution, persists artifact, and performs: SCORED→NARRATIVE_PENDING→NARRATIVE_READY on success. On failure: NARRATIVE_PENDING→NARRATIVE_FAILED. Do not alter lifecycle enum or transition map.
+- [ ] Implementation boundary: `services/worker/src/orchestration/audit-orchestrator.js` owns lifecycle transitions. `services/worker/src/narrative/narrative-service.js` returns result/error only — does NOT call lifecycle.
+- [ ] Unit proof: Orchestrator integration test shows exact ordered lifecycle tail [SCORED, NARRATIVE_PENDING, NARRATIVE_READY]. Narrative-service test proves zero lifecycle calls.
+- [ ] Acceptance proof: Acceptance exercises orchestrator path and verifies lifecycle history.
 
 ### WP9-FAIL-01 — Fail closed on narrative failure
 - [ ] Behaviour: NARRATIVE_PENDING → NARRATIVE_FAILED. No renderer, report write, deployment. Failed repair → NARRATIVE_FAILED.
@@ -151,6 +151,12 @@
 - [ ] Behaviour: workflow version, prompt version, model ID, input/output schema versions, max calls, max tokens, test fixture, benchmark status (not yet run), rollback reference recorded.
 - [ ] Implementation boundary: `services/worker/src/narrative/narrative-service.js`
 - [ ] Unit proof: Metadata object contains all required fields. Benchmark status = "NOT_RUN".
+
+### WP9-N8N-01 — Versioned inactive n8n workflow candidate
+- [ ] Behaviour: Versioned candidate exists at `services/worker/src/n8n/prysm-narrative-workflow-v1.1.0.json`. active=false. Webhook authentication required. Input validation fails closed (validates worker-provided validation proof + package hash). Cache hit routes to replay path, never mock. Explicit mock/replay/live routes. Live model endpoint validated before HTTP call (strict hostname allowlist, HTTPS only, no localhost/loopback/private IP). Primary call ≤1, repair ≤1, no recursive path, no agent, no scoring/provider/rendering nodes, no credentials embedded, no remote activation.
+- [ ] Implementation boundary: `services/worker/src/n8n/prysm-narrative-workflow-v1.1.0.json`
+- [ ] Unit proof: Structural graph tests — parse JSON, verify active=false, auth present, cache-hit→replay edge, mock path separate, endpoint validation node exists, node count, credential scan, graph cycle check.
+- [ ] Acceptance proof: Workflow JSON structural validation suite passes.
 
 ### WP9-PROMPT-01 — Prompt is short, fixed, versioned
 - [ ] Behaviour: Prompt requests only narrative-response fields. No conversation history, raw evidence, code, HTML, CSS, debug data.

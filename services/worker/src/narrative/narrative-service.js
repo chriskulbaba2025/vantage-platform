@@ -169,8 +169,7 @@ function generateMockNarrative(reportPkg, modelId, now) {
  * @param {string} [opts.now] — Controlled timestamp for deterministic mock (ISO-8601)
  * @param {object} [opts.artifactStore] — WP3 Artifact Store for persistence
  * @param {object} [opts.scope] — { tenantId, clientId, auditId } for artifact scoping
- * @param {object} [opts.lifecycleService] — WP4 Lifecycle Service for state transitions
- * @returns {Promise<{ narrative: object, ledger: object, cacheHit: boolean, callsMade: number, cost: number, validated: boolean }>}
+ * @returns {Promise<{ narrative: object, ledger: object, cacheHit: boolean, callsMade: number, cost: number, validated: boolean, artifactRecord?: object }>}
  */
 export async function executeNarrative({
   reportPackage,
@@ -185,7 +184,6 @@ export async function executeNarrative({
   now,
   artifactStore,
   scope,
-  lifecycleService,
 }) {
   // ── 1. Validate ReportContentPackage against frozen schema ──────────
   validateReportPackage(reportPackage);
@@ -236,7 +234,7 @@ export async function executeNarrative({
     });
 
     await persistAndTransition({
-      narrative, ledger, artifactStore, scope, lifecycleService,
+      narrative, ledger, artifactStore, scope, 
       pkgHash, executionId, auditId: reportPackage.auditId,
     });
 
@@ -283,7 +281,7 @@ export async function executeNarrative({
 
     // Artifact persistence for validated replay
     await persistAndTransition({
-      narrative: cachedNarrative, ledger, artifactStore, scope, lifecycleService,
+      narrative: cachedNarrative, ledger, artifactStore, scope, 
       pkgHash, executionId, auditId: reportPackage.auditId,
     });
 
@@ -373,7 +371,7 @@ export async function executeNarrative({
       } catch {
         // Repair failed — fail closed
         await failNarrative({
-          artifactStore, scope, lifecycleService, executionId,
+          artifactStore, scope,  executionId,
           auditId: reportPackage.auditId, reason: "Repair call failed",
           now,
         });
@@ -401,7 +399,7 @@ export async function executeNarrative({
       validation = validateNarrativeResponse(repairResponse, reportPackage);
       if (!validation.valid) {
         await failNarrative({
-          artifactStore, scope, lifecycleService, executionId,
+          artifactStore, scope,  executionId,
           auditId: reportPackage.auditId,
           reason: `Repair validation failed: ${validation.errors.join("; ")}`,
           now,
@@ -446,7 +444,7 @@ export async function executeNarrative({
     });
 
     await persistAndTransition({
-      narrative, ledger, artifactStore, scope, lifecycleService,
+      narrative, ledger, artifactStore, scope, 
       pkgHash, executionId, auditId: reportPackage.auditId,
     });
 
@@ -461,7 +459,7 @@ export async function executeNarrative({
 // ---------------------------------------------------------------------------
 
 async function persistAndTransition({
-  narrative, ledger, artifactStore, scope, lifecycleService,
+  narrative, ledger, artifactStore, scope, 
   pkgHash, executionId, auditId,
 }) {
   // Persist narrative artifact if store provided
@@ -487,52 +485,17 @@ async function persistAndTransition({
     }
   }
 
-  // Lifecycle: SCORED → NARRATIVE_PENDING → NARRATIVE_READY
-  // Only the orchestrator owns state transitions. When lifecycleService is
-  // provided, this method performs transitions through the existing service.
-  if (lifecycleService && scope) {
-    const tenantId = scope.tenantId;
-    await lifecycleService.transition({
-      auditId,
-      tenantId,
-      toState: "narrative_pending",
-      transitionIdempotencyKey: `${auditId}:${executionId || "narr"}:narrative-pending`,
-      reason: "narrative-execution-complete",
-    });
-    await lifecycleService.transition({
-      auditId,
-      tenantId,
-      toState: "narrative_ready",
-      transitionIdempotencyKey: `${auditId}:${executionId || "narr"}:narrative-ready`,
-      reason: "narrative-validated-and-persisted",
-    });
-  }
+  // Lifecycle ownership belongs to the orchestrator only.
+  // narrative-service returns results/errors; the orchestrator performs
+  // SCORED → NARRATIVE_PENDING → NARRATIVE_READY (or NARRATIVE_FAILED).
 }
 
 async function failNarrative({
-  artifactStore, scope, lifecycleService, executionId, auditId, reason, now,
+  artifactStore, scope, executionId, auditId, reason, now,
 }) {
-  // No artifact write on failure
-  // Transition to NARRATIVE_FAILED
-  if (lifecycleService && scope) {
-    const tenantId = scope.tenantId;
-    try {
-      await lifecycleService.transition({
-        auditId,
-        tenantId,
-        toState: "narrative_pending",
-        transitionIdempotencyKey: `${auditId}:${executionId || "narr"}:narrative-pending`,
-        reason: "narrative-execution-attempted",
-      });
-    } catch { /* may already be in narrative_pending */ }
-    await lifecycleService.transition({
-      auditId,
-      tenantId,
-      toState: "narrative_failed",
-      transitionIdempotencyKey: `${auditId}:${executionId || "narr"}:narrative-failed`,
-      reason: reason || "narrative-validation-failed",
-    });
-  }
+  // No artifact write on failure.
+  // No lifecycle calls — the orchestrator owns state transitions.
+  // This function exists only to signal governed failure to the caller.
 }
 
 export {

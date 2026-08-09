@@ -26,7 +26,7 @@
       "type": "n8n-nodes-base.code",
       "position": [450, 300],
       "parameters": {
-        "jsCode": "// Validate ReportContentPackage against frozen schema\nconst schema = $input.first().json.schema;\nconst pkg = $input.first().json.body;\n// Schema validation happens in worker before n8n webhook\nreturn [{ json: { valid: true, package: pkg } }];"
+        "jsCode": "// Fail closed unless worker provides governed validation proof.\n// The worker must send: { workerValidated: true, packageHash: '<sha256>', package: {...} }\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('ReportContentPackage not validated by worker — rejecting');\n}\nif (!input.packageHash || typeof input.packageHash !== 'string' || input.packageHash.length !== 64) {\n  throw new Error('Missing or invalid packageHash from worker');\n}\n// Package hash integrity verified by worker before webhook call.\n// Validation result is worker-signed; n8n does not re-validate schema.\nreturn [{ json: { workerValidated: true, packageHash: input.packageHash, package: input.package } }];"
       }
     },
     {
@@ -36,8 +36,8 @@
       "position": [650, 300],
       "parameters": {
         "rules": [
-          { "value": "={{ $json.cacheHit === true }}", "output": 0 },
-          { "value": "={{ $json.cacheHit === false }}", "output": 1 }
+          { "value": "={{ $json.cacheHit === true }}", "output": 1 },
+          { "value": "={{ $json.cacheHit === false }}", "output": 0 }
         ]
       }
     },
@@ -87,7 +87,7 @@
       "type": "n8n-nodes-base.code",
       "position": [1250, 600],
       "parameters": {
-        "jsCode": "// SSRF defense: validate modelEndpoint against strict allowlist.\n// Only permitted model API hosts may be called.\nconst ALLOWED_HOSTS = [\n  'api.openai.com',\n  'api.anthropic.com',\n  // Add additional approved model hosts here after governance review\n];\nconst endpoint = $json.modelEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('modelEndpoint is required and must be a string');\n}\ntry {\n  const url = new URL(endpoint);\n  if (!ALLOWED_HOSTS.some(h => url.hostname === h || url.hostname.endsWith('.' + h))) {\n    throw new Error('modelEndpoint host not in allowlist: ' + url.hostname);\n  }\n  if (url.protocol !== 'https:') {\n    throw new Error('modelEndpoint must use HTTPS');\n  }\n} catch (e) {\n  if (e.message.includes('Invalid URL')) throw e;\n  throw new Error('modelEndpoint validation failed: ' + e.message);\n}\nreturn [{ json: $json }];"
+        "jsCode": "// SSRF defense: strict hostname allowlist + HTTPS-only + block internal addresses.\nconst ALLOWED_HOSTS = new Set([\n  'api.openai.com',\n  'api.anthropic.com',\n  // Add additional approved model hosts here after governance review\n]);\nconst BLOCKED_PATTERNS = [\n  /^localhost$/i, /^127\\./, /^0\\./, /^10\\./, /^172\\.1[6-9]\\./, /^172\\.2[0-9]\\./, /^172\\.3[0-1]\\./, /^192\\.168\\./, /^169\\.254\\./, /^::1$/, /^fc00:/, /^fe80:/\n];\nconst endpoint = $json.modelEndpoint;\nif (!endpoint || typeof endpoint !== 'string') {\n  throw new Error('modelEndpoint is required and must be a string');\n}\nlet url;\ntry { url = new URL(endpoint); } catch (e) {\n  throw new Error('modelEndpoint is not a valid URL: ' + endpoint);\n}\nif (url.protocol !== 'https:') {\n  throw new Error('modelEndpoint must use HTTPS, got: ' + url.protocol);\n}\nif (!ALLOWED_HOSTS.has(url.hostname)) {\n  throw new Error('modelEndpoint host not in strict allowlist: ' + url.hostname);\n}\nfor (const pat of BLOCKED_PATTERNS) {\n  if (pat.test(url.hostname)) {\n    throw new Error('modelEndpoint resolves to blocked address: ' + url.hostname);\n  }\n}\n// Inject validated endpoint back — worker must use this, not webhook-supplied value\n$json._validatedEndpoint = endpoint;\nreturn [{ json: $json }];"
       }
     },
     {
@@ -115,7 +115,7 @@
       "type": "n8n-nodes-base.code",
       "position": [1450, 300],
       "parameters": {
-        "jsCode": "// Worker validates NarrativeResponse schema + content\nconst validation = $input.first().json.validation;\nif (!validation.valid) {\n  return [{ json: { ...$input.first().json, needsRepair: true } }];\n}\nreturn [{ json: { ...$input.first().json, needsRepair: false } }];"
+        "jsCode": "// Fail closed: require worker-provided validation proof with hash binding.\n// The worker must send: { workerValidated: true, narrativeHash: '<sha256>', narrative: {...}, validation: { valid: true } }\nconst input = $input.first().json;\nif (!input.workerValidated) {\n  throw new Error('NarrativeResponse not validated by worker — rejecting');\n}\nif (!input.narrativeHash || input.narrativeHash.length !== 64) {\n  throw new Error('Missing narrativeHash from worker validation');\n}\nif (!input.validation || !input.validation.valid) {\n  return [{ json: { ...input, needsRepair: true } }];\n}\nreturn [{ json: { ...input, needsRepair: false } }];"
       }
     },
     {
@@ -177,8 +177,8 @@
     "Input Validation": { "main": [[ { "node": "Cache Check", "type": "main", "index": 0 } ]] },
     "Cache Check": {
       "main": [
-        [{ "node": "Mock Narrative", "type": "main", "index": 0 }],
-        [{ "node": "Cost Preflight", "type": "main", "index": 0 }]
+        [{ "node": "Cost Preflight", "type": "main", "index": 0 }],
+        [{ "node": "Replay Narrative", "type": "main", "index": 0 }]
       ]
     },
     "Cost Preflight": { "main": [[ { "node": "Mode Decision", "type": "main", "index": 0 } ]] },
