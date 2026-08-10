@@ -25,11 +25,28 @@ const MIGRATIONS = Object.freeze([
   "002_wp11_web_app_integration.sql",
 ]);
 
+async function executePageSpeedWithProductionConfig(args) {
+  const existing = args.auditRequest?.performance || {};
+  const pagespeedApiKey = existing.pagespeedApiKey || process.env.GOOGLE_PAGESPEED_API_KEY || process.env.PAGESPEED_API_KEY || "";
+  const cruxApiKey = existing.cruxApiKey || process.env.GOOGLE_CRUX_API_KEY || process.env.CRUX_API_KEY || pagespeedApiKey;
+  return pagespeedExecute({
+    ...args,
+    auditRequest: {
+      ...args.auditRequest,
+      performance: {
+        ...existing,
+        pagespeedApiKey,
+        cruxApiKey,
+      },
+    },
+  });
+}
+
 /** Return the exact six governed WP6 production adapters. */
 export function createProductionAdapters() {
   return Object.freeze({
     "dataforseo-onpage": Object.freeze({ adapterVersion: ONPAGE_VERSION, execute: onpageExecute }),
-    pagespeed: Object.freeze({ adapterVersion: "1.1.0", execute: pagespeedExecute }),
+    pagespeed: Object.freeze({ adapterVersion: "1.1.0", execute: executePageSpeedWithProductionConfig }),
     "dataforseo-serp": Object.freeze({ adapterVersion: SERP_VERSION, execute: serpExecute }),
     backlinks: Object.freeze({ adapterVersion: "1.0.0", execute: backlinksExecute }),
     ga4: Object.freeze({ adapterVersion: "1.0.0", execute: ga4Execute }),
