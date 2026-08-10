@@ -2,7 +2,7 @@
  * DataForSEO SERP Adapter — WP6 governed execute() wrapper.
  *
  * Wraps querySerp() behind the universal source contract expected by the
- * AuditOrchestrator.  Returns schema-valid source results with raw bytes
+ * AuditOrchestrator. Returns schema-valid source results with raw bytes
  * for artifact storage.
  *
  * @module adapters/dataforseo-serp/serp-adapter
@@ -11,19 +11,9 @@
 import { querySerp } from "./dataforseo-serp-client.js";
 
 const ADAPTER_VERSION = "1.0.0";
+const AUDIENCE_SCOPES = new Set(["local", "regional", "national"]);
 
-/**
- * Execute the DataForSEO SERP adapter behind the universal source contract.
- *
- * @param {object} args
- * @param {object} args.auditRequest
- * @param {string} args.source — "dataforseo-serp"
- * @param {string} args.executionId
- * @param {string} args.sourceExecutionKey
- * @param {AbortSignal} args.signal
- * @param {number} args.attempt
- * @returns {Promise<{ rawBytes: Buffer|null, contentType: string|null, sourceResult: object }>}
- */
+/** Execute the DataForSEO SERP adapter behind the universal source contract. */
 export async function execute({ auditRequest, source, executionId, sourceExecutionKey, signal, attempt }) {
   const startedAt = new Date().toISOString();
   const competitorConfig = auditRequest.competitors || {};
@@ -31,11 +21,15 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     ? auditRequest.competitors
     : (competitorConfig.supplied || []);
 
-  // Determine service keywords to search for
   const services = auditRequest.services || [];
   const keywords = services.length > 0
-    ? services.slice(0, 5).map(s => typeof s === "string" ? s : s.name || s.service || "").filter(Boolean)
+    ? services.slice(0, 5).map((s) => typeof s === "string" ? s : s.name || s.service || "").filter(Boolean)
     : [auditRequest.primaryGoal || auditRequest.businessName || ""].filter(Boolean);
+
+  const rawMarket = String(auditRequest.market || competitorConfig.market || "").trim();
+  const audienceScope = AUDIENCE_SCOPES.has(rawMarket.toLowerCase())
+    ? rawMarket.toLowerCase()
+    : null;
 
   if (keywords.length === 0) {
     const completedAt = new Date().toISOString();
@@ -56,13 +50,17 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         returnedRecords: 0,
         coverage: { requested: 0, completed: 0, failed: 0 },
         limitations: ["No service keywords or competitors configured for SERP analysis."],
-        evidence: { competitors: [], suppliedCompetitors },
+        evidence: { competitors: [], suppliedCompetitors, audienceScope },
       },
     };
   }
 
+  // Local/regional/national is a competitive-scope classification, not a
+  // DataForSEO location name. Keep the provider location valid while carrying
+  // the scope through evidence/report context. Geographic refinement can be
+  // added later without changing the intake contract.
   const options = {
-    location: auditRequest.market || competitorConfig.market || "Canada",
+    location: audienceScope ? "Canada" : (rawMarket || "Canada"),
     language: auditRequest.language || competitorConfig.language || "en",
     login: process.env.DATAFORSEO_LOGIN || "",
     password: process.env.DATAFORSEO_PASSWORD || "",
@@ -88,14 +86,14 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         coverage: { requested: keywords.length, completed: 0, failed: keywords.length },
         limitations: ["DataForSEO credentials not configured for SERP queries."],
         errorCategory: "not_configured",
-        evidence: { competitors: [], suppliedCompetitors },
+        evidence: { competitors: [], suppliedCompetitors, audienceScope },
       },
     };
   }
 
   const allItems = [];
   const errors = [];
-  let totalRequested = keywords.length;
+  const totalRequested = keywords.length;
   let totalCompleted = 0;
 
   try {
@@ -106,12 +104,10 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       try {
         const result = await querySerp(keyword, options);
         if (result.items && result.items.length > 0) {
-          allItems.push(...result.items.map(item => ({ ...item, _keyword: keyword })));
+          allItems.push(...result.items.map((item) => ({ ...item, _keyword: keyword })));
           totalCompleted++;
         }
-        if (result.error) {
-          errors.push(`${keyword}: ${result.error}`);
-        }
+        if (result.error) errors.push(`${keyword}: ${result.error}`);
       } catch (kwError) {
         errors.push(`${keyword}: ${kwError.message}`);
       }
@@ -121,6 +117,8 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     const rawPayload = {
       adapterVersion: ADAPTER_VERSION,
       collectedAt: completedAt,
+      audienceScope,
+      providerLocation: options.location,
       keywords,
       items: allItems,
       suppliedCompetitors,
@@ -154,15 +152,14 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       evidence: {
         competitors: allItems.slice(0, 100),
         suppliedCompetitors,
+        audienceScope,
+        providerLocation: options.location,
         keywordCount: keywords.length,
         resultCount: allItems.length,
       },
     };
 
-    if (status === "FAILED" && errors.length > 0) {
-      sourceResult.errorCategory = "no_data";
-    }
-
+    if (status === "FAILED" && errors.length > 0) sourceResult.errorCategory = "no_data";
     return { rawBytes, contentType: "application/json", sourceResult };
   } catch (error) {
     const completedAt = new Date().toISOString();
@@ -184,7 +181,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         coverage: { requested: totalRequested, completed: 0, failed: totalRequested },
         limitations: [`SERP execution failed: ${error.message}`],
         errorCategory: error.category || "internal",
-        evidence: { competitors: [], suppliedCompetitors },
+        evidence: { competitors: [], suppliedCompetitors, audienceScope, providerLocation: options.location },
       },
     };
   }
