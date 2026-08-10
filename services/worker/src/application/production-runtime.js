@@ -93,9 +93,7 @@ async function loadAuditMetadata(lifecycleRepo, auditId, tenantId) {
   return null;
 }
 
-/**
- * Construct the governed production runtime.
- */
+/** Construct the governed production runtime. */
 export function createProductionRuntime({
   config,
   adapters,
@@ -150,10 +148,46 @@ export function createProductionRuntime({
     validateContract: runtimeValidateContract,
   });
 
+  async function runAuditToReviewableDraft({ auditRequest, executionId, slug }) {
+    let result = await orchestrator.execute(auditRequest, { executionId });
+    let previousState = null;
+
+    for (let step = 0; step < 4; step++) {
+      if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;
+      if (result.finalState === previousState) break;
+      previousState = result.finalState;
+      result = await orchestrator.execute(auditRequest, { executionId });
+    }
+
+    // WP10 stores the immutable client pages in the governed Artifact Store.
+    // The report store owns only the human-review lifecycle, so initialise its
+    // draft record once the governed draft exists. This does not alter the
+    // governed report-page bytes.
+    if (result.finalState === T.DRAFT_RENDERED && typeof reportStore.writeReport === "function") {
+      const indexHtml = result.renderedPages instanceof Map
+        ? (result.renderedPages.get("index.html") || "")
+        : "";
+      await reportStore.writeReport({
+        slug,
+        runId: auditRequest.auditId,
+        model: { evidence: {} },
+        manifest: {
+          auditId: auditRequest.auditId,
+          lifecycleStatus: T.DRAFT_RENDERED,
+          governedManifestKey: result.manifestKey || null,
+        },
+        html: indexHtml,
+        includeIndexHtml: Boolean(indexHtml),
+      });
+    }
+
+    return result;
+  }
+
   /**
-   * Production web create: build one fresh governed audit identity per user
-   * submission and drive the staged orchestrator until the reviewable draft
-   * exists (or a controlled failure state is reached).
+   * Start one real audit without holding a Vercel request open for provider,
+   * narrative, and render work. Railway continues the governed job while the
+   * browser polls canonical lifecycle status.
    */
   async function createAudit(input, tenantId) {
     const targetUrl = normalizeUrl(input.targetUrl);
@@ -162,6 +196,7 @@ export function createProductionRuntime({
     const clientId = buildClientId(targetUrl, businessName);
     const idempotencyKey = `web:${auditId}`;
     const executionId = randomUUID();
+    const slug = slugify(businessName);
 
     const auditRequest = {
       contractVersion: "1.0.0",
@@ -188,27 +223,28 @@ export function createProductionRuntime({
       throw err;
     }
 
-    let result = await orchestrator.execute(auditRequest, { executionId });
-    let previousState = null;
-    for (let step = 0; step < 4; step++) {
-      if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;
-      if (result.finalState === previousState) break;
-      previousState = result.finalState;
-      result = await orchestrator.execute(auditRequest, { executionId });
-    }
-
+    // Persist the audit identity before returning the HTTP response. The
+    // orchestrator reuses the same idempotency identity when background work
+    // starts, so this is safe and restart-observable.
+    await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey });
     if (typeof lifecycleRepo.updateAuditMetadata === "function") {
       await lifecycleRepo.updateAuditMetadata(auditId, tenantId, { businessName, targetUrl });
     }
+
+    Promise.resolve()
+      .then(() => runAuditToReviewableDraft({ auditRequest, executionId, slug }))
+      .catch((error) => {
+        console.error(`Audit ${auditId} background execution failed:`, error);
+      });
 
     return {
       auditId,
       tenantId,
       clientId,
       executionId,
-      finalState: result.finalState,
-      slug: slugify(businessName),
-      lifecycle: result,
+      finalState: T.CREATED,
+      slug,
+      backgroundStarted: true,
     };
   }
 
@@ -248,7 +284,9 @@ export function createProductionRuntime({
         reason: "human review checklist completed",
       });
     }
-    return { ...result, status: T.IN_REVIEW };
+    // Preserve the report-store compatibility status (`reviewed`) while the
+    // canonical PostgreSQL lifecycle is `in_review`.
+    return result;
   }
 
   async function approveAudit(auditId, tenantId, slug, approver, pages) {
