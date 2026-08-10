@@ -21,7 +21,31 @@ const SQL = {
   loadAuditMeta: `SELECT tenant_id, client_id FROM prysm.lifecycle_audits WHERE audit_id = $1`,
   lockAudit:  `SELECT tenant_id, client_id FROM prysm.lifecycle_audits WHERE audit_id = $1 FOR UPDATE`,
   latestEvent: `SELECT next_state, sequence FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence DESC LIMIT 1`,
+  latestEvent: `SELECT next_state, sequence FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence DESC LIMIT 1`,
   updateAuditClient: `UPDATE prysm.lifecycle_audits SET client_id = $1 WHERE audit_id = $2`,
+  // WP11: tenant-scoped audit history
+  listByTenant: `
+    SELECT
+      a.audit_id,
+      a.client_id,
+      a.business_name,
+      a.target_url,
+      a.created_at,
+      COALESCE(
+        (SELECT e.next_state FROM prysm.lifecycle_events e
+         WHERE e.audit_id = a.audit_id ORDER BY e.sequence DESC LIMIT 1),
+        'created'
+      ) AS latest_state,
+      COALESCE(
+        (SELECT e.timestamp FROM prysm.lifecycle_events e
+         WHERE e.audit_id = a.audit_id ORDER BY e.sequence DESC LIMIT 1),
+        a.created_at
+      ) AS updated_at
+    FROM prysm.lifecycle_audits a
+    WHERE a.tenant_id = $1
+    ORDER BY a.created_at DESC
+    LIMIT $2 OFFSET $3
+  `,
 };
 
 function rowToEvent(row) {
@@ -191,7 +215,21 @@ export function createPostgresLifecycleRepository({ pool }) {
     return pool.query(SQL.updateAuditClient, [newClientId, auditId]);
   }
 
-  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, runMigration, executeUpdate };
+  // WP11: tenant-scoped audit history
+  async function listByTenant(tenantId, limit = 50, offset = 0) {
+    const result = await pool.query(SQL.listByTenant, [tenantId, limit, offset]);
+    return result.rows.map((row) => ({
+      audit_id: row.audit_id,
+      client_id: row.client_id || "",
+      business_name: row.business_name || "",
+      target_url: row.target_url || "",
+      created_at: row.created_at,
+      latest_state: row.latest_state,
+      updated_at: row.updated_at,
+    }));
+  }
+
+  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, runMigration, executeUpdate, listByTenant };
 }
 
 export default { createPostgresLifecycleRepository };

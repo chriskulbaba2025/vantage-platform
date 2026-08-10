@@ -42,7 +42,12 @@
     "acceptance:wp10": "node scripts/acceptance-wp10.js",
     "wp10:preflight": "node scripts/wp10-preflight.js",
     "wp10:scope-check": "node scripts/wp10-scope-check.js",
-    "wp10:verify": "node scripts/wp10-verify.js"
+    "wp10:verify": "node scripts/wp10-verify.js",
+    "test:wp11": "node scripts/acceptance-wp11.js",
+    "acceptance:wp11": "node scripts/acceptance-wp11.js",
+    "wp11:preflight": "node scripts/wp11-preflight.js",
+    "wp11:scope-check": "node scripts/wp11-scope-check.js",
+    "wp11:verify": "node scripts/wp11-verify.js"
   },
   "engines": {
     "node": ">=20.0.0"
