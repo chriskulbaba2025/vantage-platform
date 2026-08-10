@@ -9,6 +9,9 @@ function intEnv(name, fallback, min, max) {
 export function loadConfig(env = process.env) {
   return {
     port: intEnv("PORT", 3000, 1, 65535),
+    // WP12: production database and tenant configuration
+    databaseUrl: env.DATABASE_URL || "",
+    vantageTenantId: env.VANTAGE_TENANT_ID || "default",
     webhookSecret: env.VANTAGE_WEBHOOK_SECRET || "",
     maxPages: intEnv("VANTAGE_MAX_PAGES", 30, 1, 100),
     browserMode: env.VANTAGE_BROWSER_MODE || "auto",
