@@ -2,5 +2,9 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "outputDirectory": ".next",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "env": {
+    "VANTAGE_WORKER_API_URL": "https://vantage-platform-production.up.railway.app",
+    "VANTAGE_TENANT_ID": "default"
+  }
 }
