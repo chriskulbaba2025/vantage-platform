@@ -31,7 +31,10 @@ const T = LIFECYCLE_STATE;
 const memoryStore = createMemoryArtifactStore();
 const artifactStore = createGovernedArtifactStore({ store: memoryStore });
 const lifecycleRepo = createMemoryLifecycleRepository();
-const lifecycle = createLifecycleService(lifecycleRepo);
+// Wrap with WP11 test-fixture to provide listByTenant without modifying production memory-repository.js
+const { addListByTenantToRepo } = await import("../test-fixtures/wp11/setup-helpers.js");
+const lifecycleRepoWithHistory = addListByTenantToRepo(lifecycleRepo);
+const lifecycle = createLifecycleService(lifecycleRepoWithHistory);
 
 const { mkdirSync, rmSync } = await import("node:fs");
 const { resolve, dirname } = await import("node:path");
@@ -78,7 +81,7 @@ const orchestrator = createAuditOrchestrator({
 
 // --- Application service ---
 const auditService = createAuditApplicationService({
-  orchestrator, lifecycleRepo, lifecycleService: lifecycle, artifactStore, reportStore,
+  orchestrator, lifecycleRepo: lifecycleRepoWithHistory, lifecycleService: lifecycle, artifactStore, reportStore,
   config: { artifactDir: testBaseDir },
   validateContract: () => ({ valid: true, errors: [] }),
 });

@@ -46,7 +46,9 @@ mkdirSync(testBaseDir, { recursive: true });
 const memoryStore = createMemoryArtifactStore();
 const artifactStore = createGovernedArtifactStore({ store: memoryStore });
 const lifecycleRepo = createMemoryLifecycleRepository();
-const lifecycle = createLifecycleService(lifecycleRepo);
+const { addListByTenantToRepo } = await import("../services/worker/test-fixtures/wp11/setup-helpers.js");
+const lifecycleRepoWithHistory = addListByTenantToRepo(lifecycleRepo);
+const lifecycle = createLifecycleService(lifecycleRepoWithHistory);
 const reportStore = createLocalReportStore({ baseDir: testBaseDir });
 
 // Mock adapters
@@ -76,7 +78,7 @@ const orchestrator = createAuditOrchestrator({
 });
 
 const auditService = createAuditApplicationService({
-  orchestrator, lifecycleRepo, lifecycleService: lifecycle,
+  orchestrator, lifecycleRepo: lifecycleRepoWithHistory, lifecycleService: lifecycle,
   artifactStore, reportStore,
   config: { artifactDir: testBaseDir },
   validateContract: () => ({ valid: true, errors: [] }),
