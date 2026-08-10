@@ -1,6 +1,5 @@
 node_modules/
 services/worker/node_modules/
-.next/
 artifacts/cache/
 artifacts/reports/
 artifacts/local/backlink-tests/

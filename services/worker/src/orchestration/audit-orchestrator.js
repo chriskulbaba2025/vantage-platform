@@ -1177,7 +1177,7 @@ export function createAuditOrchestrator({
     }
   }
 
-  return Object.freeze({ execute, lifecycleService });
+  return Object.freeze({ execute });
 }
 
 export { CANONICAL_SOURCES, SOURCE_EVIDENCE_MAP, buildSourceExecutionIdentity };

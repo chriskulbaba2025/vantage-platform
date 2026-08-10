@@ -34,8 +34,10 @@ export function createAuditApplicationService({
   validateContract,
   clock,
 }) {
-  // Use provided lifecycleService or fall back to orchestrator's
-  const _lifecycleService = lifecycleService || orchestrator.lifecycleService;
+  // lifecycleService is required — must be injected by the application wiring
+  if (!lifecycleService) {
+    throw new Error("lifecycleService is required for AuditApplicationService");
+  }
   const c = clock || {
     now: () => new Date().toISOString(),
   };
@@ -126,10 +128,10 @@ export function createAuditApplicationService({
    * Return the exact canonical lifecycle state for an audit.
    */
   async function getAuditStatus(auditId, tenantId) {
-    const state = await _lifecycleService?.currentState?.(auditId, tenantId);
+    const state = await lifecycleService.currentState(auditId, tenantId);
     if (!state) return null;
 
-    const history = await _lifecycleService?.history?.(auditId, tenantId);
+    const history = await lifecycleService.history(auditId, tenantId);
     const events = history || [];
 
     // Get source statuses from the most recent EVIDENCE_LOCKED event

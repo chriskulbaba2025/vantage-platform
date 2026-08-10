@@ -104,29 +104,7 @@ export function createMemoryLifecycleRepository() {
     transitionKeyStore.clear(); auditMeta.clear();
   }
 
-  // WP11: tenant-scoped audit history (memory stub)
-  function listByTenant(tenantId) {
-    const results = [];
-    for (const [auditId, meta] of auditMeta) {
-      if (meta.tenantId !== tenantId) continue;
-      const evts = eventsStore.get(auditId) || [];
-      const latest = evts.length > 0 ? evts[evts.length - 1] : null;
-      results.push({
-        audit_id: auditId,
-        client_id: meta.clientId || "",
-        business_name: meta.businessName || "",
-        target_url: meta.targetUrl || "",
-        created_at: meta.createdAt || (evts.length > 0 ? evts[0].timestamp : null),
-        latest_state: latest ? latest.nextState : "created",
-        updated_at: latest ? latest.timestamp : null,
-      });
-    }
-    // Newest first
-    results.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-    return results;
-  }
-
-  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, _clear, listByTenant };
+  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, _clear };
 }
 
 export default { createMemoryLifecycleRepository };

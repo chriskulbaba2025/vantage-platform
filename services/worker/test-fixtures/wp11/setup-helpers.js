@@ -3,11 +3,71 @@
  *
  * Prepares the full governed artifact chain so the orchestrator can
  * complete a full CREATED → DRAFT_RENDERED lifecycle.
+ *
+ * Also provides a test-only listByTenant wrapper for memory repositories
+ * so the production memory-repository.js remains unmodified.
  */
 
 import { randomUUID, createHash } from "node:crypto";
 
 function sha256(input) { return createHash("sha256").update(input).digest("hex"); }
+
+/**
+ * Wrap a memory lifecycle repository to provide listByTenant for testing.
+ * Does NOT modify the production memory-repository.js file.
+ */
+export function addListByTenantToRepo(lifecycleRepo) {
+  // Access internal state through the repo's _clear method to detect if this
+  // is a memory repo. If it has _clear, we can instrument it.
+  if (typeof lifecycleRepo._clear !== "function") {
+    // Not a memory repo — listByTenant should come from the real impl
+    return lifecycleRepo;
+  }
+
+  // Create a proxy that adds listByTenant using the repo's internal state
+  // accessed through the loadEvents tenant-scoping pattern
+  const wrapped = Object.create(lifecycleRepo);
+
+  // Store audit metadata during createAudit for later retrieval
+  const auditMeta = new Map();
+
+  wrapped.listByTenant = async function (tenantId) {
+    const results = [];
+    for (const [auditId, meta] of auditMeta) {
+      if (meta.tenantId !== tenantId) continue;
+      try {
+        const events = await lifecycleRepo.loadEvents(auditId, tenantId);
+        const latest = events.length > 0 ? events[events.length - 1] : null;
+        results.push({
+          audit_id: auditId,
+          client_id: meta.clientId || "",
+          business_name: meta.businessName || "",
+          target_url: meta.targetUrl || "",
+          created_at: meta.createdAt || (events.length > 0 ? events[0].timestamp : null),
+          latest_state: latest ? latest.nextState : "created",
+          updated_at: latest ? latest.timestamp : null,
+        });
+      } catch { /* skip audits that fail tenant isolation */ }
+    }
+    results.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    return results;
+  };
+
+  // Hook createAudit to capture metadata
+  const origCreate = lifecycleRepo.createAudit.bind(lifecycleRepo);
+  wrapped.createAudit = async function (opts) {
+    auditMeta.set(opts.auditId, {
+      tenantId: opts.tenantId,
+      clientId: opts.clientId,
+      createdAt: opts.event?.timestamp || new Date().toISOString(),
+      businessName: opts.businessName || "",
+      targetUrl: opts.targetUrl || "",
+    });
+    return origCreate(opts);
+  };
+
+  return wrapped;
+}
 
 /**
  * Seed all required artifacts so the orchestrator can complete the full
