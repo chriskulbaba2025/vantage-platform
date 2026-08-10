@@ -64,4 +64,4 @@ jobs:
       - run: npm run test:wp10
       - run: npm run acceptance:wp10
       - run: npm run acceptance:wp11
-      - run: npm run wp11:scope-check
+      - run: npm run acceptance:wp12
