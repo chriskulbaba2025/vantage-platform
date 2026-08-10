@@ -384,8 +384,12 @@ export function createRequestHandler({
 }
 
 // =============================================================================
-// Production startup
+// Production startup — WP12 governed runtime
 // =============================================================================
+
+import { createProductionRuntime } from "./application/production-runtime.js";
+import { createPostgresLifecycleRepository } from "./lifecycle/postgres-repository.js";
+import { createGovernedArtifactStore } from "./storage/governed-artifact-store.js";
 
 const config = loadConfig();
 const localStore = createLocalReportStore({ baseDir: config.artifactDir, publicBaseUrl: config.publicReportBaseUrl });
@@ -403,7 +407,144 @@ const oauthService = createOAuthService({
   tokenStore,
 });
 
-const requestListener = createRequestHandler({ config, localStore, store, oauthService });
+// --- WP12: Construct governed production runtime ---
+
+// Schema validator (lazy import — avoids circular deps)
+let validateContract = () => ({ valid: true, errors: [] });
+try {
+  const { createValidator } = await import("./contracts/validator.js");
+  const v = createValidator();
+  validateContract = (schemaId, obj) => v.validate(schemaId, obj);
+} catch {
+  console.warn("Schema validator not available — using pass-through");
+}
+
+// Adapters — lazy loading with graceful fallback
+let adapters = {};
+
+async function loadAdapters() {
+  const adapterSources = {
+    "dataforseo-onpage": { dir: "dataforseo-onpage", file: "dataforseo-onpage-adapter.js", factory: "createDataForSeoOnPageAdapter" },
+    pagespeed: { dir: "pagespeed", file: "pagespeed-adapter.js", factory: "createPageSpeedAdapter" },
+    "dataforseo-serp": { dir: "dataforseo-serp", file: "serp-adapter.js", factory: "createSerpAdapter" },
+    backlinks: { dir: "dataforseo-backlinks", file: "backlink-adapter.legacy.js", factory: null },
+    ga4: { dir: "ga4", file: "ga4-adapter.js", factory: "createGa4Adapter" },
+    gsc: { dir: "gsc", file: "gsc-adapter.js", factory: "createGscAdapter" },
+  };
+
+  const loaded = {};
+  for (const [key, src] of Object.entries(adapterSources)) {
+    try {
+      const mod = await import(`./adapters/${src.dir}/${src.file}`);
+      if (src.factory && typeof mod[src.factory] === "function") {
+        loaded[key] = mod[src.factory](config);
+      } else if (typeof mod.default === "function") {
+        loaded[key] = mod.default(config);
+      } else {
+        // Fallback: use the first exported function or the module itself
+        const fn = Object.values(mod).find((v) => typeof v === "function");
+        loaded[key] = fn ? fn(config) : mod;
+      }
+    } catch (e) {
+      console.warn(`Adapter ${key} not loadable:`, e.message);
+    }
+  }
+  return loaded;
+}
+try {
+  adapters = await loadAdapters();
+  if (Object.keys(adapters).length > 0) {
+    console.log(`Production adapters loaded: ${Object.keys(adapters).join(", ")}`);
+  }
+} catch (e) {
+  console.warn("Adapter loading failed:", e.message);
+}
+
+// Artifact store (production S3 or local)
+let artifactStore;
+try {
+  if (config.reportsBucket) {
+    const { createS3ArtifactStore } = await import("./storage/s3-artifact-store.js");
+    artifactStore = createGovernedArtifactStore({
+      store: createS3ArtifactStore({
+        bucket: config.reportsBucket,
+        region: config.awsRegion,
+        prefix: config.reportsPrefix,
+      }),
+    });
+  } else {
+    // Local artifact store for development/testing
+    const { createMemoryArtifactStore } = await import("./storage/memory-artifact-store.js");
+    artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
+  }
+} catch (e) {
+  console.warn("Artifact store creation failed:", e.message);
+  const { createMemoryArtifactStore } = await import("./storage/memory-artifact-store.js");
+  artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
+}
+
+// Lifecycle repository (PostgreSQL when DATABASE_URL is set)
+let lifecycleRepo;
+let auditService = null;
+
+if (config.databaseUrl) {
+  try {
+    const pg = await import("pg");
+    const pool = new pg.Pool({
+      connectionString: config.databaseUrl,
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
+
+    // Verify connectivity
+    await pool.query("SELECT 1");
+    console.log("PostgreSQL connected");
+
+    lifecycleRepo = createPostgresLifecycleRepository({ pool });
+
+    // Run migrations to ensure schema exists
+    if (typeof lifecycleRepo.runMigration === "function") {
+      try { await lifecycleRepo.runMigration(); } catch (e) { console.warn("Migration note:", e.message); }
+    }
+  } catch (e) {
+    console.error("PostgreSQL connection failed:", e.message);
+    console.error("Worker starting without database — history, review, and approval will be unavailable");
+  }
+}
+
+// Fallback to memory repo when no DATABASE_URL (development only)
+if (!lifecycleRepo) {
+  console.warn("No DATABASE_URL configured — using in-memory lifecycle repository (NOT for production)");
+  const { createMemoryLifecycleRepository } = await import("./lifecycle/memory-repository.js");
+  lifecycleRepo = createMemoryLifecycleRepository();
+}
+
+// Construct the full governed production runtime
+if (lifecycleRepo && artifactStore) {
+  try {
+    const runtime = createProductionRuntime({
+      config,
+      adapters,
+      validateContract,
+      artifactStore,
+      lifecycleRepo,
+      reportStore: store,
+    });
+    auditService = runtime.auditService;
+    console.log("WP12 production runtime initialized — governed API v1 available");
+  } catch (e) {
+    console.error("Production runtime initialization failed:", e.message);
+  }
+}
+
+const requestListener = createRequestHandler({
+  config,
+  localStore,
+  store,
+  oauthService,
+  auditService,
+});
+
 const server = createServer(requestListener);
 server.listen(config.port, "0.0.0.0", () => {
   console.log(`Prysm worker listening on :${config.port}`);

@@ -45,6 +45,7 @@
     "wp10:verify": "node scripts/wp10-verify.js",
     "test:wp11": "node scripts/acceptance-wp11.js",
     "acceptance:wp11": "node scripts/acceptance-wp11.js",
+    "acceptance:wp12": "node scripts/acceptance-wp12.js",
     "wp11:preflight": "node scripts/wp11-preflight.js",
     "wp11:scope-check": "node scripts/wp11-scope-check.js",
     "wp11:verify": "node scripts/wp11-verify.js"
@@ -55,7 +56,8 @@
   "dependencies": {
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "cheerio": "^1.2.0"
+    "cheerio": "^1.2.0",
+    "pg": "^8.16.0"
   },
   "optionalDependencies": {
     "@aws-sdk/client-s3": "^3.1086.0",
@@ -65,7 +67,6 @@
     "playwright": "^1.61.1"
   },
   "devDependencies": {
-    "pg": "^8.16.0",
     "pg-mem": "^3.0.14"
   }
 }
