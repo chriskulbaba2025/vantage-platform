@@ -97,6 +97,17 @@ class WorkerClient {
     return data;
   }
 
+  /** Resume a stuck audit */
+  async resumeAudit(auditId: string) {
+    const res = await this.fetch(`/api/v1/audits/${auditId}/resume`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Resume failed");
+    return data;
+  }
+
   /** Get report page URL (returns the worker URL for proxying) */
   getReportPageUrl(auditId: string, filename: string, slug: string, clientId: string): string {
     return `${this.baseUrl}/api/v1/audits/${auditId}/report/${filename}?slug=${encodeURIComponent(slug)}&clientId=${encodeURIComponent(clientId)}`;
