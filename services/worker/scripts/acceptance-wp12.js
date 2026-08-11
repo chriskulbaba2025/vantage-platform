@@ -183,7 +183,15 @@ async function seedToScored(targetUrl, businessName, tenantId) {
   });
 
   const auditRequest = { contractVersion: "1.0.0", auditId, tenantId, clientId, idempotencyKey: randomUUID(), targetUrl, businessName };
-  const result = await runtime.orchestrator.execute(auditRequest, { executionId });
+  let result = await runtime.orchestrator.execute(auditRequest, { executionId });
+  // Loop like runAuditToReviewableDraft — WP8 build + narrative + rendering
+  let previousState = null;
+  for (let step = 0; step < 4; step++) {
+    if (result.finalState === T.DRAFT_RENDERED || result.finalState === T.RENDER_FAILED || result.finalState === T.NARRATIVE_FAILED) break;
+    if (result.finalState === previousState) break;
+    previousState = result.finalState;
+    result = await runtime.orchestrator.execute(auditRequest, { executionId: randomUUID() });
+  }
 
   return { auditId, tenantId, clientId, slug: slugify(businessName), finalState: result.finalState, runtime, pageArtifacts: result.pageArtifacts };
 }
@@ -247,7 +255,7 @@ function slugify(s) { return String(s || "audit").toLowerCase().replace(/[^a-z0-
 
 {
   const seeded = await seedToScored("https://lifecycle-test.com", "Lifecycle Test", "wp12-tenant");
-  check("LIFECYCLE-01: finalState >= narrative_ready (WP8 wired)", seeded.finalState === T.NARRATIVE_READY || seeded.finalState === T.DRAFT_RENDERED, `Got ${seeded.finalState}`);
+  check("LIFECYCLE-01: finalState = draft_rendered", seeded.finalState === T.DRAFT_RENDERED, `Got ${seeded.finalState}`);
 
   const status = await seeded.runtime.auditService.getAuditStatus(seeded.auditId, "wp12-tenant");
   check("LIFECYCLE-01: status non-null", status !== null);

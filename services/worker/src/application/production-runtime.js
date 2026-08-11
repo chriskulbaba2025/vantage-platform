@@ -313,11 +313,6 @@ export function createProductionRuntime({
     const businessName = meta?.business_name || meta?.businessName || "";
     const targetUrl = meta?.target_url || meta?.targetUrl || "";
 
-    // Auto-resume stuck audits on status check
-    if (current && RESUMABLE_STATES.has(current.state)) {
-      resumeAudit(auditId, tenantId).catch(() => {});
-    }
-
     return {
       ...status,
       clientId: current?.clientId || meta?.client_id || meta?.clientId || "",

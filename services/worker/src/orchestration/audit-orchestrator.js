@@ -1061,15 +1061,21 @@ export function createAuditOrchestrator({
         // canonical evidence, findings, and scores.  This is the governed
         // WP8 boundary — no providers, LLMs, or n8n are called.
         try {
-          // Load canonical evidence
-          const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" });
-          if (!(await artifactStore.exists(evKey))) {
-            const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
-            return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
+          // Load canonical evidence — try governed manifest first, fall back
+          // to direct artifact read for compatibility with pre-manifest audits.
+          let canonicalEvidence;
+          try {
+            const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
+            canonicalEvidence = crManifest.evidence;
+          } catch {
+            const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" });
+            if (!(await artifactStore.exists(evKey))) {
+              throw new Error("Canonical evidence not found — manifest failed and evidence.json missing");
+            }
+            const evBytes = await artifactStore.get(evKey);
+            if (!evBytes) throw new Error("Canonical evidence artifact is empty");
+            canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
           }
-          const evBytes = await artifactStore.get(evKey);
-          if (!evBytes) throw new Error("Canonical evidence artifact is empty");
-          const canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
 
           // Load findings
           const fKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" });
