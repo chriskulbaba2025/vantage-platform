@@ -284,6 +284,9 @@ export function createProductionRuntime({
       result = await orchestrator.execute(auditRequest, { executionId: randomUUID() });
     }
 
+    // Surface WP8/narrative errors in the resume response
+    const error = result.wp8Error || null;
+
     // If draft rendered, ensure report store is initialized
     if (result.finalState === T.DRAFT_RENDERED && typeof reportStore.writeReport === "function") {
       const slug = slugify(businessName);
@@ -302,7 +305,7 @@ export function createProductionRuntime({
       } catch { /* best-effort sync */ }
     }
 
-    return result.finalState;
+    return { finalState: result.finalState, error };
   }
 
   async function getAuditStatus(auditId, tenantId) {

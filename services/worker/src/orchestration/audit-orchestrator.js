@@ -966,7 +966,7 @@ export function createAuditOrchestrator({
 
   // Build summary — explicit status mapping
   // -------------------------------------------------------------------
-  function buildSummary({ auditRequest, executionId, finalState, resumed, allSourceResults, canonicalRecord, startedAt }) {
+  function buildSummary({ auditRequest, executionId, finalState, resumed, allSourceResults, canonicalRecord, startedAt, wp8Error }) {
     const sc = { total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 };
     const sources = allSourceResults.map(e => {
       const status = e.sourceResult.status || "NOT_APPLICABLE";
@@ -975,12 +975,14 @@ export function createAuditOrchestrator({
       if (counterKey !== undefined) sc[counterKey]++;
       return Object.freeze({ source: e.source, status: e.sourceResult.status, retryCount: e.sourceResult.retryCount || 0, artifactKey: e.normalizedRecord?.key || null });
     });
-    return Object.freeze({
+    const summary = {
       contractVersion: "1.0.0", auditId: auditRequest.auditId, executionId,
       finalState, resumed: resumed || false, startedAt, completedAt: c.now(),
       sourceCounts: Object.freeze(sc), sources: Object.freeze(sources),
       canonicalEvidence: canonicalRecord ? Object.freeze({ key: canonicalRecord.key, sha256: canonicalRecord.sha256, bytes: canonicalRecord.bytes }) : null,
-    });
+    };
+    if (wp8Error) summary.wp8Error = wp8Error;
+    return Object.freeze(summary);
   }
 
   // ===================================================================

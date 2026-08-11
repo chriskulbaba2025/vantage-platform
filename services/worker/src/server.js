@@ -313,8 +313,8 @@ export function createRequestHandler({
           }
           try {
             const tenantId = config.vantageTenantId || "default";
-            const finalState = await auditService.resumeAudit(auditId, tenantId);
-            return send(res, 200, { auditId, resumed: true, finalState });
+            const result = await auditService.resumeAudit(auditId, tenantId);
+            return send(res, 200, { auditId, resumed: true, ...result });
           } catch (err) {
             return send(res, err.statusCode || 500, { error: err.message });
           }
