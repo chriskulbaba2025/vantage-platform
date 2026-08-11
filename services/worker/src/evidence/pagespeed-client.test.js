@@ -137,7 +137,9 @@ test("T7-04: PageSpeed timeout → Lighthouse fallback success", async () => {
   const fetchImpl = async (url) => {
     if (String(url).includes("pagespeedonline")) {
       // Simulate timeout by never resolving
-      return new Promise(() => {}); // will time out via withTimeout
+      const error = new Error("Simulated PageSpeed timeout");
+      error.errorCategory = "timeout";
+      throw error;
     }
     return new Response("not found", { status: 404 });
   };
@@ -720,8 +722,10 @@ test("T7-NULL-05: PageSpeed retry success produces AVAILABLE with retry count", 
 test("T7-NULL-06: site timeout triggers Lighthouse fallback, null scores become PARTIAL", async () => {
   const fetchImpl = async (url) => {
     if (String(url).includes("pagespeedonline")) {
-      // Simulate timeout — never resolves
-      return new Promise(() => {});
+      // Simulate timeout deterministically without waiting for the production timer
+      const error = new Error("Simulated PageSpeed timeout");
+      error.errorCategory = "timeout";
+      throw error;
     }
     return new Response("not found", { status: 404 });
   };

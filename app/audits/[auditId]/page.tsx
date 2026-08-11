@@ -1,20 +1,8 @@
 import { workerClient } from "@/lib/worker-client";
+import AuditReviewActions from "@/components/AuditReviewActions";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
-
-const REVIEW_CHECKLIST_ITEMS = [
-  { id: "source_failures", label: "Source failures and partial coverage" },
-  { id: "top_ten_findings", label: "Top ten findings" },
-  { id: "high_severity", label: "High-severity findings" },
-  { id: "competitor_selections", label: "Competitor selections" },
-  { id: "internal_link_recommendations", label: "Internal-link recommendations" },
-  { id: "root_cause", label: "Root cause" },
-  { id: "score_eligibility", label: "Score eligibility" },
-  { id: "limitations", label: "Limitations" },
-  { id: "causal_language", label: "Causal language" },
-  { id: "implementation_feasibility", label: "Implementation feasibility" },
-];
 
 export default async function AuditDetailPage({ params }: { params: { auditId: string } }) {
   const { auditId } = params;
@@ -47,21 +35,24 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
     );
   }
 
+  const state = String(status!.state || "");
+  const slug = String(status!.slug || "");
+
   return (
     <div>
       <div className="flex-row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
-        <h1 style={{ margin: 0 }}>Audit Status</h1>
-        <span className={`status-badge ${stateClass(status!.state)}`}>{status!.state}</span>
+        <h1 style={{ margin: 0 }}>{status!.businessName || "Audit Status"}</h1>
+        <span className={`status-badge ${stateClass(state)}`}>{state}</span>
       </div>
 
       <div className="card">
+        {status!.targetUrl && <p><strong>Website:</strong> {status!.targetUrl}</p>}
         <p><strong>Audit ID:</strong> <code>{auditId}</code></p>
         <p><strong>Version:</strong> {status!.version}</p>
         <p><strong>Created:</strong> {status!.createdAt ? new Date(status!.createdAt).toLocaleString() : "—"}</p>
         <p><strong>Updated:</strong> {status!.updatedAt ? new Date(status!.updatedAt).toLocaleString() : "—"}</p>
       </div>
 
-      {/* Lifecycle History */}
       <div className="card">
         <h2 style={{ fontSize: "1rem", marginBottom: 12 }}>Lifecycle History</h2>
         <table>
@@ -80,10 +71,12 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
         </table>
       </div>
 
-      {/* Report Viewer — only for approved/published */}
-      {(status!.state === "approved" || status!.state === "published") && (
+      <AuditReviewActions auditId={auditId} state={state} slug={slug} />
+
+      {(state === "approved" || state === "published") && (
         <div className="card" style={{ borderColor: "var(--green)" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Approved Report</h2>
+          <p>The governed report is approved and ready to review.</p>
           <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Report</a>
         </div>
       )}

@@ -1,13 +1,20 @@
 /**
- * Postgres Lifecycle Repository — fingerprint stored on transition_keys only.
+ * PostgreSQL Lifecycle Repository — canonical persistent lifecycle store.
  * @module lifecycle/postgres-repository
  */
 
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   RepositoryFailureError, DuplicateAuditError, AuditNotFoundError,
   ConcurrencyConflictError, TenantIsolationError,
   TransitionIdempotencyConflictError,
 } from "./lifecycle-errors.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "migrations");
+const MIGRATION_FILES = Object.freeze(["001_lifecycle.sql", "002_wp11_web_app_integration.sql"]);
 
 const SQL = {
   insertAuditMeta:   `INSERT INTO prysm.lifecycle_audits (audit_id, tenant_id, client_id, created_at) VALUES ($1,$2,$3,$4)`,
@@ -19,11 +26,11 @@ const SQL = {
   loadEvents: `SELECT * FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence ASC`,
   loadTransitionKey: `SELECT e.*, tk.request_fingerprint FROM prysm.lifecycle_transition_keys tk JOIN prysm.lifecycle_events e ON e.event_id = tk.event_id WHERE tk.audit_id = $1 AND tk.transition_idempotency_key = $2`,
   loadAuditMeta: `SELECT tenant_id, client_id FROM prysm.lifecycle_audits WHERE audit_id = $1`,
+  loadAuditMetadataScoped: `SELECT audit_id, tenant_id, client_id, business_name, target_url, created_at FROM prysm.lifecycle_audits WHERE audit_id = $1 AND tenant_id = $2`,
   lockAudit:  `SELECT tenant_id, client_id FROM prysm.lifecycle_audits WHERE audit_id = $1 FOR UPDATE`,
   latestEvent: `SELECT next_state, sequence FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence DESC LIMIT 1`,
-  latestEvent: `SELECT next_state, sequence FROM prysm.lifecycle_events WHERE audit_id = $1 ORDER BY sequence DESC LIMIT 1`,
   updateAuditClient: `UPDATE prysm.lifecycle_audits SET client_id = $1 WHERE audit_id = $2`,
-  // WP11: tenant-scoped audit history
+  updateAuditMetadata: `UPDATE prysm.lifecycle_audits SET business_name = $1, target_url = $2 WHERE audit_id = $3 AND tenant_id = $4`,
   listByTenant: `
     SELECT
       a.audit_id,
@@ -49,7 +56,6 @@ const SQL = {
 };
 
 function rowToEvent(row) {
-  // Build clean event — no fingerprint on public object
   const e = {
     contractVersion: "1.0.0",
     eventId:       row.event_id,
@@ -67,7 +73,6 @@ function rowToEvent(row) {
   if (row.execution_id != null) e.executionId = row.execution_id;
   if (row.artifact_key != null) e.artifactKey = row.artifact_key;
   if (row.transition_idempotency_key != null) e.transitionIdempotencyKey = row.transition_idempotency_key;
-  // loadByTransitionKey JOIN returns request_fingerprint — attach internally
   if (row.request_fingerprint != null) e._fingerprint = row.request_fingerprint;
   return Object.freeze(e);
 }
@@ -75,10 +80,38 @@ function rowToEvent(row) {
 export function createPostgresLifecycleRepository({ pool }) {
   if (!pool) throw new Error("postgres-lifecycle-repository requires a pool");
 
-  async function runMigration(sql) {
-    for (const stmt of sql.split(";").map(s => s.trim()).filter(s => s.length > 0)) {
+  let initializationPromise = null;
+
+  async function runSqlMigration(sql) {
+    if (typeof sql !== "string" || !sql.trim()) throw new Error("Migration SQL is required");
+    for (const stmt of sql.split(";").map((s) => s.trim()).filter((s) => s.length > 0)) {
       await pool.query(stmt);
     }
+  }
+
+  async function ensureInitialized() {
+    if (!initializationPromise) {
+      initializationPromise = (async () => {
+        for (const filename of MIGRATION_FILES) {
+          const sql = await readFile(resolve(MIGRATIONS_DIR, filename), "utf8");
+          await runSqlMigration(sql);
+        }
+        return true;
+      })().catch((error) => {
+        initializationPromise = null;
+        throw error;
+      });
+    }
+    return initializationPromise;
+  }
+
+  /**
+   * With SQL: apply that explicit migration (test/backward compatibility).
+   * Without SQL: apply the deployed canonical migration set.
+   */
+  async function runMigration(sql) {
+    if (typeof sql === "string") return runSqlMigration(sql);
+    return ensureInitialized();
   }
 
   async function withTransaction(fn) {
@@ -99,13 +132,14 @@ export function createPostgresLifecycleRepository({ pool }) {
   }
 
   async function createAudit({ auditId, tenantId, clientId, idempotencyKey, event }) {
+    await ensureInitialized();
     try {
       return await withTransaction(async (db) => {
         const existing = await db.query(SQL.loadIdempotencyConflict, [tenantId, idempotencyKey]);
         if (existing.rows.length > 0) {
           const row = existing.rows[0];
           if (row.audit_id === auditId && row.tenant_id === tenantId && row.client_id === clientId) {
-            return true; // idempotent — all matches
+            return true;
           }
           throw new DuplicateAuditError({ tenantId, idempotencyKey, existingAuditId: row.audit_id, newAuditId: auditId });
         }
@@ -140,6 +174,7 @@ export function createPostgresLifecycleRepository({ pool }) {
   }
 
   async function loadEvents(auditId, tenantId) {
+    await ensureInitialized();
     const metaResult = await pool.query(SQL.loadAuditMeta, [auditId]);
     if (metaResult.rows.length === 0) return [];
     if (metaResult.rows[0].tenant_id !== tenantId) throw new TenantIsolationError({ auditId, tenantId });
@@ -148,18 +183,21 @@ export function createPostgresLifecycleRepository({ pool }) {
   }
 
   async function loadByIdempotencyKey(tenantId, idempotencyKey) {
+    await ensureInitialized();
     const result = await pool.query(SQL.loadIdempotencyConflict, [tenantId, idempotencyKey]);
     if (result.rows.length === 0) return null;
     return { auditId: result.rows[0].audit_id, idempotencyKey, tenantId: result.rows[0].tenant_id, clientId: result.rows[0].client_id };
   }
 
   async function loadByTransitionKey(auditId, transitionIdempotencyKey) {
+    await ensureInitialized();
     const result = await pool.query(SQL.loadTransitionKey, [auditId, transitionIdempotencyKey]);
     if (result.rows.length === 0) return null;
     return rowToEvent(result.rows[0]);
   }
 
   async function appendEventAtomic({ event, fingerprint, expectedState, expectedVersion }) {
+    await ensureInitialized();
     try {
       await withTransaction(async (db) => {
         const lockResult = await db.query(SQL.lockAudit, [event.auditId]);
@@ -193,15 +231,11 @@ export function createPostgresLifecycleRepository({ pool }) {
           event.executionId || null, event.codeVersion,
           event.artifactKey || null, event.transitionIdempotencyKey || null,
         ]);
-
         await db.query(SQL.insertTransitionKey, [
           event.auditId, event.transitionIdempotencyKey, event.eventId, fingerprint,
         ]);
       });
     } catch (err) {
-      // Duplicate event (audit_id, sequence) after a concurrent race past
-      // the service-layer optimistic checks → ConcurrencyConflictError.
-      // Needed for pg-mem where SELECT … FOR UPDATE is a non-blocking no-op.
       if (err.code === "23505" || (err.message && err.message.includes("duplicate"))) {
         throw new ConcurrencyConflictError(event.auditId, {
           expectedVersion, duplicateSequence: event.sequence,
@@ -212,11 +246,25 @@ export function createPostgresLifecycleRepository({ pool }) {
   }
 
   async function executeUpdate(auditId, newClientId) {
+    await ensureInitialized();
     return pool.query(SQL.updateAuditClient, [newClientId, auditId]);
   }
 
-  // WP11: tenant-scoped audit history
+  async function updateAuditMetadata(auditId, tenantId, { businessName = "", targetUrl = "" } = {}) {
+    await ensureInitialized();
+    const result = await pool.query(SQL.updateAuditMetadata, [businessName, targetUrl, auditId, tenantId]);
+    if (result.rowCount === 0) throw new AuditNotFoundError(auditId);
+    return true;
+  }
+
+  async function getAuditMetadata(auditId, tenantId) {
+    await ensureInitialized();
+    const result = await pool.query(SQL.loadAuditMetadataScoped, [auditId, tenantId]);
+    return result.rows[0] || null;
+  }
+
   async function listByTenant(tenantId, limit = 50, offset = 0) {
+    await ensureInitialized();
     const result = await pool.query(SQL.listByTenant, [tenantId, limit, offset]);
     return result.rows.map((row) => ({
       audit_id: row.audit_id,
@@ -229,7 +277,18 @@ export function createPostgresLifecycleRepository({ pool }) {
     }));
   }
 
-  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, runMigration, executeUpdate, listByTenant };
+  return {
+    createAudit,
+    loadEvents,
+    loadByIdempotencyKey,
+    loadByTransitionKey,
+    appendEventAtomic,
+    runMigration,
+    executeUpdate,
+    updateAuditMetadata,
+    getAuditMetadata,
+    listByTenant,
+  };
 }
 
 export default { createPostgresLifecycleRepository };
