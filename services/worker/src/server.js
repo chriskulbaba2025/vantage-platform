@@ -427,7 +427,7 @@ async function loadAdapters() {
     "dataforseo-onpage": { dir: "dataforseo-onpage", file: "dataforseo-onpage-adapter.js", factory: "createDataForSeoOnPageAdapter" },
     pagespeed: { dir: "pagespeed", file: "pagespeed-adapter.js", factory: "createPageSpeedAdapter" },
     "dataforseo-serp": { dir: "dataforseo-serp", file: "serp-adapter.js", factory: "createSerpAdapter" },
-    backlinks: { dir: "dataforseo-backlinks", file: "backlink-adapter.legacy.js", factory: null },
+    backlinks: { dir: "dataforseo-backlinks", file: "backlink-adapter.js", factory: "createBacklinksAdapter" },
     ga4: { dir: "ga4", file: "ga4-adapter.js", factory: "createGa4Adapter" },
     gsc: { dir: "gsc", file: "gsc-adapter.js", factory: "createGscAdapter" },
   };
