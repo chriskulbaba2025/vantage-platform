@@ -314,9 +314,18 @@ export function createRequestHandler({
           try {
             const tenantId = config.vantageTenantId || "default";
             const result = await auditService.resumeAudit(auditId, tenantId);
-            return send(res, 200, { auditId, resumed: true, ...result });
+            // Log diagnostics internally; return safe client response
+            if (result.error) {
+              console.error(`Audit ${auditId} resume stalled: ${result.error}`);
+            }
+            const { error: _, ...safeResult } = result;
+            return send(res, 200, { auditId, resumed: true, ...safeResult });
           } catch (err) {
-            return send(res, err.statusCode || 500, { error: err.message });
+            console.error(`Audit ${auditId} resume failed:`, err.message);
+            // Never expose internal diagnostics to the client
+            return send(res, err.statusCode || 500, {
+              error: "Audit recovery could not complete. The audit may need to be restarted.",
+            });
           }
         }
 
@@ -405,7 +414,7 @@ export function createRequestHandler({
 
 import { createProductionRuntime } from "./application/production-runtime.js";
 import { createPostgresLifecycleRepository } from "./lifecycle/postgres-repository.js";
-import { createGovernedArtifactStore } from "./storage/governed-artifact-store.js";
+import { createGovernedArtifactStore, buildKey as buildArtifactKey } from "./storage/governed-artifact-store.js";
 
 const config = loadConfig();
 const localStore = createLocalReportStore({ baseDir: config.artifactDir, publicBaseUrl: config.publicReportBaseUrl });
@@ -440,27 +449,51 @@ import { createProductionAdapters } from "./application/production-bootstrap.js"
 const adapters = createProductionAdapters();
 console.log(`Production adapters loaded: ${Object.keys(adapters).join(", ")}`);
 
-// Artifact store (production S3 or local)
+// Artifact store — governed persistence boundary.
+//
+// Production MUST use durable S3 storage.  In-memory storage silently loses
+// all canonical evidence, findings, scores, report-content packages, and
+// rendered pages across deploys/restarts.  There is no safe fallback.
+//
+// Development-only: set VANTAGE_DEV_MEMORY_STORE=true to use the in-memory
+// artifact store.  This MUST NOT be set in production.
+const PRODUCTION_ARTIFACT_STORE_REQUIRED = (
+  "VANTAGE PRODUCTION — persistent S3 artifact storage is required. " +
+  "Set VANTAGE_REPORTS_BUCKET and AWS_REGION. " +
+  "For local development only, set VANTAGE_DEV_MEMORY_STORE=true."
+);
+
 let artifactStore;
-try {
-  if (config.reportsBucket) {
-    const { createS3ArtifactStore } = await import("./storage/s3-artifact-store.js");
-    artifactStore = createGovernedArtifactStore({
-      store: createS3ArtifactStore({
-        bucket: config.reportsBucket,
-        region: config.awsRegion,
-        prefix: config.reportsPrefix,
-      }),
-    });
-  } else {
-    // Local artifact store for development/testing
-    const { createMemoryArtifactStore } = await import("./storage/memory-artifact-store.js");
-    artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
+if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("VANTAGE_DEV_MEMORY_STORE is not allowed in production");
   }
-} catch (e) {
-  console.warn("Artifact store creation failed:", e.message);
   const { createMemoryArtifactStore } = await import("./storage/memory-artifact-store.js");
   artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
+  console.warn("DEVELOPMENT: using in-memory artifact store (NOT for production)");
+} else if (!config.reportsBucket) {
+  throw new Error(`VANTAGE_REPORTS_BUCKET is required. ${PRODUCTION_ARTIFACT_STORE_REQUIRED}`);
+} else {
+  try {
+    const { createS3ArtifactStore } = await import("./storage/s3-artifact-store.js");
+    const s3Store = createS3ArtifactStore({
+      bucket: config.reportsBucket,
+      region: config.awsRegion,
+      prefix: config.reportsPrefix,
+    });
+    artifactStore = createGovernedArtifactStore({ store: s3Store });
+    console.log(`Artifact store: S3 bucket=${config.reportsBucket} region=${config.awsRegion} prefix=${config.reportsPrefix}`);
+    // Prove connectivity at startup — fail closed if unreachable
+    try {
+      const probeKey = buildArtifactKey({ tenantId: "_startup", clientId: "_probe", auditId: "00000000-0000-0000-0000-000000000000", category: "_startup", artifactName: "probe.json" });
+      await s3Store.exists(probeKey);
+      console.log("Artifact store connectivity verified");
+    } catch (probeErr) {
+      throw new Error(`Artifact store connectivity check failed: ${probeErr.message}. ${PRODUCTION_ARTIFACT_STORE_REQUIRED}`);
+    }
+  } catch (e) {
+    throw new Error(`Production artifact store initialization failed: ${e.message}. ${PRODUCTION_ARTIFACT_STORE_REQUIRED}`);
+  }
 }
 
 // Lifecycle repository (PostgreSQL when DATABASE_URL is set)
