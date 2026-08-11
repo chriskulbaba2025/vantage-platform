@@ -73,6 +73,14 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
 
       <AuditReviewActions auditId={auditId} state={state} slug={slug} />
 
+      {(state === "draft_rendered" || state === "in_review") && (
+        <div className="card" style={{ borderColor: "var(--amber)" }}>
+          <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Draft Report</h2>
+          <p>The governed draft report is ready for review. Pages are visible only to the reviewer.</p>
+          <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Draft Report</a>
+        </div>
+      )}
+
       {(state === "approved" || state === "published") && (
         <div className="card" style={{ borderColor: "var(--green)" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Approved Report</h2>

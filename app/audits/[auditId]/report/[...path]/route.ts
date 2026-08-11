@@ -29,7 +29,8 @@ export async function GET(
     if (!status) {
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
-    if (status.state !== "approved" && status.state !== "published") {
+    const READABLE_STATES = new Set(["draft_rendered", "in_review", "approved", "published"]);
+    if (!READABLE_STATES.has(status.state)) {
       return NextResponse.json({ error: "Report not available", code: "REPORT_NOT_APPROVED" }, { status: 403 });
     }
 

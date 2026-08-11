@@ -259,37 +259,52 @@ export function createAuditApplicationService({
 
   /**
    * Retrieve a report page from the governed artifact store.
-   * Only serves pages when lifecycle is APPROVED or PUBLISHED.
+   * Serves draft pages for draft_rendered and in_review (reviewer access).
+   * Serves approved pages for approved and published (client access).
    */
   async function getReportPage(tenantId, clientId, auditId, filename, slug) {
-    // Check lifecycle state via report store
-    let lifecycle;
+    // Check lifecycle state via lifecycle repo (canonical)
+    let currentState;
     try {
-      lifecycle = await reportStore.getStatus(slug, auditId);
+      const current = await lifecycleService.currentState(auditId, tenantId);
+      currentState = current?.state;
     } catch {
-      // fall through to 404
+      // Fallback to report store
+      try {
+        const rpt = await reportStore.getStatus(slug, auditId);
+        currentState = rpt?.status;
+      } catch {
+        currentState = null;
+      }
     }
 
-    if (!lifecycle) {
+    if (!currentState) {
       const err = new Error("Audit not found");
       err.statusCode = 404;
       throw err;
     }
 
-    if (lifecycle.status !== "approved" && lifecycle.status !== "published") {
+    const READABLE_STATES = new Set(["draft_rendered", "in_review", "approved", "published"]);
+    if (!READABLE_STATES.has(currentState)) {
       const err = new Error("Report not available");
       err.statusCode = 403;
       err.code = "REPORT_NOT_APPROVED";
-      err.lifecycleStatus = lifecycle.status;
+      err.lifecycleStatus = currentState;
       throw err;
     }
 
-    // Validate filename is in the approved manifest
-    const finalArtifacts = lifecycle.artifacts?.final || [];
-    if (!finalArtifacts.includes(filename)) {
-      const err = new Error("Page not found in approved report");
-      err.statusCode = 404;
-      throw err;
+    // For approved/published, validate against the artifact manifest.
+    // For draft states, read directly from artifact store (no manifest yet).
+    const DRAFT_STATES = new Set(["draft_rendered", "in_review"]);
+    if (!DRAFT_STATES.has(currentState)) {
+      let lifecycle;
+      try { lifecycle = await reportStore.getStatus(slug, auditId); } catch { /* fall through */ }
+      const finalArtifacts = lifecycle?.artifacts?.final || [];
+      if (!finalArtifacts.includes(filename)) {
+        const err = new Error("Page not found in approved report");
+        err.statusCode = 404;
+        throw err;
+      }
     }
 
     // Read from governed artifact store

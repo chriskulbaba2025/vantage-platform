@@ -248,6 +248,63 @@ export function createProductionRuntime({
     };
   }
 
+  const RESUMABLE_STATES = new Set([T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY]);
+
+  async function resumeAudit(auditId, tenantId) {
+    const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
+    if (!meta) return null;
+    const current = await lifecycleService.currentState(auditId, tenantId);
+    if (!current || !RESUMABLE_STATES.has(current.state)) return current?.state || null;
+
+    const businessName = meta.business_name || meta.businessName || "";
+    const targetUrl = meta.target_url || meta.targetUrl || "";
+    const clientId = meta.client_id || meta.clientId || current.clientId || "";
+    const executionId = randomUUID();
+    const auditRequest = {
+      contractVersion: "1.0.0",
+      auditId,
+      tenantId,
+      clientId,
+      idempotencyKey: `${auditId}:resume:${Date.now()}`,
+      targetUrl: targetUrl || "https://unknown",
+      businessName,
+      market: "",
+      language: "en-CA",
+      primaryGoal: "",
+      services: [],
+      competitors: [],
+    };
+
+    let result = await orchestrator.execute(auditRequest, { executionId });
+    let previousState = null;
+    for (let step = 0; step < 4; step++) {
+      if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;
+      if (result.finalState === previousState) break;
+      previousState = result.finalState;
+      result = await orchestrator.execute(auditRequest, { executionId: randomUUID() });
+    }
+
+    // If draft rendered, ensure report store is initialized
+    if (result.finalState === T.DRAFT_RENDERED && typeof reportStore.writeReport === "function") {
+      const slug = slugify(businessName);
+      try {
+        const existing = await reportStore.getStatus(slug, auditId).catch(() => null);
+        if (!existing || existing.status !== "draft_rendered") {
+          await reportStore.writeReport({
+            slug,
+            runId: auditId,
+            model: { evidence: {} },
+            manifest: { auditId, lifecycleStatus: T.DRAFT_RENDERED, governedManifestKey: null },
+            html: "",
+            includeIndexHtml: false,
+          });
+        }
+      } catch { /* best-effort sync */ }
+    }
+
+    return result.finalState;
+  }
+
   async function getAuditStatus(auditId, tenantId) {
     const status = await baseAuditService.getAuditStatus(auditId, tenantId);
     if (!status) return null;
@@ -255,6 +312,12 @@ export function createProductionRuntime({
     const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
     const businessName = meta?.business_name || meta?.businessName || "";
     const targetUrl = meta?.target_url || meta?.targetUrl || "";
+
+    // Auto-resume stuck audits on status check
+    if (current && RESUMABLE_STATES.has(current.state)) {
+      resumeAudit(auditId, tenantId).catch(() => {});
+    }
+
     return {
       ...status,
       clientId: current?.clientId || meta?.client_id || meta?.clientId || "",
@@ -329,6 +392,7 @@ export function createProductionRuntime({
     getAuditStatus,
     submitReview,
     approveAudit,
+    resumeAudit,
   });
 
   return Object.freeze({

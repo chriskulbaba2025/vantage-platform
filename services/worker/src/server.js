@@ -196,7 +196,8 @@ export function createRequestHandler({
         }
         let lifecycle = null;
         try { lifecycle = await store.getStatus(slug, runId); } catch {}
-        if (!lifecycle || lifecycle.status !== LIFECYCLE_STATUS.APPROVED) {
+        const LEGACY_READABLE = new Set(["draft", "reviewed", "approved", "published"]);
+        if (!lifecycle || !LEGACY_READABLE.has(lifecycle.status)) {
           return send(res, 403, { error: "Report not available", code: "REPORT_NOT_APPROVED", message: "This report has not been approved for delivery.", status: lifecycle?.status || "unknown" });
         }
         const finalArtifacts = lifecycle.artifacts?.final || [];
@@ -285,7 +286,7 @@ export function createRequestHandler({
       }
 
       // GET /api/v1/audits/:auditId — audit status
-      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/report\/(.+))?$/);
+      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/resume|\/report\/(.+))?$/);
       if (wp11AuditMatch) {
         const auditId = wp11AuditMatch[1];
         const subPath = wp11AuditMatch[2] || "";
@@ -299,6 +300,21 @@ export function createRequestHandler({
             const status = await auditService.getAuditStatus(auditId, tenantId);
             if (!status) return send(res, 404, { error: "Audit not found" });
             return send(res, 200, status);
+          } catch (err) {
+            return send(res, err.statusCode || 500, { error: err.message });
+          }
+        }
+
+        // POST /api/v1/audits/:auditId/resume — recover stuck audits
+        if (req.method === "POST" && subPath === "/resume") {
+          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          if (!auditService || typeof auditService.resumeAudit !== "function") {
+            return send(res, 501, { error: "WP11 resume not configured" });
+          }
+          try {
+            const tenantId = config.vantageTenantId || "default";
+            const finalState = await auditService.resumeAudit(auditId, tenantId);
+            return send(res, 200, { auditId, resumed: true, finalState });
           } catch (err) {
             return send(res, err.statusCode || 500, { error: err.message });
           }
