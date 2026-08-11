@@ -1063,20 +1063,32 @@ export function createAuditOrchestrator({
         // canonical evidence, findings, and scores.  This is the governed
         // WP8 boundary — no providers, LLMs, or n8n are called.
         try {
-          // Load canonical evidence — try governed manifest first, fall back
-          // to direct artifact read for compatibility with pre-manifest audits.
+          // Load canonical evidence — three-tier fallback for recovery:
+          //   1. Governed manifest (full verification)
+          //   2. Direct canonical/evidence.json read
+          //   3. Manifest unverified — extract canonicalArtifact.key
           let canonicalEvidence;
           try {
             const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
             canonicalEvidence = crManifest.evidence;
-          } catch {
-            const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" });
-            if (!(await artifactStore.exists(evKey))) {
-              throw new Error("Canonical evidence not found — manifest failed and evidence.json missing");
+          } catch (manifestErr) {
+            try {
+              const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" });
+              const evBytes = await artifactStore.get(evKey);
+              if (!evBytes) throw new Error("empty");
+              canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
+            } catch {
+              // Final fallback: load manifest unverified, follow canonicalArtifact.key
+              const manKey = buildArtifactKey({ tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" });
+              const manBytes = await artifactStore.get(manKey);
+              if (!manBytes) throw new Error(`Cannot load canonical evidence: ${manifestErr.message}`);
+              const manifest = JSON.parse(Buffer.from(manBytes).toString("utf8"));
+              const evKey = manifest?.canonicalArtifact?.key;
+              if (!evKey) throw new Error(`Manifest has no canonicalArtifact.key: ${manifestErr.message}`);
+              const evBytes = await artifactStore.get(evKey);
+              if (!evBytes) throw new Error(`Evidence artifact empty at ${evKey}: ${manifestErr.message}`);
+              canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
             }
-            const evBytes = await artifactStore.get(evKey);
-            if (!evBytes) throw new Error("Canonical evidence artifact is empty");
-            canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
           }
 
           // Load findings
