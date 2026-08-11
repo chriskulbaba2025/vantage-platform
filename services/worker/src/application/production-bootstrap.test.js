@@ -175,10 +175,10 @@ await test("Production bootstrap — zero provider calls", async (t) => {
   });
 
   // =========================================================================
-  // BL-01: server.js adapterSources points to production adapter
+  // BL-01: server.js uses canonical createProductionAdapters, not legacy loader
   // =========================================================================
 
-  await t.test("BL-01: server.js backlinks source is backlink-adapter.js, NOT legacy", async () => {
+  await t.test("BL-01: server.js uses createProductionAdapters, NOT legacy dynamic loader", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve, dirname } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
@@ -187,15 +187,27 @@ await test("Production bootstrap — zero provider calls", async (t) => {
       "utf-8"
     );
 
-    // The adapterSources block must reference backlink-adapter.js (production)
-    const hasProductionBacklinksRef = /backlinks\s*:\s*\{[^}]*backlink-adapter\.js/.test(serverSrc);
-    assert.ok(hasProductionBacklinksRef,
-      "server.js adapterSources.backlinks must point to backlink-adapter.js");
+    // The canonical bootstrap must be used
+    assert.ok(
+      serverSrc.includes("createProductionAdapters"),
+      "server.js must import createProductionAdapters from production-bootstrap.js"
+    );
 
-    // The legacy test file must NOT appear as an adapter source
-    const hasLegacyBacklinksRef = /backlinks\s*:\s*\{[^}]*backlink-adapter\.legacy/.test(serverSrc);
-    assert.equal(hasLegacyBacklinksRef, false,
-      "server.js must NOT reference backlink-adapter.legacy.js in adapterSources");
+    // The legacy dynamic loader must not exist
+    assert.equal(
+      /async function loadAdapters/.test(serverSrc), false,
+      "server.js must NOT contain the dynamic loadAdapters function"
+    );
+    assert.equal(
+      /adapterSources/.test(serverSrc), false,
+      "server.js must NOT contain adapterSources"
+    );
+
+    // The legacy test file must NOT be referenced
+    assert.equal(
+      /backlink-adapter\.legacy/.test(serverSrc), false,
+      "server.js must NOT reference backlink-adapter.legacy.js"
+    );
   });
 
   // =========================================================================

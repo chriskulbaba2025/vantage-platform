@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { execute as onpageExecute, ADAPTER_VERSION as ONPAGE_VERSION } from "../adapters/dataforseo-onpage/dataforseo-onpage-adapter.js";
 import { execute as pagespeedExecute } from "../evidence/pagespeed-client.js";
 import { execute as serpExecute, ADAPTER_VERSION as SERP_VERSION } from "../adapters/dataforseo-serp/serp-adapter.js";
-import { execute as backlinksExecute } from "../evidence/backlinks-provider.js";
+import { execute as backlinksExecute } from "../adapters/dataforseo-backlinks/backlink-adapter.js";
 import { execute as ga4Execute } from "../evidence/ga4-client.js";
 import { execute as gscExecute } from "../evidence/gsc-client.js";
 import { compileAllSchemas } from "../contracts/validator.js";

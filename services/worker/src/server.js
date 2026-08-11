@@ -419,46 +419,10 @@ try {
   console.warn("Schema validator not available — using pass-through");
 }
 
-// Adapters — lazy loading with graceful fallback
-let adapters = {};
-
-async function loadAdapters() {
-  const adapterSources = {
-    "dataforseo-onpage": { dir: "dataforseo-onpage", file: "dataforseo-onpage-adapter.js", factory: "createDataForSeoOnPageAdapter" },
-    pagespeed: { dir: "pagespeed", file: "pagespeed-adapter.js", factory: "createPageSpeedAdapter" },
-    "dataforseo-serp": { dir: "dataforseo-serp", file: "serp-adapter.js", factory: "createSerpAdapter" },
-    backlinks: { dir: "dataforseo-backlinks", file: "backlink-adapter.js", factory: "createBacklinksAdapter" },
-    ga4: { dir: "ga4", file: "ga4-adapter.js", factory: "createGa4Adapter" },
-    gsc: { dir: "gsc", file: "gsc-adapter.js", factory: "createGscAdapter" },
-  };
-
-  const loaded = {};
-  for (const [key, src] of Object.entries(adapterSources)) {
-    try {
-      const mod = await import(`./adapters/${src.dir}/${src.file}`);
-      if (src.factory && typeof mod[src.factory] === "function") {
-        loaded[key] = mod[src.factory](config);
-      } else if (typeof mod.default === "function") {
-        loaded[key] = mod.default(config);
-      } else {
-        // Fallback: use the first exported function or the module itself
-        const fn = Object.values(mod).find((v) => typeof v === "function");
-        loaded[key] = fn ? fn(config) : mod;
-      }
-    } catch (e) {
-      console.warn(`Adapter ${key} not loadable:`, e.message);
-    }
-  }
-  return loaded;
-}
-try {
-  adapters = await loadAdapters();
-  if (Object.keys(adapters).length > 0) {
-    console.log(`Production adapters loaded: ${Object.keys(adapters).join(", ")}`);
-  }
-} catch (e) {
-  console.warn("Adapter loading failed:", e.message);
-}
+// Adapters — canonical production composition (zero provider calls during bootstrap)
+import { createProductionAdapters } from "./application/production-bootstrap.js";
+const adapters = createProductionAdapters();
+console.log(`Production adapters loaded: ${Object.keys(adapters).join(", ")}`);
 
 // Artifact store (production S3 or local)
 let artifactStore;
