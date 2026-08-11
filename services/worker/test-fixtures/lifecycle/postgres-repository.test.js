@@ -29,10 +29,6 @@ function createPgMemRepo() {
   const db = newDb();
   const Pool = db.adapters.createPg().Pool;
   const pgPool = new Pool();
-  const sql = readFileSync(MIGRATION_PATH, "utf-8");
-  for (const stmt of sql.split(";").map(s => s.trim()).filter(s => s.length > 0)) {
-    pgPool.query(stmt);
-  }
   return createPostgresLifecycleRepository({ pool: pgPool });
 }
 
