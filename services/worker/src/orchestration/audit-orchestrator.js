@@ -17,6 +17,7 @@ import { buildArtifactKey } from "../storage/artifact-key.js";
 import { scoreFromCanonicalEvidence } from "../scoring/scoring-service.js";
 import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service.js";
 import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
+import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -1050,15 +1051,82 @@ export function createAuditOrchestrator({
       }
     }
 
-    // 3a2. SCORED — proceed to governed narrative (WP9)
+    // 3a2. SCORED — WP8 package build + governed narrative (WP9)
     if (cs.state === T.SCORED) {
-      // Pre-check: WP8 package must exist before entering NARRATIVE_PENDING.
-      // If missing, remain at SCORED (backward compatible with WP5-WP7 tests).
       const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
       const pkgExists = await artifactStore.exists(pkgKey);
+
       if (!pkgExists) {
-        const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
-        return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
+        // WP8 recovery: build the report-content package from persisted
+        // canonical evidence, findings, and scores.  This is the governed
+        // WP8 boundary — no providers, LLMs, or n8n are called.
+        try {
+          // Load canonical evidence
+          const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" });
+          if (!(await artifactStore.exists(evKey))) {
+            const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
+            return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
+          }
+          const evBytes = await artifactStore.get(evKey);
+          if (!evBytes) throw new Error("Canonical evidence artifact is empty");
+          const canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
+
+          // Load findings
+          const fKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" });
+          if (!(await artifactStore.exists(fKey))) throw new Error("findings.json artifact missing");
+          const fBytes = await artifactStore.get(fKey);
+          const findings = JSON.parse(Buffer.from(fBytes).toString("utf8"));
+
+          // Load scores
+          const sKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
+          if (!(await artifactStore.exists(sKey))) throw new Error("scores.json artifact missing");
+          const sBytes = await artifactStore.get(sKey);
+          const scoreSet = JSON.parse(Buffer.from(sBytes).toString("utf8"));
+
+          // Build the WP8 package from governed inputs only
+          const pkg = buildReportContentPackage({
+            auditRequest,
+            canonicalEvidence,
+            findings: Array.isArray(findings) ? findings : (findings.findings || []),
+            scoreSet,
+          });
+
+          // Validate against report-content schema
+          const pkgValidation = validateContract(
+            "https://vantage-platform.io/prysm/contracts/v1/report-content.schema.json", pkg);
+          if (!pkgValidation.valid) {
+            throw new Error(`WP8 package validation failed: ${JSON.stringify(pkgValidation.errors?.slice(0, 3))}`);
+          }
+
+          // Persist with deterministic serialization
+          const pkgBytes = serializePackage(pkg);
+          const pkgSha = packageSha256(pkg);
+          const pkgScope = { tenantId, clientId, auditId, category: "report", artifactName: "report-content.json" };
+          const pkgRecord = await artifactStore.put({
+            bytes: Buffer.from(pkgBytes, "utf8"),
+            contentType: "application/json",
+            scope: pkgScope,
+          });
+
+          // Read back and verify
+          const storedBytes = await artifactStore.get(pkgRecord.key);
+          if (!storedBytes) throw new Error("WP8 package write-back verification failed: artifact empty");
+          const storedStr = Buffer.from(storedBytes).toString("utf8");
+          if (storedStr !== pkgBytes) throw new Error("WP8 package write-back verification failed: content mismatch");
+          const storedSha = createHash("sha256").update(storedStr).digest("hex");
+          if (storedSha !== pkgSha) throw new Error(`WP8 package write-back verification failed: SHA mismatch (expected ${pkgSha.slice(0,8)}, got ${storedSha.slice(0,8)})`);
+
+          // Verify via artifact store if supported
+          if (typeof artifactStore.verify === "function") {
+            const verifyResult = await artifactStore.verify(pkgRecord);
+            if (!verifyResult) throw new Error("WP8 package artifact store verify() returned false");
+          }
+        } catch (wp8Err) {
+          // WP8 build/validation/persistence failed — remain fail-closed at SCORED
+          console.error(`WP8 package build failed for ${auditId}:`, wp8Err.message);
+          const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
+          return buildSummary({ auditRequest, executionId, finalState: T.SCORED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt, wp8Error: wp8Err.message });
+        }
       }
       return runGovernedNarrative({ auditRequest, executionId, startedAt });
     }

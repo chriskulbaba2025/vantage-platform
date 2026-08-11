@@ -112,7 +112,7 @@ console.log("--- WP12-RUNTIME-01: Production runtime wiring ---");
 // =============================================================================
 console.log("\n--- WP12-LIFECYCLE-01: Full governed lifecycle ---");
 
-async function seedFullAuditToDraftRendered(targetUrl, businessName, tenantId) {
+async function seedToScored(targetUrl, businessName, tenantId) {
   const auditId = randomUUID();
   const clientId = `${targetUrl.replace(/[^a-zA-Z0-9.-]/g, "-")}-${businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   const executionId = randomUUID();
@@ -121,6 +121,82 @@ async function seedFullAuditToDraftRendered(targetUrl, businessName, tenantId) {
   await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey: randomUUID() });
 
   // Seed required governed artifacts
+  const canonicalEvidence = {
+    contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId,
+    normalizedRequest: { targetUrl, businessName, market: "", language: "en-CA", primaryGoal: "", services: [], competitors: [] },
+    sources: {
+      website: { source: "dataforseo-onpage", status: "AVAILABLE", provider: "mock", adapterVersion: "1.0.0", collectedAt: new Date().toISOString() },
+      performance: { source: "pagespeed", status: "AVAILABLE", provider: "mock", adapterVersion: "1.0.0", collectedAt: new Date().toISOString() },
+      competitors: { source: "dataforseo-serp", status: "NOT_APPLICABLE" },
+      backlinks: { source: "backlinks", status: "NOT_CONNECTED" },
+      ga4: { source: "ga4", status: "NOT_CONNECTED" },
+      gsc: { source: "gsc", status: "NOT_CONNECTED" },
+    },
+    limitations: [], artifactReferences: [],
+    adapterVersions: Object.fromEntries(Object.keys(mockAdapters).map((s) => [s, "1.0.0"])),
+    createdAt: new Date().toISOString(),
+  };
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(canonicalEvidence), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" } });
+
+  // Canonical evidence record manifest (required by WP8 recovery path)
+  const evBytes = Buffer.from(JSON.stringify(canonicalEvidence), "utf-8");
+  const crManifest = {
+    contractVersion: "1.0.0",
+    auditId,
+    tenantId,
+    clientId,
+    canonicalArtifact: {
+      key: buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" }),
+      sha256: createHash("sha256").update(evBytes).digest("hex"),
+      bytes: evBytes.length,
+      contentType: "application/json",
+    },
+  };
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(crManifest), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" } });
+
+  const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify([]), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
+
+  // WP8 report-content.json is NOT pre-seeded — the orchestrator must build it
+  // from canonical evidence + findings + scores during the SCORED→NARRATIVE_PENDING
+  // transition.  This proves the production WP8 pipeline is wired.
+  //
+  // narrative.json is also NOT pre-seeded — the narrative service generates it
+  // during NARRATIVE_PENDING → NARRATIVE_READY.
+
+  // Start at SCORED so the orchestrator exercises:
+  //   SCORED → (WP8 build) → NARRATIVE_PENDING → NARRATIVE_READY → DRAFT_RENDERED
+  // report-content.json is NOT pre-seeded — the orchestrator must build it
+  // from canonical evidence + findings + scores at the SCORED branch.
+  for (const state of [T.VALIDATED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED]) {
+    await lifecycleService.transition({ auditId, tenantId, toState: state, transitionIdempotencyKey: `${auditId}:${state}:${executionId}` });
+  }
+
+  const runtime = createProductionRuntime({
+    config: { ...config, vantageTenantId: tenantId },
+    adapters: mockAdapters,
+    validateContract: () => ({ valid: true, errors: [] }),
+    artifactStore,
+    lifecycleRepo,
+    reportStore,
+  });
+
+  const auditRequest = { contractVersion: "1.0.0", auditId, tenantId, clientId, idempotencyKey: randomUUID(), targetUrl, businessName };
+  const result = await runtime.orchestrator.execute(auditRequest, { executionId });
+
+  return { auditId, tenantId, clientId, slug: slugify(businessName), finalState: result.finalState, runtime, pageArtifacts: result.pageArtifacts };
+}
+
+// Seed to NARRATIVE_READY with all artifacts pre-seeded (for review/approval/artifact tests).
+// Does NOT exercise SCORED→NARRATIVE_PENDING (that's proven by seedToScored above).
+async function seedToDraftRendered(targetUrl, businessName, tenantId) {
+  const auditId = randomUUID();
+  const clientId = `${targetUrl.replace(/[^a-zA-Z0-9.-]/g, "-")}-${businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const executionId = randomUUID();
+  const lifecycleService = createLifecycleService(lifecycleRepo);
+  await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey: randomUUID() });
+
   const canonicalEvidence = {
     contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId,
     normalizedRequest: { targetUrl, businessName, market: "", language: "en-CA", primaryGoal: "", services: [], competitors: [] },
@@ -170,8 +246,8 @@ async function seedFullAuditToDraftRendered(targetUrl, businessName, tenantId) {
 function slugify(s) { return String(s || "audit").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80); }
 
 {
-  const seeded = await seedFullAuditToDraftRendered("https://lifecycle-test.com", "Lifecycle Test", "wp12-tenant");
-  check("LIFECYCLE-01: finalState = draft_rendered", seeded.finalState === T.DRAFT_RENDERED, `Got ${seeded.finalState}`);
+  const seeded = await seedToScored("https://lifecycle-test.com", "Lifecycle Test", "wp12-tenant");
+  check("LIFECYCLE-01: finalState >= narrative_ready (WP8 wired)", seeded.finalState === T.NARRATIVE_READY || seeded.finalState === T.DRAFT_RENDERED, `Got ${seeded.finalState}`);
 
   const status = await seeded.runtime.auditService.getAuditStatus(seeded.auditId, "wp12-tenant");
   check("LIFECYCLE-01: status non-null", status !== null);
@@ -186,6 +262,15 @@ function slugify(s) { return String(s || "audit").toLowerCase().replace(/[^a-z0-
     check("LIFECYCLE-01: includes narrative_pending", states.includes(T.NARRATIVE_PENDING));
     check("LIFECYCLE-01: includes narrative_ready", states.includes(T.NARRATIVE_READY));
     check("LIFECYCLE-01: includes draft_rendered", states.includes(T.DRAFT_RENDERED));
+
+    // WP8: report-content.json must exist — built by orchestrator during SCORED
+    const pkgKey = buildArtifactKey({ tenantId: "wp12-tenant", clientId: seeded.clientId, auditId: seeded.auditId, category: "report", artifactName: "report-content.json" });
+    const pkgExists = await artifactStore.exists(pkgKey);
+    check("LIFECYCLE-01: WP8 report-content.json auto-built", pkgExists);
+    if (pkgExists) {
+      const pkgBytes = await artifactStore.get(pkgKey);
+      check("LIFECYCLE-01: WP8 package non-empty", pkgBytes && pkgBytes.length > 0);
+    }
   }
 }
 
@@ -195,7 +280,7 @@ function slugify(s) { return String(s || "audit").toLowerCase().replace(/[^a-z0-
 console.log("\n--- WP12-REVIEW-01/APPROVAL-01: Review and approval ---");
 
 {
-  const seeded = await seedFullAuditToDraftRendered("https://review-test.com", "Review Approve Test", "wp12-tenant");
+  const seeded = await seedToDraftRendered("https://review-test.com", "Review Approve Test", "wp12-tenant");
   const slug = slugify("Review Approve Test");
   const svc = seeded.runtime.auditService;
 
@@ -240,7 +325,7 @@ console.log("\n--- WP12-REVIEW-01/APPROVAL-01: Review and approval ---");
 console.log("\n--- WP12-ARTIFACT-01: Artifact proof ---");
 
 {
-  const seeded = await seedFullAuditToDraftRendered("https://artifact-test.com", "Artifact Test", "wp12-tenant");
+  const seeded = await seedToDraftRendered("https://artifact-test.com", "Artifact Test", "wp12-tenant");
   check("ARTIFACT-01: page artifacts exist", (seeded.pageArtifacts || []).length === 16);
 
   for (const art of (seeded.pageArtifacts || [])) {
