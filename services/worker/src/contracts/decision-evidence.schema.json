@@ -7,11 +7,43 @@
   "version": "1.0.0",
   "contractVersion": "1.0.0",
   "required": ["contractVersion", "decisionEvidenceVersion"],
+  "allOf": [
+    {
+      "description": "DE-04: AVAILABLE/PARTIAL site evidence must carry the structural data that scoring and rendering require. Malformed available evidence (missing domain/pages/services/trust/platform/schemaTypes) is a contract violation and must fail validation. Unavailable states (FAILED/BLOCKED/UNAVAILABLE/NOT_CONNECTED/NOT_APPLICABLE) may have reduced fields.",
+      "if": {
+        "properties": {
+          "site": {
+            "type": "object",
+            "required": ["sourceStatus"],
+            "properties": {
+              "sourceStatus": { "enum": ["AVAILABLE", "PARTIAL"] }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "site": {
+            "type": "object",
+            "required": [
+              "domain",
+              "pages",
+              "services",
+              "trust",
+              "platform",
+              "schemaTypes"
+            ]
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "contractVersion": { "const": "1.0.0" },
     "decisionEvidenceVersion": { "const": "1.0.0" },
     "site": {
-      "type": ["object", "null"],
+      "type": "object",
+      "description": "Site (crawl) evidence — a mandatory source for every audit. Missing site evidence (null) is a contract violation: the source plan always includes the on-page crawl.",
       "required": ["sourceStatus"],
       "properties": {
         "sourceStatus": { "type": "string" },

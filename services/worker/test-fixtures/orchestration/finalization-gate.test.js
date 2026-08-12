@@ -470,3 +470,110 @@ test("PRYSM-CLOSE-07: renderer receives exactly the validated frozen model", asy
   );
   assert.equal(revalidated.valid, true, `renderer input revalidates: ${JSON.stringify(revalidated.errors?.slice(0, 3))}`);
 });
+
+// =============================================================================
+// DE-09 / DE-15 — Renderer precondition gate: malformed AVAILABLE/PARTIAL
+// decision evidence fails closed with rendererCallCount = 0, no pages
+// persisted, no later success lifecycle events.
+// =============================================================================
+
+function makeMalformedDecisionEvidence(missingSitePart) {
+  const evidence = makeDecisionEvidence();
+  if (missingSitePart === "site") {
+    evidence.site = null;
+  } else if (missingSitePart === "siteStatus") {
+    delete evidence.site.sourceStatus;
+  } else {
+    delete evidence.site[missingSitePart];
+  }
+  return evidence;
+}
+
+const DE_MALFORMED_CASES = [
+  ["site", "missing site"],
+  ["domain", "missing site.domain"],
+  ["pages", "missing site.pages"],
+  ["trust", "missing site.trust"],
+  ["platform", "missing site.platform"],
+  ["schemaTypes", "missing site.schemaTypes"],
+];
+
+for (const [missingPart, label] of DE_MALFORMED_CASES) {
+  test(`DE-09/DE-15: ${label} → RENDER_FAILED, renderer calls = 0, zero pages`, async () => {
+    const { artifactStore, lifecycleService } = await setupOrchestrator();
+    const auditId = randomUUID();
+    const tenantId = "t1";
+    const clientId = "c1";
+
+    await seedToNarrativeReady(
+      { artifactStore, lifecycleService },
+      {
+        auditId, tenantId, clientId,
+        scores: makeScores({ scores: { ...makeScores().scores, performance: 73 } }),
+        decisionEvidence: makeMalformedDecisionEvidence(missingPart),
+        findings: makeFindings(),
+      },
+    );
+
+    let rendererCalls = 0;
+    const rendererSpy = () => {
+      rendererCalls++;
+      throw new Error("renderer must not be called");
+    };
+
+    const orchestrator = createAuditOrchestrator({
+      lifecycleService,
+      artifactStore,
+      adapters: {},
+      validateContract,
+      clock,
+      narrativeMode: "mock",
+      rendererImpl: rendererSpy,
+    });
+
+    const auditRequest = {
+      contractVersion: "1.0.0",
+      auditId,
+      tenantId,
+      clientId,
+      idempotencyKey: randomUUID(),
+      targetUrl: "https://proof.example.com",
+      businessName: "Proof Business",
+      market: "Canada",
+      language: "en",
+      primaryGoal: "conversion",
+      services: ["Governed Evidence Service"],
+      competitors: [],
+    };
+
+    let thrown = null;
+    try {
+      await orchestrator.execute(auditRequest, { executionId: randomUUID(), startedAt: clock.now() });
+    } catch (err) {
+      thrown = err;
+    }
+    assert.ok(thrown, "execution must reject malformed decision evidence");
+
+    // DE-15: persisted lifecycle state = render_failed
+    const cs = await lifecycleService.currentState(auditId, tenantId);
+    assert.equal(cs.state, T.RENDER_FAILED, `lifecycle must be render_failed (got ${cs.state})`);
+
+    // DE-15: renderer call count = 0
+    assert.equal(rendererCalls, 0, "rendererCallCount must remain exactly 0");
+
+    // DE-15: no approved report pages were persisted
+    const pagePrefix = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/`;
+    assert.equal(await artifactStore.exists(`${pagePrefix}index.html`), false, "no pages persisted");
+
+    // DE-15: no later success lifecycle events exist
+    const history = await lifecycleService.history(auditId, tenantId);
+    const statesAfterRenderFailed = (history || [])
+      .slice(-3)
+      .map((e) => e.nextState);
+    assert.equal(
+      statesAfterRenderFailed.includes(T.DRAFT_RENDERED),
+      false,
+      "no draft_rendered success event after the failure",
+    );
+  });
+}

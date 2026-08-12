@@ -50,25 +50,72 @@ function baReq(overrides = {}) {
   return { contractVersion: "1.0.0", auditId: randomUUID(), tenantId: "t1", clientId: "c1", idempotencyKey: randomUUID(), targetUrl: "https://example.com", ...overrides };
 }
 
+/**
+ * DE-04-compliant mock evidence: AVAILABLE/PARTIAL site evidence must carry
+ * the structural fields the executable decision-evidence schema requires
+ * (domain/pages/services/trust/platform/schemaTypes).
+ */
+function makeSiteEvidence(overrides = {}) {
+  return {
+    sourceStatus: "AVAILABLE",
+    domain: "example.com",
+    targetUrl: "https://example.com",
+    pageCount: 1,
+    pages: [{ url: "https://example.com", title: "Example", headings: { h1: ["Example"], h2: [], h3: [] } }],
+    services: ["service-a"],
+    topicKeywords: [],
+    ctas: [],
+    forms: [],
+    externalCtas: [],
+    socialLinks: [],
+    trust: { credentials: true },
+    platform: "WordPress",
+    schemaTypes: ["WebPage"],
+    statusCounts: { "200": 1 },
+    totalWords: 100,
+    averageWords: 100,
+    missingTitles: 0,
+    missingDescriptions: 0,
+    missingCanonicals: 0,
+    h1Missing: 0,
+    h1Multiple: 0,
+    imageCount: 0,
+    imagesMissingAlt: 0,
+    internalLinkCount: 0,
+    brokenInternalLinks: [],
+    securityHeaders: {},
+    _contentEvidenceAvailable: true,
+    _responseHeadersAvailable: false,
+    collectedAt: mockClock().now(),
+    ...overrides,
+  };
+}
+
 function makePartialResult(source) {
+  const evidence = source === "dataforseo-onpage"
+    ? makeSiteEvidence()
+    : {};
   return {
     contractVersion: "1.0.0", schemaVersion: "1.0.0",
     source, provider: "Mock", adapterVersion: "1.0.0",
     status: "PARTIAL", startedAt: mockClock().now(), completedAt: mockClock().now(),
     retryCount: 2, expectedRecords: 5, returnedRecords: 3,
     coverage: { requested: 5, completed: 3, failed: 2 },
-    limitations: ["controlled limitation"], evidence: {},
+    limitations: ["controlled limitation"], evidence,
   };
 }
 
 function makeAvailResult(source) {
+  const evidence = source === "dataforseo-onpage"
+    ? makeSiteEvidence()
+    : {};
   return {
     contractVersion: "1.0.0", schemaVersion: "1.0.0",
     source, provider: "Mock", adapterVersion: "1.0.0",
     status: "AVAILABLE", startedAt: mockClock().now(), completedAt: mockClock().now(),
     retryCount: 1, expectedRecords: 1, returnedRecords: 1,
     coverage: { requested: 1, completed: 1, failed: 0 },
-    limitations: [], evidence: {},
+    limitations: [], evidence,
   };
 }
 

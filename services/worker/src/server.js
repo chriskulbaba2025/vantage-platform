@@ -85,8 +85,21 @@ export function createRequestHandler({
         return res.end();
       }
 
+      // DE-07/DE-08/DE-13: the legacy audit runner hydrates the canonical
+      // metadata envelope and feeds the renderer directly — an alternate
+      // evidence path.  When the governed runtime is available, production
+      // intake is the governed /api/v1/audits route ONLY; the legacy route
+      // fails closed.  Without the governed runtime (development), the
+      // legacy runner remains for local tooling.
       if (req.method === "POST" && url.pathname === "/audits") {
         if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+        if (auditService) {
+          return send(res, 426, {
+            error: "Legacy audit route disabled — use the governed API",
+            code: "LEGACY_ROUTE_DISABLED",
+            hint: "POST /api/v1/audits",
+          });
+        }
         const input = await readJson(req);
         const result = await _runAudit(input, { config, oauthService });
         return send(res, 201, {

@@ -15,6 +15,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { buildArtifactKey } from "../storage/artifact-key.js";
 
 // ---------------------------------------------------------------------------
 // Source-to-evidence-key mapping (must match SOURCE_EVIDENCE_MAP)
@@ -77,19 +78,23 @@ function hydrateSite(sourceResult) {
   return stripUndefined({
     sourceStatus: status,
     collectedAt: sourceResult.completedAt || undefined,
+    // DE-04 critical structural fields: passed through WITHOUT defaults.
+    // When the adapter did not supply them, the hydrated evidence omits
+    // them and decision-evidence.schema.json rejects the AVAILABLE/PARTIAL
+    // site at the persistence boundary (malformed evidence fails closed).
     domain: ev.domain || undefined,
     targetUrl: ev.targetUrl || undefined,
+    pages: ev.pages,
+    services: ev.services,
+    trust: ev.trust,
+    platform: ev.platform || undefined,
+    schemaTypes: ev.schemaTypes,
     pageCount: ev.pageCount ?? 0,
-    pages: ev.pages || [],
-    services: ev.services || [],
     topicKeywords: ev.topicKeywords || [],
     ctas: ev.ctas || [],
     forms: ev.forms || [],
     externalCtas: ev.externalCtas || [],
     socialLinks: ev.socialLinks || [],
-    trust: ev.trust || {},
-    platform: ev.platform || undefined,
-    schemaTypes: ev.schemaTypes || [],
     statusCounts: ev.statusCounts || {},
     totalWords: ev.totalWords ?? 0,
     averageWords: ev.averageWords ?? 0,
@@ -330,5 +335,59 @@ export async function persistDecisionEvidence({ store, scope, evidence, validate
   return record;
 }
 
+/**
+ * DE-06 / DE-08: load the persisted decision-evidence.json, verify artifact
+ * integrity, and schema-validate the content BEFORE any consumer uses it.
+ *
+ * Sequence:
+ *   load decision-evidence.json
+ *   → verify artifact record (key/bytes/SHA)
+ *   → schema validate the parsed content
+ *   → return the validated evidence object
+ *
+ * @param {object} opts
+ * @param {import("../storage/governed-artifact-store.js").ArtifactStore} opts.store
+ * @param {{ tenantId: string, clientId: string, auditId: string }} opts.scope
+ * @param {function} opts.validateContract
+ * @returns {Promise<object>} the validated decision evidence
+ * @throws {Error} when the artifact is missing, corrupt, or schema-invalid
+ */
+export async function loadAndValidateDecisionEvidence({ store, scope, validateContract }) {
+  const key = buildArtifactKey({
+    ...scope,
+    category: "canonical",
+    artifactName: "decision-evidence.json",
+  });
+
+  const bytes = await store.get(key);
+  if (!bytes || bytes.length === 0) {
+    throw new Error("Decision evidence artifact not found or empty — cannot proceed without governed evidence");
+  }
+
+  let evidence;
+  try {
+    evidence = JSON.parse(Buffer.from(bytes).toString("utf8"));
+  } catch (parseErr) {
+    throw new Error(`Decision evidence artifact is not valid JSON: ${parseErr.message}`);
+  }
+
+  // Schema validation AFTER read-back, BEFORE use.  Malformed
+  // AVAILABLE/PARTIAL evidence fails closed here — scoring and rendering
+  // are never reached with an incompatible evidence shape.
+  if (validateContract) {
+    const sv = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/decision-evidence.schema.json",
+      evidence,
+    );
+    if (!sv || !sv.valid) {
+      throw new Error(
+        `Decision evidence validation failed on load: ${JSON.stringify((sv?.errors || []).slice(0, 5))}`,
+      );
+    }
+  }
+
+  return evidence;
+}
+
 export { SOURCE_KEY, VIABLE_STATUSES };
-export default { buildDecisionEvidence, persistDecisionEvidence };
+export default { buildDecisionEvidence, persistDecisionEvidence, loadAndValidateDecisionEvidence };

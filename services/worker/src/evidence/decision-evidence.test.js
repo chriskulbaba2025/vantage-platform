@@ -160,7 +160,11 @@ test("PRYSM-CLOSE-02e: FAILED SourceResult validation errors are reported but so
 });
 
 // --- PRYSM-CLOSE-02f: site with AVAILABLE but empty evidence still hydrates ---
-test("PRYSM-CLOSE-02f: valid AVAILABLE site with minimal evidence hydrates", () => {
+// DE-04: critical structural fields (domain/pages/services/trust/platform/
+// schemaTypes) are NOT defaulted during hydration — absence propagates to
+// the persistence boundary where the schema rejects malformed AVAILABLE
+// evidence.
+test("PRYSM-CLOSE-02f: AVAILABLE site with minimal evidence hydrates without fabricating structural fields", () => {
   const validateContract = makeValidator();
   const { evidence, errors } = buildDecisionEvidence({
     allSourceResults: [
@@ -174,5 +178,8 @@ test("PRYSM-CLOSE-02f: valid AVAILABLE site with minimal evidence hydrates", () 
   assert.equal(evidence.site?.sourceStatus, "AVAILABLE", "site hydrates");
   assert.equal(evidence.site?.domain, undefined, "empty domain is undefined (not fabricated)");
   assert.equal(evidence.site?.pageCount, 0, "pageCount defaults to 0");
-  assert.deepEqual(evidence.site?.services, [], "services defaults to empty array");
+  assert.equal(evidence.site?.services, undefined, "services NOT fabricated (absence preserved)");
+  assert.equal(evidence.site?.pages, undefined, "pages NOT fabricated");
+  assert.equal(evidence.site?.trust, undefined, "trust NOT fabricated");
+  assert.equal(evidence.site?.schemaTypes, undefined, "schemaTypes NOT fabricated");
 });
