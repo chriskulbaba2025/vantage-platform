@@ -46,6 +46,7 @@
     "test:wp11": "node scripts/acceptance-wp11.js",
     "acceptance:wp11": "node scripts/acceptance-wp11.js",
     "acceptance:wp12": "node scripts/acceptance-wp12.js",
+    "acceptance:prysm": "node scripts/acceptance-prysm.js",
     "wp11:preflight": "node scripts/wp11-preflight.js",
     "wp11:scope-check": "node scripts/wp11-scope-check.js",
     "wp11:verify": "node scripts/wp11-verify.js"

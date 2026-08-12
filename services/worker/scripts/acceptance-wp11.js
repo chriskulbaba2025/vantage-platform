@@ -113,6 +113,36 @@ async function seedFullAudit(targetUrl, businessName, tenantId) {
   };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(canonicalEvidence), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" } });
 
+  // PRYSM-CLOSE-06/07: governed rendering requires decision evidence.
+  const decisionEvidence = {
+    contractVersion: "1.0.0", decisionEvidenceVersion: "1.0.0",
+    site: {
+      sourceStatus: "AVAILABLE", collectedAt: new Date().toISOString(),
+      domain: (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })(),
+      targetUrl, pageCount: 1, pages: [], services: [], topicKeywords: [],
+      ctas: [], forms: [], externalCtas: [], socialLinks: [],
+      trust: {}, platform: "Unknown", schemaTypes: [], statusCounts: {},
+      totalWords: 0, averageWords: 0, missingTitles: 0, missingDescriptions: 0,
+      missingCanonicals: 0, h1Missing: 0, h1Multiple: 0, imageCount: 0,
+      imagesMissingAlt: 0, internalLinkCount: 0, brokenInternalLinks: [],
+      securityHeaders: {}, _contentEvidenceAvailable: true, _responseHeadersAvailable: false,
+      limitations: [],
+    },
+    performance: {
+      sourceStatus: "AVAILABLE", collectedAt: new Date().toISOString(),
+      provider: "pagespeed-insights", fallbackUsed: false, testedUrls: [targetUrl],
+      mobile: { status: "AVAILABLE", scores: { performance: 73 }, metrics: { fcpMs: 1200, lcpMs: 1800 } },
+      desktop: { status: "AVAILABLE", scores: { performance: 88 }, metrics: { fcpMs: 600, lcpMs: 900 } },
+      limitations: [],
+    },
+    competitors: [],
+    backlinks: { sourceStatus: "NOT_CONNECTED", collectedAt: new Date().toISOString(), provider: "DataForSEO", adapterVersion: "1.0.0", limitations: [] },
+    ga4: { sourceStatus: "NOT_CONNECTED", collectedAt: new Date().toISOString(), provider: "Google", adapterVersion: "1.0.0", limitations: [] },
+    gsc: { sourceStatus: "NOT_CONNECTED", collectedAt: new Date().toISOString(), provider: "Google", adapterVersion: "1.0.0", limitations: [] },
+    competitorOpportunities: null,
+  };
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(decisionEvidence), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" } });
+
   const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify([]), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
@@ -359,12 +389,15 @@ console.log("\n--- Phase 7: VIEW-01 Report viewer ---");
     html: "<!DOCTYPE html><html></html>", includeIndexHtml: true,
   });
 
-  // DRAFT — 403
-  try {
-    await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "index.html", slug);
-    check("VIEW-01: draft → 403", false, "Should have thrown");
-  } catch (e) {
-    check("VIEW-01: draft → 403", e.statusCode === 403, `Got ${e.statusCode}: ${e.message}`);
+  // DRAFT — reviewer-facing retrieval boundary serves the draft; the
+  // CLIENT-facing publication gate (web route 404 for non-final artifacts +
+  // getPublishedReportPage REPORT_NOT_PUBLISHED) is proven by WP10 and C14.
+  {
+    const draftPage = await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "index.html", slug);
+    // Report-store draft record uses status "draft"; the canonical
+    // lifecycle state is "draft_rendered".  Either label is the draft.
+    check("VIEW-01: draft retrievable through reviewer boundary", !!draftPage.bytes && ["draft", "draft_rendered"].includes(draftPage.lifecycleStatus),
+      `got lifecycleStatus=${draftPage.lifecycleStatus}`);
   }
 
   // Review + Approve

@@ -312,7 +312,7 @@ async function callPsi(url, strategy, apiKey, fetchImpl) {
 // Local Lighthouse CLI fallback
 // ---------------------------------------------------------------------------
 
-async function runLocalLighthouse(url, strategy) {
+async function runLocalLighthouse(url, strategy, runOptions = {}) {
   const [{ default: lighthouse }, chromeLauncher, playwright] = await Promise.all([
     import("lighthouse"),
     import("chrome-launcher"),
@@ -334,7 +334,23 @@ async function runLocalLighthouse(url, strategy) {
         : { mobile: false, width: 1350, height: 940, deviceScaleFactor: 1, disabled: false },
       throttlingMethod: strategy === "mobile" ? "simulate" : "provided",
     };
-    const result = await lighthouse(url, flags);
+
+    // PRYSM-CLOSE-12: governed Lighthouse timeout — the subprocess must
+    // terminate on timeout.  Racing here guarantees the function exits
+    // (finally kills Chrome) even when the Lighthouse run never resolves.
+    const timeoutMs = runOptions.timeoutMs || 120_000;
+    let timer;
+    const result = await Promise.race([
+      lighthouse(url, flags),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(Object.assign(new Error(`Lighthouse ${strategy} timed out after ${timeoutMs}ms`), { category: "timeout" })),
+          timeoutMs,
+        );
+      }),
+    ]);
+    clearTimeout(timer);
+
     if (!result?.lhr) throw new Error("Local Lighthouse returned no report");
     return result.lhr;
   } finally {
@@ -437,7 +453,12 @@ export async function collectPerformance(url, options = {}) {
       // Attempt Lighthouse CLI fallback
       try {
         const runner = options.localRunner || runLocalLighthouse;
-        const raw = await runner(url, strategy);
+        // PRYSM-CLOSE-12: governed Lighthouse timeout — pass the boundary
+        // so subprocess execution terminates when the timeout fires.
+        const raw = await runner(url, strategy, {
+          timeoutMs: options.lighthouseTimeoutMs || 120_000,
+          signal: options.signal || null,
+        });
         // Runner returns normalized result; add/enrich provenance fields
         results[strategy] = {
           ...raw,
@@ -914,22 +935,31 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       limitations: envelope.limitations || [],
       evidence: {
         sourceStatus: envelope.sourceStatus || envelope.status,
-        fallbackUsed: envelope.fallbackUsed || false,
-        primarySource: envelope.source,
+        source: envelope.source,
         intendedProvider: envelope.intendedProvider || "pagespeed-insights",
-        mobileStatus: envelope.mobile?.status || null,
-        desktopStatus: envelope.desktop?.status || null,
+        fallbackUsed: envelope.fallbackUsed || false,
+        mobile: envelope.mobile ? {
+          status: envelope.mobile.status,
+          scores: envelope.mobile.scores,
+          metrics: envelope.mobile.metrics,
+        } : null,
+        desktop: envelope.desktop ? {
+          status: envelope.desktop.status,
+          scores: envelope.desktop.scores,
+          metrics: envelope.desktop.metrics,
+        } : null,
+        fieldData: envelope.fieldData || null,
+        pageResults: envelope.pageResults || [],
+        testedUrls: envelope.testedUrls || [],
+        renderingDiagnostics: envelope.renderingDiagnostics || null,
+        collectedAt: envelope.collectedAt,
+        coverage: envelope.coverage || null,
+        limitations: envelope.limitations || [],
       },
     };
 
     if (sourceStatus.errorCategory) {
       sourceResult.errorCategory = sourceStatus.errorCategory;
-    }
-    if (envelope.mobile?.scores?.performance != null) {
-      sourceResult.evidence.mobilePerformanceScore = envelope.mobile.scores.performance;
-    }
-    if (envelope.desktop?.scores?.performance != null) {
-      sourceResult.evidence.desktopPerformanceScore = envelope.desktop.scores.performance;
     }
 
     return { rawBytes, contentType: "application/json", sourceResult };

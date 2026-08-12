@@ -661,7 +661,9 @@ export function buildFindings(site, performance, gsc) {
     // Enforce: no finding without evidence (PRD §16)
     if (!evidenceRecords.length) return;
 
-    const affectedUrls = opts.affectedUrls || [site.targetUrl || site.domain];
+    const affectedUrls = (opts.affectedUrls && opts.affectedUrls.length > 0)
+      ? opts.affectedUrls
+      : [site.targetUrl || site.domain || "https://unknown"].filter(Boolean);
 
     const findingId = generateFindingId(
       opts.ruleId,
@@ -698,13 +700,15 @@ export function buildFindings(site, performance, gsc) {
       scoreBearing: priority.scoreBearing,
       rawPriority: priority.raw,
       finalPriority: priority.final,
-      severity: opts.severity, // kept for display compatibility
-      problem: opts.title,     // kept for display compatibility
+      severity: opts.severity,
+      // Display compatibility aliases — the renderer uses problem/impact/fix/effort
+      // as display keys.  These replicate the canonical fields.
+      problem: opts.title,
       impact: opts.businessImpact || opts.impact || "",
       fix: opts.recommendation || opts.fix || "",
       effort: opts.effort || "M",
       key: opts.key || "",
-      evidenceText: opts.evidenceText || "", // kept for display compatibility
+      evidenceText: opts.evidenceText || "",
     });
   };
 
@@ -1192,7 +1196,9 @@ export function buildRenderingDiagnosticFindings(diagnostics, site) {
       confidence: CONFIDENCE_LEVELS.SUPPORTED,
     });
 
-    const affectedUrls = d.affectedUrl ? [d.affectedUrl] : [site?.targetUrl || site?.domain].filter(Boolean);
+    const affectedUrls = d.affectedUrl
+      ? [d.affectedUrl]
+      : ([site?.targetUrl || site?.domain || "https://unknown"].filter(Boolean));
     const evidenceRecords = [
       { provider: d.provider || "pagespeed-insights", sourceStatus: d.providerStatus || SOURCE_STATUS.AVAILABLE, field: "diagnostic", observedValue: d.diagnosticCode, artifactRef: null },
     ];
@@ -1221,7 +1227,7 @@ export function buildRenderingDiagnosticFindings(diagnostics, site) {
       fix: d.recommendation || "",
       effort: "M",
       key: "rendering",
-      evidenceText: d.clientExplanation.slice(0, 200),
+      evidenceText: d.clientExplanation?.slice(0, 200) || "",
     });
   }
 

@@ -29,11 +29,11 @@
   "readinessStatusDetail": "Provisional",
   "showNumericScore": true,
   "evidenceConfidenceScore": 70,
-  "evidenceConfidenceFactors": [
-    { "factor": "Crawl coverage", "score": 80, "weight": 0.4 },
-    { "factor": "Performance data", "score": 65, "weight": 0.3 },
-    { "factor": "Analytics data", "score": 50, "weight": 0.3 }
-  ],
+  "evidenceConfidenceFactors": {
+    "sourceAvailability": 80,
+    "dataCompleteness": 65,
+    "sourceValidity": 50
+  },
   "dimensionEligibility": {
     "conversion_pathways": true,
     "trust_eeat": true,
@@ -68,6 +68,8 @@
     }
   ],
   "rootCause": "The most impactful opportunity is missing trust credentials on key conversion pages. Addressing this will improve visitor confidence and readiness to convert.",
+  "findingIds": [],
+  "findingCount": 0,
   "findings": [],
   "sourceDependencies": {
     "website": "AVAILABLE",

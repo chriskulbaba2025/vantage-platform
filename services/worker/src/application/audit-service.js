@@ -91,6 +91,34 @@ export function createAuditApplicationService({
       auditRequest.gsc = { siteUrl: input.gsc.siteUrl.trim() };
     }
 
+    // Governed optional configuration pass-through (schema-validated):
+    // crawl overrides, performance configuration, SERP/backlinks config,
+    // and controlled-dependency seams (oauthService/fetchImpl) that sit
+    // BELOW the production adapter layer.
+    if (input.crawl && typeof input.crawl === "object") {
+      auditRequest.crawl = { ...(auditRequest.crawl || {}), ...input.crawl };
+    }
+    if (input.performance && typeof input.performance === "object") {
+      auditRequest.performance = input.performance;
+    }
+    if (input.serp && typeof input.serp === "object") {
+      auditRequest.serp = input.serp;
+    }
+    if (input.backlinks && typeof input.backlinks === "object") {
+      auditRequest.backlinks = input.backlinks;
+    }
+    if (input.ga4 && typeof input.ga4 === "object") {
+      if (input.ga4.oauthService) auditRequest.ga4.oauthService = input.ga4.oauthService;
+      if (input.ga4.fetchImpl) auditRequest.ga4.fetchImpl = input.ga4.fetchImpl;
+      if (input.ga4.serviceAccountJson) auditRequest.ga4.serviceAccountJson = input.ga4.serviceAccountJson;
+    }
+    if (input.gsc && typeof input.gsc === "object") {
+      if (input.gsc.oauthService) auditRequest.gsc.oauthService = input.gsc.oauthService;
+      if (input.gsc.fetchImpl) auditRequest.gsc.fetchImpl = input.gsc.fetchImpl;
+      if (input.gsc.serviceAccountJson) auditRequest.gsc.serviceAccountJson = input.gsc.serviceAccountJson;
+      if (input.gsc.sufficiencyThreshold != null) auditRequest.gsc.sufficiencyThreshold = input.gsc.sufficiencyThreshold;
+    }
+
     // Validate schema
     if (validateContract) {
       const v = validateContract(
@@ -104,6 +132,16 @@ export function createAuditApplicationService({
         throw err;
       }
     }
+
+    // PRYSM-CLOSE-09: persist the complete normalized AuditRequest durably
+    // before background execution.  Recovery loads this record verbatim —
+    // missing values are never reconstructed with defaults.
+    const { persistAuditRequest } = await import("../orchestration/audit-request-persistence.js");
+    await persistAuditRequest({
+      store: artifactStore,
+      auditRequest,
+      validateContract,
+    });
 
     // Execute through the governed orchestrator (never legacy runAudit)
     const executionId = randomUUID();
@@ -296,10 +334,10 @@ export function createAuditApplicationService({
     // For approved/published, validate against the artifact manifest.
     // For draft states, read directly from artifact store (no manifest yet).
     const DRAFT_STATES = new Set(["draft_rendered", "in_review"]);
+    let lifecycleRecord = null;
+    try { lifecycleRecord = await reportStore.getStatus(slug, auditId); } catch { /* fall through */ }
     if (!DRAFT_STATES.has(currentState)) {
-      let lifecycle;
-      try { lifecycle = await reportStore.getStatus(slug, auditId); } catch { /* fall through */ }
-      const finalArtifacts = lifecycle?.artifacts?.final || [];
+      const finalArtifacts = lifecycleRecord?.artifacts?.final || [];
       if (!finalArtifacts.includes(filename)) {
         const err = new Error("Page not found in approved report");
         err.statusCode = 404;
@@ -328,7 +366,7 @@ export function createAuditApplicationService({
       filename,
       bytes,
       contentType: filename.endsWith(".html") ? "text/html; charset=utf-8" : "application/json",
-      lifecycleStatus: lifecycle.status,
+      lifecycleStatus: lifecycleRecord?.status || currentState,
     };
   }
 

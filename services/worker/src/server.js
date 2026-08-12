@@ -85,8 +85,21 @@ export function createRequestHandler({
         return res.end();
       }
 
+      // DE-07/DE-08/DE-13: the legacy audit runner hydrates the canonical
+      // metadata envelope and feeds the renderer directly — an alternate
+      // evidence path.  When the governed runtime is available, production
+      // intake is the governed /api/v1/audits route ONLY; the legacy route
+      // fails closed.  Without the governed runtime (development), the
+      // legacy runner remains for local tooling.
       if (req.method === "POST" && url.pathname === "/audits") {
         if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+        if (auditService) {
+          return send(res, 426, {
+            error: "Legacy audit route disabled — use the governed API",
+            code: "LEGACY_ROUTE_DISABLED",
+            hint: "POST /api/v1/audits",
+          });
+        }
         const input = await readJson(req);
         const result = await _runAudit(input, { config, oauthService });
         return send(res, 201, {
@@ -434,14 +447,23 @@ const oauthService = createOAuthService({
 
 // --- WP12: Construct governed production runtime ---
 
-// Schema validator (lazy import — avoids circular deps)
-let validateContract = () => ({ valid: true, errors: [] });
+// Schema validator (lazy import — avoids circular deps).
+// Fail closed: if the validator cannot be loaded, the server cannot start.
+let validateContract;
 try {
   const { createValidator } = await import("./contracts/validator.js");
   const v = createValidator();
-  validateContract = (schemaId, obj) => v.validate(schemaId, obj);
-} catch {
-  console.warn("Schema validator not available — using pass-through");
+  validateContract = (schemaId, obj) => {
+    const result = v.validate(schemaId, obj);
+    if (!result) {
+      // Validator returned null/undefined — schema not loaded
+      throw new Error(`Contract validator unavailable for schema: ${schemaId}`);
+    }
+    return result;
+  };
+} catch (err) {
+  console.error("FATAL: Schema validator failed to load — server cannot start without contract enforcement.");
+  throw err;
 }
 
 // Adapters — canonical production composition (zero provider calls during bootstrap)
@@ -535,9 +557,10 @@ if (!lifecycleRepo) {
 }
 
 // Construct the full governed production runtime
+let runtime = null;
 if (lifecycleRepo && artifactStore) {
   try {
-    const runtime = createProductionRuntime({
+    runtime = createProductionRuntime({
       config,
       adapters,
       validateContract,
@@ -550,6 +573,24 @@ if (lifecycleRepo && artifactStore) {
   } catch (e) {
     console.error("Production runtime initialization failed:", e.message);
   }
+}
+
+// PRYSM-CLOSE-10: reclaim audits stranded by a previous process termination.
+// The durable work record (PostgreSQL lifecycle + persisted AuditRequest +
+// S3 artifacts) is the durability boundary — not the in-process promise.
+// The sweep runs after startup; HTTP serving does not depend on it.
+if (runtime && typeof runtime.recoverStrandedAudits === "function") {
+  Promise.resolve()
+    .then(() => runtime.recoverStrandedAudits(config.vantageTenantId))
+    .then((recovered) => {
+      if (recovered.length > 0) {
+        console.log(`Reclaimed ${recovered.length} stranded audit(s):`,
+          recovered.map((r) => `${r.auditId.slice(0, 8)}→${r.finalState}`).join(", "));
+      }
+    })
+    .catch((err) => {
+      console.error("Stranded-audit recovery sweep failed:", err.message);
+    });
 }
 
 const requestListener = createRequestHandler({

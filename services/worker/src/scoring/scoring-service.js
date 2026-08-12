@@ -39,7 +39,9 @@ function deriveScoredAt(evidence) {
     const ts = ev?.collectedAt || ev?._sourceStatus?.completedAt;
     if (ts) timestamps.push(new Date(ts).getTime());
   }
-  const competitors = evidence.competitors || [];
+  // Support both legacy array format and decision-evidence object format
+  const compRaw = evidence.competitors || [];
+  const competitors = Array.isArray(compRaw) ? compRaw : (compRaw.competitors || []);
   for (const c of competitors) {
     if (c.collectedAt) timestamps.push(new Date(c.collectedAt).getTime());
   }
@@ -63,7 +65,24 @@ function deriveScoredAt(evidence) {
  * @param {Array<object>} opts.findings - Array of governed finding objects
  * @returns {Promise<import("../storage/governed-artifact-store.js").ArtifactRecord>}
  */
-export async function persistFindings({ store, scope, findings }) {
+export async function persistFindings({ store, scope, findings, validateContract }) {
+  // Validate each finding against the governed Finding contract before
+  // persistence.  Malformed findings must never reach the artifact store.
+  if (validateContract) {
+    for (let i = 0; i < findings.length; i++) {
+      const fv = validateContract(
+        "https://vantage-platform.io/prysm/contracts/v1/finding.schema.json",
+        findings[i],
+      );
+      if (!fv || !fv.valid) {
+        throw new Error(
+          `Finding[${i}] (ruleId=${findings[i].ruleId || "?"}) validation failed: ` +
+          `${JSON.stringify((fv?.errors || []).slice(0, 3))}`,
+        );
+      }
+    }
+  }
+
   const bytes = Buffer.from(JSON.stringify(findings, null, 2), "utf-8");
   const key = buildArtifactKey({
     tenantId: scope.tenantId,
@@ -124,7 +143,20 @@ export async function persistFindings({ store, scope, findings }) {
  * @param {object} opts.scoreSet - Governed Score Set object
  * @returns {Promise<import("../storage/governed-artifact-store.js").ArtifactRecord>}
  */
-export async function persistScores({ store, scope, scoreSet }) {
+export async function persistScores({ store, scope, scoreSet, validateContract }) {
+  // Validate ScoreSet against the governed score contract before persistence.
+  if (validateContract) {
+    const sv = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/score.schema.json",
+      scoreSet,
+    );
+    if (!sv || !sv.valid) {
+      throw new Error(
+        `ScoreSet validation failed: ${JSON.stringify((sv?.errors || []).slice(0, 5))}`,
+      );
+    }
+  }
+
   const bytes = Buffer.from(JSON.stringify(scoreSet, null, 2), "utf-8");
   const key = buildArtifactKey({
     tenantId: scope.tenantId,
@@ -205,6 +237,13 @@ function buildScoreSet(model, findingsRecord, scoresRecord) {
     rootCause: model.rootCause,
     findingCount: model.findings.length,
     findingIds: model.findings.map((f) => f.findingId),
+    // Preserve downstream renderer-required data so the ReportViewModel
+    // and renderer do not reconstruct these as empty arrays/objects.
+    conversionPaths: model.conversionPaths || [],
+    readinessMap: model.readinessMap || [],
+    contentIdeas: model.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+    competitors: model.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+    renderingDiagnostics: model.renderingDiagnostics || [],
     findingsArtifact: findingsRecord ? {
       key: findingsRecord.key,
       sha256: findingsRecord.sha256,
@@ -252,6 +291,7 @@ export async function scoreFromCanonicalEvidence({
   canonicalEvidence,
   auditInput,
   scoredAt,
+  validateContract,
 }) {
   // ── 1. Derive deterministic scoring timestamp ────────────────────────
   const effectiveScoredAt = scoredAt || deriveScoredAt(canonicalEvidence);
@@ -266,6 +306,7 @@ export async function scoreFromCanonicalEvidence({
     store,
     scope,
     findings: model.findings,
+    validateContract,
   });
 
   // ── 4. Build and persist scores artifact ─────────────────────────────
@@ -276,6 +317,7 @@ export async function scoreFromCanonicalEvidence({
     store,
     scope,
     scoreSet,
+    validateContract,
   });
 
   // Build final score set with the actual scores record reference

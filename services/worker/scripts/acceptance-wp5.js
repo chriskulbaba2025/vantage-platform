@@ -46,7 +46,7 @@ function mockClock(iso = "2026-01-01T00:00:00.000Z") { let t = new Date(iso).get
 const schemasDir = resolve(ROOT, "src", "contracts");
 const _ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(_ajv);
-["audit-request.schema.json", "source-result.schema.json", "canonical-evidence.schema.json"].forEach(f => {
+["audit-request.schema.json", "source-result.schema.json", "canonical-evidence.schema.json", "decision-evidence.schema.json", "finding.schema.json", "score.schema.json", "report-content.schema.json", "narrative-response.schema.json", "report-view-model.schema.json", "report-manifest.schema.json", "artifact-record.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json"].forEach(f => {
   _ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
 });
 function vc(sid, obj) { const v = _ajv.getSchema(sid); return { valid: v(obj), errors: v.errors || [] }; }
@@ -731,6 +731,33 @@ console.log("\n─ I. STORED: Evidence-stored recovery ─");
   const ev = { contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId, normalizedRequest: { targetUrl: "https://example.com" }, sources: { website: { source: "dataforseo-onpage", status: "AVAILABLE", collectedAt: mockClock().now() } }, limitations: [], artifactReferences: [], adapterVersions: {}, createdAt: mockClock().now() };
   const cr = await store.put({ bytes: Buffer.from(JSON.stringify(ev)), contentType: "application/json", scope: { ...scope, category: "canonical", artifactName: "evidence.json" } });
   const mr = await persistCanonicalRecordManifest({ store, scope, createdAt: mockClock().now(), canonicalRecord: cr });
+
+  // PRYSM-CLOSE-02: scoring requires the governed decision-evidence boundary —
+  // seed it through the real production builder from a valid SourceResult.
+  {
+    const { buildDecisionEvidence, persistDecisionEvidence } = await import("../src/evidence/decision-evidence.js");
+    const siteSourceResult = {
+      contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage",
+      provider: "DataForSEO", adapterVersion: "1.0.0", status: "AVAILABLE",
+      startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 0,
+      coverage: { requested: 1, completed: 1, failed: 0 }, limitations: [],
+      evidence: {
+        sourceStatus: "AVAILABLE", domain: "example.com", targetUrl: "https://example.com",
+        pageCount: 1, pages: [], services: [], trust: {}, platform: "WordPress",
+        schemaTypes: [], statusCounts: {}, ctas: [], forms: [], externalCtas: [],
+        socialLinks: [], internalLinkCount: 0, brokenInternalLinks: [],
+        securityHeaders: {}, _contentEvidenceAvailable: true, _responseHeadersAvailable: false,
+        collectedAt: mockClock().now(),
+      },
+    };
+    const decisionResult = buildDecisionEvidence({
+      allSourceResults: [{ source: "dataforseo-onpage", sourceResult: siteSourceResult }],
+      suppliedCompetitors: [],
+      validateContract: vc,
+    });
+    await persistDecisionEvidence({ store, scope, evidence: decisionResult.evidence, validateContract: vc });
+  }
+
   await lc.transition({ auditId, tenantId, toState: T.EVIDENCE_STORED, transitionIdempotencyKey: `${auditId}:es`, artifactKey: mr.key });
 
   // Instrument adapter calls
@@ -785,32 +812,32 @@ console.log("\n─ J. REPLAY: Locked replay proof ─");
   const s1 = await orch.execute(req);
   assertEq(s1.finalState, T.SCORED, "REPLAY: first run = scored (WP7)");
 
-  // Instrument writes for replay
-  let writesAfterFirstRun = 0;
-  const rp = store.put.bind(store);
-  store.put = async (i) => { writesAfterFirstRun++; return rp(i); };
+  // Capture the persisted governed evidence identity AFTER the first run
+  const canonicalKey = buildCanonicalRecordManifestKey({ tenantId: req.tenantId, clientId: req.clientId, auditId: req.auditId });
+  const persistedBytesBefore = await store.get(canonicalKey);
+  const deKey = `tenants/${req.tenantId}/clients/${req.clientId}/audits/${req.auditId}/canonical/decision-evidence.json`;
+  const deBytesBefore = await store.get(deKey);
 
   const callsBeforeReplay = adapterCalls;
   const s2 = await orch.execute(req);
+  // WP7+WP8 architecture: the second execute continues from SCORED through
+  // the WP8 package + narrative boundaries — the governed REPLAY invariant
+  // is that collection and provider work are never repeated.
+  assertEq([T.SCORED, T.NARRATIVE_READY, T.DRAFT_RENDERED].includes(s2.finalState), true, `REPLAY: second run continued to ${s2.finalState}`);
 
   // REPLAY-01: zero adapter calls
   assertEq(adapterCalls - callsBeforeReplay, 0, "REPLAY-01: zero new adapter calls");
 
-  // REPLAY-02: zero artifact writes
-  assertEq(writesAfterFirstRun, 0, "REPLAY-02: zero artifact writes");
+  // REPLAY-02: governed evidence artifacts unchanged (no duplicate
+  // collection/scoring writes) — byte-identical persisted evidence.
+  const persistedBytesAfter = await store.get(canonicalKey);
+  const deBytesAfter = await store.get(deKey);
+  assertDeep(persistedBytesAfter, persistedBytesBefore, "REPLAY-02: canonical record bytes identical across replays");
+  assertDeep(deBytesAfter, deBytesBefore, "REPLAY-02: decision evidence bytes identical across replays");
 
-  // REPLAY-03: canonical identity unchanged + persisted bytes proof
-  assertEq(s2.canonicalEvidence.key, s1.canonicalEvidence.key, "REPLAY-03: key unchanged");
-  assertEq(s2.canonicalEvidence.sha256, s1.canonicalEvidence.sha256, "REPLAY-03: SHA unchanged");
-  assertEq(s2.canonicalEvidence.bytes, s1.canonicalEvidence.bytes, "REPLAY-03: bytes unchanged");
-
-  const persistedBytes = await store.get(s1.canonicalEvidence.key);
-  assertEq(persistedBytes.length, s1.canonicalEvidence.bytes, "REPLAY-03: persisted byte count = canonical bytes count");
-  assertEq(sha256(persistedBytes), s1.canonicalEvidence.sha256, "REPLAY-03: persisted SHA = canonical SHA");
-
-  const persistedBytes2 = await store.get(s2.canonicalEvidence.key);
-  assertEq(persistedBytes2.length, persistedBytes.length, "REPLAY-03: persisted byte count unchanged across replays");
-  assertDeep(persistedBytes2, persistedBytes, "REPLAY-03: persisted bytes identical across replays");
+  // REPLAY-03: persisted identity proof (key/SHA/bytes read from storage)
+  assertEq(persistedBytesAfter.length, persistedBytesBefore.length, "REPLAY-03: persisted byte count unchanged");
+  assertEq(sha256(persistedBytesAfter), sha256(persistedBytesBefore), "REPLAY-03: persisted SHA unchanged across replays");
 }
 
 // ===================================================================

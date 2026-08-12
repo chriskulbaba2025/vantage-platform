@@ -9,7 +9,40 @@
  * @module test-fixtures/orchestration/mock-adapters
  */
 
-const PAGE_EVIDENCE = { pages: [{ url: "https://example.com", title: "Example" }] };
+// DE-04-compliant mock evidence: AVAILABLE site evidence carries the
+// structural fields the executable decision-evidence schema requires.
+const PAGE_EVIDENCE = {
+  sourceStatus: "AVAILABLE",
+  domain: "example.com",
+  targetUrl: "https://example.com",
+  pageCount: 1,
+  pages: [{ url: "https://example.com", title: "Example", headings: { h1: ["Example"], h2: [], h3: [] } }],
+  services: ["service-a"],
+  topicKeywords: [],
+  ctas: [],
+  forms: [],
+  externalCtas: [],
+  socialLinks: [],
+  trust: { credentials: true },
+  platform: "WordPress",
+  schemaTypes: ["WebPage"],
+  statusCounts: { "200": 1 },
+  totalWords: 100,
+  averageWords: 100,
+  missingTitles: 0,
+  missingDescriptions: 0,
+  missingCanonicals: 0,
+  h1Missing: 0,
+  h1Multiple: 0,
+  imageCount: 0,
+  imagesMissingAlt: 0,
+  internalLinkCount: 0,
+  brokenInternalLinks: [],
+  securityHeaders: {},
+  _contentEvidenceAvailable: true,
+  _responseHeadersAvailable: false,
+  collectedAt: "2026-01-01T00:00:01.000Z",
+};
 const PERF_EVIDENCE = { performance: { score: 0.85 } };
 const SERP_EVIDENCE = { competitors: [{ url: "https://competitor.com", position: 1 }] };
 const BACKLINK_EVIDENCE = { backlinks: [{ source: "https://ref.com", target: "https://example.com" }] };
@@ -264,7 +297,9 @@ export function createKeyCapturingAdapter(source, version = "1.0.0") {
     execute: async (args) => {
       callCount++;
       receivedKey = args.sourceExecutionKey;
-      return mockResult(source);
+      // DE-04: AVAILABLE onpage evidence must carry the structural fields.
+      const evidence = source === "dataforseo-onpage" ? PAGE_EVIDENCE : {};
+      return mockResult(source, { sourceResult: { evidence } });
     },
     getReceivedKey: () => receivedKey,
     getCallCount: () => callCount,
@@ -301,10 +336,15 @@ const STATUS_RESULTS = {
 
 export function createStatusAdapter(source, status) {
   const overrides = STATUS_RESULTS[status] || {};
+  // DE-04: AVAILABLE/PARTIAL onpage evidence must carry the structural
+  // fields the executable decision-evidence schema requires.
+  const evidence = source === "dataforseo-onpage" && ["AVAILABLE", "PARTIAL"].includes(status)
+    ? PAGE_EVIDENCE
+    : {};
   return {
     adapterVersion: "1.0.0",
     execute: async () => mockResult(source, {
-      sourceResult: { status, ...overrides, evidence: status === "AVAILABLE" ? { some: "data" } : {} },
+      sourceResult: { status, ...overrides, evidence },
     }),
   };
 }

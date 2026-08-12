@@ -243,7 +243,9 @@ test("T8-10: GSC evidence envelope has provider provenance and canonical fields"
   assert.equal(result._sourceStatus.provider, "google-search-console");
   assert.ok(result.collectedAt);
   assert.ok(result.coverage);
-  assert.equal(result.coverage.windowsRequested, 2);
+  // windowsRequested moved out of the canonical coverage contract
+  // ({ requested, completed, failed }) into evidence-level metadata.
+  assert.equal(result.comparisonWindowsRequested, 2);
 });
 
 // ---------------------------------------------------------------------------

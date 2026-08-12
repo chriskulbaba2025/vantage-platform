@@ -345,7 +345,7 @@ test("scoreAudit produces complete deterministic Karen-style report model", () =
       model.scores.conversionReadiness <= 100,
   );
   assert.equal(model.findings[0].severity, "High");
-  assert.ok(model.findings.some((f) => f.key === "lcp"));
+  assert.ok(model.findings.some((f) => f.ruleId === "VAN-PERF-001"), "LCP finding present");
   assert.ok(model.readinessMap.length > 0);
   assert.equal(model.contentIdeas.tofu.length, 3);
 });

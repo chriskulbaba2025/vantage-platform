@@ -23,7 +23,7 @@
       "source": "dataforseo-onpage"
     }
   ],
-  "confidence": 85,
+  "confidence": "deterministic",
   "businessImpact": "Visitors cannot verify provider qualifications, reducing conversion confidence on service pages.",
   "recommendation": "Add professional credentials, certifications, and team qualifications to the homepage and service pages.",
   "implementationEffort": "M",

@@ -154,6 +154,46 @@ async function seedToScored(targetUrl, businessName, tenantId) {
   };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(crManifest), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" } });
 
+  // Pre-seed decision evidence so the renderer has governed evidence to consume.
+  // The decision evidence shape matches what the locked renderer expects:
+  // { site, performance, competitors, backlinks, ga4, gsc }.
+  const decisionEvidence = {
+    contractVersion: "1.0.0",
+    decisionEvidenceVersion: "1.0.0",
+    site: {
+      sourceStatus: "AVAILABLE",
+      domain: (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })(),
+      targetUrl,
+      pageCount: 1,
+      pages: [{ title: businessName, url: targetUrl }],
+      services: [],
+      topicKeywords: [],
+      ctas: [],
+      forms: [],
+      trust: {},
+      platform: "Unknown",
+      schemaTypes: [],
+      missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
+      h1Missing: 0, h1Multiple: 0, imageCount: 0, imagesMissingAlt: 0,
+      internalLinkCount: 0, totalWords: 0, averageWords: 0,
+      brokenInternalLinks: [], externalCtas: [], socialLinks: [],
+      securityHeaders: {}, statusCounts: {},
+      limitations: [],
+      _contentEvidenceAvailable: false, _responseHeadersAvailable: false,
+    },
+    performance: { sourceStatus: "AVAILABLE" },
+    competitors: [],
+    backlinks: { sourceStatus: "NOT_CONNECTED" },
+    ga4: { sourceStatus: "NOT_CONNECTED" },
+    gsc: { sourceStatus: "NOT_CONNECTED" },
+    competitorOpportunities: {},
+  };
+  await artifactStore.put({
+    bytes: Buffer.from(JSON.stringify(decisionEvidence), "utf-8"),
+    contentType: "application/json",
+    scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" },
+  });
+
   const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify([]), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
@@ -221,6 +261,19 @@ async function seedToDraftRendered(targetUrl, businessName, tenantId) {
     createdAt: new Date().toISOString(),
   };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(canonicalEvidence), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" } });
+
+  // Pre-seed decision evidence for the renderer.
+  const deForRender = {
+    contractVersion: "1.0.0", decisionEvidenceVersion: "1.0.0",
+    site: { sourceStatus: "AVAILABLE", domain: (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })(), targetUrl, pageCount: 1, pages: [{ title: businessName, url: targetUrl }], services: [], topicKeywords: [], ctas: [], forms: [], trust: {}, platform: "Unknown", schemaTypes: [], missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0, h1Missing: 0, h1Multiple: 0, imageCount: 0, imagesMissingAlt: 0, internalLinkCount: 0, totalWords: 0, averageWords: 0, brokenInternalLinks: [], externalCtas: [], socialLinks: [], securityHeaders: {}, statusCounts: {}, limitations: [], _contentEvidenceAvailable: false, _responseHeadersAvailable: false },
+    performance: { sourceStatus: "AVAILABLE" },
+    competitors: [],
+    backlinks: { sourceStatus: "NOT_CONNECTED" },
+    ga4: { sourceStatus: "NOT_CONNECTED" },
+    gsc: { sourceStatus: "NOT_CONNECTED" },
+    competitorOpportunities: {},
+  };
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(deForRender), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" } });
 
   const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
@@ -408,6 +461,7 @@ console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
     vantageTenantId: "wp12-timeout-tenant",
     databaseUrl: "",
     onpagePollTimeoutMs: 50,   // ~50ms hard timeout boundary
+    pagespeedTimeoutMs: 100,  // ~100ms hard timeout boundary for the hung pagespeed adapter
     port: 3000,
     reportsBucket: "",
     awsRegion: "ca-central-1",
@@ -436,7 +490,11 @@ console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
   let currentState = T.CREATED;
   let enteredCollecting = false;
   const seenStates = [];
-  while (Date.now() - pollStart < 2000) {
+  // Governed retry budget for the hung pagespeed source:
+  //   3 attempts × 100ms hard timeout + exponential backoff (2s + 4s) ≈ 6.3s.
+  // Ceiling of 15s proves the hard timeout escapes the hung provider
+  // without manual intervention, well under the 120s source default.
+  while (Date.now() - pollStart < 15000) {
     const cs = await hangLc.currentState(auditId, tenantId);
     const st = cs?.state || T.CREATED;
     if (!seenStates.includes(st)) seenStates.push(st);
@@ -449,7 +507,7 @@ console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
 
   // Verify collection escaped the hung adapter.
   check("TIMEOUT-01: entered collecting", enteredCollecting, `seen: ${seenStates.join(" → ")}`);
-  check("TIMEOUT-01: left collecting before ceiling", currentState !== T.COLLECTING && pollElapsed < 2000,
+  check("TIMEOUT-01: left collecting before ceiling", currentState !== T.COLLECTING && pollElapsed < 15000,
     `final=${currentState}, elapsed=${pollElapsed}ms`);
 
   // Verify lifecycle reached the governed evidence-locked boundary.

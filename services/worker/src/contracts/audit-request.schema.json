@@ -91,30 +91,34 @@
     },
     "ga4": {
       "type": "object",
-      "additionalProperties": false,
       "properties": {
         "propertyId": {
           "type": "string",
           "pattern": "^[0-9]+$",
           "description": "Google Analytics 4 property ID (digits only)."
-        }
+        },
+        "serviceAccountJson": { "type": "string" },
+        "oauthService": {},
+        "fetchImpl": {}
       },
-      "description": "Optional GA4 property selection. Only propertyId is permitted."
+      "description": "Optional GA4 property selection. oauthService/fetchImpl are controlled-dependency injection seams (tests only)."
     },
     "gsc": {
       "type": "object",
-      "additionalProperties": false,
       "properties": {
         "siteUrl": {
           "type": "string",
           "description": "Google Search Console site URL or sc-domain property."
-        }
+        },
+        "serviceAccountJson": { "type": "string" },
+        "oauthService": {},
+        "fetchImpl": {},
+        "sufficiencyThreshold": { "type": "integer", "minimum": 1 }
       },
-      "description": "Optional GSC property selection. Only siteUrl is permitted."
+      "description": "Optional GSC property selection. oauthService/fetchImpl are controlled-dependency injection seams (tests only)."
     },
     "crawl": {
       "type": "object",
-      "additionalProperties": false,
       "properties": {
         "maxPages": {
           "type": "integer",
@@ -133,9 +137,40 @@
         "excludePatterns": {
           "type": "array",
           "items": { "type": "string" }
-        }
+        },
+        "pollTimeoutMs": { "type": "integer", "minimum": 1 },
+        "pollIntervalMs": { "type": "integer", "minimum": 1 },
+        "resumeTaskId": { "type": "string" },
+        "fixtures": {},
+        "fetchImpl": {},
+        "localRunner": {}
       },
-      "description": "Crawl configuration overrides."
+      "description": "Crawl configuration overrides. fixtures/fetchImpl/localRunner are controlled-dependency injection seams (tests only); production defaults are unchanged."
+    },
+    "performance": {
+      "type": "object",
+      "properties": {
+        "pagespeedApiKey": { "type": "string" },
+        "cruxApiKey": { "type": "string" },
+        "lighthouseTimeoutMs": { "type": "integer", "minimum": 1 },
+        "fetchImpl": {},
+        "localRunner": {}
+      },
+      "description": "Performance configuration. fetchImpl/localRunner are controlled-dependency injection seams (tests only)."
+    },
+    "serp": {
+      "type": "object",
+      "properties": {
+        "fetchImpl": {}
+      },
+      "description": "SERP configuration. fetchImpl is a controlled-dependency injection seam (tests only)."
+    },
+    "backlinks": {
+      "type": "object",
+      "properties": {
+        "fetchImpl": {}
+      },
+      "description": "Backlinks configuration. fetchImpl is a controlled-dependency injection seam (tests only)."
     }
   }
 }

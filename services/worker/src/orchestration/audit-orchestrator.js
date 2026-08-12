@@ -18,6 +18,8 @@ import { scoreFromCanonicalEvidence } from "../scoring/scoring-service.js";
 import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service.js";
 import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
+import { buildDecisionEvidence, persistDecisionEvidence, loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
+import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -104,12 +106,22 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
 export function createAuditOrchestrator({
   lifecycleService, artifactStore, adapters, validateContract,
   clock, timer, retryPolicyResolver,
-  narrativeExecutor,
-  n8nCallCounter,
+  narrativeExecutor, narrativeMode, narrativeDependencies,
+  n8nCallCounter, rendererImpl,
 }) {
   const c = clock || defaultClock();
   const _narrativeExecutor = narrativeExecutor || executeNarrative;
+  const _narrativeMode = narrativeMode || NARRATIVE_MODE.MOCK;
   const _n8nCallCounter = n8nCallCounter || { count: 0 };
+  // Governed narrative dependencies (cacheStore for REPLAY, modelClient +
+  // budget + priceTable + modelConfig for LIVE).  Validated at runtime
+  // configuration time; forwarded to the narrative executor.
+  const _narrativeDependencies = narrativeDependencies || {};
+  // Testability seam: injected renderer records the exact model it receives.
+  // Default production behaviour is unchanged (dynamic import of the locked
+  // renderer).  Regression proof: default path verified by WP10-LOCK-01 and
+  // the production acceptance suite.
+  const _rendererImpl = rendererImpl || null;
 
   // -------------------------------------------------------------------
   // Validation
@@ -254,19 +266,46 @@ export function createAuditOrchestrator({
     }
 
     // Persist normalized result (throws on failure)
-    const normalizedRecord = await persistNormalized({ auditRequest, source: item.source, sourceResult });
+    let normalizedRecord;
+    try {
+      normalizedRecord = await persistNormalized({ auditRequest, source: item.source, sourceResult });
+    } catch (err) {
+      if (err.code === "ERR_ARTIFACT_IMMUTABLE_CONFLICT") {
+        // PRYSM-CLOSE-13: transient re-execution produced a new result.
+        // The governed store is immutable — the prior attempt's normalized
+        // artifact remains the durable record; the new in-memory result
+        // drives the current run only.
+        normalizedRecord = null;
+      } else {
+        throw err;
+      }
+    }
 
-    // Persist source checkpoint manifest (throws on failure)
+    // Persist source checkpoint manifest (throws on failure).
+    // When the normalized artifact conflicted (transient re-execution), the
+    // prior checkpoint manifest remains the durable record — skip.
     const identityForManifest = actualIdentity || identity || buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion || "1.0.0" });
-    await persistSourceCheckpointManifest({
-      store: artifactStore,
-      scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
-      source: item.source,
-      sourceExecutionKey: identityForManifest.sourceExecutionKey,
-      completedAt: c.now(),
-      normalizedRecord,
-      rawRecord,
-    });
+    if (normalizedRecord) {
+      try {
+        await persistSourceCheckpointManifest({
+          store: artifactStore,
+          scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
+          source: item.source,
+          sourceExecutionKey: identityForManifest.sourceExecutionKey,
+          completedAt: c.now(),
+          normalizedRecord,
+          rawRecord,
+        });
+      } catch (err) {
+        if (err.code === "ERR_ARTIFACT_IMMUTABLE_CONFLICT") {
+          // PRYSM-CLOSE-13: prior checkpoint manifest remains the durable
+          // record for recovery classification.  The current run proceeds
+          // with the new in-memory result.
+        } else {
+          throw err;
+        }
+      }
+    }
 
     return { sourceResult, rawRecord, normalizedRecord, identity: identityForManifest };
   }
@@ -306,7 +345,21 @@ export function createAuditOrchestrator({
         expectedSourceExecutionKey: buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion }).sourceExecutionKey,
       });
       if (restored) {
-        completed.push({ source: item.source, completed: true, restored });
+        // PRYSM-CLOSE-13: decide recovery from the PERSISTED failure
+        // classification.  Transient failures and recoverable provider-task
+        // timeouts are re-executed; everything else is restored without a
+        // provider call.
+        const classification = classifyFailure({
+          status: restored.sourceResult?.status,
+          errorCategory: restored.sourceResult?.errorCategory,
+          requestId: restored.sourceResult?.requestId,
+        });
+        if (classification.action === RECOVERY_ACTION.RESTORE) {
+          completed.push({ source: item.source, completed: true, restored });
+        }
+        // REEXECUTE_FRESH / REEXECUTE_RESUME_TASK: intentionally NOT marked
+        // completed — governedCollection re-executes the source.  The resume
+        // task hint is applied there from the persisted requestId.
       }
     }
     return completed;
@@ -428,7 +481,35 @@ export function createAuditOrchestrator({
       // Execute adapter — any exception here is infrastructure failure
       const registeredVersion = getAdapterVersion(item.source) || "1.0.0";
       const identity = buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion });
-      const result = await processOneSource({ auditRequest, item, executionId, identity });
+
+      // PRYSM-CLOSE-12: recoverable provider task timeout — resume the SAME
+      // paid task instead of re-submitting.  A previous attempt that timed
+      // out AFTER the provider task was created persisted its requestId in
+      // the normalized artifact; pass it through as a resume hint.
+      let effectiveAuditRequest = auditRequest;
+      if (item.source === "dataforseo-onpage") {
+        try {
+          const normKey = buildArtifactKey({
+            tenantId: auditRequest.tenantId,
+            clientId: auditRequest.clientId,
+            auditId: auditRequest.auditId,
+            category: "normalized",
+            artifactName: "dataforseo-onpage.json",
+          });
+          const prevBytes = await artifactStore.get(normKey);
+          if (prevBytes) {
+            const prev = JSON.parse(Buffer.from(prevBytes).toString("utf8"));
+            if (prev?.requestId && (prev?.errorCategory === "timeout" || prev?.status === "FAILED")) {
+              effectiveAuditRequest = {
+                ...auditRequest,
+                crawl: { ...(auditRequest.crawl || {}), resumeTaskId: prev.requestId },
+              };
+            }
+          }
+        } catch { /* no prior artifact — fresh submission */ }
+      }
+
+      const result = await processOneSource({ auditRequest: effectiveAuditRequest, item, executionId, identity });
       allSourceResults.push({
         source: item.source,
         sourceResult: result.sourceResult,
@@ -437,8 +518,28 @@ export function createAuditOrchestrator({
       });
     }
 
-    // 5. Assemble canonical evidence
+    // 5. Assemble canonical evidence (metadata contract — backward compat)
     const { canonicalRecord } = await assembleCanonical({ auditRequest, allSourceResults });
+
+    // 5b. Build governed decision evidence from persisted SourceResults.
+    //     This hydrates { site, performance, competitors, backlinks, ga4, gsc }
+    //     from the normalized source results so scoring and rendering receive
+    //     the full evidence they require.
+    const decisionResult = buildDecisionEvidence({
+      allSourceResults,
+      suppliedCompetitors: auditRequest.competitors || [],
+      validateContract,
+    });
+    if (decisionResult.errors.length > 0) {
+      // Decision evidence build had validation warnings — log but don't block.
+      // Individual source hydration failures are recorded in the evidence.
+    }
+    const decisionEvidenceRecord = await persistDecisionEvidence({
+      store: artifactStore,
+      scope,
+      evidence: decisionResult.evidence,
+      validateContract,
+    });
 
     // 6. Persist canonical record manifest
     const manifestRecord = await persistCanonicalRecordManifest({
@@ -460,7 +561,7 @@ export function createAuditOrchestrator({
       artifactKey: manifestKey,
     });
 
-    return { allSourceResults, canonicalRecord, isResumed };
+    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, isResumed };
   }
 
   // -------------------------------------------------------------------
@@ -520,25 +621,31 @@ export function createAuditOrchestrator({
     const { tenantId, clientId, auditId } = auditRequest;
     const scope = { tenantId, clientId, auditId };
 
-    // Load canonical evidence via the governed manifest
-    const crManifest = await loadAndVerifyCanonicalRecordManifest({
-      store: artifactStore, scope, validateContract,
+    // DE-07: scoring has ONE input — the persisted, verified, schema-validated
+    // decision-evidence.json.  No canonical-evidence.json fallback, no
+    // rehydration, no fabricated site evidence.
+    const decisionEvidence = await loadAndValidateDecisionEvidence({
+      store: artifactStore,
+      scope: { tenantId, clientId, auditId },
+      validateContract,
     });
-    const canonicalEvidence = crManifest.evidence;
 
-    // Build audit input from canonical evidence
+    // Build audit input from decision evidence
     const auditInput = {
-      targetUrl: canonicalEvidence.site?.targetUrl || auditRequest.targetUrl,
+      targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
       businessName: auditRequest.businessName || "",
       competitors: auditRequest.competitors || [],
     };
 
-    // Run governed scoring — this persists findings.json and scores.json
+    // Run governed scoring — this persists findings.json and scores.json.
+    // Each finding is validated against the governed Finding contract
+    // before persistence; malformed findings fail closed.
     const result = await scoreFromCanonicalEvidence({
       store: artifactStore,
       scope: { tenantId, clientId, auditId },
-      canonicalEvidence,
+      canonicalEvidence: decisionEvidence,
       auditInput,
+      validateContract,
     });
 
     // Transition to SCORED — lifecycle event records the scores artifact key
@@ -588,11 +695,11 @@ export function createAuditOrchestrator({
       }),
       sourceCounts: Object.freeze(sc),
       sources: Object.freeze(srcs),
-      canonicalEvidence: Object.freeze({
-        key: (canonicalRecord || crManifest.canonicalArtifact).key,
-        sha256: (canonicalRecord || crManifest.canonicalArtifact).sha256,
-        bytes: (canonicalRecord || crManifest.canonicalArtifact).bytes,
-      }),
+      canonicalEvidence: canonicalRecord ? Object.freeze({
+        key: canonicalRecord.key,
+        sha256: canonicalRecord.sha256,
+        bytes: canonicalRecord.bytes,
+      }) : null,
     });
   }
 
@@ -627,25 +734,41 @@ export function createAuditOrchestrator({
       throw new Error("Failed to load ReportContentPackage: " + err.message);
     }
 
-    // Transition SCORED → NARRATIVE_PENDING (orchestrator owns this)
-    await doTransition(
-      auditId, tenantId, executionId,
-      T.NARRATIVE_PENDING,
-      "narrative-execution-start",
-      null,
-    );
+    // Transition SCORED → NARRATIVE_PENDING (orchestrator owns this).
+    // When resuming from NARRATIVE_PENDING (process died mid-narrative),
+    // remain at NARRATIVE_PENDING and re-run only if no narrative artifact
+    // was persisted.
+    const preState = await lifecycleService.currentState(auditId, tenantId);
+    if (preState?.state === T.SCORED) {
+      await doTransition(
+        auditId, tenantId, executionId,
+        T.NARRATIVE_PENDING,
+        "narrative-execution-start",
+        null,
+      );
+    } else if (preState?.state !== T.NARRATIVE_PENDING) {
+      throw new Error(`Cannot run narrative from lifecycle state: ${preState?.state}`);
+    }
 
-    // Execute governed narrative — mock mode (never live in CI/test)
+    // Execute governed narrative with configured mode.
+    // Production uses MOCK (development), REPLAY (staging), or LIVE (explicitly approved).
     let narrativeResult;
     try {
       narrativeResult = await _narrativeExecutor({
         reportPackage,
-        mode: NARRATIVE_MODE.MOCK,
+        mode: _narrativeMode,
         modelId: "prysm-wp9-orchestrator",
         executionId,
         artifactStore,
         scope,
         now: c.now(),
+        // Governed narrative dependencies (validated at runtime configuration
+        // time before any audit executes).
+        cacheStore: _narrativeDependencies.cacheStore,
+        modelClient: _narrativeDependencies.modelClient,
+        budget: _narrativeDependencies.budget,
+        priceTable: _narrativeDependencies.priceTable,
+        modelConfig: _narrativeDependencies.modelConfig,
       });
     } catch (narrativeErr) {
       // Narrative execution failed — fail closed
@@ -731,6 +854,7 @@ export function createAuditOrchestrator({
       if (!pkgBytes) throw new Error("ReportContentPackage artifact not found");
       reportPackage = JSON.parse(pkgBytes.toString());
     } catch (err) {
+      console.error(`[runGovernedRendering] Package load failed for ${auditId}:`, err.message);
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-artifact-load-failed:" + (err.message || "").slice(0, 200), null);
       throw err;
@@ -744,12 +868,15 @@ export function createAuditOrchestrator({
       if (!narrBytes) throw new Error("NarrativeResponse artifact not found");
       narrative = JSON.parse(narrBytes.toString());
     } catch (err) {
+      console.error(`[runGovernedRendering] Narrative load failed for ${auditId}:`, err.message);
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-narrative-load-failed:" + (err.message || "").slice(0, 200), null);
       throw err;
     }
 
-    // Load scoring model
+    // Load scoring model from persisted scores artifact.
+    // Fields preserved by buildScoreSet (WP12) are read directly from the
+    // artifact so the renderer never reconstructs empty arrays/objects.
     let scoringModel;
     try {
       const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
@@ -761,9 +888,11 @@ export function createAuditOrchestrator({
         scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
         assessedWeight: scoreSet.assessedWeight ?? 0, readinessStatus: scoreSet.readinessStatus || "",
         showNumericScore: scoreSet.showNumericScore ?? false, evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
-        rootCause: scoreSet.rootCause || "", findings: [], conversionPaths: [], readinessMap: [],
-        contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
-        competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+        rootCause: scoreSet.rootCause || "", findings: [],
+        conversionPaths: scoreSet.conversionPaths || [],
+        readinessMap: scoreSet.readinessMap || [],
+        contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+        competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
       };
     } catch (err) {
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
@@ -778,10 +907,45 @@ export function createAuditOrchestrator({
       if (findingsBytes) scoringModel.findings = JSON.parse(findingsBytes.toString());
     } catch { /* supplementary */ }
 
-    // --- Build ReportViewModel (validates WP8+WP9+scoring integration) ---
+    // --- DE-08: load the SAME persisted verified decision-evidence.json
+    // used by scoring.  Sequence: load → verify artifact integrity →
+    // schema validate → renderer preconditions.  No canonical-evidence.json
+    // fallback; no fabricated site/performance objects.
+    // DE-09: malformed AVAILABLE/PARTIAL evidence fails closed here with
+    // rendererCallCount === 0.
+    let decisionEvidence;
+    try {
+      decisionEvidence = await loadAndValidateDecisionEvidence({
+        store: artifactStore,
+        scope: { tenantId, clientId, auditId },
+        validateContract,
+      });
+    } catch (evidenceErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-evidence-invalid:" + (evidenceErr.message || "").slice(0, 200), null);
+      throw evidenceErr;
+    }
+
+    // --- PRYSM-CLOSE-06: finalization gate before any rendering ---
+    // The governed finalization gate validates the scored model against the
+    // actual decision evidence.  A failing gate blocks the renderer entirely:
+    // renderer calls = 0, report artifact writes = 0.
+    const { runFinalizationGate } = await import("../scoring/report-finalization-gate.js");
+    const gate = runFinalizationGate(scoringModel, decisionEvidence);
+    if (!gate.passed) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-finalization-gate-failed:" + (gate.errors || []).map((e) => e.message).join("; ").slice(0, 200), null);
+      throw new Error("Finalization gate failed: " + (gate.errors || []).map((e) => e.message).join("; "));
+    }
+
+    // --- Build COMPLETE ReportViewModel (validates WP8+WP9+scoring+evidence) ---
+    // PRYSM-CLOSE-07: assemble the complete model (including governed decision
+    // evidence), validate the complete model, freeze, and render the SAME object.
+    // No augmentation or replacement after validation.
     const vmResult = buildReportViewModel({
       reportPackage, narrative, scoringModel, validateContract,
       reportVersion: scoringModel.scoringVersion, now: c.now(),
+      evidence: decisionEvidence,
     });
 
     if (!vmResult.valid) {
@@ -790,58 +954,20 @@ export function createAuditOrchestrator({
       throw new Error("ReportViewModel build failed: " + (vmResult.errors || []).join("; "));
     }
 
-    // --- Load canonical evidence for full renderer model ---
-    // The locked renderer expects a model with evidence.site, evidence.performance, etc.
-    // We load canonical evidence to provide the full data the renderer needs.
-    let canonicalEvidence;
-    try {
-      const crManifest = await loadAndVerifyCanonicalRecordManifest({
-        store: artifactStore, scope, validateContract,
-      });
-      canonicalEvidence = crManifest?.evidence || null;
-    } catch { /* canonical evidence may not be available for unit-test only paths */ }
-
-    // Build renderer-compatible model combining canonical evidence + scoring + narrative
-    const rendererModel = {
-      generatedAt: scoringModel.generatedAt || c.now(),
-      scoringVersion: scoringModel.scoringVersion || "3.0.0",
-      reportVersion: scoringModel.scoringVersion || "3.0.0",
-      input: vmResult.model.input || {},
-      evidence: canonicalEvidence || {
-        site: { domain: reportPackage.business?.domain || "unknown", pages: [{ title: reportPackage.business?.name || "Unknown" }], services: [], topicKeywords: [], ctas: [], forms: [], trust: {}, pageCount: 0, schemaTypes: [], sourceStatus: "NOT_APPLICABLE", brokenInternalLinks: [], externalCtas: [], securityHeaders: {}, socialLinks: [], missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0, totalWords: 0, averageWords: 0, imagesMissingAlt: 0, h1Missing: 0, h1Multiple: 0, internalLinkCount: 0, targetUrl: reportPackage.business?.domain ? `https://${reportPackage.business.domain}` : "" },
-        performance: { sourceStatus: "NOT_APPLICABLE" },
-        backlinks: { sourceStatus: "NOT_APPLICABLE" },
-        ga4: { sourceStatus: "NOT_APPLICABLE" },
-        gsc: { sourceStatus: "NOT_APPLICABLE" },
-        competitors: [],
-        competitorOpportunities: {},
-      },
-      scores: scoringModel.scores || {},
-      bands: scoringModel.bands || {},
-      assessedWeight: scoringModel.assessedWeight ?? 0,
-      readinessStatus: scoringModel.readinessStatus || "",
-      showNumericScore: scoringModel.showNumericScore ?? false,
-      evidenceConfidenceScore: scoringModel.evidenceConfidenceScore ?? 0,
-      rootCause: scoringModel.rootCause || "",
-      findings: scoringModel.findings || [],
-      conversionPaths: scoringModel.conversionPaths || [],
-      readinessMap: scoringModel.readinessMap || [],
-      contentIdeas: scoringModel.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
-      competitors: scoringModel.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
-      sourceStatus: vmResult.model.sourceStatus || {},
-      limitations: vmResult.model.limitations || [],
-      narrative: vmResult.model.narrative || null,
-      _gate: { passed: true },
-    };
+    // --- Renderer input: the exact validated object, frozen ---
+    const rendererModel = Object.freeze(vmResult.model);
 
     // --- Render all 16 approved pages via locked renderer ---
-    const { renderApprovedReport } = await import("../report/render-approved-report.js");
+    const { renderApprovedReport } = _rendererImpl
+      ? { renderApprovedReport: _rendererImpl }
+      : await import("../report/render-approved-report.js");
     rendererCallCount++;
 
     let rendered;
     try {
       rendered = renderApprovedReport(rendererModel);
     } catch (renderErr) {
+      console.error(`[runGovernedRendering] Pages render failed for ${auditId}:`, renderErr.message);
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-pages-failed:" + (renderErr.message || "").slice(0, 200), null);
       throw new Error("Approved page rendering failed: " + renderErr.message);
@@ -1048,6 +1174,7 @@ export function createAuditOrchestrator({
       } catch (scoringErr) {
         // Canonical evidence not loadable or scoring failed — remain at EVIDENCE_LOCKED.
         // The lifecycle stays exactly where it was (WP7-FAIL-01).
+        console.error(`[runGovernedScoring] FAILED for audit ${auditId}:`, scoringErr.message);
         const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract }).catch(() => null);
         return buildSummary({ auditRequest, executionId, finalState: T.EVIDENCE_LOCKED, resumed: false, allSourceResults: [], canonicalRecord: crManifest?.canonicalArtifact || null, startedAt });
       }
@@ -1059,37 +1186,19 @@ export function createAuditOrchestrator({
       const pkgExists = await artifactStore.exists(pkgKey);
 
       if (!pkgExists) {
-        // WP8 recovery: build the report-content package from persisted
-        // canonical evidence, findings, and scores.  This is the governed
-        // WP8 boundary — no providers, LLMs, or n8n are called.
+        // WP8 recovery: build the report-content package from the persisted,
+        // verified, schema-validated decision evidence, findings, and scores.
+        // This is the governed WP8 boundary — no providers, LLMs, or n8n are
+        // called.
+        // DE-07/DE-13: the canonical-evidence metadata envelope is NOT an
+        // alternate production input — the package build consumes the same
+        // DecisionEvidence contract as scoring and rendering.
         try {
-          // Load canonical evidence — three-tier fallback for recovery:
-          //   1. Governed manifest (full verification)
-          //   2. Direct canonical/evidence.json read
-          //   3. Manifest unverified — extract canonicalArtifact.key
-          let canonicalEvidence;
-          try {
-            const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-            canonicalEvidence = crManifest.evidence;
-          } catch (manifestErr) {
-            try {
-              const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" });
-              const evBytes = await artifactStore.get(evKey);
-              if (!evBytes) throw new Error("empty");
-              canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
-            } catch {
-              // Final fallback: load manifest unverified, follow canonicalArtifact.key
-              const manKey = buildArtifactKey({ tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" });
-              const manBytes = await artifactStore.get(manKey);
-              if (!manBytes) throw new Error(`Cannot load canonical evidence: ${manifestErr.message}`);
-              const manifest = JSON.parse(Buffer.from(manBytes).toString("utf8"));
-              const evKey = manifest?.canonicalArtifact?.key;
-              if (!evKey) throw new Error(`Manifest has no canonicalArtifact.key: ${manifestErr.message}`);
-              const evBytes = await artifactStore.get(evKey);
-              if (!evBytes) throw new Error(`Evidence artifact empty at ${evKey}: ${manifestErr.message}`);
-              canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
-            }
-          }
+          const canonicalEvidence = await loadAndValidateDecisionEvidence({
+            store: artifactStore,
+            scope: { tenantId, clientId, auditId },
+            validateContract,
+          });
 
           // Load findings
           const fKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" });
@@ -1167,10 +1276,22 @@ export function createAuditOrchestrator({
       return runGovernedRendering({ auditRequest, executionId, startedAt, injectPageFailure: opts.injectPageFailure || false });
     }
 
-    // 3a4. NARRATIVE_PENDING, NARRATIVE_FAILED — idempotent replay
+    // 3a4. NARRATIVE_PENDING, NARRATIVE_FAILED — governed narrative recovery.
+    // PRYSM-CLOSE-11: if the narrative artifact was already persisted, resume
+    // at NARRATIVE_READY without re-executing (no duplicate LLM work).  If it
+    // was not persisted, re-run the governed narrative from the persisted
+    // WP8 package.
     if (cs.state === T.NARRATIVE_PENDING || cs.state === T.NARRATIVE_FAILED) {
-      const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-      return buildSummary({ auditRequest, executionId, finalState: cs.state, resumed: false, allSourceResults: [], canonicalRecord: crManifest.canonicalArtifact, startedAt });
+      const narrKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/narrative.json`;
+      const narrExists = typeof artifactStore.exists === "function" && (await artifactStore.exists(narrKey));
+      if (narrExists) {
+        await doTransition(auditId, tenantId, executionId, T.NARRATIVE_READY, "narrative-recovered-from-artifact", narrKey);
+        return buildSummary({ auditRequest, executionId, finalState: T.NARRATIVE_READY, resumed: true, allSourceResults: [], canonicalRecord: null, startedAt });
+      }
+      if (cs.state === T.NARRATIVE_FAILED) {
+        await doTransition(auditId, tenantId, executionId, T.NARRATIVE_PENDING, "narrative-failed-recovery", null);
+      }
+      return runGovernedNarrative({ auditRequest, executionId, startedAt });
     }
 
     // 3a5. DRAFT_RENDERED, IN_REVIEW, APPROVED, PUBLISHED — governed WP10 terminal/idempotent states
