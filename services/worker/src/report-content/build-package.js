@@ -46,9 +46,11 @@ function sha256(str) {
 
 function buildIdentity(auditRequest, evidence) {
   const site = evidence.site || {};
+  const domain = site.domain || (() => { try { return new URL(auditRequest.targetUrl || "https://unknown").hostname; } catch { return "unknown"; } })();
+  const name = auditRequest.businessName || domain || "Website Audit";
   return {
-    name: auditRequest.businessName || "",
-    domain: site.domain || new URL(auditRequest.targetUrl || "https://unknown").hostname,
+    name,
+    domain,
     platform: site.platform || "Unknown",
   };
 }

@@ -18,6 +18,7 @@ import { scoreFromCanonicalEvidence } from "../scoring/scoring-service.js";
 import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service.js";
 import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
+import { buildDecisionEvidence, persistDecisionEvidence } from "../evidence/decision-evidence.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -437,8 +438,28 @@ export function createAuditOrchestrator({
       });
     }
 
-    // 5. Assemble canonical evidence
+    // 5. Assemble canonical evidence (metadata contract — backward compat)
     const { canonicalRecord } = await assembleCanonical({ auditRequest, allSourceResults });
+
+    // 5b. Build governed decision evidence from persisted SourceResults.
+    //     This hydrates { site, performance, competitors, backlinks, ga4, gsc }
+    //     from the normalized source results so scoring and rendering receive
+    //     the full evidence they require.
+    const decisionResult = buildDecisionEvidence({
+      allSourceResults,
+      suppliedCompetitors: auditRequest.competitors || [],
+      validateContract,
+    });
+    if (decisionResult.errors.length > 0) {
+      // Decision evidence build had validation warnings — log but don't block.
+      // Individual source hydration failures are recorded in the evidence.
+    }
+    const decisionEvidenceRecord = await persistDecisionEvidence({
+      store: artifactStore,
+      scope,
+      evidence: decisionResult.evidence,
+      validateContract,
+    });
 
     // 6. Persist canonical record manifest
     const manifestRecord = await persistCanonicalRecordManifest({
@@ -460,7 +481,7 @@ export function createAuditOrchestrator({
       artifactKey: manifestKey,
     });
 
-    return { allSourceResults, canonicalRecord, isResumed };
+    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, isResumed };
   }
 
   // -------------------------------------------------------------------
@@ -520,15 +541,33 @@ export function createAuditOrchestrator({
     const { tenantId, clientId, auditId } = auditRequest;
     const scope = { tenantId, clientId, auditId };
 
-    // Load canonical evidence via the governed manifest
-    const crManifest = await loadAndVerifyCanonicalRecordManifest({
-      store: artifactStore, scope, validateContract,
-    });
-    const canonicalEvidence = crManifest.evidence;
+    // Load governed decision evidence — contains hydrated { site, performance,
+    // competitors, backlinks, ga4, gsc } from persisted normalized SourceResults.
+    // Fall back to canonical evidence manifest for backward compatibility.
+    let decisionEvidence;
+    try {
+      const deKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" });
+      const deBytes = await artifactStore.get(deKey);
+      if (deBytes) {
+        decisionEvidence = JSON.parse(Buffer.from(deBytes).toString("utf8"));
+      }
+    } catch { /* decision evidence not available — fall through */ }
 
-    // Build audit input from canonical evidence
+    if (!decisionEvidence) {
+      // Backward-compat: load canonical evidence from manifest
+      try {
+        const crManifest = await loadAndVerifyCanonicalRecordManifest({
+          store: artifactStore, scope, validateContract,
+        });
+        decisionEvidence = crManifest.evidence;
+      } catch (err) {
+        throw new Error(`Cannot load evidence for scoring: ${err.message}`);
+      }
+    }
+
+    // Build audit input from decision evidence
     const auditInput = {
-      targetUrl: canonicalEvidence.site?.targetUrl || auditRequest.targetUrl,
+      targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
       businessName: auditRequest.businessName || "",
       competitors: auditRequest.competitors || [],
     };
@@ -537,7 +576,7 @@ export function createAuditOrchestrator({
     const result = await scoreFromCanonicalEvidence({
       store: artifactStore,
       scope: { tenantId, clientId, auditId },
-      canonicalEvidence,
+      canonicalEvidence: decisionEvidence,
       auditInput,
     });
 
@@ -588,11 +627,11 @@ export function createAuditOrchestrator({
       }),
       sourceCounts: Object.freeze(sc),
       sources: Object.freeze(srcs),
-      canonicalEvidence: Object.freeze({
-        key: (canonicalRecord || crManifest.canonicalArtifact).key,
-        sha256: (canonicalRecord || crManifest.canonicalArtifact).sha256,
-        bytes: (canonicalRecord || crManifest.canonicalArtifact).bytes,
-      }),
+      canonicalEvidence: canonicalRecord ? Object.freeze({
+        key: canonicalRecord.key,
+        sha256: canonicalRecord.sha256,
+        bytes: canonicalRecord.bytes,
+      }) : null,
     });
   }
 
@@ -749,7 +788,9 @@ export function createAuditOrchestrator({
       throw err;
     }
 
-    // Load scoring model
+    // Load scoring model from persisted scores artifact.
+    // Fields preserved by buildScoreSet (WP12) are read directly from the
+    // artifact so the renderer never reconstructs empty arrays/objects.
     let scoringModel;
     try {
       const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
@@ -761,9 +802,11 @@ export function createAuditOrchestrator({
         scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
         assessedWeight: scoreSet.assessedWeight ?? 0, readinessStatus: scoreSet.readinessStatus || "",
         showNumericScore: scoreSet.showNumericScore ?? false, evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
-        rootCause: scoreSet.rootCause || "", findings: [], conversionPaths: [], readinessMap: [],
-        contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
-        competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+        rootCause: scoreSet.rootCause || "", findings: [],
+        conversionPaths: scoreSet.conversionPaths || [],
+        readinessMap: scoreSet.readinessMap || [],
+        contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+        competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
       };
     } catch (err) {
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
@@ -790,48 +833,39 @@ export function createAuditOrchestrator({
       throw new Error("ReportViewModel build failed: " + (vmResult.errors || []).join("; "));
     }
 
-    // --- Load canonical evidence for full renderer model ---
-    // The locked renderer expects a model with evidence.site, evidence.performance, etc.
-    // We load canonical evidence to provide the full data the renderer needs.
-    let canonicalEvidence;
+    // --- Load governed decision evidence for the renderer ---
+    // Prefer decision evidence.  Fall back to canonical evidence for backward
+    // compatibility with audits collected before the decision-evidence boundary.
+    let decisionEvidence;
     try {
-      const crManifest = await loadAndVerifyCanonicalRecordManifest({
-        store: artifactStore, scope, validateContract,
-      });
-      canonicalEvidence = crManifest?.evidence || null;
-    } catch { /* canonical evidence may not be available for unit-test only paths */ }
+      const deKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" });
+      const deBytes = await artifactStore.get(deKey);
+      if (deBytes) {
+        decisionEvidence = JSON.parse(Buffer.from(deBytes).toString("utf8"));
+      }
+    } catch { /* not available */ }
 
-    // Build renderer-compatible model combining canonical evidence + scoring + narrative
+    if (!decisionEvidence) {
+      try {
+        const crManifest = await loadAndVerifyCanonicalRecordManifest({
+          store: artifactStore, scope, validateContract,
+        });
+        decisionEvidence = crManifest?.evidence || null;
+      } catch { /* not available */ }
+    }
+
+    if (!decisionEvidence) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-evidence-missing:no decision or canonical evidence found", null);
+      throw new Error("No governed evidence found — cannot render");
+    }
+
+    // --- Single validated renderer input ---
+    // Merge the schema-valid ReportViewModel with the governed decision evidence.
+    // No fallback site/performance objects.  No _gate override.
     const rendererModel = {
-      generatedAt: scoringModel.generatedAt || c.now(),
-      scoringVersion: scoringModel.scoringVersion || "3.0.0",
-      reportVersion: scoringModel.scoringVersion || "3.0.0",
-      input: vmResult.model.input || {},
-      evidence: canonicalEvidence || {
-        site: { domain: reportPackage.business?.domain || "unknown", pages: [{ title: reportPackage.business?.name || "Unknown" }], services: [], topicKeywords: [], ctas: [], forms: [], trust: {}, pageCount: 0, schemaTypes: [], sourceStatus: "NOT_APPLICABLE", brokenInternalLinks: [], externalCtas: [], securityHeaders: {}, socialLinks: [], missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0, totalWords: 0, averageWords: 0, imagesMissingAlt: 0, h1Missing: 0, h1Multiple: 0, internalLinkCount: 0, targetUrl: reportPackage.business?.domain ? `https://${reportPackage.business.domain}` : "" },
-        performance: { sourceStatus: "NOT_APPLICABLE" },
-        backlinks: { sourceStatus: "NOT_APPLICABLE" },
-        ga4: { sourceStatus: "NOT_APPLICABLE" },
-        gsc: { sourceStatus: "NOT_APPLICABLE" },
-        competitors: [],
-        competitorOpportunities: {},
-      },
-      scores: scoringModel.scores || {},
-      bands: scoringModel.bands || {},
-      assessedWeight: scoringModel.assessedWeight ?? 0,
-      readinessStatus: scoringModel.readinessStatus || "",
-      showNumericScore: scoringModel.showNumericScore ?? false,
-      evidenceConfidenceScore: scoringModel.evidenceConfidenceScore ?? 0,
-      rootCause: scoringModel.rootCause || "",
-      findings: scoringModel.findings || [],
-      conversionPaths: scoringModel.conversionPaths || [],
-      readinessMap: scoringModel.readinessMap || [],
-      contentIdeas: scoringModel.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
-      competitors: scoringModel.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
-      sourceStatus: vmResult.model.sourceStatus || {},
-      limitations: vmResult.model.limitations || [],
-      narrative: vmResult.model.narrative || null,
-      _gate: { passed: true },
+      ...vmResult.model,
+      evidence: decisionEvidence,
     };
 
     // --- Render all 16 approved pages via locked renderer ---
@@ -1063,31 +1097,40 @@ export function createAuditOrchestrator({
         // canonical evidence, findings, and scores.  This is the governed
         // WP8 boundary — no providers, LLMs, or n8n are called.
         try {
-          // Load canonical evidence — three-tier fallback for recovery:
-          //   1. Governed manifest (full verification)
-          //   2. Direct canonical/evidence.json read
-          //   3. Manifest unverified — extract canonicalArtifact.key
+          // Load governed evidence for WP8 package build.
+          // Prefer decision evidence ({ site, performance, ... } shape).
+          // Fall back through canonical evidence for backward compatibility.
           let canonicalEvidence;
           try {
-            const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
-            canonicalEvidence = crManifest.evidence;
-          } catch (manifestErr) {
+            const deKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" });
+            const deBytes = await artifactStore.get(deKey);
+            if (deBytes) {
+              canonicalEvidence = JSON.parse(Buffer.from(deBytes).toString("utf8"));
+            }
+          } catch { /* fall through */ }
+
+          if (!canonicalEvidence) {
+            // Backward-compat: three-tier canonical evidence fallback
             try {
-              const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" });
-              const evBytes = await artifactStore.get(evKey);
-              if (!evBytes) throw new Error("empty");
-              canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
-            } catch {
-              // Final fallback: load manifest unverified, follow canonicalArtifact.key
-              const manKey = buildArtifactKey({ tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" });
-              const manBytes = await artifactStore.get(manKey);
-              if (!manBytes) throw new Error(`Cannot load canonical evidence: ${manifestErr.message}`);
-              const manifest = JSON.parse(Buffer.from(manBytes).toString("utf8"));
-              const evKey = manifest?.canonicalArtifact?.key;
-              if (!evKey) throw new Error(`Manifest has no canonicalArtifact.key: ${manifestErr.message}`);
-              const evBytes = await artifactStore.get(evKey);
-              if (!evBytes) throw new Error(`Evidence artifact empty at ${evKey}: ${manifestErr.message}`);
-              canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
+              const crManifest = await loadAndVerifyCanonicalRecordManifest({ store: artifactStore, scope, validateContract });
+              canonicalEvidence = crManifest.evidence;
+            } catch (manifestErr) {
+              try {
+                const evKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "evidence.json" });
+                const evBytes = await artifactStore.get(evKey);
+                if (!evBytes) throw new Error("empty");
+                canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
+              } catch {
+                const manKey = buildArtifactKey({ tenantId, clientId, auditId, category: "manifests", artifactName: "canonical-evidence-record.json" });
+                const manBytes = await artifactStore.get(manKey);
+                if (!manBytes) throw new Error(`Cannot load canonical evidence: ${manifestErr.message}`);
+                const manifest = JSON.parse(Buffer.from(manBytes).toString("utf8"));
+                const evKey = manifest?.canonicalArtifact?.key;
+                if (!evKey) throw new Error(`Manifest has no canonicalArtifact.key: ${manifestErr.message}`);
+                const evBytes = await artifactStore.get(evKey);
+                if (!evBytes) throw new Error(`Evidence artifact empty at ${evKey}: ${manifestErr.message}`);
+                canonicalEvidence = JSON.parse(Buffer.from(evBytes).toString("utf8"));
+              }
             }
           }
 

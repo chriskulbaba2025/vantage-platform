@@ -459,10 +459,48 @@ export function scoreAudit(input, evidence, opts = {}) {
   const scoredAt = deriveScoredAt(evidence, opts.scoredAt);
 
   // ── Crawl gate (PRD v3.0 §8.6) ────────────────────────────────────
-  if (!isCrawlViable(site)) {
-    if (!site) {
-      // No site evidence at all — fully not-assessed model
-      return buildNotAssessedModel(input, { ...evidence, site: { sourceStatus: SOURCE_STATUS.UNAVAILABLE, pageCount: 0, pages: [], trust: {}, securityHeaders: {}, limitations: ["No crawl evidence in canonical payload"] } }, scoredAt);
+  // A viable status without actual crawl content (domain + pages) is
+  // treated as unavailable — prevents hollow evidence from masquerading
+  // as a valid crawl.  Domain is mandatory: without it the renderer and
+  // scoring modules cannot function correctly.
+  const hasCrawlContent = site && site.domain && Array.isArray(site.pages) && site.pages.length > 0;
+  if (!isCrawlViable(site) || !hasCrawlContent) {
+    if (!site || !hasCrawlContent) {
+      // Build a complete fallback site so renderer sections never encounter
+      // undefined fields.  Preserve any actual evidence the site already has.
+      const fallbackSite = {
+        sourceStatus: site?.sourceStatus || SOURCE_STATUS.UNAVAILABLE,
+        pageCount: site?.pageCount || 0,
+        pages: site?.pages || [],
+        services: site?.services || [],
+        topicKeywords: site?.topicKeywords || [],
+        ctas: site?.ctas || [],
+        forms: site?.forms || [],
+        schemaTypes: site?.schemaTypes || [],
+        socialLinks: site?.socialLinks || [],
+        brokenInternalLinks: site?.brokenInternalLinks || [],
+        externalCtas: site?.externalCtas || [],
+        trust: site?.trust || {},
+        securityHeaders: site?.securityHeaders || {},
+        domain: site?.domain || undefined,
+        platform: site?.platform || undefined,
+        targetUrl: site?.targetUrl || undefined,
+        totalWords: site?.totalWords || 0,
+        averageWords: site?.averageWords || 0,
+        missingTitles: site?.missingTitles || 0,
+        missingDescriptions: site?.missingDescriptions || 0,
+        missingCanonicals: site?.missingCanonicals || 0,
+        h1Missing: site?.h1Missing || 0,
+        h1Multiple: site?.h1Multiple || 0,
+        imageCount: site?.imageCount || 0,
+        imagesMissingAlt: site?.imagesMissingAlt || 0,
+        internalLinkCount: site?.internalLinkCount || 0,
+        statusCounts: site?.statusCounts || {},
+        limitations: [...(site?.limitations || []), "No crawl evidence in canonical payload"],
+        _contentEvidenceAvailable: site?._contentEvidenceAvailable || false,
+        _responseHeadersAvailable: site?._responseHeadersAvailable || false,
+      };
+      return buildNotAssessedModel(input, { ...evidence, site: fallbackSite }, scoredAt);
     }
     return buildNotAssessedModel(input, evidence, scoredAt);
   }

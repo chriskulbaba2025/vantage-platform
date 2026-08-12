@@ -103,17 +103,22 @@ function competitorComparison(competitorResults, competitorOpportunities) {
   // Backward-compatible: build basic crawl comparison
   const comparisons = competitorResults.map((item) => {
     if (item.status !== SOURCE_STATUS.AVAILABLE) return { name: item.url, url: item.url, status: "Unavailable", note: item.error };
-    const site = item.evidence;
+    const site = item.evidence || {};
+    // Guard against thin/hollow evidence from decision-evidence hydration.
+    // Some competitor items may have SERP-only metadata without crawl content.
+    if (!site.pages && !site.services && !site.pageCount) {
+      return { name: item.domain || item.url, url: item.url, status: "Insufficient Evidence", topic: "", offerClarity: "Not Assessed", trustProof: "Not Assessed", ctaClarity: "Not Assessed", contentDepth: "Not Assessed", eeat: "Not Assessed", pathClarity: "Not Assessed" };
+    }
     return {
-      name: site.pages[0]?.title || site.domain,
+      name: (site.pages || [])[0]?.title || site.domain || item.domain,
       url: item.url,
-      topic: site.services.slice(0, 4).join(", ") || site.topicKeywords.slice(0, 4).join(", "),
-      offerClarity: site.services.length >= 3 || site.pageCount >= 4 ? "Strong" : site.services.length ? "Moderate" : "Light",
+      topic: (site.services || []).slice(0, 4).join(", ") || (site.topicKeywords || []).slice(0, 4).join(", "),
+      offerClarity: (site.services || []).length >= 3 || site.pageCount >= 4 ? "Strong" : (site.services || []).length ? "Moderate" : "Light",
       trustProof: band(scoreTrust(site)),
-      ctaClarity: site.ctas.length >= 1 && site.ctas.length <= 8 ? "Strong" : site.ctas.length ? "Moderate" : "Light",
+      ctaClarity: (site.ctas || []).length >= 1 && (site.ctas || []).length <= 8 ? "Strong" : (site.ctas || []).length ? "Moderate" : "Light",
       contentDepth: site.pageCount >= 6 ? "Strong" : site.pageCount >= 3 ? "Moderate" : "Light",
       eeat: band(scoreTrust(site)),
-      pathClarity: site.forms.length || site.ctas.length ? "Moderate" : "Light",
+      pathClarity: (site.forms || []).length || (site.ctas || []).length ? "Moderate" : "Light",
     };
   });
 

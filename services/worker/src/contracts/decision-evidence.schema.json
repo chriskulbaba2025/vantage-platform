@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/decision-evidence.schema.json",
+  "title": "Decision Evidence",
+  "description": "Governed hydrated evidence model built from validated persisted SourceResults. Feeds scoring and rendering.",
+  "type": "object",
+  "required": ["contractVersion", "decisionEvidenceVersion"],
+  "properties": {
+    "contractVersion": { "const": "1.0.0" },
+    "decisionEvidenceVersion": { "const": "1.0.0" },
+    "site": {
+      "type": "object",
+      "required": ["sourceStatus"],
+      "properties": {
+        "sourceStatus": { "type": "string" },
+        "collectedAt": { "type": "string" },
+        "domain": { "type": "string" },
+        "targetUrl": { "type": "string" },
+        "pageCount": { "type": "integer" },
+        "pages": { "type": "array" },
+        "services": { "type": "array" },
+        "topicKeywords": { "type": "array" },
+        "ctas": { "type": "array" },
+        "forms": { "type": "array" },
+        "externalCtas": { "type": "array" },
+        "socialLinks": { "type": "array" },
+        "trust": { "type": "object" },
+        "platform": { "type": "string" },
+        "schemaTypes": { "type": "array" },
+        "statusCounts": { "type": "object" },
+        "totalWords": { "type": "integer" },
+        "averageWords": { "type": "integer" },
+        "missingTitles": { "type": "integer" },
+        "missingDescriptions": { "type": "integer" },
+        "missingCanonicals": { "type": "integer" },
+        "h1Missing": { "type": "integer" },
+        "h1Multiple": { "type": "integer" },
+        "imageCount": { "type": "integer" },
+        "imagesMissingAlt": { "type": "integer" },
+        "internalLinkCount": { "type": "integer" },
+        "brokenInternalLinks": { "type": "array" },
+        "securityHeaders": { "type": "object" },
+        "_contentEvidenceAvailable": { "type": "boolean" },
+        "_responseHeadersAvailable": { "type": "boolean" },
+        "limitations": { "type": "array" },
+        "coverage": { "type": "object" }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "required": ["sourceStatus"],
+      "properties": {
+        "sourceStatus": { "type": "string" },
+        "collectedAt": { "type": "string" },
+        "provider": { "type": "string" },
+        "fallbackUsed": { "type": "boolean" },
+        "testedUrls": { "type": "array" },
+        "mobile": { "type": "object" },
+        "desktop": { "type": "object" },
+        "renderingDiagnostics": { "type": "object" },
+        "limitations": { "type": "array" },
+        "coverage": { "type": "object" }
+      }
+    },
+    "competitors": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "backlinks": {
+      "type": "object",
+      "required": ["sourceStatus"],
+      "properties": {
+        "sourceStatus": { "type": "string" },
+        "collectedAt": { "type": "string" },
+        "provider": { "type": "string" },
+        "adapterVersion": { "type": "string" },
+        "limitations": { "type": "array" }
+      }
+    },
+    "ga4": {
+      "type": "object",
+      "required": ["sourceStatus"],
+      "properties": {
+        "sourceStatus": { "type": "string" },
+        "collectedAt": { "type": "string" },
+        "provider": { "type": "string" },
+        "adapterVersion": { "type": "string" },
+        "limitations": { "type": "array" }
+      }
+    },
+    "gsc": {
+      "type": "object",
+      "required": ["sourceStatus"],
+      "properties": {
+        "sourceStatus": { "type": "string" },
+        "collectedAt": { "type": "string" },
+        "provider": { "type": "string" },
+        "adapterVersion": { "type": "string" },
+        "limitations": { "type": "array" }
+      }
+    },
+    "competitorOpportunities": {
+      "type": "object"
+    }
+  }
+}

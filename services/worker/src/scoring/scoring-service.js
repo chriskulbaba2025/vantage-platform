@@ -39,7 +39,9 @@ function deriveScoredAt(evidence) {
     const ts = ev?.collectedAt || ev?._sourceStatus?.completedAt;
     if (ts) timestamps.push(new Date(ts).getTime());
   }
-  const competitors = evidence.competitors || [];
+  // Support both legacy array format and decision-evidence object format
+  const compRaw = evidence.competitors || [];
+  const competitors = Array.isArray(compRaw) ? compRaw : (compRaw.competitors || []);
   for (const c of competitors) {
     if (c.collectedAt) timestamps.push(new Date(c.collectedAt).getTime());
   }
@@ -205,6 +207,13 @@ function buildScoreSet(model, findingsRecord, scoresRecord) {
     rootCause: model.rootCause,
     findingCount: model.findings.length,
     findingIds: model.findings.map((f) => f.findingId),
+    // Preserve downstream renderer-required data so the ReportViewModel
+    // and renderer do not reconstruct these as empty arrays/objects.
+    conversionPaths: model.conversionPaths || [],
+    readinessMap: model.readinessMap || [],
+    contentIdeas: model.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+    competitors: model.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+    renderingDiagnostics: model.renderingDiagnostics || [],
     findingsArtifact: findingsRecord ? {
       key: findingsRecord.key,
       sha256: findingsRecord.sha256,
