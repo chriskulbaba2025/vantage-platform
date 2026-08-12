@@ -475,20 +475,20 @@ if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
   throw new Error(`VANTAGE_REPORTS_BUCKET is required. ${PRODUCTION_ARTIFACT_STORE_REQUIRED}`);
 } else {
   try {
-    const { S3Client } = await import("@aws-sdk/client-s3");
-    const { createS3ArtifactStore } = await import("./storage/s3-artifact-store.js");
+    const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } = await import("@aws-sdk/client-s3");
     const s3Client = new S3Client({ region: config.awsRegion });
-    const s3Store = createS3ArtifactStore({
-      s3Client,
+    artifactStore = createGovernedArtifactStore({
+      type: "object",
+      client: s3Client,
       bucket: config.reportsBucket,
       prefix: config.reportsPrefix,
+      commands: { PutObjectCommand, GetObjectCommand, HeadObjectCommand },
     });
-    artifactStore = createGovernedArtifactStore({ store: s3Store });
     console.log(`Artifact store: S3 bucket=${config.reportsBucket} region=${config.awsRegion} prefix=${config.reportsPrefix}`);
     // Prove connectivity at startup — fail closed if unreachable
     try {
       const probeKey = buildArtifactKey({ tenantId: "_startup", clientId: "_probe", auditId: "00000000-0000-0000-0000-000000000000", category: "_startup", artifactName: "probe.json" });
-      await s3Store.exists(probeKey);
+      await artifactStore.exists(probeKey);
       console.log("Artifact store connectivity verified");
     } catch (probeErr) {
       throw new Error(`Artifact store connectivity check failed: ${probeErr.message}. ${PRODUCTION_ARTIFACT_STORE_REQUIRED}`);
