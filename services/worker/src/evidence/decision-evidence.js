@@ -289,22 +289,15 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
  * @returns {Promise<import("../storage/governed-artifact-store.js").ArtifactRecord>}
  */
 export async function persistDecisionEvidence({ store, scope, evidence, validateContract }) {
-  // Validate against decision-evidence schema (non-blocking when schema unavailable)
+  // Validate against decision-evidence schema.  Fail closed — a missing or
+  // unloadable schema is a production defect, not a recoverable error.
   if (validateContract) {
-    try {
-      const sv = validateContract(
-        "https://vantage-platform.io/prysm/contracts/v1/decision-evidence.schema.json",
-        evidence,
-      );
-      if (sv && !sv.valid) {
-        throw new Error(`Decision evidence validation failed: ${JSON.stringify(sv.errors?.slice(0, 5))}`);
-      }
-    } catch (validationErr) {
-      // Schema may not be loaded in all test contexts — log and continue.
-      // Production builds always have the schema available.
-      if (validationErr.message.includes("Decision evidence validation failed")) {
-        throw validationErr;
-      }
+    const sv = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/decision-evidence.schema.json",
+      evidence,
+    );
+    if (!sv || !sv.valid) {
+      throw new Error(`Decision evidence validation failed: ${JSON.stringify((sv?.errors || []).slice(0, 5))}`);
     }
   }
 

@@ -105,11 +105,12 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
 export function createAuditOrchestrator({
   lifecycleService, artifactStore, adapters, validateContract,
   clock, timer, retryPolicyResolver,
-  narrativeExecutor,
+  narrativeExecutor, narrativeMode,
   n8nCallCounter,
 }) {
   const c = clock || defaultClock();
   const _narrativeExecutor = narrativeExecutor || executeNarrative;
+  const _narrativeMode = narrativeMode || NARRATIVE_MODE.MOCK;
   const _n8nCallCounter = n8nCallCounter || { count: 0 };
 
   // -------------------------------------------------------------------
@@ -674,12 +675,13 @@ export function createAuditOrchestrator({
       null,
     );
 
-    // Execute governed narrative — mock mode (never live in CI/test)
+    // Execute governed narrative with configured mode.
+    // Production uses MOCK (development), REPLAY (staging), or LIVE (explicitly approved).
     let narrativeResult;
     try {
       narrativeResult = await _narrativeExecutor({
         reportPackage,
-        mode: NARRATIVE_MODE.MOCK,
+        mode: _narrativeMode,
         modelId: "prysm-wp9-orchestrator",
         executionId,
         artifactStore,
@@ -834,31 +836,17 @@ export function createAuditOrchestrator({
     }
 
     // --- Load governed decision evidence for the renderer ---
-    // Prefer decision evidence.  Fall back to canonical evidence for backward
-    // compatibility with audits collected before the decision-evidence boundary.
+    // The renderer receives ONLY decision evidence — no canonical fallback,
+    // no fabricated defaults.  Missing decision evidence fails closed.
     let decisionEvidence;
-    try {
-      const deKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" });
-      const deBytes = await artifactStore.get(deKey);
-      if (deBytes) {
-        decisionEvidence = JSON.parse(Buffer.from(deBytes).toString("utf8"));
-      }
-    } catch { /* not available */ }
-
-    if (!decisionEvidence) {
-      try {
-        const crManifest = await loadAndVerifyCanonicalRecordManifest({
-          store: artifactStore, scope, validateContract,
-        });
-        decisionEvidence = crManifest?.evidence || null;
-      } catch { /* not available */ }
-    }
-
-    if (!decisionEvidence) {
+    const deKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" });
+    const deBytes = await artifactStore.get(deKey);
+    if (!deBytes) {
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
-        "render-evidence-missing:no decision or canonical evidence found", null);
-      throw new Error("No governed evidence found — cannot render");
+        "render-evidence-missing:decision-evidence.json not found", null);
+      throw new Error("Decision evidence artifact not found — cannot render");
     }
+    decisionEvidence = JSON.parse(Buffer.from(deBytes).toString("utf8"));
 
     // --- Single validated renderer input ---
     // Merge the schema-valid ReportViewModel with the governed decision evidence.

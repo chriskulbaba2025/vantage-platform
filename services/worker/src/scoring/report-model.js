@@ -16,11 +16,13 @@ function buildConversionPaths(site) {
     if (!site.trust.testimonials && !site.trust.credentials) blockers.push("no trust proof");
     if (!site.trust.pricing) blockers.push("no pricing context");
     if (!site.trust.policies) blockers.push("no policy or next-step reassurance");
+    // Strip extra CTA properties so the output matches the frozen schema.
+    const cleanCta = cta ? { text: cta.text || "", url: cta.url || "" } : null;
     return {
       name: `${index === 0 ? "Primary" : "Secondary"} Path: ${cta.text || "Conversion action"}`,
-      cta,
+      cta: cleanCta,
       host,
-      steps: ["Land on the relevant page", `Locate “${cta.text || "the call to action"}”`, `Continue through ${host}`, "Complete the requested action"],
+      steps: ["Land on the relevant page", `Locate "${cta.text || "the call to action"}"`, `Continue through ${host}`, "Complete the requested action"],
       blockers,
       status: blockers.length === 0 ? "Clear" : blockers.length <= 1 ? "Weak" : "Missing support",
     };

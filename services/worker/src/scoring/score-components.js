@@ -661,7 +661,9 @@ export function buildFindings(site, performance, gsc) {
     // Enforce: no finding without evidence (PRD §16)
     if (!evidenceRecords.length) return;
 
-    const affectedUrls = opts.affectedUrls || [site.targetUrl || site.domain];
+    const affectedUrls = (opts.affectedUrls && opts.affectedUrls.length > 0)
+      ? opts.affectedUrls
+      : [site.targetUrl || site.domain || "https://unknown"].filter(Boolean);
 
     const findingId = generateFindingId(
       opts.ruleId,
@@ -1192,7 +1194,9 @@ export function buildRenderingDiagnosticFindings(diagnostics, site) {
       confidence: CONFIDENCE_LEVELS.SUPPORTED,
     });
 
-    const affectedUrls = d.affectedUrl ? [d.affectedUrl] : [site?.targetUrl || site?.domain].filter(Boolean);
+    const affectedUrls = d.affectedUrl
+      ? [d.affectedUrl]
+      : ([site?.targetUrl || site?.domain || "https://unknown"].filter(Boolean));
     const evidenceRecords = [
       { provider: d.provider || "pagespeed-insights", sourceStatus: d.providerStatus || SOURCE_STATUS.AVAILABLE, field: "diagnostic", observedValue: d.diagnosticCode, artifactRef: null },
     ];

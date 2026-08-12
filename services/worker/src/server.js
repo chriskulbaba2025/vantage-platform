@@ -434,14 +434,23 @@ const oauthService = createOAuthService({
 
 // --- WP12: Construct governed production runtime ---
 
-// Schema validator (lazy import — avoids circular deps)
-let validateContract = () => ({ valid: true, errors: [] });
+// Schema validator (lazy import — avoids circular deps).
+// Fail closed: if the validator cannot be loaded, the server cannot start.
+let validateContract;
 try {
   const { createValidator } = await import("./contracts/validator.js");
   const v = createValidator();
-  validateContract = (schemaId, obj) => v.validate(schemaId, obj);
-} catch {
-  console.warn("Schema validator not available — using pass-through");
+  validateContract = (schemaId, obj) => {
+    const result = v.validate(schemaId, obj);
+    if (!result) {
+      // Validator returned null/undefined — schema not loaded
+      throw new Error(`Contract validator unavailable for schema: ${schemaId}`);
+    }
+    return result;
+  };
+} catch (err) {
+  console.error("FATAL: Schema validator failed to load — server cannot start without contract enforcement.");
+  throw err;
 }
 
 // Adapters — canonical production composition (zero provider calls during bootstrap)

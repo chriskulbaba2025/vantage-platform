@@ -116,6 +116,10 @@ export function createProductionRuntime({
   const runtimeAdapters = injectedAdaptersAreValid(adapters) ? adapters : createProductionAdapters();
   const runtimeValidateContract = resolveValidator(validateContract);
 
+  // Resolve narrative mode from environment/config.
+  // MOCK = development/CI, REPLAY = staging/deterministic replay, LIVE = production.
+  const narrativeMode = config.narrativeMode || (process.env.PRYSM_LLM_MODE === "live" ? "live" : process.env.PRYSM_LLM_MODE === "replay" ? "replay" : "mock");
+
   const orchestrator = createAuditOrchestrator({
     lifecycleService,
     artifactStore,
@@ -126,16 +130,33 @@ export function createProductionRuntime({
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       setTimeout: (fn, ms) => setTimeout(fn, ms),
     },
-    retryPolicyResolver: () => ({
-      timeoutMs: config.onpagePollTimeoutMs || 600_000,
-      maxAttempts: 3,
-      retryable: (err) => {
-        if (err?.code === "ECONNRESET" || err?.code === "ETIMEDOUT" || err?.code === "ENOTFOUND") return true;
-        if (err?.statusCode && err.statusCode >= 500 && err.statusCode < 600) return true;
-        return false;
-      },
-      delayMs: (attempt) => Math.min(1000 * Math.pow(2, attempt), 30_000),
-    }),
+    narrativeMode,
+    retryPolicyResolver: (source) => {
+      // Source-specific timeouts:
+      //   on-page crawls can take minutes (polling DataForSEO)
+      //   PageSpeed/Lighthouse typically completes in 30-60s
+      //   API-based adapters (SERP, backlinks, GA4, GSC) complete faster
+      const sourceTimeouts = {
+        "dataforseo-onpage": config.onpagePollTimeoutMs || 600_000,
+        "pagespeed":          120_000,
+        "dataforseo-serp":    60_000,
+        "backlinks":          60_000,
+        "ga4":                60_000,
+        "gsc":                60_000,
+      };
+      return {
+        timeoutMs: sourceTimeouts[source] || 60_000,
+        maxAttempts: 3,
+        retryable: (err) => {
+          // Must match the hard-timeout category from executeWithRetry
+          if (err?.category === "timeout") return true;
+          if (err?.category === "network" && err?.statusCode >= 500) return true;
+          if (err?.code === "ECONNRESET" || err?.code === "ETIMEDOUT" || err?.code === "ECONNREFUSED" || err?.code === "ENOTFOUND") return true;
+          return false;
+        },
+        delayMs: (attempt) => Math.min(1000 * Math.pow(2, attempt), 30_000),
+      };
+    },
   });
 
   const baseAuditService = createAuditApplicationService({
