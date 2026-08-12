@@ -475,10 +475,12 @@ if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
   throw new Error(`VANTAGE_REPORTS_BUCKET is required. ${PRODUCTION_ARTIFACT_STORE_REQUIRED}`);
 } else {
   try {
+    const { S3Client } = await import("@aws-sdk/client-s3");
     const { createS3ArtifactStore } = await import("./storage/s3-artifact-store.js");
+    const s3Client = new S3Client({ region: config.awsRegion });
     const s3Store = createS3ArtifactStore({
+      s3Client,
       bucket: config.reportsBucket,
-      region: config.awsRegion,
       prefix: config.reportsPrefix,
     });
     artifactStore = createGovernedArtifactStore({ store: s3Store });
