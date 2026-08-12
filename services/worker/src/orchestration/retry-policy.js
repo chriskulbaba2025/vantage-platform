@@ -44,6 +44,10 @@ export function resolveSourcePolicy({ policyResolver, source }) {
 /**
  * Execute a source with timeout and retry.
  *
+ * The timeout is enforced at the orchestration boundary with Promise.race.
+ * The AbortSignal is still delivered to cooperative adapters, but an adapter
+ * that ignores the signal can no longer hold the audit lifecycle indefinitely.
+ *
  * @param {object} opts
  * @param {function} opts.executeFn — (signal, attempt) => Promise<{rawBytes, contentType, sourceResult}>
  * @param {object} opts.policy — resolved policy { timeoutMs, maxAttempts, retryable, delayMs }
@@ -59,11 +63,20 @@ export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     actualAttempts = attempt;
     const ac = new AbortController();
-    const timer = clock ? clock.setTimeout(() => ac.abort(), timeoutMs) : setTimeout(() => ac.abort(), timeoutMs);
+    let timer = null;
+
+    const timeoutPromise = new Promise((_, reject) => {
+      const onTimeout = () => {
+        ac.abort();
+        reject(Object.assign(new Error("Source execution timed out"), { category: "timeout" }));
+      };
+      timer = clock ? clock.setTimeout(onTimeout, timeoutMs) : setTimeout(onTimeout, timeoutMs);
+    });
 
     try {
-      const result = await executeFn(ac.signal, attempt);
-      clearTimeout(timer);
+      const executionPromise = Promise.resolve().then(() => executeFn(ac.signal, attempt));
+      const result = await Promise.race([executionPromise, timeoutPromise]);
+      if (timer) clearTimeout(timer);
       if (onAttempt) onAttempt(attempt, { status: "fulfilled" });
       // Orchestrator owns the retry count — override adapter-provided value
       if (result.sourceResult) {
@@ -71,7 +84,7 @@ export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) 
       }
       return result;
     } catch (err) {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       lastError = err;
 
       if (ac.signal.aborted) {
