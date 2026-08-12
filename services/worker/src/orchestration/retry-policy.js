@@ -63,20 +63,22 @@ export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     actualAttempts = attempt;
     const ac = new AbortController();
-    let timer = null;
-
-    const timeoutPromise = new Promise((_, reject) => {
-      const onTimeout = () => {
-        ac.abort();
-        reject(Object.assign(new Error("Source execution timed out"), { category: "timeout" }));
-      };
-      timer = clock ? clock.setTimeout(onTimeout, timeoutMs) : setTimeout(onTimeout, timeoutMs);
-    });
+    let timer;
 
     try {
-      const executionPromise = Promise.resolve().then(() => executeFn(ac.signal, attempt));
-      const result = await Promise.race([executionPromise, timeoutPromise]);
-      if (timer) clearTimeout(timer);
+      // Race the adapter promise against a hard wall-clock timeout.
+      // The AbortSignal is passed as a best-effort cancellation hint but
+      // the timeout boundary is enforced independently — a hanging adapter
+      // that never checks the signal cannot hold the orchestrator.
+      const result = await Promise.race([
+        executeFn(ac.signal, attempt),
+        new Promise((_, reject) => {
+          timer = clock
+            ? clock.setTimeout(() => { ac.abort(); reject(Object.assign(new Error("Source execution timed out"), { category: "timeout" })); }, timeoutMs)
+            : setTimeout(() => { ac.abort(); reject(Object.assign(new Error("Source execution timed out"), { category: "timeout" })); }, timeoutMs);
+        }),
+      ]);
+      clearTimeout(timer);
       if (onAttempt) onAttempt(attempt, { status: "fulfilled" });
       // Orchestrator owns the retry count — override adapter-provided value
       if (result.sourceResult) {
@@ -84,10 +86,12 @@ export async function executeWithRetry({ executeFn, policy, clock, onAttempt }) 
       }
       return result;
     } catch (err) {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
       lastError = err;
 
-      if (ac.signal.aborted) {
+      // Safety net: if the adapter threw via the AbortSignal path rather than
+      // the race timeout, still classify as a timeout.
+      if (!lastError.category && ac.signal.aborted) {
         lastError = Object.assign(new Error("Source execution timed out"), { category: "timeout" });
       }
 

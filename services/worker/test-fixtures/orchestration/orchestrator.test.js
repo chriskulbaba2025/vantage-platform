@@ -1345,8 +1345,48 @@ test("18. timeout exhaustion: retryCount = 2", async () => {
   assert.equal(summary.sources.find(x => x.source === "pagespeed").retryCount, 2);
 });
 
+// Permanent regression: hard timeout boundary — a never-resolving adapter
+// must not hold the orchestrator indefinitely.
+test("19. hard-timeout: never-resolving adapter returns FAILED with timeout category", async () => {
+  const store = createGovernedArtifactStore({ type: "memory" });
+  let attempts = 0;
+  const adapters = createBaseMockAdapters();
+  // Adapter that NEVER resolves — simulates a stuck provider connection.
+  adapters["pagespeed"] = {
+    adapterVersion: "1.0.0",
+    execute: async () => { attempts++; return new Promise(() => { /* never settles */ }); },
+  };
+  const start = Date.now();
+  const orch = createAuditOrchestrator({
+    lifecycleService: createLifecycleService(createMemoryLifecycleRepository()),
+    artifactStore: store,
+    adapters,
+    validateContract,
+    clock: mockClock(),
+    retryPolicyResolver: () => ({ timeoutMs: 50, maxAttempts: 2, retryable: e => e?.category === "timeout", delayMs: () => 0 }),
+  });
+  const summary = await orch.execute(baReq());
+  const elapsed = Date.now() - start;
+
+  // Must return within a bounded time (timeoutMs × maxAttempts + overhead).
+  assert.ok(elapsed < 2000, `expected <2s, took ${elapsed}ms`);
+  // Both attempts must have been made.
+  assert.equal(attempts, 2);
+  const src = summary.sources.find(x => x.source === "pagespeed");
+  assert.equal(src.status, "FAILED");
+  assert.equal(src.retryCount, 1);
+  // Verify the error is classified as timeout.
+  const stored = await store.get(
+    `tenants/t1/clients/c1/audits/${summary.auditId}/normalized/pagespeed.json`
+  );
+  assert.ok(stored, "normalized artifact must exist");
+  const parsed = JSON.parse(Buffer.from(stored).toString("utf8"));
+  assert.equal(parsed.status, "FAILED");
+  assert.equal(parsed.errorCategory, "timeout");
+});
+
 // Missing artifactKey fail-closed
-test("19. missing/wrong/cross-tenant lifecycle artifactKey fails closed", async () => {
+test("20. missing/wrong/cross-tenant lifecycle artifactKey fails closed", async () => {
   const store = createGovernedArtifactStore({ type: "memory" });
   const repo = createMemoryLifecycleRepository();
   const lc = createLifecycleService(repo);
