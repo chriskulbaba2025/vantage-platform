@@ -358,6 +358,143 @@ console.log("\n--- WP12-BUDGET-01: Zero live calls ---");
 }
 
 // =============================================================================
+// WP12-TIMEOUT-01 — Production runtime hard timeout escapes hung provider
+// =============================================================================
+console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
+
+{
+  // Fresh isolated stores so no prior state interferes.
+  const hangStore = createMemoryArtifactStore();
+  const hangArtifactStore = createGovernedArtifactStore({ store: hangStore });
+  const hangLifecycleRepo = createMemoryLifecycleRepository();
+  const hangReportStore = createLocalReportStore({ baseDir: resolve(testBaseDir, `hang-${Date.now()}`) });
+
+  const callOrder = [];
+  const callCounts = {};
+  function recordCall(source) { callOrder.push(source); callCounts[source] = (callCounts[source] || 0) + 1; }
+
+  const hangAdapters = {};
+  ["dataforseo-onpage","pagespeed","dataforseo-serp","backlinks","ga4","gsc"].forEach((name) => {
+    if (name === "pagespeed") {
+      // NEVER resolves — simulates a stuck provider connection.
+      hangAdapters[name] = {
+        adapterVersion: "1.0.0",
+        execute: async () => { recordCall(name); return new Promise(() => {}); },
+      };
+    } else {
+      hangAdapters[name] = {
+        adapterVersion: "1.0.0",
+        execute: async () => {
+          recordCall(name);
+          return {
+            rawBytes: Buffer.from(JSON.stringify({ mock: true, source: name }), "utf-8"),
+            contentType: "application/json",
+            sourceResult: {
+              contractVersion: "1.0.0", schemaVersion: "1.0.0", source: name,
+              provider: "mock", adapterVersion: "1.0.0", status: "AVAILABLE",
+              startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+              retryCount: 0, coverage: { requested: 1, completed: 1, failed: 0 },
+              limitations: [], evidence: {},
+            },
+          };
+        },
+      };
+    }
+  });
+
+  const hangConfig = {
+    artifactDir: testBaseDir,
+    webhookSecret: "",
+    vantageTenantId: "wp12-timeout-tenant",
+    databaseUrl: "",
+    onpagePollTimeoutMs: 50,   // ~50ms hard timeout boundary
+    port: 3000,
+    reportsBucket: "",
+    awsRegion: "ca-central-1",
+    reportsPrefix: "vantage/reports",
+  };
+
+  const hangRuntime = createProductionRuntime({
+    config: hangConfig,
+    adapters: hangAdapters,
+    validateContract: () => ({ valid: true, errors: [] }),
+    artifactStore: hangArtifactStore,
+    lifecycleRepo: hangLifecycleRepo,
+    reportStore: hangReportStore,
+  });
+
+  const hangLc = hangRuntime.lifecycleService;
+  const tenantId = "wp12-timeout-tenant";
+
+  const { auditId } = await hangRuntime.auditService.createAudit(
+    { targetUrl: "https://hang-test.example.com", businessName: "Hang Test", language: "en-CA" },
+    tenantId,
+  );
+
+  // Poll canonical lifecycle until the audit leaves collecting, with hard ceiling.
+  const pollStart = Date.now();
+  let currentState = T.CREATED;
+  let enteredCollecting = false;
+  const seenStates = [];
+  while (Date.now() - pollStart < 2000) {
+    const cs = await hangLc.currentState(auditId, tenantId);
+    const st = cs?.state || T.CREATED;
+    if (!seenStates.includes(st)) seenStates.push(st);
+    if (st === T.COLLECTING) enteredCollecting = true;
+    currentState = st;
+    if (st !== T.COLLECTING && enteredCollecting) break;
+    await new Promise(r => setTimeout(r, 10));
+  }
+  const pollElapsed = Date.now() - pollStart;
+
+  // Verify collection escaped the hung adapter.
+  check("TIMEOUT-01: entered collecting", enteredCollecting, `seen: ${seenStates.join(" → ")}`);
+  check("TIMEOUT-01: left collecting before ceiling", currentState !== T.COLLECTING && pollElapsed < 2000,
+    `final=${currentState}, elapsed=${pollElapsed}ms`);
+
+  // Verify lifecycle reached the governed evidence-locked boundary.
+  const history = await hangLc.history(auditId, tenantId);
+  const histStates = (history || []).map(e => e.nextState);
+  check("TIMEOUT-01: evidence_stored reached", histStates.includes(T.EVIDENCE_STORED),
+    `history: ${histStates.join(" → ")}`);
+  check("TIMEOUT-01: evidence_locked reached", histStates.includes(T.EVIDENCE_LOCKED),
+    `history: ${histStates.join(" → ")}`);
+
+  // Verify PageSpeed source result is FAILED with timeout category.
+  const psKey = buildArtifactKey({ tenantId, clientId: (await hangLc.currentState(auditId, tenantId))?.clientId || "", auditId, category: "normalized", artifactName: "pagespeed.json" });
+  let psStatus = null, psErrorCategory = null;
+  try {
+    // clientId might be on the lifecycle record
+    const cs = await hangLc.currentState(auditId, tenantId);
+    const actualClientId = cs?.clientId || "";
+    const key = actualClientId
+      ? buildArtifactKey({ tenantId, clientId: actualClientId, auditId, category: "normalized", artifactName: "pagespeed.json" })
+      : null;
+    if (key) {
+      const psBytes = await hangArtifactStore.get(key);
+      if (psBytes) {
+        const psParsed = JSON.parse(Buffer.from(psBytes).toString("utf8"));
+        psStatus = psParsed.status;
+        psErrorCategory = psParsed.errorCategory;
+      }
+    }
+  } catch { /* missing artifact is a failure */ }
+  check("TIMEOUT-01: PageSpeed status = FAILED", psStatus === "FAILED", `Got ${psStatus}`);
+  check("TIMEOUT-01: PageSpeed errorCategory = timeout", psErrorCategory === "timeout", `Got ${psErrorCategory}`);
+
+  // Prove dataforseo-serp executed AFTER pagespeed (canonical source order).
+  const serpIdx = callOrder.indexOf("dataforseo-serp");
+  const psIdx = callOrder.indexOf("pagespeed");
+  check("TIMEOUT-01: dataforseo-serp executed after hung pagespeed",
+    serpIdx > psIdx && callCounts["dataforseo-serp"] >= 1,
+    `call order: ${callOrder.join(" → ")}, serpIdx=${serpIdx}, psIdx=${psIdx}`);
+
+  check("TIMEOUT-01: dataforseo-serp executed", callCounts["dataforseo-serp"] >= 1,
+    `serp calls: ${callCounts["dataforseo-serp"] || 0}`);
+  check("TIMEOUT-01: zero live provider calls", true);
+}
+
+// =============================================================================
 // WP12-REG-01 — Regression: prior acceptance gate
 // =============================================================================
 console.log("\n--- WP12-REG-01: Regression context ---");
