@@ -118,6 +118,7 @@ export function buildReportViewModel({
   validateContract,
   reportVersion,
   now,
+  evidence,
 }) {
   const errors = [];
   let rendererCallCount = 0;
@@ -241,7 +242,7 @@ export function buildReportViewModel({
         observedValue: ev.observedValue,
         source: ev.source || ev.provider || "",
       })),
-      confidence: typeof f.confidence === "number" ? f.confidence : 50,
+      confidence: typeof f.confidence === "string" ? f.confidence : "deterministic",
       businessImpact: f.businessImpact || "",
       recommendation: f.recommendation || "",
       implementationEffort: f.implementationEffort || "M",
@@ -273,6 +274,9 @@ export function buildReportViewModel({
       gsc: reportPackage.sourceStatus?.gsc || "NOT_APPLICABLE",
     },
     limitations: reportPackage.limitations || [],
+    // Governed decision evidence — part of the COMPLETE model, validated
+    // together with everything else BEFORE the renderer receives it.
+    evidence: evidence || null,
     // Narrative fields
     narrative: narrative,
     // Gate

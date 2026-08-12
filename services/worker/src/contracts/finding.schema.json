@@ -84,33 +84,23 @@
       "maxItems": 50,
       "items": {
         "type": "object",
-        "additionalProperties": false,
         "required": ["field", "observedValue"],
         "properties": {
-          "field": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Evidence field name."
-          },
-          "observedValue": {
-            "description": "The observed value for this evidence field."
-          },
-          "expectedValue": {
-            "description": "The expected or threshold value."
-          },
-          "source": {
-            "type": "string",
-            "description": "Source key that produced this evidence."
-          }
+          "field": { "type": "string", "minLength": 1 },
+          "observedValue": {},
+          "expectedValue": {},
+          "source": { "type": "string" },
+          "provider": { "type": "string" },
+          "sourceStatus": { "type": "string" },
+          "artifactRef": { "type": ["string", "null"] }
         }
       },
       "description": "Evidence references backing this finding. At least one is required — no evidence means no finding."
     },
     "confidence": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 100,
-      "description": "Confidence score 0-100 for this finding."
+      "type": "string",
+      "enum": ["deterministic", "strongly_supported", "supported", "directional", "insufficient"],
+      "description": "Confidence level for this finding per PRD §15.4."
     },
     "businessImpact": {
       "type": "string",
@@ -144,6 +134,10 @@
       "enum": ["High", "Medium", "Low"],
       "description": "Severity classification."
     },
+    "rawPriority": {
+      "type": "number",
+      "description": "Raw priority before confidence modifier."
+    },
     "finalPriority": {
       "type": "number",
       "description": "Computed priority for sorting findings."
@@ -151,6 +145,30 @@
     "findingKey": {
       "type": "string",
       "description": "Optional stable key for grouping or deduplication."
+    },
+    "problem": {
+      "type": "string",
+      "description": "Display alias for title (renderer compatibility)."
+    },
+    "impact": {
+      "type": "string",
+      "description": "Display alias for businessImpact (renderer compatibility)."
+    },
+    "fix": {
+      "type": "string",
+      "description": "Display alias for recommendation (renderer compatibility)."
+    },
+    "effort": {
+      "type": "string",
+      "description": "Display alias for implementationEffort (renderer compatibility)."
+    },
+    "evidenceText": {
+      "type": "string",
+      "description": "Pre-formatted evidence text for renderer display."
+    },
+    "key": {
+      "type": "string",
+      "description": "Stable key for grouping (renderer compatibility)."
     }
   }
 }

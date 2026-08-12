@@ -929,23 +929,33 @@ export async function crawlWithDataforseo(target, options = {}) {
   let retryCount = 0;
   let taskPostResult = null;
 
+  // PRYSM-CLOSE-12: resuming a previously created provider task.
+  // When a durable task ID is supplied, NO new paid task is submitted —
+  // polling continues against the same task.
+  const resumeTaskId = options.resumeTaskId || null;
+
   // -----------------------------------------------------------------------
-  // Step 1: Submit task
+  // Step 1: Submit task (skipped when resuming an existing provider task)
   // -----------------------------------------------------------------------
   try {
-    taskPostResult = await client.taskPost(target, {
-      maxPages,
-      maxDepth: options.maxDepth,
-      enableJavascript: options.enableJavascript ?? DEFAULTS.enableJavascript,
-      enableBrowserRendering:
-        options.enableBrowserRendering ?? DEFAULTS.enableBrowserRendering,
-      loadResources: options.loadResources ?? DEFAULTS.loadResources,
-      includePatterns: options.includePatterns,
-      excludePatterns: options.excludePatterns,
-      maxExternalResources: options.maxExternalResources,
-      customRobotsTxt: options.customRobotsTxt || null,
-    });
-    rawTaskId = taskPostResult.taskId;
+    if (resumeTaskId) {
+      rawTaskId = resumeTaskId;
+      taskPostResult = { taskId: resumeTaskId, resumed: true };
+    } else {
+      taskPostResult = await client.taskPost(target, {
+        maxPages,
+        maxDepth: options.maxDepth,
+        enableJavascript: options.enableJavascript ?? DEFAULTS.enableJavascript,
+        enableBrowserRendering:
+          options.enableBrowserRendering ?? DEFAULTS.enableBrowserRendering,
+        loadResources: options.loadResources ?? DEFAULTS.loadResources,
+        includePatterns: options.includePatterns,
+        excludePatterns: options.excludePatterns,
+        maxExternalResources: options.maxExternalResources,
+        customRobotsTxt: options.customRobotsTxt || null,
+      });
+      rawTaskId = taskPostResult.taskId;
+    }
   } catch (error) {
     const completedAt = new Date().toISOString();
     const isQuota = error.category === "rate_limit" ||
@@ -1472,6 +1482,9 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     maxExternalResources: crawl.maxExternalResources,
     pollTimeoutMs: crawl.pollTimeoutMs ?? DEFAULTS.pollTimeoutMs,
     pollIntervalMs: crawl.pollIntervalMs ?? DEFAULTS.pollIntervalMs,
+    // PRYSM-CLOSE-12: durable provider task ID from a previous attempt —
+    // resume polling on the same paid task, never re-submit.
+    resumeTaskId: crawl.resumeTaskId || null,
     clientOptions: {
       mode: crawl.fixtures || crawl.fetchImpl ? (crawl.fixtures ? "fixture" : "live") : "live",
       fixtures: crawl.fixtures || null,
@@ -1517,10 +1530,43 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       },
       limitations: envelope.limitations || [],
       evidence: {
+        // Full normalized decision evidence — all fields required downstream
+        // by scoring and rendering.  Raw provider payloads remain in rawBytes
+        // and the _raw envelope key only.
         sourceStatus: envelope.sourceStatus || envelope.status,
-        pageCount: envelope.pageCount,
+        targetUrl: envelope.targetUrl,
         domain: envelope.domain,
+        pageCount: envelope.pageCount,
+        pages: envelope.pages || [],
         statusCounts: envelope.statusCounts || {},
+        totalWords: envelope.totalWords,
+        averageWords: envelope.averageWords,
+        missingTitles: envelope.missingTitles,
+        missingDescriptions: envelope.missingDescriptions,
+        missingCanonicals: envelope.missingCanonicals,
+        h1Missing: envelope.h1Missing,
+        h1Multiple: envelope.h1Multiple,
+        imageCount: envelope.imageCount,
+        imagesMissingAlt: envelope.imagesMissingAlt,
+        imagesMissingDimensions: envelope.imagesMissingDimensions,
+        schemaTypes: envelope.schemaTypes || [],
+        forms: envelope.forms || [],
+        ctas: envelope.ctas || [],
+        externalCtas: envelope.externalCtas || [],
+        socialLinks: envelope.socialLinks || [],
+        internalLinkCount: envelope.internalLinkCount,
+        brokenInternalLinks: envelope.brokenInternalLinks || [],
+        brokenLinksCount: envelope.brokenLinksCount,
+        platform: envelope.platform || "Unknown",
+        services: envelope.services || [],
+        topicKeywords: envelope.topicKeywords || [],
+        trust: envelope.trust || {},
+        securityHeaders: envelope.securityHeaders || {},
+        collectedAt: envelope.collectedAt,
+        coverage: envelope.coverage || null,
+        limitations: envelope.limitations || [],
+        _contentEvidenceAvailable: envelope._contentEvidenceAvailable || false,
+        _responseHeadersAvailable: envelope._responseHeadersAvailable || false,
       },
     };
 

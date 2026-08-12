@@ -43,7 +43,7 @@
       "evidence": [
         { "field": "trust.credentials", "observedValue": false, "source": "dataforseo-onpage" }
       ],
-      "confidence": 85,
+      "confidence": "deterministic",
       "businessImpact": "Visitors cannot verify provider qualifications.",
       "recommendation": "Add professional credentials to the homepage.",
       "implementationEffort": "M",

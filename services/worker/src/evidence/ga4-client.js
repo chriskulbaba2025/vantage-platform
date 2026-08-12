@@ -430,7 +430,10 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
   const options = {
     propertyId: ga4Config.propertyId,
     serviceAccountJson: ga4Config.serviceAccountJson || process.env.GOOGLE_SERVICE_ACCOUNT_JSON || "",
-    fetchImpl: null,
+    // Testability seams: controlled OAuth boundary + transport below the
+    // adapter layer.  Production default behaviour is unchanged (null).
+    oauthService: ga4Config.oauthService || null,
+    fetchImpl: ga4Config.fetchImpl || null,
   };
 
   try {
@@ -470,7 +473,12 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         sourceStatus: envelope.sourceStatus || envelope.status,
         included: envelope.included,
         affectsScore: envelope.affectsScore,
+        totals: envelope.totals || null,
+        engagementRate: envelope.engagementRate,
+        conversionRate: envelope.conversionRate,
         measurementReadiness: envelope.measurementReadiness || null,
+        collectedAt: envelope.collectedAt,
+        limitations: envelope.note ? [envelope.note] : [],
       },
     };
 

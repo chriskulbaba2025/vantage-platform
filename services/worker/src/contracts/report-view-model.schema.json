@@ -104,8 +104,8 @@
         "properties": {
           "name": { "type": "string" },
           "cta": {
-            "type": "object",
-            "additionalProperties": false,
+            "type": ["object", "null"],
+            "description": "Conversion CTA on this path. Null when no conversion action was detected (legitimate 'Missing' path).",
             "properties": {
               "text": { "type": "string" },
               "url": { "type": "string" }
@@ -273,6 +273,10 @@
           "confidence": { "type": "string" }
         }
       }
+    },
+    "evidence": {
+      "type": ["object", "null"],
+      "description": "Governed decision evidence consumed by the renderer. Part of the complete validated model — the renderer receives exactly this validated object."
     },
     "narrative": {
       "$ref": "https://vantage-platform.io/prysm/contracts/v1/narrative-response.schema.json",

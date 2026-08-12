@@ -252,6 +252,9 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     login: process.env.DATAFORSEO_LOGIN || "",
     password: process.env.DATAFORSEO_PASSWORD || "",
     topicKeywords,
+    // Testability seam: controlled transport below the adapter layer.
+    // Production default behaviour is unchanged (null → live fetch).
+    fetchImpl: (auditRequest.backlinks && typeof auditRequest.backlinks === "object" ? auditRequest.backlinks.fetchImpl : null) || null,
   };
 
   if (!options.login || !options.password) {
@@ -320,7 +323,16 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         sourceStatus: envelope.sourceStatus || envelope.status,
         totalBacklinksReviewed: envelope.totalBacklinksReviewed,
         goodCount: envelope.goodCount,
+        badCount: envelope.badCount,
+        worthPursuingCount: envelope.worthPursuingCount,
         authoritySummary: envelope.authoritySummary,
+        topGoodLinks: envelope.topGoodLinks || [],
+        topBadLinks: envelope.topBadLinks || [],
+        topWorthPursuingDomains: envelope.topWorthPursuingDomains || [],
+        backlinks: envelope.backlinks || [],
+        collectedAt: envelope.collectedAt || completedAt,
+        coverage: envelope.coverage || null,
+        limitations: envelope.limitations || [],
       },
     };
 

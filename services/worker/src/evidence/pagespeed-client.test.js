@@ -918,3 +918,54 @@ test("retry: 503 (transient) triggers exactly one retry per strategy", async () 
   // Each strategy: first call fails (503), retry succeeds = 1 retry per strategy = 2 total
   assert.equal(result._sourceStatus.retryCount, 2);
 });
+
+// ---------------------------------------------------------------------------
+// C12 — Lighthouse subprocess governed timeout boundary
+// ---------------------------------------------------------------------------
+
+test("PRYSM-CLOSE-12-LH: Lighthouse fallback receives the governed timeout boundary", async () => {
+  let receivedOptions = null;
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      return errorResponse(500, "provider failure");
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const localRunner = async (_url, strategy, runOptions) => {
+    receivedOptions = runOptions;
+    return normalizeLighthouse(lhr, "lighthouse-cli-fallback", strategy, { url: _url, fallbackUsed: true });
+  };
+  const result = await collectPerformance("https://example.com", {
+    fetchImpl,
+    disableCache: true,
+    localRunner,
+    lighthouseTimeoutMs: 45000,
+  });
+  assert.ok(receivedOptions, "runner received options");
+  assert.equal(receivedOptions.timeoutMs, 45000, "governed Lighthouse timeout passed to the runner");
+  assert.equal(result.mobile.fallbackUsed, true, "fallback engaged");
+});
+
+test("PRYSM-CLOSE-12-LH2: uncooperative Lighthouse runner failure surfaces as FAILED strategy, not a hang", async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes("pagespeedonline")) {
+      return errorResponse(500, "provider failure");
+    }
+    return new Response("not found", { status: 404 });
+  };
+  // Runner that rejects immediately with a timeout-category error — the
+  // production default runLocalLighthouse produces exactly this when its
+  // internal governed timeout fires (chrome killed in finally).
+  const localRunner = async () => {
+    throw Object.assign(new Error("Lighthouse mobile timed out after 100ms"), { category: "timeout" });
+  };
+  const result = await collectPerformance("https://example.com", {
+    fetchImpl,
+    disableCache: true,
+    localRunner,
+    lighthouseTimeoutMs: 100,
+  });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED, "both providers failed → FAILED");
+  assert.equal(result.mobile.status, SOURCE_STATUS.FAILED, "mobile strategy FAILED");
+  assert.match(result.limitations.join("; "), /timed out/, "timeout surfaced in limitations");
+});

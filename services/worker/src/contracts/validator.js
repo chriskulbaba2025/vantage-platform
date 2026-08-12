@@ -33,12 +33,15 @@ const REQUIRED_SCHEMAS = [
   "source-result.schema.json",
   "artifact-record.schema.json",
   "canonical-evidence.schema.json",
+  "decision-evidence.schema.json",
   "finding.schema.json",
   "score.schema.json",
   "report-content.schema.json",
   "narrative-response.schema.json",
   "report-view-model.schema.json",
   "report-manifest.schema.json",
+  "lifecycle-event.schema.json",
+  "lifecycle-state.schema.json",
 ];
 
 // ---------------------------------------------------------------------------

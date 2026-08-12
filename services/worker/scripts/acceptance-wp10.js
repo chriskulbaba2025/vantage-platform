@@ -31,7 +31,7 @@ function check(label, condition, detail) {
 const schemasDir = resolve(__dirname, "..", "src", "contracts");
 const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(ajv);
-["report-view-model.schema.json","report-content.schema.json","narrative-response.schema.json","finding.schema.json","score.schema.json","report-manifest.schema.json","artifact-record.schema.json","audit-request.schema.json","source-result.schema.json","canonical-evidence.schema.json"].forEach(f => {
+["report-view-model.schema.json","report-content.schema.json","narrative-response.schema.json","finding.schema.json","score.schema.json","report-manifest.schema.json","artifact-record.schema.json","audit-request.schema.json","source-result.schema.json","canonical-evidence.schema.json","decision-evidence.schema.json","lifecycle-event.schema.json","lifecycle-state.schema.json"].forEach(f => {
   ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f),"utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
 });
 function validate(sid, obj) { const v = ajv.getSchema(sid); return v ? { valid: v(obj), errors: v.errors || [] } : { valid: false, errors: [{ message: `Schema not found: ${sid}` }] }; }
@@ -120,6 +120,52 @@ async function setupToNarrativeReady(auditId) {
   const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
   await artifactStore.put({ bytes: Buffer.from(scoresJson, "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(sm.findings || []), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
+
+  // PRYSM-CLOSE-06/07: governed rendering requires decision evidence —
+  // seed it through the real production builder.
+  {
+    const { buildDecisionEvidence } = await import("../src/evidence/decision-evidence.js");
+    const siteSourceResult = {
+      contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage",
+      provider: "mock", adapterVersion: "1.0.0", status: "AVAILABLE",
+      startedAt: "2026-08-09T12:00:00.000Z", completedAt: "2026-08-09T12:00:01.000Z", retryCount: 0,
+      coverage: { requested: 1, completed: 1, failed: 0 }, limitations: [],
+      evidence: {
+        sourceStatus: "AVAILABLE", domain: "testbusiness.com", targetUrl: "https://testbusiness.com",
+        pageCount: 1, pages: [], services: [], trust: {}, platform: "WordPress",
+        schemaTypes: [], statusCounts: {}, ctas: [], forms: [], externalCtas: [],
+        socialLinks: [], internalLinkCount: 0, brokenInternalLinks: [],
+        securityHeaders: {}, _contentEvidenceAvailable: true, _responseHeadersAvailable: false,
+        collectedAt: "2026-08-09T12:00:01.000Z",
+      },
+    };
+    const perfSourceResult = {
+      contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "pagespeed",
+      provider: "mock", adapterVersion: "1.0.0", status: "AVAILABLE",
+      startedAt: "2026-08-09T12:00:01.000Z", completedAt: "2026-08-09T12:00:02.000Z", retryCount: 0,
+      coverage: { requested: 2, completed: 2, failed: 0 }, limitations: [],
+      evidence: {
+        sourceStatus: "AVAILABLE", fallbackUsed: false, testedUrls: ["https://testbusiness.com"],
+        mobile: { status: "AVAILABLE", scores: { performance: 73 }, metrics: { fcpMs: 1200, lcpMs: 1800 } },
+        desktop: { status: "AVAILABLE", scores: { performance: 88 }, metrics: { fcpMs: 600, lcpMs: 900 } },
+        collectedAt: "2026-08-09T12:00:02.000Z",
+      },
+    };
+    const decisionResult = buildDecisionEvidence({
+      allSourceResults: [
+        { source: "dataforseo-onpage", sourceResult: siteSourceResult },
+        { source: "pagespeed", sourceResult: perfSourceResult },
+      ],
+      suppliedCompetitors: [],
+      validateContract: validate,
+    });
+    await artifactStore.put({
+      bytes: Buffer.from(JSON.stringify(decisionResult.evidence), "utf-8"),
+      contentType: "application/json",
+      scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" },
+    });
+  }
+
   return { auditRequest: { contractVersion: "1.0.0", auditId, tenantId, clientId, idempotencyKey: randomUUID(), targetUrl: "https://testbusiness.com", businessName: "Test Business Inc." }, tenantId, clientId, executionId };
 }
 
@@ -195,17 +241,19 @@ console.log("\n--- Phase 2: Production server handler delivery gating ---");
     });
   }
 
-  // --- Draft: 403 ---
+  // --- Draft: not client-visible (no final artifacts → 404 PAGE_NOT_FOUND) ---
+  // PRYSM-CLOSE-14: draft/review states must never be exposed through
+  // client-facing report routes.  The governed route returns 404 because
+  // draft pages are not part of the approved final artifact set.
   {
     const r = await httpGet(`/reports/${storeSlug}/${storeRunId}/index.html`);
-    check("Draft: HTTP 403", r.status === 403, `Got ${r.status}`);
+    check("Draft: HTTP 404 (not client-visible)", r.status === 404, `Got ${r.status}`);
     const p = JSON.parse(r.body);
-    check("Draft: REPORT_NOT_APPROVED", p.code === "REPORT_NOT_APPROVED");
-    check(`Draft: status=draft (${p.status})`, p.status === "draft");
+    check("Draft: PAGE_NOT_FOUND", p.code === "PAGE_NOT_FOUND", `Got ${p.code}`);
     check(`Draft: body bytes=${r.body.length}`, r.body.length > 0);
   }
 
-  // --- Review: 403 ---
+  // --- Review: not client-visible ---
   {
     const now = new Date().toISOString();
     await testStore.writeReview(storeSlug, storeRunId, {
@@ -214,9 +262,9 @@ console.log("\n--- Phase 2: Production server handler delivery gating ---");
       findingsReviewed: true, limitationsAccepted: true,
     });
     const r = await httpGet(`/reports/${storeSlug}/${storeRunId}/index.html`);
-    check("Reviewed: HTTP 403", r.status === 403);
+    check("Reviewed: HTTP 404 (not client-visible)", r.status === 404, `Got ${r.status}`);
     const p = JSON.parse(r.body);
-    check(`Reviewed: status=reviewed (${p.status})`, p.status === "reviewed");
+    check("Reviewed: PAGE_NOT_FOUND", p.code === "PAGE_NOT_FOUND", `Got ${p.code}`);
   }
 
   // --- Approve with 16 pages: 200 ---

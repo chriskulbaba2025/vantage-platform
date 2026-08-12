@@ -1,0 +1,86 @@
+{
+  "contractVersion": "1.0.0",
+  "decisionEvidenceVersion": "1.0.0",
+  "site": {
+    "sourceStatus": "AVAILABLE",
+    "collectedAt": "2026-08-04T14:10:00.000Z",
+    "domain": "proof.example.com",
+    "targetUrl": "https://proof.example.com",
+    "pageCount": 3,
+    "pages": [],
+    "services": ["Governed Evidence Service"],
+    "topicKeywords": [],
+    "ctas": [],
+    "forms": [],
+    "externalCtas": [],
+    "socialLinks": [],
+    "trust": { "credentials": true },
+    "platform": "ProofCMS",
+    "schemaTypes": ["ProfessionalService"],
+    "statusCounts": { "200": 3 },
+    "totalWords": 360,
+    "averageWords": 120,
+    "missingTitles": 0,
+    "missingDescriptions": 0,
+    "missingCanonicals": 0,
+    "h1Missing": 0,
+    "h1Multiple": 0,
+    "imageCount": 0,
+    "imagesMissingAlt": 0,
+    "internalLinkCount": 2,
+    "brokenInternalLinks": [],
+    "securityHeaders": {},
+    "_contentEvidenceAvailable": true,
+    "_responseHeadersAvailable": false,
+    "limitations": [],
+    "coverage": { "requested": 3, "completed": 3, "failed": 0 }
+  },
+  "performance": {
+    "sourceStatus": "AVAILABLE",
+    "collectedAt": "2026-08-04T14:10:00.000Z",
+    "provider": "pagespeed-insights",
+    "fallbackUsed": false,
+    "testedUrls": ["https://proof.example.com"],
+    "mobile": {
+      "scores": { "performance": 73 },
+      "metrics": { "fcpMs": 1200, "lcpMs": 1800 }
+    },
+    "desktop": {
+      "scores": { "performance": 88 },
+      "metrics": { "fcpMs": 600, "lcpMs": 900 }
+    },
+    "limitations": [],
+    "coverage": { "requested": 2, "completed": 2, "failed": 0 }
+  },
+  "competitors": [
+    {
+      "url": "https://competitor-proof.example.net",
+      "domain": "competitor-proof.example.net",
+      "status": "AVAILABLE",
+      "collectedAt": "2026-08-04T14:10:00.000Z",
+      "evidence": { "source": "dataforseo-serp", "keyword": "governed evidence", "title": "Competitor Proof", "description": "A competing service", "position": 1, "candidateUrl": "https://competitor-proof.example.net" }
+    }
+  ],
+  "backlinks": {
+    "sourceStatus": "AVAILABLE",
+    "collectedAt": "2026-08-04T14:10:00.000Z",
+    "provider": "DataForSEO",
+    "adapterVersion": "1.0.0",
+    "limitations": []
+  },
+  "ga4": {
+    "sourceStatus": "AVAILABLE",
+    "collectedAt": "2026-08-04T14:10:00.000Z",
+    "provider": "Google",
+    "adapterVersion": "1.0.0",
+    "limitations": []
+  },
+  "gsc": {
+    "sourceStatus": "AVAILABLE",
+    "collectedAt": "2026-08-04T14:10:00.000Z",
+    "provider": "Google",
+    "adapterVersion": "1.0.0",
+    "limitations": []
+  },
+  "competitorOpportunities": null
+}

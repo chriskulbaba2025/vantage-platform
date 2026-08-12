@@ -1,0 +1,14 @@
+{
+  "contractVersion": "1.0.0",
+  "eventId": "550e8400-e29b-41d4-a716-446655440000",
+  "auditId": "550e8400-e29b-41d4-a716-446655440001",
+  "tenantId": "t1",
+  "clientId": "c1",
+  "sequence": 1,
+  "priorState": "created",
+  "nextState": "validated",
+  "timestamp": "2026-08-04T14:10:00.000Z",
+  "actor": "system",
+  "reason": "input validated",
+  "codeVersion": "1.0.0"
+}

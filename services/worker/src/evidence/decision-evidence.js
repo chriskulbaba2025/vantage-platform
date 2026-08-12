@@ -151,22 +151,27 @@ function hydrateCompetitors(sourceResult, suppliedCompetitors) {
   const rawCompetitors = ev.competitors || [];
 
   // Map raw SERP items into competitor comparison objects.
-  // Each item has { url, title, description, _keyword, ... } from the SERP adapter.
-  // The competitorComparison function expects { url, domain, status, evidence }.
-  return rawCompetitors.map((item, i) => ({
-    url: item.url || item.link || `serp-result-${i}`,
-    domain: item.domain || (() => { try { return new URL(item.url || "").hostname; } catch { return ""; } })(),
-    status,
-    collectedAt: sourceResult.completedAt || undefined,
-    evidence: {
-      source: "dataforseo-serp",
-      keyword: item._keyword || "",
-      title: item.title || "",
-      description: item.description || "",
-      position: item.position ?? i + 1,
-      ...item,
-    },
-  }));
+  // The SERP adapter normalizes items to { candidateUrl, domain, title,
+  // position, ... } — the candidateUrl field must survive into the
+  // competitor evidence (lossless adapter boundary).
+  return rawCompetitors.map((item, i) => {
+    const competitorUrl = item.url || item.candidateUrl || item.link || "";
+    return {
+      url: competitorUrl || `serp-result-${i}`,
+      domain: item.domain || (() => { try { return new URL(competitorUrl).hostname; } catch { return ""; } })(),
+      status,
+      collectedAt: sourceResult.completedAt || undefined,
+      evidence: {
+        source: "dataforseo-serp",
+        keyword: item._keyword || "",
+        title: item.title || "",
+        description: item.description || "",
+        position: item.position ?? item.rank_absolute ?? i + 1,
+        candidateUrl: competitorUrl,
+        ...item,
+      },
+    };
+  });
 }
 
 /**
@@ -231,13 +236,21 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
       continue;
     }
 
-    // Validate SourceResult before hydration
+    // Validate SourceResult before hydration.
+    // AVAILABLE/PARTIAL sources that fail validation are NOT hydrated —
+    // malformed evidence must never reach scoring or rendering.
     if (validateContract) {
       const validation = validateSourceResult(sr, validateContract);
       if (!validation.valid) {
-        errors.push(`SourceResult validation failed for "${entry.source}": ${JSON.stringify(validation.errors?.slice(0, 3))}`);
-        // Continue with hydration — structural errors are reported but don't
-        // block the remaining sources.  Callers decide fail-closed policy.
+        const status = sr.status || "NOT_APPLICABLE";
+        errors.push(`SourceResult validation failed for "${entry.source}" (status=${status}): ${JSON.stringify(validation.errors?.slice(0, 3))}`);
+        if (VIABLE_STATUSES.has(status)) {
+          // Malformed AVAILABLE/PARTIAL evidence — fail closed.
+          // Do NOT hydrate this source.  The evidence key stays null.
+          continue;
+        }
+        // Non-viable sources (FAILED, BLOCKED, etc.) that still fail
+        // validation are reported but do not block the pipeline.
       }
     }
 
@@ -265,15 +278,8 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
     }
   }
 
-  // Fill missing evidence keys with defaults so downstream code does not
-  // need to null-check every evidence key.
-  if (!evidence.site) evidence.site = { sourceStatus: "NOT_CONNECTED" };
-  if (!evidence.performance) evidence.performance = { sourceStatus: "NOT_CONNECTED" };
-  if (!evidence.competitors) evidence.competitors = [];
-  if (!evidence.backlinks) evidence.backlinks = { sourceStatus: "NOT_CONNECTED" };
-  if (!evidence.ga4) evidence.ga4 = { sourceStatus: "NOT_CONNECTED" };
-  if (!evidence.gsc) evidence.gsc = { sourceStatus: "NOT_CONNECTED" };
-  if (!evidence.competitorOpportunities) evidence.competitorOpportunities = {};
+  // Decision evidence is built from validated, persisted SourceResults only.
+  // Missing keys are NOT fabricated — downstream code must null-check.
 
   return { evidence, errors };
 }

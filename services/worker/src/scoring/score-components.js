@@ -700,13 +700,15 @@ export function buildFindings(site, performance, gsc) {
       scoreBearing: priority.scoreBearing,
       rawPriority: priority.raw,
       finalPriority: priority.final,
-      severity: opts.severity, // kept for display compatibility
-      problem: opts.title,     // kept for display compatibility
+      severity: opts.severity,
+      // Display compatibility aliases — the renderer uses problem/impact/fix/effort
+      // as display keys.  These replicate the canonical fields.
+      problem: opts.title,
       impact: opts.businessImpact || opts.impact || "",
       fix: opts.recommendation || opts.fix || "",
       effort: opts.effort || "M",
       key: opts.key || "",
-      evidenceText: opts.evidenceText || "", // kept for display compatibility
+      evidenceText: opts.evidenceText || "",
     });
   };
 
@@ -1225,7 +1227,7 @@ export function buildRenderingDiagnosticFindings(diagnostics, site) {
       fix: d.recommendation || "",
       effort: "M",
       key: "rendering",
-      evidenceText: d.clientExplanation.slice(0, 200),
+      evidenceText: d.clientExplanation?.slice(0, 200) || "",
     });
   }
 

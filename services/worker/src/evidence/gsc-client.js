@@ -327,8 +327,10 @@ export async function collectGsc(siteUrl, options = {}) {
       requested: Object.keys(windows).length * rowLimit,
       completed: returnedCount,
       failed: 0,
-      windowsRequested: Object.keys(windows).length,
     },
+    // GSC-specific detail — belongs in evidence, not in the canonical
+    // coverage contract ({ requested, completed, failed } only).
+    comparisonWindowsRequested: Object.keys(windows).length,
     rawArtifactRef: null,
     _sourceStatus: buildSourceStatus({
       provider: "google-search-console",
@@ -389,7 +391,10 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
 
   const options = {
     serviceAccountJson: gscConfig.serviceAccountJson || process.env.GOOGLE_SERVICE_ACCOUNT_JSON || "",
-    fetchImpl: null,
+    // Testability seams: controlled OAuth boundary + transport below the
+    // adapter layer.  Production default behaviour is unchanged (null).
+    oauthService: gscConfig.oauthService || null,
+    fetchImpl: gscConfig.fetchImpl || null,
     sufficiencyThreshold: gscConfig.sufficiencyThreshold ?? 100,
   };
 
@@ -431,6 +436,10 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         included: envelope.included,
         sufficiency: envelope.sufficiency || null,
         totals: envelope.totals || null,
+        topQueries: envelope.topQueries || [],
+        topPages: envelope.topPages || [],
+        collectedAt: envelope.collectedAt,
+        limitations: envelope.limitations || [],
       },
     };
 

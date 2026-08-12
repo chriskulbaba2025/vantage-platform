@@ -4,12 +4,14 @@
   "title": "Decision Evidence",
   "description": "Governed hydrated evidence model built from validated persisted SourceResults. Feeds scoring and rendering.",
   "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
   "required": ["contractVersion", "decisionEvidenceVersion"],
   "properties": {
     "contractVersion": { "const": "1.0.0" },
     "decisionEvidenceVersion": { "const": "1.0.0" },
     "site": {
-      "type": "object",
+      "type": ["object", "null"],
       "required": ["sourceStatus"],
       "properties": {
         "sourceStatus": { "type": "string" },
@@ -47,7 +49,7 @@
       }
     },
     "performance": {
-      "type": "object",
+      "type": ["object", "null"],
       "required": ["sourceStatus"],
       "properties": {
         "sourceStatus": { "type": "string" },
@@ -63,12 +65,11 @@
       }
     },
     "competitors": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": { "type": "object" }
     },
     "backlinks": {
-      "type": "object",
-      "required": ["sourceStatus"],
+      "type": ["object", "null"],
       "properties": {
         "sourceStatus": { "type": "string" },
         "collectedAt": { "type": "string" },
@@ -78,8 +79,7 @@
       }
     },
     "ga4": {
-      "type": "object",
-      "required": ["sourceStatus"],
+      "type": ["object", "null"],
       "properties": {
         "sourceStatus": { "type": "string" },
         "collectedAt": { "type": "string" },
@@ -89,8 +89,7 @@
       }
     },
     "gsc": {
-      "type": "object",
-      "required": ["sourceStatus"],
+      "type": ["object", "null"],
       "properties": {
         "sourceStatus": { "type": "string" },
         "collectedAt": { "type": "string" },
@@ -100,7 +99,7 @@
       }
     },
     "competitorOpportunities": {
-      "type": "object"
+      "type": ["object", "null"]
     }
   }
 }

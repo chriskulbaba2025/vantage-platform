@@ -72,6 +72,36 @@ function makeAvailResult(source) {
   };
 }
 
+/**
+ * PRYSM-CLOSE-02: scoring requires the governed decision-evidence boundary.
+ * Seed decision-evidence.json through the real production builder from a
+ * valid SourceResult so evidence-stored recovery tests exercise the
+ * production scoring entry point.
+ */
+async function seedDecisionEvidence({ store, scope, validateContract }) {
+  const { buildDecisionEvidence, persistDecisionEvidence } = await import("../../src/evidence/decision-evidence.js");
+  const siteSourceResult = {
+    contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage",
+    provider: "DataForSEO", adapterVersion: "1.0.0", status: "AVAILABLE",
+    startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 0,
+    coverage: { requested: 1, completed: 1, failed: 0 }, limitations: [],
+    evidence: {
+      sourceStatus: "AVAILABLE", domain: "example.com", targetUrl: "https://example.com",
+      pageCount: 1, pages: [], services: [], trust: {}, platform: "WordPress",
+      schemaTypes: [], statusCounts: {}, ctas: [], forms: [], externalCtas: [],
+      socialLinks: [], internalLinkCount: 0, brokenInternalLinks: [],
+      securityHeaders: {}, _contentEvidenceAvailable: true, _responseHeadersAvailable: false,
+      collectedAt: mockClock().now(),
+    },
+  };
+  const decisionResult = buildDecisionEvidence({
+    allSourceResults: [{ source: "dataforseo-onpage", sourceResult: siteSourceResult }],
+    suppliedCompetitors: [],
+    validateContract,
+  });
+  await persistDecisionEvidence({ store, scope, evidence: decisionResult.evidence, validateContract });
+}
+
 async function persistSourceCheckpoint(store, scope, source, result, rawRecord = null) {
   const bytes = Buffer.from(JSON.stringify(result));
   const nr = await store.put({ bytes, contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: `${source}.json` }, source });
@@ -1136,6 +1166,7 @@ test("WP5-CLOSE-STORED-01: evidence_stored recovery — zero adapter calls", asy
   const ev = { contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId, normalizedRequest: { targetUrl: "https://example.com" }, sources: { website: { source: "dataforseo-onpage", status: "AVAILABLE", collectedAt: mockClock().now() } }, limitations: [], artifactReferences: [], adapterVersions: {}, createdAt: mockClock().now() };
   const cr = await store.put({ bytes: Buffer.from(JSON.stringify(ev)), contentType: "application/json", scope: { ...scope, category: "canonical", artifactName: "evidence.json" } });
   const mr = await persistCanonicalRecordManifest({ store, scope, createdAt: mockClock().now(), canonicalRecord: cr });
+  await seedDecisionEvidence({ store, scope, validateContract });
   await lc.transition({ auditId, tenantId, toState: T.EVIDENCE_STORED, transitionIdempotencyKey: `${auditId}:es`, artifactKey: mr.key });
 
   let totalAdapterCalls = 0;
@@ -1169,6 +1200,7 @@ test("WP5-CLOSE-STORED-02: evidence_stored recovery — zero artifact writes", a
   const ev = { contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId, normalizedRequest: { targetUrl: "https://example.com" }, sources: { website: { source: "dataforseo-onpage", status: "AVAILABLE", collectedAt: mockClock().now() } }, limitations: [], artifactReferences: [], adapterVersions: {}, createdAt: mockClock().now() };
   const cr = await store.put({ bytes: Buffer.from(JSON.stringify(ev)), contentType: "application/json", scope: { ...scope, category: "canonical", artifactName: "evidence.json" } });
   const mr = await persistCanonicalRecordManifest({ store, scope, createdAt: mockClock().now(), canonicalRecord: cr });
+  await seedDecisionEvidence({ store, scope, validateContract });
   await lc.transition({ auditId, tenantId, toState: T.EVIDENCE_STORED, transitionIdempotencyKey: `${auditId}:es`, artifactKey: mr.key });
 
   // Instrument put to count writes during recovery
@@ -1201,6 +1233,7 @@ test("WP5-CLOSE-STORED-03: evidence_stored → exactly one transition", async ()
   const ev = { contractVersion: "1.0.0", evidenceVersion: "1.0.0", auditId, normalizedRequest: { targetUrl: "https://example.com" }, sources: { website: { source: "dataforseo-onpage", status: "AVAILABLE", collectedAt: mockClock().now() } }, limitations: [], artifactReferences: [], adapterVersions: {}, createdAt: mockClock().now() };
   const cr = await store.put({ bytes: Buffer.from(JSON.stringify(ev)), contentType: "application/json", scope: { ...scope, category: "canonical", artifactName: "evidence.json" } });
   const mr = await persistCanonicalRecordManifest({ store, scope, createdAt: mockClock().now(), canonicalRecord: cr });
+  await seedDecisionEvidence({ store, scope, validateContract });
   await lc.transition({ auditId, tenantId, toState: T.EVIDENCE_STORED, transitionIdempotencyKey: `${auditId}:es`, artifactKey: mr.key });
 
   const beforeHistory = await lc.history(auditId, tenantId);

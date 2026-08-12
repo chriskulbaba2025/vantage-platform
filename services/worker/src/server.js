@@ -544,9 +544,10 @@ if (!lifecycleRepo) {
 }
 
 // Construct the full governed production runtime
+let runtime = null;
 if (lifecycleRepo && artifactStore) {
   try {
-    const runtime = createProductionRuntime({
+    runtime = createProductionRuntime({
       config,
       adapters,
       validateContract,
@@ -559,6 +560,24 @@ if (lifecycleRepo && artifactStore) {
   } catch (e) {
     console.error("Production runtime initialization failed:", e.message);
   }
+}
+
+// PRYSM-CLOSE-10: reclaim audits stranded by a previous process termination.
+// The durable work record (PostgreSQL lifecycle + persisted AuditRequest +
+// S3 artifacts) is the durability boundary — not the in-process promise.
+// The sweep runs after startup; HTTP serving does not depend on it.
+if (runtime && typeof runtime.recoverStrandedAudits === "function") {
+  Promise.resolve()
+    .then(() => runtime.recoverStrandedAudits(config.vantageTenantId))
+    .then((recovered) => {
+      if (recovered.length > 0) {
+        console.log(`Reclaimed ${recovered.length} stranded audit(s):`,
+          recovered.map((r) => `${r.auditId.slice(0, 8)}→${r.finalState}`).join(", "));
+      }
+    })
+    .catch((err) => {
+      console.error("Stranded-audit recovery sweep failed:", err.message);
+    });
 }
 
 const requestListener = createRequestHandler({

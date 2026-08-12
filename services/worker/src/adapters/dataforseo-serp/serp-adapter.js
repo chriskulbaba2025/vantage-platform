@@ -64,6 +64,9 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     language: auditRequest.language || competitorConfig.language || "en",
     login: process.env.DATAFORSEO_LOGIN || "",
     password: process.env.DATAFORSEO_PASSWORD || "",
+    // Testability seam: controlled transport below the adapter layer.
+    // Production default behaviour is unchanged (null → live fetch).
+    fetchImpl: (auditRequest.serp && typeof auditRequest.serp === "object" ? auditRequest.serp.fetchImpl : null) || null,
   };
 
   if (!options.login || !options.password) {
