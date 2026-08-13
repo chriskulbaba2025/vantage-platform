@@ -78,6 +78,18 @@ artifactStore.get = async (key) => {
 };
 
 // ---------------------------------------------------------------------------
+// Live-call guard: ANY global fetch during the suite is a violation.
+// ---------------------------------------------------------------------------
+const liveFetchViolations = [];
+const liveFetchArmed = true;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (...args) => {
+  const url = String(args[0]).slice(0, 120);
+  liveFetchViolations.push({ url });
+  throw new Error(`LIVE FETCH ESCAPE — tenant acceptance must be fully controlled: ${url}`);
+};
+
+// ---------------------------------------------------------------------------
 // Controlled adapters (below the provider boundary) + orchestrator
 // ---------------------------------------------------------------------------
 const providerCalls = { total: 0 };
@@ -159,7 +171,7 @@ const handler = createRequestHandler({
   identityRepo,
 });
 
-function request(method, path, { principal, tenant, secret, body } = {}) {
+function request(method, path, { principal, principalToken, tenant, secret, body } = {}) {
   return new Promise((resolvePromise) => {
     const bodyBuf = body ? Buffer.from(JSON.stringify(body)) : Buffer.alloc(0);
     const req = {
@@ -170,7 +182,10 @@ function request(method, path, { principal, tenant, secret, body } = {}) {
       [Symbol.asyncIterator]: async function* () { yield bodyBuf; },
     };
     if (secret) req.headers["x-vantage-secret"] = secret;
-    if (principal) {
+    if (principalToken) {
+      req.headers["x-prysm-principal"] = principalToken;
+      if (tenant) req.headers["x-prysm-tenant"] = tenant;
+    } else if (principal) {
       req.headers["x-prysm-principal"] = signPrincipal({ secret: "test-secret", principal, nowMs: Date.now() });
       if (tenant) req.headers["x-prysm-tenant"] = tenant;
     }
@@ -234,18 +249,55 @@ async function createAuditForTenant(tenantId, urlHost, toState) {
   let result = await driveToState(auditRequest, [T.DRAFT_RENDERED]);
   if (toState === "draft_rendered" && result.finalState === T.DRAFT_RENDERED) return { auditId, tenantId, clientId };
   if (toState === "approved") {
-    // Drive fully, then approve through the governed service.
+    // Drive fully to the draft, then review + approve through the REAL
+    // governed service.  Any failure here FAILS the suite — the approved
+    // fixture must genuinely reach approved (no silent swallow).
     result = await driveToState(auditRequest, [T.DRAFT_RENDERED]);
+    if (result.finalState !== T.DRAFT_RENDERED) {
+      throw new Error(`fixture failed to reach draft_rendered (got ${result.finalState})`);
+    }
     const slug = "fixture";
-    if (result.finalState === T.DRAFT_RENDERED) {
-      try {
-        await auditService.submitReview(auditId, tenantId, slug, "fixture-reviewer", [{ id: "source_failures", reviewed: true, reviewedAt: "2026-01-01T00:00:00.000Z" }]);
-        const pages = new Map();
-        for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
-          pages.set(fn, `<!DOCTYPE html><html><body>${fn} fixture</body></html>`);
-        }
-        await auditService.approveAudit(auditId, tenantId, slug, "fixture-approver", pages);
-      } catch (e) { /* fall through — state recorded below */ }
+    // Initialize the report-store draft record (the runtime does this in
+    // runAuditToReviewableDraft) so the governed review/approval path runs.
+    await reportStore.writeReport({
+      slug,
+      runId: auditId,
+      model: { evidence: {} },
+      manifest: { auditId, lifecycleStatus: T.DRAFT_RENDERED, governedManifestKey: null },
+      html: "",
+      includeIndexHtml: false,
+    });
+    // Mirror production-runtime.submitReview: report-store review record +
+    // canonical lifecycle DRAFT_RENDERED → IN_REVIEW.
+    await auditService.submitReview(auditId, tenantId, slug, "fixture-reviewer", [
+      { id: "source_failures", reviewed: true, reviewedAt: "2026-01-01T00:00:00.000Z" },
+    ]);
+    await lifecycle.transition({
+      auditId,
+      tenantId,
+      toState: T.IN_REVIEW,
+      transitionIdempotencyKey: `${auditId}:fixture-review`,
+      actor: "fixture-reviewer",
+      reason: "fixture human review completed",
+    });
+    const pages = new Map();
+    for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
+      pages.set(fn, `<!DOCTYPE html><html><body>${fn} fixture</body></html>`);
+    }
+    // Mirror production-runtime.approveAudit: report-store approval +
+    // canonical lifecycle IN_REVIEW → APPROVED.
+    await auditService.approveAudit(auditId, tenantId, slug, "fixture-approver", pages);
+    await lifecycle.transition({
+      auditId,
+      tenantId,
+      toState: T.APPROVED,
+      transitionIdempotencyKey: `${auditId}:fixture-approve`,
+      actor: "fixture-approver",
+      reason: "fixture human approval completed",
+    });
+    const afterApproval = (await lifecycle.currentState(auditId, tenantId))?.state;
+    if (afterApproval !== "approved") {
+      throw new Error(`fixture failed to reach approved (got ${afterApproval})`);
     }
   }
   return { auditId, tenantId, clientId };
@@ -314,14 +366,12 @@ console.log("\n--- TENANT-AUTH assertions ---");
   check("TENANT-AUTH-07: tenant_admin@A → tenant-b audit → 404", res.status === 404, `got ${res.status}`);
 }
 
-// TENANT-AUTH-08 — expired principal → 401 (logout semantics at the worker)
+// TENANT-AUTH-08 — expired principal → 401 THROUGH THE ROUTE (logout
+// semantics at the worker boundary).
 {
   const expired = signPrincipal({ secret: "test-secret", principal: P(users.alice.sub, users.alice.email), nowMs: Date.now() - 120_000 });
-  const res = await request("GET", "/api/v1/audits", { secret: null });
-  res.headers = {}; // no principal — covered by 01
-  // Direct expired-token check via the resolver:
-  const { verifyPrincipal } = await import("../src/identity/authorization.js");
-  check("TENANT-AUTH-08: expired principal token rejected", verifyPrincipal({ secret: "test-secret", token: expired, nowMs: Date.now() }) === null);
+  const res = await request("GET", "/api/v1/audits", { principalToken: expired });
+  check("TENANT-AUTH-08: expired principal request → 401 via the route", res.status === 401, `got ${res.status}`);
 }
 
 // TENANT-AUTH-09 — disabled membership denied
@@ -396,10 +446,21 @@ console.log("\n--- TENANT-AUTH assertions ---");
   check("TENANT-AUTH-15: decision-evidence artifact persisted via the real path", await artifactStore.exists(deKey));
 }
 
-// TENANT-AUTH-16 — zero live provider/LLM calls
+// TENANT-AUTH-16 — zero live provider/LLM calls: the global fetch guard
+// was armed before the suite ran; ANY live fetch would have recorded a
+// violation and thrown.  The predicate below fails if a live call ever
+// escapes the controlled boundary.
 {
-  check("TENANT-AUTH-16: controlled adapter calls only (no live provider calls)", providerCalls.total >= 0);
-  check("TENANT-AUTH-16: no live fetch escaped (controlled transports)", true);
+  check(
+    "TENANT-AUTH-16: zero live fetch escapes (guard armed + zero violations)",
+    liveFetchArmed === true && liveFetchViolations.length === 0,
+    `violations=${JSON.stringify(liveFetchViolations.slice(0, 3))}, armed=${liveFetchArmed}`,
+  );
+  check(
+    "TENANT-AUTH-16: controlled provider adapters executed the real boundary",
+    providerCalls.total >= 6,
+    `provider adapter executions=${providerCalls.total}`,
+  );
 }
 
 // TENANT-AUTH-17 — multi-tenant user: bob = reviewer@B + viewer@A
