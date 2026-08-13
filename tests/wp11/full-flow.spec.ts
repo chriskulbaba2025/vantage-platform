@@ -9,8 +9,9 @@
 
 import { test, expect } from "@playwright/test";
 
-const WORKER_PORT = 19300 + Math.floor(Math.random() * 500);
-const NEXT_PORT = 19300 + Math.floor(Math.random() * 500) + 500;
+// Ports match playwright.config.ts webServer wiring (env-overridable).
+const WORKER_PORT = parseInt(process.env.WORKER_PORT || "19350", 10);
+const NEXT_PORT = parseInt(process.env.NEXT_PORT || "19400", 10);
 const WORKER_URL = `http://127.0.0.1:${WORKER_PORT}`;
 const NEXT_URL = `http://127.0.0.1:${NEXT_PORT}`;
 
@@ -129,5 +130,58 @@ test.describe("WP11 Full Browser Flow", () => {
     const resTraversal = await page.request.get(`${NEXT_URL}/audits/00000000-0000-0000-0000-000000000000/report/..%2F..%2Fetc%2Fpasswd`);
     expect(resTraversal.status()).toBe(400);
     console.log(`  [x] VIEW-01: Path traversal rejected (status: ${resTraversal.status()})`);
+  });
+
+  test("DRAFT-REVIEW-01: Draft Review button routes to a valid internal review page (no 404)", async ({ page }) => {
+    // 1. Create a real draft audit through the governed same-origin API.
+    const createRes = await page.request.post(`${NEXT_URL}/api/audits`, {
+      data: {
+        targetUrl: "https://draft-review-test.com",
+        businessName: "Draft Review Test Inc.",
+        market: "Toronto, Ontario, Canada",
+        language: "en-CA",
+        primaryGoal: "conversion",
+        services: ["Consulting"],
+      },
+    });
+    expect(createRes.status()).toBe(201);
+    const created = await createRes.json();
+    const auditId = String(created.auditId || "");
+    expect(auditId).toMatch(/^[a-f0-9-]{36}$/);
+    console.log(`  [x] DRAFT-REVIEW-01: audit created (${auditId})`);
+
+    // 2. Open the audit detail page and wait for the draft review card.
+    await page.goto(`${NEXT_URL}/audits/${auditId}`, { waitUntil: "networkidle" });
+    await expect(page.getByRole("heading", { name: "Draft Report" })).toBeVisible({ timeout: 30_000 });
+    const draftButton = page.getByRole("link", { name: "View Draft Report" });
+    await expect(draftButton).toBeVisible();
+    await expect(draftButton).toHaveAttribute("href", `/audits/${auditId}/report`);
+    console.log("  [x] DRAFT-REVIEW-01: Draft Report button visible on detail page");
+
+    // 3. Click the button — must resolve to the internal report page for the
+    //    SAME audit ID without a 404.
+    await draftButton.click();
+    await page.waitForURL(`**/audits/${auditId}/report/index.html`, { timeout: 30_000 });
+    const finalUrl = page.url();
+    expect(finalUrl).toContain(`/audits/${auditId}/report/`);
+    console.log(`  [x] DRAFT-REVIEW-01: button resolved to ${finalUrl}`);
+
+    // 4. The review page must actually render the draft report HTML.
+    await expect(page.locator("body")).not.toContainText("404");
+    await expect(page.locator("body")).not.toContainText("This page could not be found");
+    const bodyText = await page.textContent("body") || "";
+    expect(bodyText.length).toBeGreaterThan(100);
+    console.log("  [x] DRAFT-REVIEW-01: report page rendered (no 404)");
+
+    // 5. Same audit ID retained through the redirect + proxy.
+    expect(page.url()).toContain(auditId);
+  });
+
+  test("DRAFT-REVIEW-02: invalid audit ID fails safely", async ({ page }) => {
+    const res = await page.request.get(`${NEXT_URL}/audits/00000000-0000-0000-0000-000000000000/report`, {
+      maxRedirects: 0,
+    });
+    expect([403, 404]).toContain(res.status());
+    console.log(`  [x] DRAFT-REVIEW-02: invalid audit ID → ${res.status()} (fail safe)`);
   });
 });

@@ -15,7 +15,13 @@ export async function GET(
   { params }: { params: { auditId: string } },
 ) {
   const status = await workerClient.getAuditStatus(params.auditId);
-  if (!status || (status.state !== "approved" && status.state !== "published")) {
+
+  // Reviewer-readable states.  The Draft Review button is shown for
+  // draft_rendered / in_review — the reviewer-facing report proxy
+  // (report/[...path]/route.ts) serves those pages.  Gating on
+  // approved/published only made the draft button 404.
+  const READABLE_STATES = new Set(["draft_rendered", "in_review", "approved", "published"]);
+  if (!status || !READABLE_STATES.has(status.state)) {
     notFound();
   }
   // Redirect using trusted origin (not request URL host header)
