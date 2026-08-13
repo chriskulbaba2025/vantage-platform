@@ -6,3 +6,9 @@ artifacts/local/backlink-tests/
 .env
 *.log
 .vercel
+
+# Build and test artifacts
+.next/
+test-results/
+tsconfig.tsbuildinfo
+next-env.d.ts

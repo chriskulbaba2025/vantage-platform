@@ -7,6 +7,12 @@
 
 import { workerClient } from "@/lib/worker-client";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  REVIEWER_COOKIE,
+  isValidReviewerToken,
+  REVIEWER_ONLY_STATES,
+  PUBLIC_STATES,
+} from "@/lib/reviewer-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +35,16 @@ export async function GET(
     if (!status) {
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
-    const READABLE_STATES = new Set(["draft_rendered", "in_review", "approved", "published"]);
-    if (!READABLE_STATES.has(status.state)) {
+    const state = String(status.state || "");
+    if (!PUBLIC_STATES.has(state) && !REVIEWER_ONLY_STATES.has(state)) {
       return NextResponse.json({ error: "Report not available", code: "REPORT_NOT_APPROVED" }, { status: 403 });
+    }
+    // Reviewer-only states require the reviewer session cookie.
+    if (REVIEWER_ONLY_STATES.has(state)) {
+      const token = request.cookies.get(REVIEWER_COOKIE)?.value;
+      if (!isValidReviewerToken(token)) {
+        return NextResponse.json({ error: "Reviewer authorization required", code: "REVIEWER_AUTH_REQUIRED" }, { status: 403 });
+      }
     }
 
     const slug = String(status.slug || "");

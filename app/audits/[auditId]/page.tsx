@@ -1,6 +1,8 @@
 import { workerClient } from "@/lib/worker-client";
 import AuditReviewActions from "@/components/AuditReviewActions";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { REVIEWER_COOKIE, isValidReviewerToken } from "@/lib/reviewer-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -76,8 +78,14 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
       {(state === "draft_rendered" || state === "in_review") && (
         <div className="card" style={{ borderColor: "var(--amber)" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Draft Report</h2>
-          <p>The governed draft report is ready for review. Pages are visible only to the reviewer.</p>
-          <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Draft Report</a>
+          {isValidReviewerToken(cookies().get(REVIEWER_COOKIE)?.value) ? (
+            <>
+              <p>The governed draft report is ready for review. Pages are visible only to the reviewer.</p>
+              <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Draft Report</a>
+            </>
+          ) : (
+            <p>Draft reports are reviewer-only. Sign in as a reviewer to open the internal review page.</p>
+          )}
         </div>
       )}
 
