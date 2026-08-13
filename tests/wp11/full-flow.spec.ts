@@ -10,10 +10,12 @@
 import { test, expect } from "@playwright/test";
 
 // Ports match playwright.config.ts webServer wiring (env-overridable).
+// NEXT_URL uses localhost so the reviewer-session cookie host matches the
+// server's nextUrl.origin redirect target.
 const WORKER_PORT = parseInt(process.env.WORKER_PORT || "19350", 10);
 const NEXT_PORT = parseInt(process.env.NEXT_PORT || "19400", 10);
 const WORKER_URL = `http://127.0.0.1:${WORKER_PORT}`;
-const NEXT_URL = `http://127.0.0.1:${NEXT_PORT}`;
+const NEXT_URL = `http://localhost:${NEXT_PORT}`;
 
 test.describe("WP11 Full Browser Flow", () => {
   test.setTimeout(120_000);
@@ -150,7 +152,15 @@ test.describe("WP11 Full Browser Flow", () => {
     expect(auditId).toMatch(/^[a-f0-9-]{36}$/);
     console.log(`  [x] DRAFT-REVIEW-01: audit created (${auditId})`);
 
-    // 2. Open the audit detail page and wait for the draft review card.
+    // 2. Establish the reviewer session (secret-protected issuance; the
+    //    cookie is shared with the page's browser context).
+    const sessionRes = await page.request.post(`${NEXT_URL}/api/reviewer-session`, {
+      headers: { "x-vantage-secret": "test-secret" },
+    });
+    expect(sessionRes.status()).toBe(200);
+    console.log("  [x] DRAFT-REVIEW-01: reviewer session issued");
+
+    // 3. Open the audit detail page and wait for the draft review card.
     await page.goto(`${NEXT_URL}/audits/${auditId}`, { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { name: "Draft Report" })).toBeVisible({ timeout: 30_000 });
     const draftButton = page.getByRole("link", { name: "View Draft Report" });
@@ -158,7 +168,7 @@ test.describe("WP11 Full Browser Flow", () => {
     await expect(draftButton).toHaveAttribute("href", `/audits/${auditId}/report`);
     console.log("  [x] DRAFT-REVIEW-01: Draft Report button visible on detail page");
 
-    // 3. Click the button — must resolve to the internal report page for the
+    // 4. Click the button — must resolve to the internal report page for the
     //    SAME audit ID without a 404.
     await draftButton.click();
     await page.waitForURL(`**/audits/${auditId}/report/index.html`, { timeout: 30_000 });
@@ -166,14 +176,14 @@ test.describe("WP11 Full Browser Flow", () => {
     expect(finalUrl).toContain(`/audits/${auditId}/report/`);
     console.log(`  [x] DRAFT-REVIEW-01: button resolved to ${finalUrl}`);
 
-    // 4. The review page must actually render the draft report HTML.
+    // 5. The review page must actually render the draft report HTML.
     await expect(page.locator("body")).not.toContainText("404");
     await expect(page.locator("body")).not.toContainText("This page could not be found");
     const bodyText = await page.textContent("body") || "";
     expect(bodyText.length).toBeGreaterThan(100);
     console.log("  [x] DRAFT-REVIEW-01: report page rendered (no 404)");
 
-    // 5. Same audit ID retained through the redirect + proxy.
+    // 6. Same audit ID retained through the redirect + proxy.
     expect(page.url()).toContain(auditId);
   });
 
@@ -183,5 +193,43 @@ test.describe("WP11 Full Browser Flow", () => {
     });
     expect([403, 404]).toContain(res.status());
     console.log(`  [x] DRAFT-REVIEW-02: invalid audit ID → ${res.status()} (fail safe)`);
+  });
+
+  test("DRAFT-REVIEW-03: anonymous draft report access is blocked (reviewer session required)", async ({ request }) => {
+    // 1. Create a real draft audit.
+    const createRes = await request.post(`${NEXT_URL}/api/audits`, {
+      data: {
+        targetUrl: "https://anon-draft-test.com",
+        businessName: "Anon Draft Test Inc.",
+        market: "Toronto, Ontario, Canada",
+        language: "en-CA",
+        primaryGoal: "conversion",
+        services: ["Consulting"],
+      },
+    });
+    expect(createRes.status()).toBe(201);
+    const created = await createRes.json();
+    const auditId = String(created.auditId || "");
+    console.log(`  [x] DRAFT-REVIEW-03: draft audit created (${auditId})`);
+
+    // 2. WITHOUT a reviewer session, the redirect route must not reveal
+    //    the draft (404 fail-closed).
+    const redirectRes = await request.get(`${NEXT_URL}/audits/${auditId}/report`, { maxRedirects: 0 });
+    expect(redirectRes.status()).toBe(404);
+    console.log(`  [x] DRAFT-REVIEW-03: anonymous redirect → ${redirectRes.status()} (fail closed)`);
+
+    // 3. Direct proxy access to a draft page is also blocked.
+    const pageRes = await request.get(`${NEXT_URL}/audits/${auditId}/report/index.html`);
+    expect(pageRes.status()).toBe(403);
+    const body = await pageRes.json().catch(() => ({}));
+    expect(body.code).toBe("REVIEWER_AUTH_REQUIRED");
+    console.log("  [x] DRAFT-REVIEW-03: anonymous draft page → 403 REVIEWER_AUTH_REQUIRED");
+
+    // 4. Wrong-secret session issuance is rejected.
+    const badSession = await request.post(`${NEXT_URL}/api/reviewer-session`, {
+      headers: { "x-vantage-secret": "wrong-secret" },
+    });
+    expect(badSession.status()).toBe(401);
+    console.log("  [x] DRAFT-REVIEW-03: wrong-secret session issuance → 401");
   });
 });

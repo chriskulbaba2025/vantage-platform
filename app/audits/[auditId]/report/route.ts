@@ -1,12 +1,24 @@
 /**
- * WP11 Report Viewer Redirect — /audits/[auditId]/report
+ * Report Viewer Redirect — /audits/[auditId]/report
  *
- * Redirects to index.html within the approved report.
+ * Client-facing (public) states: approved / published — redirect to
+ * index.html within the report.
+ *
+ * Reviewer-only states: draft_rendered / in_review — require the
+ * reviewer session cookie (minted via POST /api/reviewer-session by a
+ * holder of the webhook secret).  Anonymous requests for draft reports
+ * fail closed (notFound) without leaking the audit's existence.
  */
 
 import { workerClient } from "@/lib/worker-client";
 import { notFound } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  REVIEWER_COOKIE,
+  isValidReviewerToken,
+  REVIEWER_ONLY_STATES,
+  PUBLIC_STATES,
+} from "@/lib/reviewer-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,17 +27,27 @@ export async function GET(
   { params }: { params: { auditId: string } },
 ) {
   const status = await workerClient.getAuditStatus(params.auditId);
-
-  // Reviewer-readable states.  The Draft Review button is shown for
-  // draft_rendered / in_review — the reviewer-facing report proxy
-  // (report/[...path]/route.ts) serves those pages.  Gating on
-  // approved/published only made the draft button 404.
-  const READABLE_STATES = new Set(["draft_rendered", "in_review", "approved", "published"]);
-  if (!status || !READABLE_STATES.has(status.state)) {
+  if (!status) {
     notFound();
   }
-  // Redirect using trusted origin (not request URL host header)
-  return NextResponse.redirect(
-    new URL(`/audits/${params.auditId}/report/index.html`, request.nextUrl.origin),
-  );
+
+  const state = String(status.state || "");
+
+  if (PUBLIC_STATES.has(state)) {
+    return NextResponse.redirect(
+      new URL(`/audits/${params.auditId}/report/index.html`, request.nextUrl.origin),
+    );
+  }
+
+  if (REVIEWER_ONLY_STATES.has(state)) {
+    const token = request.cookies.get(REVIEWER_COOKIE)?.value;
+    if (!isValidReviewerToken(token)) {
+      notFound();
+    }
+    return NextResponse.redirect(
+      new URL(`/audits/${params.auditId}/report/index.html`, request.nextUrl.origin),
+    );
+  }
+
+  notFound();
 }
