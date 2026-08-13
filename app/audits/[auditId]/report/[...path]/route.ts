@@ -13,6 +13,8 @@ import {
   REVIEWER_ONLY_STATES,
   PUBLIC_STATES,
 } from "@/lib/reviewer-auth";
+import { principalFromCookies } from "@/lib/identity/principal";
+import { SESSION_COOKIE } from "@/lib/identity/session";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,11 @@ export async function GET(
   }
 
   try {
-    const status = await workerClient.getAuditStatus(auditId);
+    // MT-IDENTITY: bind the authenticated principal — the WORKER enforces
+    // the tenant boundary and report role gate BEFORE artifact retrieval.
+    const principal = principalFromCookies(request.cookies.get(SESSION_COOKIE)?.value);
+    const client = principal ? workerClient.as(principal) : workerClient;
+    const status = await client.getAuditStatus(auditId);
     if (!status) {
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
@@ -53,7 +59,7 @@ export async function GET(
       return NextResponse.json({ error: "Approved report identity is incomplete" }, { status: 500 });
     }
 
-    const result = await workerClient.getReportPage(auditId, filename, slug, clientId);
+    const result = await client.getReportPage(auditId, filename, slug, clientId);
     if (result.status === 403) {
       return NextResponse.json({ error: "Report not available", code: "REPORT_NOT_APPROVED" }, { status: 403 });
     }

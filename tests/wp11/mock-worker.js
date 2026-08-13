@@ -132,11 +132,32 @@
             },
           };
 
+          // MT-IDENTITY: seed the mock identity repository so the REAL
+          // authorization resolution executes in the browser harness.
+          const { createMemoryIdentityRepository } = await import('../../services/worker/src/identity/memory-identity-repository.js');
+          const identityRepo = createMemoryIdentityRepository();
+          await identityRepo.createTenant({ id: 'playwright-tenant', name: 'Playwright Tenant', slug: 'playwright-tenant' });
+          // Mock-mode sub derivation matches lib/identity/identity-provider.ts:
+          // sub = 'mock-' + hex(lower(trim(email))).
+          const mockSub = (email) => 'mock-' + Buffer.from(email.toLowerCase().trim(), 'utf8').toString('hex');
+          for (const email of ['flow@test.example.com', 'draft-review@test.example.com', 'anon-draft@test.example.com']) {
+            await identityRepo.createUser({
+              id: randomUUID(), cognitoSub: mockSub(email), email, displayName: email.split('@')[0],
+            });
+            await identityRepo.createMembership({
+              id: randomUUID(), tenantId: 'playwright-tenant',
+              userId: (await identityRepo.findUserByCognitoSub(mockSub(email))).id,
+              role: 'reviewer',
+            });
+          }
+
           const handler = createRequestHandler({
-            config: { artifactDir:baseDir, webhookSecret:'', vantageTenantId:'playwright-tenant' },
+            config: { artifactDir:baseDir, webhookSecret:'test-secret', vantageTenantId:'playwright-tenant' },
             localStore:reportStore, store:reportStore,
             oauthService: { getAuthUrl:()=>'', validateState:()=>'ga4', exchangeCode:async()=>({}), getStatus:async()=>({}), disconnect:async()=>({}) },
             auditService,
+            lifecycleRepo: lcRepo,
+            identityRepo,
           });
 
           const server = createServer(handler);

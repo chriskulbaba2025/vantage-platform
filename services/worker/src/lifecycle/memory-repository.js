@@ -104,7 +104,12 @@ export function createMemoryLifecycleRepository() {
     transitionKeyStore.clear(); auditMeta.clear();
   }
 
-  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, _clear };
+  // MT-IDENTITY: resolve the audit's OWNING tenant for authorization.
+  async function findAuditTenant(auditId) {
+    return auditMeta.get(auditId)?.tenantId || null;
+  }
+
+  return { createAudit, loadEvents, loadByIdempotencyKey, loadByTransitionKey, appendEventAtomic, findAuditTenant, _clear };
 }
 
 export default { createMemoryLifecycleRepository };

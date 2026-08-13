@@ -19,6 +19,8 @@ import {
   REVIEWER_ONLY_STATES,
   PUBLIC_STATES,
 } from "@/lib/reviewer-auth";
+import { principalFromCookies } from "@/lib/identity/principal";
+import { SESSION_COOKIE } from "@/lib/identity/session";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { auditId: string } },
 ) {
-  const status = await workerClient.getAuditStatus(params.auditId);
+  // MT-IDENTITY: bind the authenticated principal when a portal session
+  // exists — the WORKER enforces tenant membership server-side.  Without a
+  // session, the legacy secret-only internal boundary applies.
+  const principal = principalFromCookies(request.cookies.get(SESSION_COOKIE)?.value);
+  const client = principal ? workerClient.as(principal) : workerClient;
+
+  const status = await client.getAuditStatus(params.auditId);
   if (!status) {
     notFound();
   }

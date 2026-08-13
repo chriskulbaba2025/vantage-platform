@@ -6,6 +6,8 @@ import { createLocalReportStore, createReportStore } from "./storage/report-stor
 import { LIFECYCLE_STATUS } from "./audit/review-gate.js";
 import { createTokenStore } from "./auth/token-store.js";
 import { createOAuthService } from "./auth/oauth-service.js";
+import { resolveAuthorization, canAccessTenant } from "./identity/authorization.js";
+import { authorizeReportAccess } from "./identity/report-authorization.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -26,6 +28,8 @@ export function createRequestHandler({
   submitReviewFn,
   approveAuditFn,
   auditService,
+  lifecycleRepo,
+  identityRepo,
 }) {
   const _runAudit = runAuditFn || runAudit;
   const _submitReview = submitReviewFn || submitReview;
@@ -42,6 +46,70 @@ export function createRequestHandler({
     if (!config.webhookSecret) return true;
     const provided = req.headers["x-vantage-secret"] || String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     return provided === config.webhookSecret;
+  }
+
+  // ---------------------------------------------------------------------
+  // MT-IDENTITY: server-side authorization resolution.
+  //
+  // Two governed boundaries:
+  //   1. Browser flows — authenticated principal via the HMAC-signed
+  //      x-prysm-principal header (produced by the trusted web server),
+  //      membership-resolved tenant; the x-prysm-tenant header is honored
+  //      ONLY when membership proves it.
+  //   2. Internal service boundary — x-vantage-secret callers (n8n/admin
+  //      tooling) are treated as platform_admin with the configured
+  //      global tenant.  This is the explicitly governed internal
+  //      boundary, never browser input.
+  // ---------------------------------------------------------------------
+  async function resolveRequestAuth(req) {
+    const hasPrincipal = typeof req.headers["x-prysm-principal"] === "string";
+    if (hasPrincipal && identityRepo) {
+      const resolved = await resolveAuthorization({
+        req,
+        secret: config.webhookSecret || "",
+        identityRepo,
+      });
+      if (resolved.authenticated) return resolved;
+      return null;
+    }
+    if (authorized(req)) {
+      return {
+        authenticated: true,
+        internal: true,
+        isPlatformAdmin: true,
+        roles: ["platform_admin"],
+        memberships: [],
+        selectedTenant: config.vantageTenantId || "default",
+      };
+    }
+    return null;
+  }
+
+  /** Resolve the tenant an authenticated request is authorized to act on. */
+  function requireTenant(auth) {
+    if (auth.internal && auth.selectedTenant) return auth.selectedTenant;
+    if (auth.selectedTenant) return auth.selectedTenant;
+    return null;
+  }
+
+  /**
+   * Authorize access to an existing audit and return its OWNING tenant.
+   * Non-disclosing: unknown and cross-tenant audits both yield null.
+   */
+  async function authorizeAuditAccess(req, auditId) {
+    const auth = await resolveRequestAuth(req);
+    if (!auth) return { status: 401, code: "UNAUTHENTICATED", tenantId: null };
+    if (typeof lifecycleRepo?.findAuditTenant !== "function") {
+      // No ownership lookup available — treat as authorized on the
+      // resolved tenant (memory/dev fallback keeps prior behaviour).
+      return { status: 200, code: "OK", tenantId: requireTenant(auth), auth };
+    }
+    const auditTenant = await lifecycleRepo.findAuditTenant(auditId);
+    if (!auditTenant) return { status: 404, code: "NOT_FOUND", tenantId: null, auth };
+    if (!canAccessTenant(auth, auditTenant)) {
+      return { status: 404, code: "NOT_FOUND", tenantId: null, auth };
+    }
+    return { status: 200, code: "OK", tenantId: auditTenant, auth };
   }
 
   async function readJson(req) {
@@ -271,13 +339,19 @@ export function createRequestHandler({
       // WP11 Governed API v1 — web application integration
       // -----------------------------------------------------------------------
 
-      // POST /api/v1/audits — create and execute a governed audit
+      // POST /api/v1/audits — create and execute a governed audit.
+      // MT-IDENTITY: the audit persists the SERVER-RESOLVED tenant from the
+      // authenticated membership — never browser-supplied tenant input.
       if (req.method === "POST" && url.pathname === "/api/v1/audits") {
-        if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+        const auth = await resolveRequestAuth(req);
+        if (!auth) return send(res, 401, { error: "Unauthorized" });
         if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+        const tenantId = requireTenant(auth);
+        if (!tenantId) {
+          return send(res, 400, { error: "Tenant selection required (x-prysm-tenant header)", code: "TENANT_SELECTION_REQUIRED" });
+        }
         try {
           const input = await readJson(req);
-          const tenantId = config.vantageTenantId || "default";
           const result = await auditService.createAudit(input, tenantId);
           return send(res, 201, result);
         } catch (err) {
@@ -287,10 +361,14 @@ export function createRequestHandler({
 
       // GET /api/v1/audits — tenant-scoped audit history
       if (req.method === "GET" && url.pathname === "/api/v1/audits") {
-        if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+        const auth = await resolveRequestAuth(req);
+        if (!auth) return send(res, 401, { error: "Unauthorized" });
         if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+        const tenantId = requireTenant(auth);
+        if (!tenantId) {
+          return send(res, 400, { error: "Tenant selection required (x-prysm-tenant header)", code: "TENANT_SELECTION_REQUIRED" });
+        }
         try {
-          const tenantId = config.vantageTenantId || "default";
           const audits = await auditService.listAudits(tenantId);
           return send(res, 200, audits);
         } catch (err) {
@@ -306,11 +384,12 @@ export function createRequestHandler({
 
         // GET /api/v1/audits/:auditId
         if (req.method === "GET" && !subPath) {
-          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
           if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
           try {
-            const tenantId = config.vantageTenantId || "default";
-            const status = await auditService.getAuditStatus(auditId, tenantId);
+            const status = await auditService.getAuditStatus(auditId, access.tenantId);
             if (!status) return send(res, 404, { error: "Audit not found" });
             return send(res, 200, status);
           } catch (err) {
@@ -320,13 +399,14 @@ export function createRequestHandler({
 
         // POST /api/v1/audits/:auditId/resume — recover stuck audits
         if (req.method === "POST" && subPath === "/resume") {
-          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
           if (!auditService || typeof auditService.resumeAudit !== "function") {
             return send(res, 501, { error: "WP11 resume not configured" });
           }
           try {
-            const tenantId = config.vantageTenantId || "default";
-            const result = await auditService.resumeAudit(auditId, tenantId);
+            const result = await auditService.resumeAudit(auditId, access.tenantId);
             // Log diagnostics internally; return safe client response
             if (result.error) {
               console.error(`Audit ${auditId} resume stalled: ${result.error}`);
@@ -344,16 +424,17 @@ export function createRequestHandler({
 
         // POST /api/v1/audits/:auditId/review
         if (req.method === "POST" && subPath === "/review") {
-          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
           if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
           try {
             const payload = await readJson(req);
             const reviewer = payload.reviewer || req.headers["x-reviewer-identity"] || "";
             if (!reviewer) return send(res, 422, { error: "Reviewer identity is required" });
-            const tenantId = config.vantageTenantId || "default";
             const slug = payload.slug;
             if (!slug) return send(res, 422, { error: "Slug is required" });
-            const result = await auditService.submitReview(auditId, tenantId, slug, reviewer, payload.checklist);
+            const result = await auditService.submitReview(auditId, access.tenantId, slug, reviewer, payload.checklist);
             return send(res, 200, result);
           } catch (err) {
             return send(res, err.statusCode || 500, { error: err.message });
@@ -362,13 +443,14 @@ export function createRequestHandler({
 
         // POST /api/v1/audits/:auditId/approve
         if (req.method === "POST" && subPath === "/approve") {
-          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
           if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
           try {
             const payload = await readJson(req);
             const approver = payload.approver || req.headers["x-reviewer-identity"] || "";
             if (!approver) return send(res, 422, { error: "Approver identity is required" });
-            const tenantId = config.vantageTenantId || "default";
             const slug = payload.slug;
             if (!slug) return send(res, 422, { error: "Slug is required" });
             // Build pages map from payload (for acceptance testing)
@@ -376,7 +458,7 @@ export function createRequestHandler({
             if (payload.pages && typeof payload.pages === "object") {
               pages = new Map(Object.entries(payload.pages));
             }
-            const result = await auditService.approveAudit(auditId, tenantId, slug, approver, pages);
+            const result = await auditService.approveAudit(auditId, access.tenantId, slug, approver, pages);
             return send(res, 200, result);
           } catch (err) {
             return send(res, err.statusCode || 500, { error: err.message });
@@ -384,8 +466,11 @@ export function createRequestHandler({
         }
 
         // GET /api/v1/audits/:auditId/report/:filename
+        // MT-IDENTITY: authorization (tenant membership + report role gate)
+        // happens BEFORE any artifact retrieval.  No report bytes are
+        // returned before authorization succeeds.  Cross-tenant access is
+        // non-disclosing 404.
         if (req.method === "GET" && subPath.startsWith("/report/")) {
-          if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
           const filename = wp11AuditMatch[3];
           if (!filename || filename.includes("..") || filename.includes("//") || filename.includes("\\")) {
             return send(res, 400, { error: "Invalid report path" });
@@ -394,12 +479,34 @@ export function createRequestHandler({
             return send(res, 400, { error: "Invalid report file name" });
           }
           if (!auditService) return send(res, 501, { error: "WP11 audit service not configured" });
+
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
+
+          // Role gate on the audit's CURRENT state — before artifact fetch.
+          let currentState;
           try {
-            const tenantId = config.vantageTenantId || "default";
+            const cs = await auditService.getAuditStatus(auditId, access.tenantId);
+            currentState = cs?.state || null;
+          } catch (err) {
+            return send(res, 404, { error: "Audit not found" });
+          }
+          if (!currentState) return send(res, 404, { error: "Audit not found" });
+          const reportAuth = authorizeReportAccess({
+            auth: access.auth,
+            auditTenant: access.tenantId,
+            state: currentState,
+          });
+          if (!reportAuth.allowed) {
+            return send(res, reportAuth.status, { error: reportAuth.reason, code: reportAuth.code });
+          }
+
+          try {
             const slug = url.searchParams.get("slug") || "";
             if (!slug) return send(res, 422, { error: "Slug query parameter is required" });
             const clientId = url.searchParams.get("clientId") || "";
-            const result = await auditService.getReportPage(tenantId, clientId, auditId, filename, slug);
+            const result = await auditService.getReportPage(reportAuth.tenantId, clientId, auditId, filename, slug);
             const ct = result.contentType || "text/html; charset=utf-8";
             const payload = result.bytes;
             res.writeHead(200, { "content-type": ct, "content-length": Buffer.byteLength(payload), "cache-control": "no-store" });
@@ -523,26 +630,33 @@ if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
 // Lifecycle repository (PostgreSQL when DATABASE_URL is set)
 let lifecycleRepo;
 let auditService = null;
+let identityRepo = null;
+let pgPool = null;
 
 if (config.databaseUrl) {
   try {
     const pg = await import("pg");
-    const pool = new pg.Pool({
+    pgPool = new pg.Pool({
       connectionString: config.databaseUrl,
       max: 10,
       idleTimeoutMillis: 30000,
     });
 
     // Verify connectivity
-    await pool.query("SELECT 1");
+    await pgPool.query("SELECT 1");
     console.log("PostgreSQL connected");
 
-    lifecycleRepo = createPostgresLifecycleRepository({ pool });
+    lifecycleRepo = createPostgresLifecycleRepository({ pool: pgPool });
 
     // Run migrations to ensure schema exists
     if (typeof lifecycleRepo.runMigration === "function") {
       try { await lifecycleRepo.runMigration(); } catch (e) { console.warn("Migration note:", e.message); }
     }
+
+    // MT-IDENTITY: PostgreSQL identity repository — the authorization
+    // source of truth (users / tenants / tenant_memberships).
+    const { createPostgresIdentityRepository } = await import("./identity/postgres-identity-repository.js");
+    identityRepo = createPostgresIdentityRepository({ pool: pgPool });
   } catch (e) {
     console.error("PostgreSQL connection failed:", e.message);
     console.error("Worker starting without database — history, review, and approval will be unavailable");
@@ -554,6 +668,8 @@ if (!lifecycleRepo) {
   console.warn("No DATABASE_URL configured — using in-memory lifecycle repository (NOT for production)");
   const { createMemoryLifecycleRepository } = await import("./lifecycle/memory-repository.js");
   lifecycleRepo = createMemoryLifecycleRepository();
+  const { createMemoryIdentityRepository } = await import("./identity/memory-identity-repository.js");
+  identityRepo = createMemoryIdentityRepository();
 }
 
 // Construct the full governed production runtime
@@ -578,10 +694,30 @@ if (lifecycleRepo && artifactStore) {
 // PRYSM-CLOSE-10: reclaim audits stranded by a previous process termination.
 // The durable work record (PostgreSQL lifecycle + persisted AuditRequest +
 // S3 artifacts) is the durability boundary — not the in-process promise.
+// MT-IDENTITY: the sweep iterates ALL governed tenants (identity repository),
+// falling back to the configured tenant when no identity repository exists.
 // The sweep runs after startup; HTTP serving does not depend on it.
 if (runtime && typeof runtime.recoverStrandedAudits === "function") {
   Promise.resolve()
-    .then(() => runtime.recoverStrandedAudits(config.vantageTenantId))
+    .then(async () => {
+      let tenantIds = [config.vantageTenantId || "default"];
+      if (identityRepo && typeof identityRepo.listTenants === "function") {
+        try {
+          const rows = await identityRepo.listTenants();
+          if (Array.isArray(rows) && rows.length > 0) {
+            tenantIds = rows.map((t) => t.id).filter(Boolean);
+          }
+        } catch (err) {
+          console.error("Tenant sweep enumeration failed:", err.message);
+        }
+      }
+      const allRecovered = [];
+      for (const tenantId of tenantIds) {
+        const recovered = await runtime.recoverStrandedAudits(tenantId);
+        allRecovered.push(...recovered);
+      }
+      return allRecovered;
+    })
     .then((recovered) => {
       if (recovered.length > 0) {
         console.log(`Reclaimed ${recovered.length} stranded audit(s):`,
@@ -599,6 +735,8 @@ const requestListener = createRequestHandler({
   store,
   oauthService,
   auditService,
+  lifecycleRepo,
+  identityRepo,
 });
 
 const server = createServer(requestListener);

@@ -9,23 +9,39 @@
 
 const WORKER_BASE = process.env.VANTAGE_WORKER_API_URL || "http://localhost:3000";
 const WORKER_SECRET = process.env.VANTAGE_WEBHOOK_SECRET || "";
-const TENANT_ID = process.env.VANTAGE_TENANT_ID || "default";
 
 interface WorkerClientOpts {
   baseUrl?: string;
   secret?: string;
-  tenantId?: string;
+  /** Authenticated principal — signed per request into the governed
+   * x-prysm-principal header (MT-IDENTITY internal boundary). */
+  principal?: { sub: string; email: string; displayName?: string };
+  /** Server-resolved tenant selection for multi-membership principals.
+   * The worker honors this ONLY when membership proves it. */
+  tenant?: string;
 }
 
 class WorkerClient {
   private baseUrl: string;
   private secret: string;
-  private tenantId: string;
+  private principal: { sub: string; email: string; displayName?: string } | null;
+  private tenant: string | null;
 
   constructor(opts?: WorkerClientOpts) {
     this.baseUrl = opts?.baseUrl || WORKER_BASE;
     this.secret = opts?.secret || WORKER_SECRET;
-    this.tenantId = opts?.tenantId || TENANT_ID;
+    this.principal = opts?.principal || null;
+    this.tenant = opts?.tenant || null;
+  }
+
+  /** Bind this client to an authenticated principal (server-side only). */
+  as(principal: { sub: string; email: string; displayName?: string }, tenant?: string): WorkerClient {
+    return new WorkerClient({
+      baseUrl: this.baseUrl,
+      secret: this.secret,
+      principal,
+      tenant: tenant || this.tenant || undefined,
+    });
   }
 
   private async fetch(path: string, init?: RequestInit): Promise<Response> {
@@ -33,15 +49,17 @@ class WorkerClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
-      return await fetch(url, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "x-vantage-secret": this.secret,
-          ...(init?.headers || {}),
-        },
-      });
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-vantage-secret": this.secret,
+        ...(init?.headers as Record<string, string> | undefined),
+      };
+      if (this.principal) {
+        const { signPrincipal } = await import("@/lib/identity/principal");
+        headers["x-prysm-principal"] = signPrincipal(this.principal as { sub: string; email: string; displayName: string });
+        if (this.tenant) headers["x-prysm-tenant"] = this.tenant;
+      }
+      return await fetch(url, { ...init, signal: controller.signal, headers });
     } finally {
       clearTimeout(timeout);
     }

@@ -14,7 +14,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "migrations");
-const MIGRATION_FILES = Object.freeze(["001_lifecycle.sql", "002_wp11_web_app_integration.sql"]);
+const MIGRATION_FILES = Object.freeze(["001_lifecycle.sql", "002_wp11_web_app_integration.sql", "003_identity.sql"]);
 
 const SQL = {
   insertAuditMeta:   `INSERT INTO prysm.lifecycle_audits (audit_id, tenant_id, client_id, created_at) VALUES ($1,$2,$3,$4)`,
@@ -265,16 +265,42 @@ export function createPostgresLifecycleRepository({ pool }) {
 
   async function listByTenant(tenantId, limit = 50, offset = 0) {
     await ensureInitialized();
-    const result = await pool.query(SQL.listByTenant, [tenantId, limit, offset]);
-    return result.rows.map((row) => ({
-      audit_id: row.audit_id,
-      client_id: row.client_id || "",
-      business_name: row.business_name || "",
-      target_url: row.target_url || "",
-      created_at: row.created_at,
-      latest_state: row.latest_state,
-      updated_at: row.updated_at,
-    }));
+    // Two-step implementation: the audit rows come from lifecycle_audits;
+    // the latest state comes from the lifecycle event log via the simple
+    // latest-event query.  This keeps every statement compatible with the
+    // governed persistence harness (pg-mem) and avoids correlated-subquery
+    // planner limitations.
+    const result = await pool.query(
+      `SELECT audit_id, client_id, business_name, target_url, created_at
+       FROM prysm.lifecycle_audits
+       WHERE tenant_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [tenantId, limit, offset],
+    );
+    const rows = [];
+    for (const row of result.rows) {
+      const latest = await pool.query(SQL.latestEvent, [row.audit_id]);
+      rows.push({
+        audit_id: row.audit_id,
+        client_id: row.client_id || "",
+        business_name: row.business_name || "",
+        target_url: row.target_url || "",
+        created_at: row.created_at,
+        latest_state: latest.rows[0]?.next_state || "created",
+        updated_at: row.created_at,
+      });
+    }
+    return rows;
+  }
+
+  // MT-IDENTITY: resolve the audit's OWNING tenant for authorization
+  // (before any tenant-scoped lookup).  Returns null when the audit does
+  // not exist — callers fail closed (non-disclosing).
+  async function findAuditTenant(auditId) {
+    await ensureInitialized();
+    const result = await pool.query(SQL.loadAuditMeta, [auditId]);
+    return result.rows[0]?.tenant_id || null;
   }
 
   return {
@@ -288,6 +314,7 @@ export function createPostgresLifecycleRepository({ pool }) {
     updateAuditMetadata,
     getAuditMetadata,
     listByTenant,
+    findAuditTenant,
   };
 }
 

@@ -20,7 +20,28 @@ const NEXT_URL = `http://localhost:${NEXT_PORT}`;
 test.describe("WP11 Full Browser Flow", () => {
   test.setTimeout(120_000);
 
+  // MT-IDENTITY: mock-mode login through the REAL session flow
+  // (PRYSM_IDENTITY_MODE=mock is set on the Next dev server by the
+  // playwright config; the worker verifies the signed principal against the
+  // seeded identity repository).
+  async function loginMock(page: import("@playwright/test").Page, email: string) {
+    const res = await page.request.post(`${NEXT_URL}/api/auth/login`, {
+      data: { email, password: "test-pass" },
+    });
+    expect(res.status()).toBe(200);
+  }
+
+  test("AUTH-01: unauthenticated portal request redirects to login", async ({ page }) => {
+    await page.goto(`${NEXT_URL}/audits`, { waitUntil: "networkidle" });
+    await page.waitForURL("**/login**");
+    await expect(page.getByRole("heading", { name: /Sign in/i })).toBeVisible();
+    console.log("  [x] AUTH-01: unauthenticated /audits → login redirect");
+  });
+
   test("FLOW-01: complete audit lifecycle through browser", async ({ page }) => {
+    // Step 0: Sign in (mock identity mode).
+    await loginMock(page, "flow@test.example.com");
+
     // Step 1: Open web application
     await page.goto(NEXT_URL, { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { name: "Audit Dashboard" })).toBeVisible({ timeout: 10_000 });
@@ -84,6 +105,8 @@ test.describe("WP11 Full Browser Flow", () => {
   });
 
   test("WEB-01: all required routes load without errors", async ({ page }) => {
+    await loginMock(page, "flow@test.example.com");
+
     // Dashboard
     await page.goto(NEXT_URL, { waitUntil: "networkidle" });
     await expect(page.locator("body")).not.toContainText("500");
@@ -121,6 +144,7 @@ test.describe("WP11 Full Browser Flow", () => {
   });
 
   test("VIEW-01: report viewer routes exist and return correct status", async ({ page }) => {
+    await loginMock(page, "flow@test.example.com");
     // Report routes exist (will show 403/404 since no approved report in test)
     // The important proof is that routes are wired up
     const resIndex = await page.request.get(`${NEXT_URL}/audits/00000000-0000-0000-0000-000000000000/report`);
@@ -138,7 +162,10 @@ test.describe("WP11 Full Browser Flow", () => {
   });
 
   test("DRAFT-REVIEW-01: Draft Review button routes to a valid internal review page (no 404)", async ({ page }) => {
-    // 1. Create a real draft audit through the governed same-origin API.
+    // 1. Sign in as the seeded reviewer (mock identity → real principal).
+    await loginMock(page, "draft-review@test.example.com");
+
+    // 2. Create a real draft audit through the governed same-origin API.
     const createRes = await page.request.post(`${NEXT_URL}/api/audits`, {
       data: {
         targetUrl: "https://draft-review-test.com",
@@ -155,15 +182,16 @@ test.describe("WP11 Full Browser Flow", () => {
     expect(auditId).toMatch(/^[a-f0-9-]{36}$/);
     console.log(`  [x] DRAFT-REVIEW-01: audit created (${auditId})`);
 
-    // 2. Establish the reviewer session (secret-protected issuance; the
-    //    cookie is shared with the page's browser context).
+    // 3. Establish the reviewer session (secret-protected issuance; the
+    //    cookie is shared with the page's browser context — temporary
+    //    internal compatibility path).
     const sessionRes = await page.request.post(`${NEXT_URL}/api/reviewer-session`, {
       headers: { "x-vantage-secret": "test-secret" },
     });
     expect(sessionRes.status()).toBe(200);
     console.log("  [x] DRAFT-REVIEW-01: reviewer session issued");
 
-    // 3. Open the audit detail page and wait for the draft review card.
+    // 4. Open the audit detail page and wait for the draft review card.
     await page.goto(`${NEXT_URL}/audits/${auditId}`, { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { name: "Draft Report" })).toBeVisible({ timeout: 30_000 });
     const draftButton = page.getByRole("link", { name: "View Draft Report" });
@@ -191,6 +219,7 @@ test.describe("WP11 Full Browser Flow", () => {
   });
 
   test("DRAFT-REVIEW-02: invalid audit ID fails safely", async ({ page }) => {
+    await loginMock(page, "flow@test.example.com");
     const res = await page.request.get(`${NEXT_URL}/audits/00000000-0000-0000-0000-000000000000/report`, {
       maxRedirects: 0,
     });
@@ -199,7 +228,15 @@ test.describe("WP11 Full Browser Flow", () => {
   });
 
   test("DRAFT-REVIEW-03: anonymous draft report access is blocked (reviewer session required)", async ({ request }) => {
-    // 1. Create a real draft audit.
+    // 1. Create a real draft audit through an authenticated principal
+    //    (a fresh APIRequestContext has no session — create via the
+    //    worker's internal boundary is NOT available anonymously, so sign
+    //    in first, create, then drop the session).
+    const loginRes = await request.post(`${NEXT_URL}/api/auth/login`, {
+      data: { email: "anon-draft@test.example.com", password: "test-pass" },
+    });
+    expect(loginRes.status()).toBe(200);
+
     const createRes = await request.post(`${NEXT_URL}/api/audits`, {
       data: {
         targetUrl: "https://anon-draft-test.com",
@@ -215,18 +252,24 @@ test.describe("WP11 Full Browser Flow", () => {
     const auditId = String(created.auditId || "");
     console.log(`  [x] DRAFT-REVIEW-03: draft audit created (${auditId})`);
 
-    // 2. WITHOUT a reviewer session, the redirect route must not reveal
-    //    the draft (404 fail-closed).
-    const redirectRes = await request.get(`${NEXT_URL}/audits/${auditId}/report`, { maxRedirects: 0 });
-    expect(redirectRes.status()).toBe(404);
-    console.log(`  [x] DRAFT-REVIEW-03: anonymous redirect → ${redirectRes.status()} (fail closed)`);
+    // 2. A FRESH anonymous context (no session cookie) must be redirected
+    //    to login — the portal middleware is the first gate.
+    const { request: pwRequest } = await import("@playwright/test");
+    const anonContext = await pwRequest.newContext();
+    const anonRes = await anonContext.get(`${NEXT_URL}/audits/${auditId}/report`, { maxRedirects: 0 });
+    const location = anonRes.headers()["location"] || "";
+    expect([307, 302, 303].includes(anonRes.status()) && location.includes("/login")).toBe(true);
+    console.log(`  [x] DRAFT-REVIEW-03: anonymous report request → login redirect (${anonRes.status()})`);
 
-    // 3. Direct proxy access to a draft page is also blocked.
-    const pageRes = await request.get(`${NEXT_URL}/audits/${auditId}/report/index.html`);
-    expect(pageRes.status()).toBe(403);
-    const body = await pageRes.json().catch(() => ({}));
-    expect(body.code).toBe("REVIEWER_AUTH_REQUIRED");
-    console.log("  [x] DRAFT-REVIEW-03: anonymous draft page → 403 REVIEWER_AUTH_REQUIRED");
+    // 3. Direct API access without a session is blocked at the portal
+    //    boundary (login redirect).  The worker's own server-side 401 for
+    //    unauthenticated requests is proven by TENANT-AUTH-01 in the
+    //    worker tenant acceptance suite.
+    const apiRes = await anonContext.get(`${NEXT_URL}/api/audits`, { maxRedirects: 0 });
+    const apiLocation = apiRes.headers()["location"] || "";
+    expect([307, 302, 303].includes(apiRes.status()) && apiLocation.includes("/login")).toBe(true);
+    console.log(`  [x] DRAFT-REVIEW-03: anonymous audit API → login redirect (${apiRes.status()})`);
+    await anonContext.dispose();
 
     // 4. Wrong-secret session issuance is rejected.
     const badSession = await request.post(`${NEXT_URL}/api/reviewer-session`, {

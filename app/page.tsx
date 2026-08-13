@@ -1,13 +1,19 @@
 import { workerClient } from "@/lib/worker-client";
+import { currentPrincipal } from "@/lib/identity/session";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const principal = currentPrincipal();
+  if (!principal) redirect("/login");
+
   let audits: unknown[] = [];
   let errorMsg = "";
 
   try {
-    audits = await workerClient.listAudits();
+    const client = workerClient.as(principal);
+    audits = await client.listAudits();
   } catch (e) {
     errorMsg = e instanceof Error ? e.message : "Failed to load audit history";
   }
