@@ -21,6 +21,7 @@ import {
   createBaseMockAdapters, createStatusAdapter,
   createKeyCapturingAdapter, createVersionMismatchAdapter,
   createMissingVersionAdapter, createEmptyVersionAdapter,
+  PAGE_EVIDENCE,
 } from "../test-fixtures/orchestration/mock-adapters.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -52,13 +53,16 @@ addFormats(_ajv);
 function vc(sid, obj) { const v = _ajv.getSchema(sid); return { valid: v(obj), errors: v.errors || [] }; }
 
 function makeAvailResult(source) {
+  // Realistic AVAILABLE result — the canonical site-evidence fixture the
+  // production adapters emit.  Empty evidence is NOT a valid AVAILABLE
+  // result and must fail decision-evidence validation (governed fail-closed).
   return {
     contractVersion: "1.0.0", schemaVersion: "1.0.0",
     source, provider: "M", adapterVersion: "1.0.0",
     status: "AVAILABLE", startedAt: mockClock().now(), completedAt: mockClock().now(),
     retryCount: 1, expectedRecords: 1, returnedRecords: 1,
     coverage: { requested: 1, completed: 1, failed: 0 },
-    limitations: [], evidence: {},
+    limitations: [], evidence: PAGE_EVIDENCE,
   };
 }
 
@@ -663,8 +667,12 @@ console.log("\n─ H. RESUME: Interrupted collecting recovery ─");
   await lc.transition({ auditId, tenantId, toState: T.VALIDATED, transitionIdempotencyKey: `${auditId}:v:validated` });
   await lc.transition({ auditId, tenantId, toState: T.COLLECTING, transitionIdempotencyKey: `${auditId}:c:collecting` });
 
-  // Persist PARTIAL onpage + AVAILABLE pagespeed checkpoints
-  const partialResult = { contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage", provider: "M", adapterVersion: "1.0.0", status: "PARTIAL", startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 2, expectedRecords: 5, returnedRecords: 3, coverage: { requested: 5, completed: 3, failed: 2 }, limitations: ["controlled limitation"], evidence: {} };
+  // Persist PARTIAL onpage + AVAILABLE pagespeed checkpoints.
+  // A realistic PARTIAL collection still carries the structural site
+  // evidence fields (domain/pages/services/trust/platform) — only the
+  // coverage is reduced.  Empty evidence would be malformed and must fail
+  // decision-evidence validation (governed fail-closed).
+  const partialResult = { contractVersion: "1.0.0", schemaVersion: "1.0.0", source: "dataforseo-onpage", provider: "M", adapterVersion: "1.0.0", status: "PARTIAL", startedAt: mockClock().now(), completedAt: mockClock().now(), retryCount: 2, expectedRecords: 5, returnedRecords: 3, coverage: { requested: 5, completed: 3, failed: 2 }, limitations: ["controlled limitation"], evidence: { ...PAGE_EVIDENCE, sourceStatus: "PARTIAL" } };
   const availResult = makeAvailResult("pagespeed");
   const nr1 = await store.put({ bytes: Buffer.from(JSON.stringify(partialResult)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "dataforseo-onpage.json" }, source: "dataforseo-onpage" });
   const nr2 = await store.put({ bytes: Buffer.from(JSON.stringify(availResult)), contentType: "application/json", scope: { ...scope, category: "normalized", artifactName: "pagespeed.json" }, source: "pagespeed" });
