@@ -8,6 +8,7 @@ import { createTokenStore } from "./auth/token-store.js";
 import { createOAuthService } from "./auth/oauth-service.js";
 import { resolveAuthorization, canAccessTenant } from "./identity/authorization.js";
 import { authorizeReportAccess } from "./identity/report-authorization.js";
+import { createSlidingWindowLimiter } from "./utils/rate-limiter.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -49,6 +50,22 @@ export function createRequestHandler({
     if (!config.webhookSecret) return false;
     const provided = req.headers["x-vantage-secret"] || String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     return provided === config.webhookSecret;
+  }
+
+  // Audit creation is the gateway to paid provider work — a per-tenant
+  // sliding window caps how many audits an hour any single tenant can
+  // trigger.  In-memory (resets on restart); the durable cost backstop is
+  // the orchestrator's paid-task idempotency.
+  const auditCreateLimiter = createSlidingWindowLimiter({ windowMs: 60 * 60 * 1000, max: 30 });
+
+  // Non-disclosing error responder: governed 4xx bodies pass through;
+  // everything else is logged server-side and returned as a generic 500.
+  function sendRouteError(res, err, { errors = null, fallback = "Internal error" } = {}) {
+    if (err && err.statusCode && err.statusCode < 500) {
+      return send(res, err.statusCode, { error: err.message, errors });
+    }
+    console.error("Worker route error:", err && err.stack ? err.stack : String(err));
+    return send(res, 500, { error: fallback });
   }
 
   // ---------------------------------------------------------------------
@@ -353,12 +370,15 @@ export function createRequestHandler({
         if (!tenantId) {
           return send(res, 400, { error: "Tenant selection required (x-prysm-tenant header)", code: "TENANT_SELECTION_REQUIRED" });
         }
+        if (!auditCreateLimiter.hit(`audit-create:${tenantId}`)) {
+          return send(res, 429, { error: "Too many audit requests — try again later", code: "RATE_LIMITED" });
+        }
         try {
           const input = await readJson(req);
           const result = await auditService.createAudit(input, tenantId);
           return send(res, 201, result);
         } catch (err) {
-          return send(res, err.statusCode || 500, { error: err.message, errors: err.errors || null });
+          return sendRouteError(res, err, { errors: err.errors || null });
         }
       }
 
@@ -375,7 +395,7 @@ export function createRequestHandler({
           const audits = await auditService.listAudits(tenantId);
           return send(res, 200, audits);
         } catch (err) {
-          return send(res, err.statusCode || 500, { error: err.message });
+          return sendRouteError(res, err);
         }
       }
 
@@ -396,7 +416,7 @@ export function createRequestHandler({
             if (!status) return send(res, 404, { error: "Audit not found" });
             return send(res, 200, status);
           } catch (err) {
-            return send(res, err.statusCode || 500, { error: err.message });
+            return sendRouteError(res, err);
           }
         }
 
@@ -440,7 +460,7 @@ export function createRequestHandler({
             const result = await auditService.submitReview(auditId, access.tenantId, slug, reviewer, payload.checklist);
             return send(res, 200, result);
           } catch (err) {
-            return send(res, err.statusCode || 500, { error: err.message });
+            return sendRouteError(res, err);
           }
         }
 
@@ -464,7 +484,7 @@ export function createRequestHandler({
             const result = await auditService.approveAudit(auditId, access.tenantId, slug, approver, pages);
             return send(res, 200, result);
           } catch (err) {
-            return send(res, err.statusCode || 500, { error: err.message });
+            return sendRouteError(res, err);
           }
         }
 
@@ -518,15 +538,15 @@ export function createRequestHandler({
             if (err.statusCode === 403) {
               return send(res, 403, { error: err.message, code: err.code || "REPORT_NOT_APPROVED", lifecycleStatus: err.lifecycleStatus || "unknown" });
             }
-            return send(res, err.statusCode || 500, { error: err.message });
+            return sendRouteError(res, err);
           }
         }
       }
 
       return send(res, 404, { error: "Not found" });
     } catch (error) {
-      console.error(error);
-      return send(res, 500, { error: error.message });
+      console.error("Worker request failed:", error);
+      return send(res, 500, { error: "Internal error" });
     }
   };
 }
