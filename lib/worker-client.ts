@@ -126,6 +126,61 @@ class WorkerClient {
     return data;
   }
 
+  // ── ACCT-PROVISION: platform-admin operations (worker enforces) ──────
+  async adminListTenants() {
+    const res = await this.fetch("/api/v1/admin/tenants");
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Failed to list companies");
+    return data;
+  }
+
+  async adminCreateTenant(input: { name: string; id?: string }) {
+    const res = await this.fetch("/api/v1/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Failed to create company");
+    return data;
+  }
+
+  async adminInviteUser(input: { cognitoSub: string; email: string; displayName?: string }) {
+    const res = await this.fetch("/api/v1/admin/users", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Failed to record the invited user");
+    return data;
+  }
+
+  async adminAssignMembership(input: { tenantId: string; cognitoSub: string; role: string }) {
+    const res = await this.fetch("/api/v1/admin/memberships", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Failed to assign the membership");
+    return data;
+  }
+
+  async adminDisableMembership(input: { tenantId: string; cognitoSub: string }) {
+    const res = await this.fetch("/api/v1/admin/memberships/disable", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Failed to disable the membership");
+    return data;
+  }
+
+  async adminListMemberships(tenantId: string) {
+    const res = await this.fetch(`/api/v1/admin/tenants/${encodeURIComponent(tenantId)}/memberships`);
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Failed to list memberships");
+    return data;
+  }
+
   /** Get report page URL (returns the worker URL for proxying) */
   getReportPageUrl(auditId: string, filename: string, slug: string, clientId: string): string {
     return `${this.baseUrl}/api/v1/audits/${auditId}/report/${filename}?slug=${encodeURIComponent(slug)}&clientId=${encodeURIComponent(clientId)}`;

@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { extname } from "node:path";
+import { randomUUID } from "node:crypto";
 import { runAudit, submitReview, approveAudit, getAuditStatus } from "./audit/run-audit.js";
 import { loadConfig } from "./config.js";
 import { createLocalReportStore, createReportStore } from "./storage/report-store.js";
@@ -541,6 +542,123 @@ export function createRequestHandler({
             return sendRouteError(res, err);
           }
         }
+      }
+
+      // -------------------------------------------------------------------
+      // ACCT-PROVISION: platform-admin boundary — company/user/membership
+      // administration.  Authorized ONLY for platform_admin principals or
+      // the secret-authenticated internal boundary.  The browser can never
+      // provision itself.
+      // -------------------------------------------------------------------
+      if (url.pathname.startsWith("/api/v1/admin/")) {
+        const auth = await resolveRequestAuth(req);
+        const isAdmin = auth && auth.authenticated && (auth.internal === true || auth.isPlatformAdmin === true);
+        if (!isAdmin) return send(res, auth ? 403 : 401, { error: auth ? "Platform admin required" : "Unauthorized", code: auth ? "FORBIDDEN" : "UNAUTHENTICATED" });
+        if (!identityRepo) return send(res, 501, { error: "Identity repository not configured" });
+
+        // POST /api/v1/admin/tenants — create a company (tenant)
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/tenants") {
+          try {
+            const input = await readJson(req);
+            const name = String(input?.name || "").trim();
+            const id = String(input?.id || "").trim();
+            if (!name) return send(res, 422, { error: "Company name is required" });
+            if (name.length > 120) return send(res, 422, { error: "Company name too long" });
+            const tenantId = id || `tenant-${randomUUID()}`;
+            if (!/^[a-z0-9][a-z0-9_-]{1,63}$/.test(tenantId)) {
+              return send(res, 422, { error: "Company id must be lowercase letters, digits, - or _" });
+            }
+            await identityRepo.createTenant({ id: tenantId, name, slug: tenantId });
+            return send(res, 201, { id: tenantId, name, slug: tenantId });
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // GET /api/v1/admin/tenants — list companies
+        if (req.method === "GET" && url.pathname === "/api/v1/admin/tenants") {
+          try {
+            const tenants = await identityRepo.listTenants();
+            return send(res, 200, tenants);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/admin/users — persist an invited Prysm user
+        // (the WEB performs the Cognito invite and passes the real sub)
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/users") {
+          try {
+            const input = await readJson(req);
+            const cognitoSub = String(input?.cognitoSub || "").trim();
+            const email = String(input?.email || "").trim().toLowerCase();
+            const displayName = String(input?.displayName || "").trim();
+            if (!cognitoSub || !email) return send(res, 422, { error: "cognitoSub and email are required" });
+            if (!email.includes("@")) return send(res, 422, { error: "Invalid email" });
+            const existing = await identityRepo.findUserByCognitoSub(cognitoSub);
+            if (existing) return send(res, 200, existing);
+            const id = randomUUID();
+            await identityRepo.createUser({ id, cognitoSub, email, displayName });
+            return send(res, 201, await identityRepo.findUserByCognitoSub(cognitoSub));
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/admin/memberships — assign a role to a company
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/memberships") {
+          try {
+            const input = await readJson(req);
+            const tenantId = String(input?.tenantId || "").trim();
+            const cognitoSub = String(input?.cognitoSub || "").trim();
+            const role = String(input?.role || "").trim();
+            if (!tenantId || !cognitoSub || !role) return send(res, 422, { error: "tenantId, cognitoSub and role are required" });
+            const allowedRoles = ["viewer", "reviewer", "tenant_admin", "platform_admin"];
+            if (!allowedRoles.includes(role)) return send(res, 422, { error: `role must be one of ${allowedRoles.join(", ")}` });
+            const tenant = await identityRepo.findTenantById(tenantId);
+            if (!tenant) return send(res, 404, { error: "Company not found" });
+            const user = await identityRepo.findUserByCognitoSub(cognitoSub);
+            if (!user) return send(res, 404, { error: "User not found — invite the user first" });
+            const existingRows = await identityRepo.findMembershipsForUser(user.id);
+            if (!existingRows.some((m) => m.tenant_id === tenantId && m.role === role)) {
+              await identityRepo.createMembership({ id: randomUUID(), tenantId, userId: user.id, role });
+            }
+            const rows = await identityRepo.findMembershipsForUser(user.id);
+            return send(res, 200, { tenantId, role, status: "active", memberships: rows });
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/admin/memberships/disable — disable a membership
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/memberships/disable") {
+          try {
+            const input = await readJson(req);
+            const tenantId = String(input?.tenantId || "").trim();
+            const cognitoSub = String(input?.cognitoSub || "").trim();
+            if (!tenantId || !cognitoSub) return send(res, 422, { error: "tenantId and cognitoSub are required" });
+            const user = await identityRepo.findUserByCognitoSub(cognitoSub);
+            if (!user) return send(res, 404, { error: "User not found" });
+            const changed = await identityRepo.updateMembershipStatus({ tenantId, userId: user.id, status: "disabled" });
+            return send(res, 200, { tenantId, userId: user.id, changed });
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // GET /api/v1/admin/tenants/:id/memberships — membership management view
+        const adminMembershipsMatch = url.pathname.match(/^\/api\/v1\/admin\/tenants\/([a-z0-9_-]+)\/memberships$/);
+        if (req.method === "GET" && adminMembershipsMatch) {
+          try {
+            const tenantId = adminMembershipsMatch[1];
+            const rows = await identityRepo.listMembershipsForTenant(tenantId);
+            return send(res, 200, rows);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        return send(res, 404, { error: "Not found" });
       }
 
       return send(res, 404, { error: "Not found" });
