@@ -119,6 +119,17 @@ console.log("ACCT-PROVISION-01 Acceptance\n===========================");
   check("AP-02: governed internal boundary → 201", r4.status === 201, `got ${r4.status}`);
   const internalCreated = JSON.parse(r4.body.toString());
   check("AP-02: created tenant id is a valid slug", /^[a-z0-9][a-z0-9_-]{1,63}$/.test(internalCreated.id), internalCreated.id);
+
+  // Invite gate: non-admin principals are denied BEFORE any side effect —
+  // no Prysm user row may appear for a non-admin invite attempt.
+  const r5 = await request("POST", "/api/v1/admin/users", { principal: NON_ADMIN, tenant: "existing-company", body: { cognitoSub: "cognito-intruder-controlled", email: "intruder@controlled-test.invalid" } });
+  check("AP-02: non-admin invite → 403", r5.status === 403, `got ${r5.status}`);
+  const intruderRow = await identityRepo.findUserByCognitoSub("cognito-intruder-controlled");
+  check("AP-02: non-admin invite created NO user row (side-effect denied)", intruderRow === null, intruderRow ? "row exists" : "no row");
+  const authProbe = await request("GET", "/api/v1/admin/authorize", { principal: ADMIN, tenant: "platform-ops" });
+  check("AP-02: platform_admin authorize probe → 200", authProbe.status === 200, `got ${authProbe.status}`);
+  const authProbeNo = await request("GET", "/api/v1/admin/authorize", { principal: NON_ADMIN, tenant: "existing-company" });
+  check("AP-02: non-admin authorize probe → 403", authProbeNo.status === 403, `got ${authProbeNo.status}`);
 }
 
 // AP-02 + AP-03 — the full provisioning cycle

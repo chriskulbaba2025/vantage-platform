@@ -57,6 +57,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Role must be viewer, reviewer or tenant_admin" }, { status: 422 });
   }
 
+  // ── Authorize BEFORE any external side effect: the worker's
+  // platform-admin gate must confirm the principal before Cognito is
+  // touched (no user creation for non-admins, no invite emails to
+  // unintended recipients).
+  try {
+    await workerClient.as(principal).authorizePlatformAdmin();
+  } catch (err) {
+    return NextResponse.json({ error: "Platform admin required" }, { status: 403 });
+  }
+
   const isProd = process.env.NODE_ENV === "production";
   const tempPassword = temporaryPassword();
 
