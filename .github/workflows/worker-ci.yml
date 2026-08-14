@@ -10,7 +10,10 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Dedicated self-hosted runner (prysm-selfhosted) — $0 hosted-runner cost.
+    # The runner lives in WSL Ubuntu-24.04 on the dev machine and provides
+    # Docker for the postgres:16 service container.
+    runs-on: [self-hosted, Linux, X64, prysm]
     defaults:
       run:
         working-directory: services/worker
