@@ -54,6 +54,36 @@ export function createMemoryIdentityRepository() {
     return [...tenants.values()];
   }
 
+  async function updateMembershipStatus({ tenantId, userId, status }) {
+    let changed = 0;
+    for (const [key, m] of memberships) {
+      if (m.tenant_id === tenantId && m.user_id === userId) {
+        m.status = status;
+        memberships.set(key, m);
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  async function listMembershipsForTenant(tenantId) {
+    const rows = [];
+    for (const m of memberships.values()) {
+      if (m.tenant_id !== tenantId) continue;
+      const user = [...users.values()].find((u) => u.id === m.user_id);
+      rows.push({
+        user_id: m.user_id,
+        cognito_sub: user?.cognito_sub || "",
+        email: user?.email || "",
+        display_name: user?.display_name || "",
+        role: m.role,
+        status: m.status,
+      });
+    }
+    rows.sort((a, b) => (a.email === b.email ? a.role.localeCompare(b.role) : a.email.localeCompare(b.email)));
+    return rows;
+  }
+
   return Object.freeze({
     createTenant,
     createUser,
@@ -62,6 +92,8 @@ export function createMemoryIdentityRepository() {
     findMembershipsForUser,
     findTenantById,
     listTenants,
+    updateMembershipStatus,
+    listMembershipsForTenant,
   });
 }
 

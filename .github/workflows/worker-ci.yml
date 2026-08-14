@@ -68,3 +68,4 @@ jobs:
       - run: npm run acceptance:wp10
       - run: npm run acceptance:wp11
       - run: npm run acceptance:wp12
+      - run: npm run acceptance:provisioning

@@ -150,6 +150,18 @@
               role: 'reviewer',
             });
           }
+          // ACCT-PROVISION: seed the platform admin identity + platform
+          // operations tenant so the REAL admin boundary executes in the
+          // browser harness.
+          await identityRepo.createTenant({ id: 'platform-ops', name: 'Platform Operations', slug: 'platform-ops' });
+          await identityRepo.createUser({
+            id: randomUUID(), cognitoSub: mockSub('admin@test.example.com'), email: 'admin@test.example.com', displayName: 'admin',
+          });
+          await identityRepo.createMembership({
+            id: randomUUID(), tenantId: 'platform-ops',
+            userId: (await identityRepo.findUserByCognitoSub(mockSub('admin@test.example.com'))).id,
+            role: 'platform_admin',
+          });
 
           const handler = createRequestHandler({
             config: { artifactDir:baseDir, webhookSecret:'test-secret', vantageTenantId:'playwright-tenant' },

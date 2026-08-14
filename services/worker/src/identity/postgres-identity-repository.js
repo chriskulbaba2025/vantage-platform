@@ -49,6 +49,8 @@ const SQL = {
   findMemberships: `SELECT m.tenant_id, m.role, m.status, t.name AS tenant_name, t.slug AS tenant_slug FROM prysm.tenant_memberships m JOIN prysm.tenants t ON t.id = m.tenant_id WHERE m.user_id = $1`,
   findTenantById: `SELECT id, name, slug, status FROM prysm.tenants WHERE id = $1`,
   countAuditsForTenant: `SELECT count(*)::int AS n FROM prysm.lifecycle_audits WHERE tenant_id = $1`,
+  updateMembershipStatus: `UPDATE prysm.tenant_memberships SET status = $3, updated_at = now() WHERE tenant_id = $1 AND user_id = $2`,
+  listMembershipsForTenant: `SELECT m.user_id, u.cognito_sub, u.email, u.display_name, m.role, m.status FROM prysm.tenant_memberships m JOIN prysm.users u ON u.id = m.user_id WHERE m.tenant_id = $1 ORDER BY u.email, m.role`,
 };
 
 /**
@@ -124,6 +126,27 @@ export function createPostgresIdentityRepository({ pool }) {
     return result.rows;
   }
 
+  /**
+   * Transition every membership row for (tenant, user) to the given
+   * status.  Returns the number of rows transitioned (0 = no such
+   * membership — callers treat that as an explicit no-op).
+   */
+  async function updateMembershipStatus({ tenantId, userId, status }) {
+    await ensureInitialized();
+    const result = await pool.query(SQL.updateMembershipStatus, [tenantId, userId, status]);
+    return result.rowCount;
+  }
+
+  /**
+   * Memberships of a tenant joined with user identity — the admin
+   * membership-management view.
+   */
+  async function listMembershipsForTenant(tenantId) {
+    await ensureInitialized();
+    const result = await pool.query(SQL.listMembershipsForTenant, [tenantId]);
+    return result.rows;
+  }
+
   return Object.freeze({
     findUserByCognitoSub,
     findMembershipsForUser,
@@ -132,6 +155,8 @@ export function createPostgresIdentityRepository({ pool }) {
     createMembership,
     findTenantById,
     listTenants,
+    updateMembershipStatus,
+    listMembershipsForTenant,
   });
 }
 
