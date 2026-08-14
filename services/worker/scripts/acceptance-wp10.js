@@ -37,6 +37,10 @@ addFormats(ajv);
 function validate(sid, obj) { const v = ajv.getSchema(sid); return v ? { valid: v(obj), errors: v.errors || [] } : { valid: false, errors: [{ message: `Schema not found: ${sid}` }] }; }
 
 // --- Imports ---
+// Local dev storage gate — server.js requires this before its module
+// evaluation (controlled acceptance never uses S3).  Mirrors the
+// acceptance-tenant.js pattern.
+process.env.VANTAGE_DEV_MEMORY_STORE = "true";
 const { createMemoryArtifactStore } = await import("../src/storage/memory-artifact-store.js");
 const { createGovernedArtifactStore, buildArtifactKey } = await import("../src/storage/governed-artifact-store.js");
 const { createMemoryLifecycleRepository } = await import("../src/lifecycle/memory-repository.js");

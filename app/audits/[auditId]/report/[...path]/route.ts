@@ -13,6 +13,8 @@ import {
   REVIEWER_ONLY_STATES,
   PUBLIC_STATES,
 } from "@/lib/reviewer-auth";
+import { principalFromCookies } from "@/lib/identity/principal";
+import { SESSION_COOKIE } from "@/lib/identity/session";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,19 @@ export async function GET(
   }
 
   try {
-    const status = await workerClient.getAuditStatus(auditId);
+    // MT-IDENTITY: bind the authenticated principal — the WORKER enforces
+    // the tenant boundary and report role gate BEFORE artifact retrieval.
+    // The secret-only internal boundary is reachable only via the governed
+    // reviewer session (minted by a holder of the webhook secret), never
+    // for plain anonymous browser traffic.
+    const principal = principalFromCookies(request.cookies.get(SESSION_COOKIE)?.value);
+    const reviewerToken = request.cookies.get(REVIEWER_COOKIE)?.value;
+    const internalAllowed = isValidReviewerToken(reviewerToken);
+    if (!principal && !internalAllowed) {
+      return NextResponse.json({ error: "Authentication required", code: "UNAUTHENTICATED" }, { status: 401 });
+    }
+    const client = principal ? workerClient.as(principal) : workerClient;
+    const status = await client.getAuditStatus(auditId);
     if (!status) {
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
@@ -39,10 +53,11 @@ export async function GET(
     if (!PUBLIC_STATES.has(state) && !REVIEWER_ONLY_STATES.has(state)) {
       return NextResponse.json({ error: "Report not available", code: "REPORT_NOT_APPROVED" }, { status: 403 });
     }
-    // Reviewer-only states require the reviewer session cookie.
-    if (REVIEWER_ONLY_STATES.has(state)) {
-      const token = request.cookies.get(REVIEWER_COOKIE)?.value;
-      if (!isValidReviewerToken(token)) {
+    // Reviewer-only states: the WORKER enforces the membership role gate
+    // for principal flows; the reviewer cookie governs only the internal
+    // (non-portal) reviewer path.
+    if (REVIEWER_ONLY_STATES.has(state) && !principal) {
+      if (!internalAllowed) {
         return NextResponse.json({ error: "Reviewer authorization required", code: "REVIEWER_AUTH_REQUIRED" }, { status: 403 });
       }
     }
@@ -53,7 +68,7 @@ export async function GET(
       return NextResponse.json({ error: "Approved report identity is incomplete" }, { status: 500 });
     }
 
-    const result = await workerClient.getReportPage(auditId, filename, slug, clientId);
+    const result = await client.getReportPage(auditId, filename, slug, clientId);
     if (result.status === 403) {
       return NextResponse.json({ error: "Report not available", code: "REPORT_NOT_APPROVED" }, { status: 403 });
     }

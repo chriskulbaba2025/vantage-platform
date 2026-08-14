@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1110.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"

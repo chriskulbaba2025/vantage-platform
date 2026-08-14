@@ -7,11 +7,20 @@
 
 import { workerClient, WorkerApiError } from "@/lib/worker-client";
 import { NextRequest, NextResponse } from "next/server";
+import { principalFromCookies } from "@/lib/identity/principal";
+import { SESSION_COOKIE } from "@/lib/identity/session";
 
 export async function POST(request: NextRequest) {
+  // MT-IDENTITY: server-side session verification before the worker call.
+  const principal = principalFromCookies(request.cookies.get(SESSION_COOKIE)?.value);
+  if (!principal) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
-    const result = await workerClient.createAudit(body);
+    const client = workerClient.as(principal);
+    const result = await client.createAudit(body);
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
     if (e instanceof WorkerApiError) {

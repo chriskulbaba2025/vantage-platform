@@ -1,17 +1,25 @@
 import { workerClient } from "@/lib/worker-client";
 import AuditReviewActions from "@/components/AuditReviewActions";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { REVIEWER_COOKIE, isValidReviewerToken } from "@/lib/reviewer-auth";
+import { currentPrincipal } from "@/lib/identity/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AuditDetailPage({ params }: { params: { auditId: string } }) {
   const { auditId } = params;
+
+  // MT-IDENTITY: authenticated portal access — the worker enforces the
+  // tenant boundary server-side; the session carries only the principal.
+  const principal = currentPrincipal();
+  if (!principal) redirect("/login");
+
   let status;
   let fetchError = "";
   try {
-    status = await workerClient.getAuditStatus(auditId);
+    const client = workerClient.as(principal);
+    status = await client.getAuditStatus(auditId);
   } catch (e) {
     console.error("Worker fetch failed:", e);
     fetchError = "Worker unavailable";

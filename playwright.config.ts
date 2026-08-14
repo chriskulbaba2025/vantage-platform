@@ -31,6 +31,7 @@ export default defineConfig({
         VANTAGE_WORKER_API_URL: `http://127.0.0.1:${process.env.WORKER_PORT || 19350}`,
         VANTAGE_WEBHOOK_SECRET: "test-secret",
         VANTAGE_TENANT_ID: "playwright-tenant",
+        PRYSM_IDENTITY_MODE: "mock",
       },
     },
   ],

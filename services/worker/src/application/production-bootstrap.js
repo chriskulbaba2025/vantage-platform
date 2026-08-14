@@ -23,6 +23,7 @@ const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "migrations");
 const MIGRATIONS = Object.freeze([
   "001_lifecycle.sql",
   "002_wp11_web_app_integration.sql",
+  "003_identity.sql",
 ]);
 
 async function executePageSpeedWithProductionConfig(args) {
