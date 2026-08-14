@@ -43,7 +43,10 @@ export function createRequestHandler({
   }
 
   function authorized(req) {
-    if (!config.webhookSecret) return true;
+    // Fail closed: without the shared secret the internal boundary
+    // (x-vantage-secret) is never open.  Production startup refuses to
+    // run without it; this guard is the second line of defense.
+    if (!config.webhookSecret) return false;
     const provided = req.headers["x-vantage-secret"] || String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     return provided === config.webhookSecret;
   }
@@ -100,9 +103,9 @@ export function createRequestHandler({
     const auth = await resolveRequestAuth(req);
     if (!auth) return { status: 401, code: "UNAUTHENTICATED", tenantId: null };
     if (typeof lifecycleRepo?.findAuditTenant !== "function") {
-      // No ownership lookup available — treat as authorized on the
-      // resolved tenant (memory/dev fallback keeps prior behaviour).
-      return { status: 200, code: "OK", tenantId: requireTenant(auth), auth };
+      // No ownership lookup available — fail closed (non-disclosing)
+      // instead of granting access on the resolved tenant.
+      return { status: 404, code: "NOT_FOUND", tenantId: null, auth };
     }
     const auditTenant = await lifecycleRepo.findAuditTenant(auditId);
     if (!auditTenant) return { status: 404, code: "NOT_FOUND", tenantId: null, auth };
@@ -591,6 +594,23 @@ const PRODUCTION_ARTIFACT_STORE_REQUIRED = (
   "Set VANTAGE_REPORTS_BUCKET and AWS_REGION. " +
   "For local development only, set VANTAGE_DEV_MEMORY_STORE=true."
 );
+
+// MT-IDENTITY: the shared webhook secret is the internal-boundary
+// credential (x-vantage-secret) AND the HMAC key for x-prysm-principal
+// tokens.  Running production persistence without it would either deny
+// every internal call or — worse — fall open.  Fail closed at startup,
+// mirroring the artifact-store requirement.
+const PRODUCTION_WEBHOOK_SECRET_REQUIRED = (
+  "VANTAGE PRODUCTION — VANTAGE_WEBHOOK_SECRET is required whenever " +
+  "DATABASE_URL is configured.  The internal boundary and the signed " +
+  "principal channel both depend on it."
+);
+
+// MT-IDENTITY fail-closed config validation — production persistence
+// without the shared secret is a misconfiguration that must not boot.
+if (config.databaseUrl && !config.webhookSecret) {
+  throw new Error(PRODUCTION_WEBHOOK_SECRET_REQUIRED);
+}
 
 let artifactStore;
 if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {

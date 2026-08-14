@@ -43,11 +43,11 @@ function base64UrlDecode(value: string): Buffer {
 
 function decodeJwtPart(token: string, index: 0 | 1): Record<string, unknown> {
   const part = token.split(".")[index];
-  if (!part) throw new Error("malformed JWT");
+  if (!part) throw Object.assign(new Error("malformed JWT"), { category: "auth" });
   try {
     return JSON.parse(base64UrlDecode(part).toString("utf8"));
   } catch {
-    throw new Error("malformed JWT payload");
+    throw Object.assign(new Error("malformed JWT payload"), { category: "auth" });
   }
 }
 
@@ -100,9 +100,11 @@ export function createCognitoIdentityBoundary({
       throw Object.assign(new Error("Unsupported token algorithm"), { category: "auth" });
     }
 
-    // 2. Claims validation.
+    // 2. Claims validation.  Only ID tokens carry the stable identity
+    // claims this boundary governs (MT-02 frozen: iss/aud/sub of the ID
+    // token).  Access tokens are authorization-scoped and rejected here.
     const now = Math.floor(Date.now() / 1000);
-    if (payload.token_use !== "id" && payload.token_use !== "access") {
+    if (payload.token_use !== "id") {
       throw Object.assign(new Error("Invalid token_use claim"), { category: "auth" });
     }
     if (typeof payload.exp !== "number" || payload.exp < now) {

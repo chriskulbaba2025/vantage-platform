@@ -28,10 +28,16 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { auditId: string } },
 ) {
-  // MT-IDENTITY: bind the authenticated principal when a portal session
-  // exists — the WORKER enforces tenant membership server-side.  Without a
-  // session, the legacy secret-only internal boundary applies.
+  // MT-IDENTITY: bind the authenticated principal — the WORKER enforces
+  // tenant membership server-side.  Without a portal session, only the
+  // governed reviewer session (minted by a webhook-secret holder) may pass
+  // the internal boundary; plain anonymous traffic fails closed here.
   const principal = principalFromCookies(request.cookies.get(SESSION_COOKIE)?.value);
+  const reviewerToken = request.cookies.get(REVIEWER_COOKIE)?.value;
+  const internalAllowed = isValidReviewerToken(reviewerToken);
+  if (!principal && !internalAllowed) {
+    notFound();
+  }
   const client = principal ? workerClient.as(principal) : workerClient;
 
   const status = await client.getAuditStatus(params.auditId);
@@ -48,8 +54,7 @@ export async function GET(
   }
 
   if (REVIEWER_ONLY_STATES.has(state)) {
-    const token = request.cookies.get(REVIEWER_COOKIE)?.value;
-    if (!isValidReviewerToken(token)) {
+    if (!principal && !internalAllowed) {
       notFound();
     }
     return NextResponse.redirect(

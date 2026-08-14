@@ -467,15 +467,19 @@ console.log("\n--- TENANT-AUTH assertions ---");
 {
   const resA = await request("GET", "/api/v1/audits", { principal: P(users.bob.sub, users.bob.email), tenant: "tenant-a" });
   const bodyA = JSON.parse(resA.body.toString());
-  const idsA = (bodyA.audits || bodyA || []).map((a) => a.audit_id);
+  const rowsA = bodyA.audits || bodyA || [];
+  const idsA = rowsA.map((a) => a.auditId);
   check("TENANT-AUTH-17: bob selects tenant-a (viewer) → 200", resA.status === 200, `got ${resA.status}`);
-  check("TENANT-AUTH-17: tenant-a scope only", idsA.every((id) => id !== approvedB.auditId), `ids=${idsA.join(",")}`);
+  check("TENANT-AUTH-17: tenant-a list contains tenant-a audit and zero tenant-b bleed",
+    idsA.includes(draftA.auditId) && idsA.every((id) => id !== approvedB.auditId), `ids=${idsA.join(",")}`);
 
   const resB = await request("GET", "/api/v1/audits", { principal: P(users.bob.sub, users.bob.email), tenant: "tenant-b" });
   const bodyB = JSON.parse(resB.body.toString());
-  const idsB = (bodyB.audits || bodyB || []).map((a) => a.audit_id);
+  const rowsB = bodyB.audits || bodyB || [];
+  const idsB = rowsB.map((a) => a.auditId);
   check("TENANT-AUTH-17: bob selects tenant-b (reviewer) → 200", resB.status === 200, `got ${resB.status}`);
-  check("TENANT-AUTH-17: tenant-b scope only", idsB.every((id) => id !== draftA.auditId), `ids=${idsB.join(",")}`);
+  check("TENANT-AUTH-17: tenant-b list contains tenant-b audit and zero tenant-a bleed",
+    idsB.includes(approvedB.auditId) && idsB.every((id) => id !== draftA.auditId), `ids=${idsB.join(",")}`);
 }
 
 // TENANT-AUTH-18 — forged browser request data cannot switch tenants

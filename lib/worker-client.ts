@@ -134,9 +134,17 @@ class WorkerClient {
   /** Proxy a report page request */
   async getReportPage(auditId: string, filename: string, slug: string, clientId: string) {
     const url = this.getReportPageUrl(auditId, filename, slug, clientId);
-    const res = await fetch(url, {
-      headers: { "x-vantage-secret": this.secret },
-    });
+    const headers: Record<string, string> = { "x-vantage-secret": this.secret };
+    if (this.principal) {
+      // MT-IDENTITY: report reads MUST carry the signed principal so the
+      // worker enforces tenant membership + report role BEFORE artifact
+      // retrieval.  The internal (secret-only) boundary remains available
+      // to governed non-browser callers.
+      const { signPrincipal } = await import("@/lib/identity/principal");
+      headers["x-prysm-principal"] = signPrincipal(this.principal as { sub: string; email: string; displayName: string });
+      if (this.tenant) headers["x-prysm-tenant"] = this.tenant;
+    }
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       if (res.status === 403 || res.status === 404) return { status: res.status, body: null };
       throw new WorkerApiError(res.status, "Failed to get report page");
