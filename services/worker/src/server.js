@@ -556,6 +556,13 @@ export function createRequestHandler({
         if (!isAdmin) return send(res, auth ? 403 : 401, { error: auth ? "Platform admin required" : "Unauthorized", code: auth ? "FORBIDDEN" : "UNAUTHENTICATED" });
         if (!identityRepo) return send(res, 501, { error: "Identity repository not configured" });
 
+        // GET /api/v1/admin/authorize — side-effect-free authorization
+        // probe.  Web routes call this BEFORE any external side effect
+        // (e.g., Cognito user creation).
+        if (req.method === "GET" && url.pathname === "/api/v1/admin/authorize") {
+          return send(res, 200, { platformAdmin: true, internal: auth.internal === true });
+        }
+
         // POST /api/v1/admin/tenants — create a company (tenant)
         if (req.method === "POST" && url.pathname === "/api/v1/admin/tenants") {
           try {

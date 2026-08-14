@@ -127,6 +127,15 @@ class WorkerClient {
   }
 
   // ── ACCT-PROVISION: platform-admin operations (worker enforces) ──────
+  /** Side-effect-free platform-admin authorization probe — call BEFORE
+   * any external side effect (e.g., Cognito user creation). */
+  async authorizePlatformAdmin() {
+    const res = await this.fetch("/api/v1/admin/authorize");
+    const data = await res.json();
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Platform admin required");
+    return data;
+  }
+
   async adminListTenants() {
     const res = await this.fetch("/api/v1/admin/tenants");
     const data = await res.json();
