@@ -192,11 +192,11 @@ if (model.generatedAt === "2026-01-15T12:00:00.000Z") {
   fail("generatedAt", `Expected FIXED_TS, got ${model.generatedAt}`);
 }
 
-// scoringVersion — PRYSM-NEXT-01 WP-D-08: v4.0.0 (versioned scoring semantics)
-if (model.scoringVersion === "4.0.0") {
-  pass("scoringVersion is 4.0.0");
+// scoringVersion — PRYSM-NEXT-01 WP-D-08/WP-E-05: v4.1.0 (versioned semantics)
+if (model.scoringVersion === "4.1.0") {
+  pass("scoringVersion is 4.1.0");
 } else {
-  fail("scoringVersion", `Expected 4.0.0, got ${model.scoringVersion}`);
+  fail("scoringVersion", `Expected 4.1.0, got ${model.scoringVersion}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -345,9 +345,9 @@ if (allRuleIdsValid) {
   fail("Invalid ruleIds", invalid.map((f) => f.ruleId).join(", "));
 }
 
-const allRuleVersionsMatch = model.findings.every((f) => f.ruleVersion === "4.0.0");
+const allRuleVersionsMatch = model.findings.every((f) => f.ruleVersion === "4.1.0");
 if (allRuleVersionsMatch) {
-  pass("All finding ruleVersions equal SCORING_VERSION (4.0.0)");
+  pass("All finding ruleVersions equal SCORING_VERSION (4.1.0)");
 } else {
   fail("ruleVersion mismatch");
 }

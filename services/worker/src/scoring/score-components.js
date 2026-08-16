@@ -5,7 +5,7 @@ import { SOURCE_STATUS } from "./evidence-contracts.js";
 // Scoring version (PRD v3.0 §15.1 + PRYSM-NEXT-01 WP-D)
 // ---------------------------------------------------------------------------
 
-export const SCORING_VERSION = "4.0.0";
+export const SCORING_VERSION = "4.1.0";
 
 // ---------------------------------------------------------------------------
 // Severity / band helpers
@@ -304,9 +304,23 @@ function scoreContentV4({ site, input }) {
   return clamp(pages + depth + servicesPts + education);
 }
 
-/** v4 conversion: same formula; eligibility gates unknown. */
-function scoreConversionV4({ site }) {
-  return scoreConversion(site);
+/**
+ * v4.1 conversion: base inferred score; when the conversion.path capability
+ * is browser-validated (WP-E), verified pages add a bounded bonus and
+ * obstructed CTAs subtract — validated evidence, never inferred strings.
+ * Validation NOT_ASSESSED keeps the inferred baseline (no penalty).
+ */
+function scoreConversionV4({ site, capabilities }) {
+  const base = scoreConversion(site);
+  const pathCap = capabilities?.["conversion.path"];
+  const summary = pathCap?.validationSummary;
+  if (pathCap?.validated === true && summary) {
+    const verified = (summary.pass ?? 0) + (summary.partial ?? 0);
+    const bonus = Math.min(10, verified * 2);
+    const obstructionPenalty = (summary.obstructionCount ?? 0) > 0 ? 10 : 0;
+    return clamp(base + bonus - obstructionPenalty);
+  }
+  return base;
 }
 
 /** v4 offer clarity: business-context services union. */
@@ -1158,6 +1172,39 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       competitiveSignal: 50,
       implementationPracticality: 80,
       verificationMethod: "Re-crawl and confirm pricing information is visible on relevant pages.",
+    });
+  }
+
+  // ── PRYSM-NEXT-01 WP-E — validated-path findings ────────────────────
+  const pathValidation = capabilities["conversion.path"]?.validationSummary;
+  if (pathValidation && (pathValidation.obstructionCount ?? 0) > 0) {
+    add({
+      ruleId: "VAN-PATH-001",
+      dimension: "conversion_pathways",
+      module: "conversion_paths",
+      title: "Primary conversion action is obstructed",
+      severity: "High",
+      key: "path_obstruction",
+      confidence: CONFIDENCE_LEVELS.STRONGLY_SUPPORTED,
+      evidence: [
+        {
+          provider: "playwright-conversion-path",
+          sourceStatus: SOURCE_STATUS.AVAILABLE,
+          field: "conversion.path.obstruction",
+          observedValue: pathValidation.obstructionCount,
+          artifactRef: null,
+        },
+      ],
+      evidenceText: `${pathValidation.obstructionCount} browser-validated page(s) have an obstructed CTA`,
+      businessImpact: "Visitors cannot reliably reach the primary action on key pages",
+      recommendation: "Remove or reposition overlays, cookie banners, or stacked elements covering the primary CTA",
+      effort: "M",
+      conversionImpact: 90,
+      gapSeverity: 80,
+      businessRelevance: 85,
+      competitiveSignal: 40,
+      implementationPracticality: 60,
+      verificationMethod: "Re-run conversion-path validation and confirm no obstruction is detected.",
     });
   }
 

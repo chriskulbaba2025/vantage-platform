@@ -56,6 +56,21 @@ function pagePurposeStage(page) {
   return null;
 }
 
+/**
+ * Deterministic site-level fallback when a service has no page-purpose
+ * evidence.  The frozen v1 report-view-model stage enum only allows
+ * TOFU/MOFU/BOFU — "Not Assessed" rows cannot be carried in the v1 shape;
+ * report design v2 (WP-G) carries true Not-Assessed rows in its own model.
+ * Rule: conversion affordances at site level → BOFU; proof content → MOFU;
+ * otherwise TOFU (early-journey assumption, documented).
+ */
+function siteFallbackStage(site) {
+  const hasForms = Array.isArray(site.forms) && site.forms.length > 0;
+  if (hasForms || site.trust?.pricing) return "BOFU";
+  if (site.trust?.testimonials || site.trust?.caseStudies) return "MOFU";
+  return "TOFU";
+}
+
 function tokenMatch(text, tokensArr) {
   const words = String(text || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter(Boolean);
   const set = new Set(tokensArr.map((t) => String(t).toLowerCase()));
@@ -89,11 +104,13 @@ function topicRows(site, input = {}) {
   const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
   return services.slice(0, 8).map((service, index) => {
     const page = servicePages.get(service);
-    const stage = page ? (pagePurposeStage(page) || "Not Assessed") : "Not Assessed";
+    const stage = page
+      ? (pagePurposeStage(page) || siteFallbackStage(site))
+      : siteFallbackStage(site);
     // NOTE (WP-D-06): the frozen report-view-model schema forbids
-    // additional properties on readinessMap rows — stage semantics change,
-    // the row SHAPE does not.  Richer provenance (page/stageBasis) lands in
-    // report design v2 (WP-G) under its own versioned model.
+    // additional properties on readinessMap rows and constrains stage to
+    // TOFU/MOFU/BOFU — stage semantics change, the row SHAPE does not.
+    // True "Not Assessed" rows land in report design v2 (WP-G).
     const blocker = stage === "BOFU" && !site.trust.pricing
       ? "Offer clarity"
       : !site.trust.credentials

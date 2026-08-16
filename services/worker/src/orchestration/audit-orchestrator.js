@@ -20,6 +20,8 @@ import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-vi
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
 import { buildDecisionEvidence, persistDecisionEvidence, loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
 import { buildCapabilityEvidence, persistCapabilityEvidence, loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
+import { validateConversionPaths } from "../evidence/conversion-path-validator.js";
+import { selectImportantPages } from "../evidence/important-page-selector.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
@@ -63,6 +65,79 @@ function artifactScope({ tenantId, clientId, auditId, category, artifactName }) 
   return { tenantId, clientId, auditId, category, artifactName };
 }
 
+/**
+ * PRYSM-NEXT-01 WP-E — persist conversion-path validation evidence:
+ * per-page screenshots (governed evidence artifacts) + the schema-validated
+ * canonical validation artifact.  Fail-closed on schema validation.
+ */
+async function persistPathValidationEvidence({
+  artifactStore, scope, auditId, generatedAt, validationResult, validateContract,
+}) {
+  const pages = [];
+  const pagesRaw = Array.isArray(validationResult?.pages) ? validationResult.pages : [];
+  for (let i = 0; i < pagesRaw.length; i++) {
+    const p = pagesRaw[i];
+    let screenshotRef = null;
+    const shot = p?._screenshotBuffer;
+    if (shot && Buffer.isBuffer(shot) && shot.length > 0) {
+      const record = await artifactStore.put({
+        bytes: shot,
+        contentType: "application/octet-stream",
+        scope: { ...scope, category: "evidence", artifactName: `path-validation-${i}.png` },
+      });
+      screenshotRef = { key: record.key, sha256: record.sha256, bytes: record.bytes };
+    }
+    pages.push({
+      url: p?.url || "",
+      role: p?.role ?? null,
+      status: p?.status || "NOT_ASSESSED",
+      checks: p?.checks || {},
+      limitations: p?.limitations || [],
+      screenshotRef,
+    });
+  }
+
+  const evidence = {
+    contractVersion: "1.0.0",
+    validationVersion: "1.0.0",
+    auditId,
+    generatedAt,
+    provider: validationResult?.provider || "playwright-conversion-path",
+    status: validationResult?.status || "NOT_ASSESSED",
+    pages,
+    summary: validationResult?.summary || {
+      requested: pages.length, pass: 0, partial: 0, failed: 0, notAssessed: pages.length,
+    },
+    limitations: validationResult?.limitations || [],
+  };
+
+  if (validateContract) {
+    const sv = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/conversion-path-validation.schema.json",
+      evidence,
+    );
+    if (!sv || !sv.valid) {
+      throw new Error(
+        `Conversion-path validation evidence failed schema validation: ${JSON.stringify((sv?.errors || []).slice(0, 5))}`,
+      );
+    }
+  }
+
+  const bytes = Buffer.from(JSON.stringify(evidence), "utf-8");
+  const record = await artifactStore.put({
+    bytes,
+    contentType: "application/json",
+    scope: { ...scope, category: "canonical", artifactName: "conversion-path-validation.json" },
+  });
+
+  const stored = await artifactStore.get(record.key);
+  if (!stored || stored.length !== bytes.length) {
+    throw new Error("Conversion-path validation read-back byte mismatch");
+  }
+
+  return evidence;
+}
+
 // ---------------------------------------------------------------------------
 // Source execution identity — stable deterministic key across runs
 // ---------------------------------------------------------------------------
@@ -97,6 +172,12 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
     redirectChainsPageLimit: auditRequest.crawl?.redirectChainsPageLimit ?? 20,
     nonIndexableLimit: auditRequest.crawl?.nonIndexableLimit ?? 1000,
     resourcesPageLimit: auditRequest.crawl?.resourcesPageLimit ?? 10,
+    // PRYSM-NEXT-01 WP-E-06 — path-validation options join the identity.
+    pathValidationEnabled: auditRequest.crawl?.pathValidationEnabled ?? true,
+    pathValidationPageLimit: auditRequest.crawl?.pathValidationPageLimit ?? 6,
+    pathValidationScreenshots: auditRequest.crawl?.pathValidationScreenshots ?? true,
+    pathValidationMobile: auditRequest.crawl?.pathValidationMobile ?? true,
+    pathValidationLiveBrowser: auditRequest.crawl?.pathValidationLiveBrowser ?? false,
   };
   const normalizedConfig = stableJsonStringify(config);
   const configHash = sha256(Buffer.from(normalizedConfig, "utf-8"));
@@ -117,6 +198,10 @@ export function createAuditOrchestrator({
   clock, timer, retryPolicyResolver,
   narrativeExecutor, narrativeMode, narrativeDependencies,
   n8nCallCounter, rendererImpl,
+  // PRYSM-NEXT-01 WP-E — testability seam: injected mock replaces the whole
+  // Playwright validation call.  Default production behaviour unchanged
+  // (real validator with allowLiveBrowser).
+  conversionPathValidatorImpl,
 }) {
   const c = clock || defaultClock();
   const _narrativeExecutor = narrativeExecutor || executeNarrative;
@@ -131,6 +216,7 @@ export function createAuditOrchestrator({
   // renderer).  Regression proof: default path verified by WP10-LOCK-01 and
   // the production acceptance suite.
   const _rendererImpl = rendererImpl || null;
+  const _conversionPathValidatorImpl = conversionPathValidatorImpl || null;
 
   // -------------------------------------------------------------------
   // Validation
@@ -550,13 +636,64 @@ export function createAuditOrchestrator({
       validateContract,
     });
 
+    // 5b2. PRYSM-NEXT-01 WP-E — narrow Playwright conversion-path
+    //     validation on the deterministic key-page set.  Browser failure
+    //     produces NOT_ASSESSED evidence and never blocks the pipeline.
+    let pathValidationEvidence = null;
+    const pathValidationEnabled = auditRequest.crawl?.pathValidationEnabled !== false;
+    if (pathValidationEnabled) {
+      const siteEvidence = decisionResult.evidence.site || {};
+      const keyPages = selectImportantPages({
+        targetUrl: siteEvidence.targetUrl || auditRequest.targetUrl,
+        pages: siteEvidence.pages || [],
+        links: [],
+        services: auditRequest.services || [],
+        maxSelected: auditRequest.crawl?.pathValidationPageLimit ?? 6,
+      }).selected;
+
+      const validatorFn = _conversionPathValidatorImpl || validateConversionPaths;
+      let validationResult;
+      try {
+        validationResult = await validatorFn({
+          targetUrl: siteEvidence.targetUrl || auditRequest.targetUrl,
+          keyPages,
+          // Live browser requires the EXPLICIT production opt-in flag.
+          // Tests never set it — zero live browsers in governed suites.
+          options: {
+            pageLimit: auditRequest.crawl?.pathValidationPageLimit ?? 6,
+            mobile: auditRequest.crawl?.pathValidationMobile !== false,
+            screenshots: auditRequest.crawl?.pathValidationScreenshots !== false,
+            allowLiveBrowser: auditRequest.crawl?.pathValidationLiveBrowser === true,
+          },
+        });
+      } catch (err) {
+        validationResult = {
+          provider: "playwright-conversion-path",
+          status: "NOT_ASSESSED",
+          pages: [],
+          summary: { requested: keyPages.length, pass: 0, partial: 0, failed: 0, notAssessed: keyPages.length },
+          limitations: [`Conversion-path validation failed: ${err.message}`],
+        };
+      }
+      pathValidationEvidence = await persistPathValidationEvidence({
+        artifactStore,
+        scope,
+        auditId,
+        generatedAt: c.now(),
+        validationResult,
+        validateContract,
+      });
+    }
+
     // 5c. PRYSM-NEXT-01 WP-C — capability evidence v2: additive canonical
-    //     artifact derived from the SAME decision evidence; consumed by
-    //     scoring v4 module eligibility (WP-D). Fail-closed persistence.
+    //     artifact derived from the SAME decision evidence (+ WP-E path
+    //     validation); consumed by scoring v4 module eligibility (WP-D).
+    //     Fail-closed persistence.
     const capabilityEvidence = buildCapabilityEvidence({
       decisionEvidence: decisionResult.evidence,
       auditId,
       generatedAt: c.now(),
+      pathValidationEvidence,
     });
     const capabilityEvidenceRecord = await persistCapabilityEvidence({
       store: artifactStore,
@@ -585,7 +722,7 @@ export function createAuditOrchestrator({
       artifactKey: manifestKey,
     });
 
-    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, capabilityEvidenceRecord, isResumed };
+    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, capabilityEvidenceRecord, pathValidationEvidence, isResumed };
   }
 
   // -------------------------------------------------------------------

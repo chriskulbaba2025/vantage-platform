@@ -342,3 +342,111 @@ test("load rejects schema-invalid artifacts", async () => {
     /validation failed on load/,
   );
 });
+
+// ---------------------------------------------------------------------------
+// WP-E-03 — Playwright validation upgrades conversion.path capability
+// ---------------------------------------------------------------------------
+
+function validationEvidence(overrides = {}) {
+  return {
+    provider: "playwright-conversion-path",
+    status: overrides.status ?? "PASS",
+    pages: overrides.pages ?? [
+      {
+        url: "https://example.com/contact",
+        role: "conversion",
+        status: "PASS",
+        checks: {
+          desktop: { cta: { found: true, visible: true, interactable: true, target: "https://example.com/book", targetResolves: true, obstructed: false } },
+          mobile: { cta: { found: true, visible: true, interactable: true, target: "https://example.com/book", targetResolves: true, obstructed: false } },
+        },
+        limitations: [],
+        screenshotRef: null,
+      },
+    ],
+    summary: overrides.summary ?? { requested: 1, pass: 1, partial: 0, failed: 0, notAssessed: 0 },
+    limitations: [],
+  };
+}
+
+test("WP-E-03: completed validation upgrades conversion.path to validated", () => {
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({ site: baseSite() }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+    pathValidationEvidence: validationEvidence({}),
+  });
+  const path = cap(result, "conversion.path");
+  assert.equal(path.status, "AVAILABLE");
+  assert.equal(path.kind, "validated");
+  assert.equal(path.validated, true);
+  assert.equal(path.validatedBy, "playwright-conversion-path");
+  assert.equal(path.validationSummary.pass, 1);
+  assert.equal(path.coverage.requested, 1);
+});
+
+test("WP-E-03: mixed validation results produce validated capability with honest summary", () => {
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({ site: baseSite() }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+    pathValidationEvidence: validationEvidence({
+      status: "PARTIAL",
+      pages: [
+        validationEvidence({}).pages[0],
+        { url: "https://example.com/", role: "home", status: "FAILED", checks: {}, limitations: [], screenshotRef: null },
+      ],
+      summary: { requested: 2, pass: 1, partial: 0, failed: 1, notAssessed: 0 },
+    }),
+  });
+  const path = cap(result, "conversion.path");
+  assert.equal(path.validated, true);
+  assert.equal(path.kind, "validated");
+  assert.equal(path.validationSummary.failed, 1);
+});
+
+test("WP-E-03: browser NOT_ASSESSED keeps the inferred state (no penalty)", () => {
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({ site: baseSite() }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+    pathValidationEvidence: {
+      provider: "playwright-conversion-path",
+      status: "NOT_ASSESSED",
+      pages: [],
+      summary: { requested: 2, pass: 0, partial: 0, failed: 0, notAssessed: 2 },
+      limitations: ["Browser launch failed"],
+    },
+  });
+  const path = cap(result, "conversion.path");
+  assert.equal(path.validated, false);
+  assert.equal(path.kind, "inferred");
+  assert.ok(path.limitations.some((l) => l.includes("launch failed")));
+});
+
+test("WP-E-03: obstruction counts surface in the validation summary", () => {
+  const obstructedPage = {
+    url: "https://example.com/contact",
+    role: "conversion",
+    status: "FAILED",
+    checks: {
+      desktop: { cta: { found: true, visible: true, interactable: true, target: "https://example.com/book", targetResolves: true, obstructed: true } },
+      mobile: { cta: { found: true, visible: true, interactable: true, target: "https://example.com/book", targetResolves: true, obstructed: false } },
+    },
+    limitations: [],
+    screenshotRef: null,
+  };
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({ site: baseSite() }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+    pathValidationEvidence: validationEvidence({
+      status: "FAILED",
+      pages: [obstructedPage],
+      summary: { requested: 1, pass: 0, partial: 0, failed: 1, notAssessed: 0 },
+    }),
+  });
+  const path = cap(result, "conversion.path");
+  assert.equal(path.validated, true, "collected failure evidence is still validated evidence");
+  assert.equal(path.validationSummary.obstructionCount, 1);
+});

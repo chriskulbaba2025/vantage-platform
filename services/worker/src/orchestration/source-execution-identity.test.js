@@ -67,3 +67,13 @@ test("adapter version participates in the key", () => {
   const b = buildSourceExecutionIdentity({ auditRequest: BASE_REQUEST, source: "dataforseo-onpage", adapterVersion: "1.1.0" });
   assert.notEqual(a.sourceExecutionKey, b.sourceExecutionKey);
 });
+
+test("PRYSM-NEXT-01 WP-E: path-validation options participate in the key", () => {
+  const base = buildSourceExecutionIdentity({ auditRequest: BASE_REQUEST, source: "dataforseo-onpage", adapterVersion: "1.1.0" });
+  const changed = buildSourceExecutionIdentity({
+    auditRequest: { ...BASE_REQUEST, crawl: { pathValidationEnabled: false, pathValidationPageLimit: 2 } },
+    source: "dataforseo-onpage",
+    adapterVersion: "1.1.0",
+  });
+  assert.notEqual(base.sourceExecutionKey, changed.sourceExecutionKey);
+});

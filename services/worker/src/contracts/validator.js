@@ -44,6 +44,8 @@ const REQUIRED_SCHEMAS = [
   "lifecycle-state.schema.json",
   // PRYSM-NEXT-01 WP-C — capability evidence v2 (additive canonical artifact)
   "capability-evidence.schema.json",
+  // PRYSM-NEXT-01 WP-E — conversion-path validation evidence
+  "conversion-path-validation.schema.json",
 ];
 
 // ---------------------------------------------------------------------------

@@ -260,11 +260,27 @@ test("WP-D-06: readinessMap stages derive from page purpose — never index % 3"
   );
 });
 
-test("WP-D-06: service with no matching page → Not Assessed, never fabricated", () => {
-  const s = site({ services: ["Mystery Service"], pages: [{ title: "Unrelated", headings: { h1: ["Unrelated"], h2: [], h3: [], h4: [] }, responseHeaders: {} }] });
+test("WP-D-06: service with no matching page → deterministic site-level fallback (v1 enum), never fabricated", () => {
+  // Frozen v1 view-model enum (TOFU/MOFU/BOFU) cannot carry "Not Assessed";
+  // the fallback ladder is deterministic: no forms/pricing/proof → TOFU.
+  const s = site({
+    services: ["Mystery Service"],
+    forms: [],
+    trust: { ...site().trust, pricing: false, testimonials: false, caseStudies: false },
+    pages: [{ title: "Unrelated", headings: { h1: ["Unrelated"], h2: [], h3: [], h4: [] }, responseHeaders: {} }],
+  });
   const model = scoreAudit(INPUT, evidenceOf({ site: s }));
   const row = model.readinessMap.find((r) => r.topic === "Mystery Service");
-  assert.equal(row.stage, "Not Assessed");
+  assert.equal(row.stage, "TOFU");
+  // With site-level conversion affordances the fallback is BOFU.
+  const s2 = site({
+    services: ["Mystery Service"],
+    forms: [{ action: "/submit" }],
+    pages: [{ title: "Unrelated", headings: { h1: ["Unrelated"], h2: [], h3: [], h4: [] }, responseHeaders: {} }],
+  });
+  const model2 = scoreAudit(INPUT, evidenceOf({ site: s2 }));
+  const row2 = model2.readinessMap.find((r) => r.topic === "Mystery Service");
+  assert.equal(row2.stage, "BOFU");
 });
 
 // ---------------------------------------------------------------------------
@@ -351,4 +367,91 @@ test("WP-D-10: identical evidence + context produces identical models (3×)", ()
   const c = scoreAudit(INPUT, ev);
   assert.deepEqual(JSON.parse(JSON.stringify(b)), JSON.parse(JSON.stringify(a)));
   assert.deepEqual(JSON.parse(JSON.stringify(c)), JSON.parse(JSON.stringify(a)));
+});
+
+// ---------------------------------------------------------------------------
+// WP-E-05 — validated conversion-path evidence in scoring v4.1
+// ---------------------------------------------------------------------------
+
+function validationEvidence(overrides = {}) {
+  return {
+    provider: "playwright-conversion-path",
+    status: overrides.status ?? "PASS",
+    pages: overrides.pages ?? [
+      {
+        url: "https://x.com/contact", role: "conversion", status: "PASS",
+        checks: {
+          desktop: { cta: { found: true, visible: true, interactable: true, target: "https://x.com/book", targetResolves: true, obstructed: false } },
+          mobile: { cta: { found: true, visible: true, interactable: true, target: "https://x.com/book", targetResolves: true, obstructed: false } },
+        },
+        limitations: [], screenshotRef: null,
+      },
+    ],
+    summary: overrides.summary ?? { requested: 1, pass: 1, partial: 0, failed: 0, notAssessed: 0 },
+    limitations: [],
+  };
+}
+
+test("WP-E-05: validated paths raise the conversion score; NOT_ASSESSED validation equals inferred baseline", () => {
+  const ev = evidenceOf();
+  const inferred = scoreAudit(INPUT, ev);
+
+  const validatedCaps = buildCapabilityEvidence({
+    decisionEvidence: ev,
+    auditId: "wpe-caps",
+    generatedAt: FIXED_TS,
+    pathValidationEvidence: validationEvidence({}),
+  });
+  const validated = scoreAudit(INPUT, ev, { capabilityEvidence: validatedCaps });
+
+  assert.ok(
+    validated.scores.conversionPathways > inferred.scores.conversionPathways,
+    `validated ${validated.scores.conversionPathways} must exceed inferred ${inferred.scores.conversionPathways}`,
+  );
+
+  const notAssessedCaps = buildCapabilityEvidence({
+    decisionEvidence: ev,
+    auditId: "wpe-caps-na",
+    generatedAt: FIXED_TS,
+    pathValidationEvidence: {
+      provider: "playwright-conversion-path",
+      status: "NOT_ASSESSED",
+      pages: [],
+      summary: { requested: 2, pass: 0, partial: 0, failed: 0, notAssessed: 2 },
+      limitations: ["browser unavailable"],
+    },
+  });
+  const notAssessed = scoreAudit(INPUT, ev, { capabilityEvidence: notAssessedCaps });
+  assert.equal(
+    notAssessed.scores.conversionPathways,
+    inferred.scores.conversionPathways,
+    "validation NOT_ASSESSED must not change the inferred score",
+  );
+});
+
+test("WP-E-05: obstructed validated path emits VAN-PATH-001 with evidence", () => {
+  const ev = evidenceOf();
+  const obstructedCaps = buildCapabilityEvidence({
+    decisionEvidence: ev,
+    auditId: "wpe-obstructed",
+    generatedAt: FIXED_TS,
+    pathValidationEvidence: validationEvidence({
+      status: "FAILED",
+      pages: [{
+        url: "https://x.com/contact", role: "conversion", status: "FAILED",
+        checks: {
+          desktop: { cta: { found: true, visible: true, interactable: true, target: "https://x.com/book", targetResolves: true, obstructed: true } },
+          mobile: { cta: { found: true, visible: true, interactable: true, target: "https://x.com/book", targetResolves: true, obstructed: false } },
+        },
+        limitations: [], screenshotRef: null,
+      }],
+      summary: { requested: 1, pass: 0, partial: 0, failed: 1, notAssessed: 0 },
+    }),
+  });
+  const model = scoreAudit(INPUT, ev, { capabilityEvidence: obstructedCaps });
+  const finding = model.findings.find((f) => f.ruleId === "VAN-PATH-001");
+  assert.ok(finding, "obstruction finding must be emitted");
+  assert.equal(finding.evidence[0].provider, "playwright-conversion-path");
+  assert.equal(finding.evidence[0].observedValue, 1);
+  assert.equal(finding.scoreBearing, true);
 });

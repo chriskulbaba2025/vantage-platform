@@ -124,7 +124,7 @@ function coverageFromAcq(entry) {
  * Per-capability derivation rules. Each rule returns a capability record.
  * Deterministic: only the decision evidence is consumed.
  */
-function deriveCapabilities(evidence, auditId) {
+function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
   const site = evidence?.site;
   const performance = evidence?.performance;
   const contentState = contentEvidenceState(site);
@@ -213,12 +213,59 @@ function deriveCapabilities(evidence, auditId) {
       status = CAPABILITY_STATUS.UNAVAILABLE;
       limitations.push("Conversion path evidence was not collected");
     }
+
+    // PRYSM-NEXT-01 WP-E — Playwright validation upgrades the capability
+    // from inferred to validated.  Browser-level NOT_ASSESSED keeps the
+    // inferred state (validation unavailability is never a penalty).
+    let kind = "inferred";
+    let validated = false;
+    let validatedBy = null;
+    let validationSummary = null;
+    let coverage = { requested: null, completed: null, failed: null };
+    if (pathValidationEvidence && typeof pathValidationEvidence === "object") {
+      const pages = isArray(pathValidationEvidence.pages)
+        ? pathValidationEvidence.pages
+        : [];
+      const assessed = pages.filter(
+        (p) => p?.status === "PASS" || p?.status === "PARTIAL" || p?.status === "FAILED",
+      );
+      if (assessed.length > 0) {
+        kind = "validated";
+        validated = true;
+        validatedBy = pathValidationEvidence.provider || "playwright-conversion-path";
+        validationSummary = {
+          requested: pathValidationEvidence.summary?.requested ?? pages.length,
+          pass: pathValidationEvidence.summary?.pass ?? 0,
+          partial: pathValidationEvidence.summary?.partial ?? 0,
+          failed: pathValidationEvidence.summary?.failed ?? 0,
+          notAssessed: pathValidationEvidence.summary?.notAssessed ?? 0,
+          obstructionCount: pages.filter((p) =>
+            p?.checks?.desktop?.cta?.obstructed === true ||
+            p?.checks?.mobile?.cta?.obstructed === true,
+          ).length,
+        };
+        if (validationSummary.pass > 0 || validationSummary.partial > 0) {
+          status = CAPABILITY_STATUS.AVAILABLE;
+        } else {
+          // All assessed pages FAILED — collected evidence of broken paths.
+          status = CAPABILITY_STATUS.AVAILABLE;
+          limitations.push("Validated conversion paths failed their checks");
+        }
+        coverage = {
+          requested: validationSummary.requested,
+          completed: validationSummary.pass + validationSummary.partial + validationSummary.failed,
+          failed: validationSummary.notAssessed,
+        };
+      } else if (isArray(pathValidationEvidence.limitations) && pathValidationEvidence.limitations.length) {
+        limitations.push(...pathValidationEvidence.limitations);
+      }
+    }
     caps["conversion.path"] = capability({
       capability: "conversion.path", status,
-      coverage: { requested: null, completed: null, failed: null },
+      coverage,
       provenance: siteProv, limitations,
-      requiredFieldsPresent: contentState === "available",
-      extra: { kind: "inferred", validated: false, validatedBy: null },
+      requiredFieldsPresent: contentState === "available" || validated,
+      extra: { kind, validated, validatedBy, validationSummary },
     });
   }
 
@@ -423,8 +470,8 @@ function deriveCapabilities(evidence, auditId) {
  * @param {string} opts.generatedAt — ISO timestamp (lifecycle clock)
  * @returns {object} capability evidence artifact
  */
-export function buildCapabilityEvidence({ decisionEvidence, auditId, generatedAt }) {
-  const capabilities = deriveCapabilities(decisionEvidence, auditId);
+export function buildCapabilityEvidence({ decisionEvidence, auditId, generatedAt, pathValidationEvidence = null }) {
+  const capabilities = deriveCapabilities(decisionEvidence, auditId, pathValidationEvidence);
 
   const summary = {
     total: CAPABILITIES.length,
