@@ -78,6 +78,9 @@ function hydrateSite(sourceResult) {
   return stripUndefined({
     sourceStatus: status,
     collectedAt: sourceResult.completedAt || undefined,
+    // PRYSM-NEXT-01 WP-C — adapter version survives hydration for
+    // capability provenance.
+    adapterVersion: sourceResult.adapterVersion || undefined,
     // DE-04 critical structural fields: passed through WITHOUT defaults.
     // When the adapter did not supply them, the hydrated evidence omits
     // them and decision-evidence.schema.json rejects the AVAILABLE/PARTIAL
@@ -108,8 +111,11 @@ function hydrateSite(sourceResult) {
     internalLinkCount: ev.internalLinkCount ?? 0,
     brokenInternalLinks: ev.brokenInternalLinks || [],
     securityHeaders: ev.securityHeaders || {},
-    _contentEvidenceAvailable: ev._contentEvidenceAvailable ?? false,
-    _responseHeadersAvailable: ev._responseHeadersAvailable ?? false,
+    // PRYSM-NEXT-01 WP-C — unknown is NOT coerced to false. Absent stays
+    // absent (undefined → stripped); capability derivation treats
+    // undefined as "unknown", never "confirmed absent".
+    _contentEvidenceAvailable: ev._contentEvidenceAvailable,
+    _responseHeadersAvailable: ev._responseHeadersAvailable,
     limitations: sourceResult.limitations || [],
     coverage: sourceResult.coverage || undefined,
     // PRYSM-NEXT-01 WP-B — deep acquisition fields pass through the

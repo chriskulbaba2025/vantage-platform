@@ -17,7 +17,7 @@
 | DEF-09 | Business context unused by scoring: scorers receive only (site, performance); intake business context (services, goal, audiences, locale) not passed | score-components.js scorers; vantage-score.js:456 | WP-D | OPEN |
 | DEF-10 | Evidence-confidence silent imputation: unknown factors default to 50 (`factors[factor] ?? 50`) with no provenance of the default | score-components.js:550-555 | WP-C/WP-D | OPEN |
 | DEF-11 | Stale acceptance harness: acceptance-task9.js review checklist lacked `internal_link_recommendations` (added to review-gate by task10) — proof-only defect | scripts/acceptance-task9.js:30 vs review-gate.js:48 | WP-A | CLOSED (proof-only fix cc6bbe1-run; task9 12/12) |
-| DEF-12 | `contentEvidenceAvailable` default-true: `site._contentEvidenceAvailable !== false` treats missing marker as available | score-components.js:646 | WP-C | OPEN |
+| DEF-12 | `contentEvidenceAvailable` default-true: `site._contentEvidenceAvailable !== false` treats missing marker as available | score-components.js:646 (consumption); decision-evidence.js hydrateSite (hydration) | WP-C/WP-D | WP-C done: hydration now unknown-preserving (undefined stays undefined). WP-D: strict consumption via capability statuses |
 
 ## CRIT audit items verified as ALREADY SATISFIED at b2e713b
 

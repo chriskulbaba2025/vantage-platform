@@ -42,6 +42,8 @@ const REQUIRED_SCHEMAS = [
   "report-manifest.schema.json",
   "lifecycle-event.schema.json",
   "lifecycle-state.schema.json",
+  // PRYSM-NEXT-01 WP-C — capability evidence v2 (additive canonical artifact)
+  "capability-evidence.schema.json",
 ];
 
 // ---------------------------------------------------------------------------

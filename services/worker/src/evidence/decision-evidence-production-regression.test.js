@@ -49,7 +49,8 @@ const _ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(_ajv);
 [
   "artifact-record.schema.json", "audit-request.schema.json",
-  "canonical-evidence.schema.json", "decision-evidence.schema.json",
+  "canonical-evidence.schema.json", "capability-evidence.schema.json",
+  "decision-evidence.schema.json",
   "finding.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json",
   "narrative-response.schema.json", "report-content.schema.json",
   "report-manifest.schema.json", "report-view-model.schema.json",

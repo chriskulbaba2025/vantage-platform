@@ -182,6 +182,50 @@ test("PRYSM-CLOSE-02f: AVAILABLE site with minimal evidence hydrates without fab
   assert.equal(evidence.site?.pages, undefined, "pages NOT fabricated");
   assert.equal(evidence.site?.trust, undefined, "trust NOT fabricated");
   assert.equal(evidence.site?.schemaTypes, undefined, "schemaTypes NOT fabricated");
+  // WP-C-03: unknown is NOT coerced to false at hydration.
+  assert.equal(
+    evidence.site?._contentEvidenceAvailable,
+    undefined,
+    "_contentEvidenceAvailable stays undefined when absent (unknown ≠ false)",
+  );
+  assert.equal(
+    evidence.site?._responseHeadersAvailable,
+    undefined,
+    "_responseHeadersAvailable stays undefined when absent",
+  );
+  assert.equal(
+    evidence.site?.adapterVersion,
+    "1.0.0",
+    "adapterVersion from the SourceResult survives hydration (provenance)",
+  );
+});
+
+// WP-C-03: adapterVersion survives hydration for capability provenance,
+// and explicit false markers are preserved exactly.
+test("WP-C: explicit content-evidence markers and adapterVersion pass through hydrateSite", () => {
+  const validateContract = makeValidator();
+  const { evidence } = buildDecisionEvidence({
+    allSourceResults: [
+      {
+        source: "dataforseo-onpage",
+        sourceResult: validSr("dataforseo-onpage", {
+          adapterVersion: "1.1.0",
+          evidence: {
+            sourceStatus: "AVAILABLE",
+            domain: "example.com",
+            targetUrl: "https://example.com/",
+            pages: [],
+            _contentEvidenceAvailable: false,
+            _responseHeadersAvailable: false,
+          },
+        }),
+      },
+    ],
+    validateContract,
+  });
+  assert.equal(evidence.site._contentEvidenceAvailable, false, "explicit false preserved");
+  assert.equal(evidence.site._responseHeadersAvailable, false, "explicit false preserved");
+  assert.equal(evidence.site.adapterVersion, "1.1.0", "adapterVersion survives hydration");
 });
 
 // PRYSM-NEXT-01 WP-B — deep acquisition fields survive the hydration

@@ -19,6 +19,7 @@ import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service
 import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
 import { buildDecisionEvidence, persistDecisionEvidence, loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
+import { buildCapabilityEvidence, persistCapabilityEvidence, loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
@@ -549,6 +550,21 @@ export function createAuditOrchestrator({
       validateContract,
     });
 
+    // 5c. PRYSM-NEXT-01 WP-C — capability evidence v2: additive canonical
+    //     artifact derived from the SAME decision evidence; consumed by
+    //     scoring v4 module eligibility (WP-D). Fail-closed persistence.
+    const capabilityEvidence = buildCapabilityEvidence({
+      decisionEvidence: decisionResult.evidence,
+      auditId,
+      generatedAt: c.now(),
+    });
+    const capabilityEvidenceRecord = await persistCapabilityEvidence({
+      store: artifactStore,
+      scope,
+      evidence: capabilityEvidence,
+      validateContract,
+    });
+
     // 6. Persist canonical record manifest
     const manifestRecord = await persistCanonicalRecordManifest({
       store: artifactStore, scope, createdAt: canonicalRecord.writtenAt || c.now(), canonicalRecord,
@@ -569,7 +585,7 @@ export function createAuditOrchestrator({
       artifactKey: manifestKey,
     });
 
-    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, isResumed };
+    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, capabilityEvidenceRecord, isResumed };
   }
 
   // -------------------------------------------------------------------

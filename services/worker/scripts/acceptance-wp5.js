@@ -47,10 +47,10 @@ function mockClock(iso = "2026-01-01T00:00:00.000Z") { let t = new Date(iso).get
 const schemasDir = resolve(ROOT, "src", "contracts");
 const _ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(_ajv);
-["audit-request.schema.json", "source-result.schema.json", "canonical-evidence.schema.json", "decision-evidence.schema.json", "finding.schema.json", "score.schema.json", "report-content.schema.json", "narrative-response.schema.json", "report-view-model.schema.json", "report-manifest.schema.json", "artifact-record.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json"].forEach(f => {
+["audit-request.schema.json", "source-result.schema.json", "canonical-evidence.schema.json", "capability-evidence.schema.json", "decision-evidence.schema.json", "finding.schema.json", "score.schema.json", "report-content.schema.json", "narrative-response.schema.json", "report-view-model.schema.json", "report-manifest.schema.json", "artifact-record.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json"].forEach(f => {
   _ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
 });
-function vc(sid, obj) { const v = _ajv.getSchema(sid); return { valid: v(obj), errors: v.errors || [] }; }
+function vc(sid, obj) { const v = _ajv.getSchema(sid); if (!v) return { valid: false, errors: [{ message: `Schema not loaded: ${sid}` }] }; return { valid: v(obj), errors: v.errors || [] }; }
 
 function makeAvailResult(source) {
   // Realistic AVAILABLE result — the canonical site-evidence fixture the

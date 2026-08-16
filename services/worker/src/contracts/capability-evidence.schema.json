@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/capability-evidence.schema.json",
+  "title": "Capability Evidence",
+  "description": "PRYSM-NEXT-01 WP-C: versioned capability-level evidence contract. Additive canonical artifact consumed by scoring v4 module eligibility and report v2 evidence layers. Unknown data is never converted to false/zero/empty — statuses are explicit.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "capabilityEvidenceVersion",
+    "auditId",
+    "generatedAt",
+    "capabilities",
+    "summary"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Contract version — must match the schema version."
+    },
+    "capabilityEvidenceVersion": {
+      "type": "string",
+      "const": "2.0.0",
+      "description": "Second-generation capability evidence model (unknown-preserving)."
+    },
+    "auditId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning audit identifier."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 generation timestamp (deterministic via lifecycle clock)."
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Capability key → capability record.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "capability",
+          "status",
+          "coverage",
+          "provenance",
+          "limitations",
+          "requiredFieldsPresent"
+        ],
+        "properties": {
+          "capability": { "type": "string", "minLength": 1 },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE", "PARTIAL", "UNAVAILABLE", "FAILED",
+              "NOT_CONNECTED", "NOT_APPLICABLE"
+            ]
+          },
+          "coverage": {
+            "type": "object",
+            "required": ["requested", "completed", "failed"],
+            "properties": {
+              "requested": { "type": ["integer", "null"], "minimum": 0 },
+              "completed": { "type": ["integer", "null"], "minimum": 0 },
+              "failed": { "type": ["integer", "null"], "minimum": 0 }
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "source": { "type": ["string", "null"] },
+              "adapterVersion": { "type": ["string", "null"] },
+              "artifactRef": { "type": ["string", "null"] }
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "requiredFieldsPresent": {
+            "type": "boolean",
+            "description": "True when the fields this capability's module requires were actually collected (not merely defaulted)."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Optional qualifier, e.g. conversion.path kind=inferred (WP-E adds validated)."
+          },
+          "validated": {
+            "type": "boolean",
+            "description": "Optional: true when the capability was browser-validated (WP-E)."
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Deterministic status counts over all capabilities.",
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "available": { "type": "integer", "minimum": 0 },
+        "partial": { "type": "integer", "minimum": 0 },
+        "unavailable": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "notConnected": { "type": "integer", "minimum": 0 },
+        "notApplicable": { "type": "integer", "minimum": 0 },
+        "assessed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
