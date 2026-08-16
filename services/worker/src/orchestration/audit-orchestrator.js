@@ -654,11 +654,16 @@ export function createAuditOrchestrator({
       validateContract,
     });
 
-    // Build audit input from decision evidence
+    // Build audit input from decision evidence + business context
+    // (PRYSM-NEXT-01 WP-D-05 — scoring v4 consumes intake context).
     const auditInput = {
       targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
       businessName: auditRequest.businessName || "",
       competitors: auditRequest.competitors || [],
+      services: auditRequest.services || [],
+      primaryGoal: auditRequest.primaryGoal || "",
+      language: auditRequest.language || "",
+      market: auditRequest.market || "",
     };
 
     // Run governed scoring — this persists findings.json and scores.json.

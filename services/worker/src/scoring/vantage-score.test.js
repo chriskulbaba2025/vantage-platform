@@ -4,6 +4,7 @@ import { scoreAudit } from "./vantage-score.js";
 import { scorePerformance } from "./score-components.js";
 import { renderReport } from "../report/render-report.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
+import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 
 // Fixed deterministic timestamp for all test fixtures (WP7 §DET-03)
 const FIXED_TS = "2026-01-15T12:00:00.000Z";
@@ -55,6 +56,13 @@ function evidence(overrides = {}) {
         contact: true,
       },
       limitations: [],
+      // PRYSM-NEXT-01 WP-D — this fixture models LEGACY CRAWLER evidence:
+      // body content WAS extracted (page-extractor always parses full HTML)
+      // and response headers WERE collected.  v4 capability derivation
+      // requires these explicit markers to distinguish collected from
+      // unknown (unknown ≠ absent).
+      _contentEvidenceAvailable: true,
+      _responseHeadersAvailable: true,
       pages: [
         {
           title: "Example",
@@ -591,13 +599,14 @@ test("V3 module weights within each dimension sum to the dimension total", () =>
   }
 });
 
-test("V3 scoring version is exposed", () => {
-  assert.equal(SCORING_VERSION, "3.0.0");
+test("V4 scoring version is exposed (PRYSM-NEXT-01 WP-D-08)", () => {
+  assert.equal(SCORING_VERSION, "4.0.0");
   const model = scoreAudit(
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
     evidence(),
   );
-  assert.equal(model.scoringVersion, "3.0.0");
+  assert.equal(model.scoringVersion, "4.0.0");
+  assert.equal(model.capabilityEvidence.capabilityEvidenceVersion, "2.0.0");
 });
 
 // ---------------------------------------------------------------------------
@@ -1276,22 +1285,34 @@ test("evidence confidence is lower when performance FAILED", () => {
 
 test("checkModuleEligibility: crawl-dependent modules require AVAILABLE or PARTIAL crawl", () => {
   const mod = MODULES.trust_signals;
+  // WP-D v4: capability-level gate — derive the capability map from the
+  // same evidence through the REAL derivation path.
+  const caps = buildCapabilityEvidence({
+    decisionEvidence: evidence(),
+    auditId: "check-elig-1",
+    generatedAt: FIXED_TS,
+  }).capabilities;
 
-  const eligible = checkModuleEligibility(mod, evidence());
+  const eligible = checkModuleEligibility(mod, evidence(), caps);
   assert.equal(eligible.eligible, true);
 
-  const failed = checkModuleEligibility(mod, evidence({ site: failedSite() }));
+  const failed = checkModuleEligibility(mod, evidence({ site: failedSite() }), caps);
   assert.equal(failed.eligible, false);
   assert.ok(failed.reason.includes("FAILED"));
 });
 
 test("checkModuleEligibility: performance module requires AVAILABLE or PARTIAL performance", () => {
   const mod = MODULES.performance;
+  const caps = buildCapabilityEvidence({
+    decisionEvidence: evidence(),
+    auditId: "check-elig-2",
+    generatedAt: FIXED_TS,
+  }).capabilities;
 
-  const eligible = checkModuleEligibility(mod, evidence());
+  const eligible = checkModuleEligibility(mod, evidence(), caps);
   assert.equal(eligible.eligible, true);
 
-  const failed = checkModuleEligibility(mod, evidence({ performance: unavailablePerf() }));
+  const failed = checkModuleEligibility(mod, evidence({ performance: unavailablePerf() }), caps);
   assert.equal(failed.eligible, false);
   assert.ok(failed.reason.includes("FAILED"));
 });

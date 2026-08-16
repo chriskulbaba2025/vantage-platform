@@ -17,6 +17,7 @@
 import { createHash } from "node:crypto";
 import { scoreAudit, SCORING_VERSION } from "./vantage-score.js";
 import { buildArtifactKey } from "../storage/artifact-key.js";
+import { loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -229,6 +230,10 @@ function buildScoreSet(model, findingsRecord, scoresRecord) {
     showNumericScore: model.showNumericScore,
     evidenceConfidenceScore: model.evidenceConfidenceScore,
     evidenceConfidenceFactors: model.evidenceConfidenceFactors,
+    evidenceConfidenceFactorAvailability: model.evidenceConfidenceFactorAvailability,
+    capabilityEvidence: model.capabilityEvidence,
+    suppressedFindingReasons: model.suppressedFindingReasons || [],
+    aiReadinessBasis: model.aiReadinessBasis || null,
     scores: model.scores,
     bands: model.bands,
     dimensionEligibility: model.dimensionEligibility,
@@ -296,9 +301,20 @@ export async function scoreFromCanonicalEvidence({
   // ── 1. Derive deterministic scoring timestamp ────────────────────────
   const effectiveScoredAt = scoredAt || deriveScoredAt(canonicalEvidence);
 
+  // ── 1b. PRYSM-NEXT-01 WP-D — governed capability evidence is a scoring
+  // input.  Load + verify + schema-validate the persisted artifact; a
+  // missing or corrupt artifact fails closed (scoring v4 never runs on
+  // unknown capability state).
+  const capabilityEvidence = await loadAndValidateCapabilityEvidence({
+    store,
+    scope,
+    validateContract,
+  });
+
   // ── 2. Run deterministic scoring ─────────────────────────────────────
   const model = scoreAudit(auditInput, canonicalEvidence, {
     scoredAt: effectiveScoredAt,
+    capabilityEvidence,
   });
 
   // ── 3. Persist findings artifact ─────────────────────────────────────
