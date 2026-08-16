@@ -51,6 +51,22 @@ export function validateAuditForm(input: Partial<AuditFormInput>): ValidationRes
     }
   }
 
+  // PRYSM-NEXT-01 WP-H — business-context validation.
+  const services = (input.services || []).map((s) => s.trim()).filter(Boolean);
+  if (services.length > 20) {
+    errors.services = "Maximum 20 services or offers allowed.";
+  }
+  const longService = services.find((s) => s.length > 128);
+  if (longService) {
+    errors.services = `Each service must be 128 characters or fewer (got "${longService.slice(0, 40)}…").`;
+  }
+  if (input.primaryGoal && input.primaryGoal.length > 256) {
+    errors.primaryGoal = "The conversion goal must be 256 characters or fewer.";
+  }
+  if (input.market && input.market.length > 128) {
+    errors.market = "Market or location must be 128 characters or fewer.";
+  }
+
   // GA4: digits only
   if (input.ga4PropertyId && !/^\d+$/.test(input.ga4PropertyId)) {
     errors.ga4PropertyId = "GA4 Property ID must contain only digits.";

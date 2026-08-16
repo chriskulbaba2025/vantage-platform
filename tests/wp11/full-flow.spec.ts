@@ -126,7 +126,10 @@ test.describe("WP11 Full Browser Flow", () => {
     await expect(page.locator("#audienceScope")).toBeVisible();
     await expect(page.locator("input[placeholder*='competitor1']")).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
-    await expect(page.locator("#businessName")).toHaveCount(0);
+    // WP-H: business-context intake fields present (businessName editable).
+    await expect(page.locator("#businessName")).toHaveCount(1);
+    await expect(page.locator("#services")).toHaveCount(1);
+    await expect(page.locator("#primaryGoal")).toHaveCount(1);
     await expect(page.locator("#ga4")).toHaveCount(0);
     await expect(page.locator("#gsc")).toHaveCount(0);
     console.log("  [x] WEB-01: Current form elements present; removed fields absent (no selector drift)");

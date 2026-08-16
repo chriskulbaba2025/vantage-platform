@@ -127,6 +127,9 @@
                 clientId: cs?.clientId || '',
                 businessName: req?.businessName || '',
                 targetUrl: req?.targetUrl || '',
+                services: req?.services || [],
+                primaryGoal: req?.primaryGoal || '',
+                market: req?.market || '',
                 slug: slugify(req?.businessName || ''),
               };
             },
@@ -170,6 +173,7 @@
             auditService,
             lifecycleRepo: lcRepo,
             identityRepo,
+            governedArtifacts: artifacts,
           });
 
           const server = createServer(handler);

@@ -32,6 +32,9 @@ export function createRequestHandler({
   auditService,
   lifecycleRepo,
   identityRepo,
+  // PRYSM-NEXT-01 WP-H — governed artifact store for report-design v2
+  // page serving.  Optional: absent ⇒ v2 pages are not served (v1 only).
+  governedArtifacts,
 }) {
   const _runAudit = runAuditFn || runAudit;
   const _submitReview = submitReviewFn || submitReview;
@@ -530,6 +533,29 @@ export function createRequestHandler({
             const slug = url.searchParams.get("slug") || "";
             if (!slug) return send(res, 422, { error: "Slug query parameter is required" });
             const clientId = url.searchParams.get("clientId") || "";
+
+            // PRYSM-NEXT-01 WP-H — report-design v2 serving.  Authorization
+            // (tenant + role gate) has ALREADY passed above; the v2 page is
+            // retrieved from the governed artifact store only for audits
+            // whose manifest declares design 2.0.0.
+            if (governedArtifacts && filename === "index.html") {
+              const v2Key = `tenants/${reportAuth.tenantId}/clients/${clientId}/audits/${auditId}/report-v2/pages/index.html`;
+              try {
+                const v2Bytes = await governedArtifacts.get(v2Key);
+                if (v2Bytes && v2Bytes.length > 0) {
+                  res.writeHead(200, {
+                    "content-type": "text/html; charset=utf-8",
+                    "content-length": v2Bytes.length,
+                    "cache-control": "no-store",
+                  });
+                  return res.end(v2Bytes);
+                }
+              } catch (v2Err) {
+                // Fall through to the v1 path when no v2 artifact exists.
+                void v2Err;
+              }
+            }
+
             const result = await auditService.getReportPage(reportAuth.tenantId, clientId, auditId, filename, slug);
             const ct = result.contentType || "text/html; charset=utf-8";
             const payload = result.bytes;
@@ -902,6 +928,9 @@ const requestListener = createRequestHandler({
   auditService,
   lifecycleRepo,
   identityRepo,
+  // PRYSM-NEXT-01 WP-H — report-design v2 pages live in the governed
+  // artifact store (same store the orchestrator persists through).
+  governedArtifacts: artifactStore,
 });
 
 const server = createServer(requestListener);
