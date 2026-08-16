@@ -129,9 +129,13 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   assert.match(html, /Findings/);
   assert.match(html, /Source statuses/);
   assert.match(html, /Evidence capabilities/);
+  // CRIT 8a — conversion-path architecture + competitive context are part
+  // of the governed section set (rendered from the model, never invented).
+  assert.match(html, /Conversion path architecture/);
+  assert.match(html, /Competitive context/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
-  assert.ok(html.includes("Scoring version 4.1.0"));
+  assert.ok(html.includes("Scoring version 4.1.1"));
 });
 
 test("WP-G-03: blocker rows carry priority/problem/consequence/evidence/action/impact/effort/confidence", () => {

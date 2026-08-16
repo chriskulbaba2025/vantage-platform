@@ -116,6 +116,10 @@ function hydrateSite(sourceResult) {
     // undefined as "unknown", never "confirmed absent".
     _contentEvidenceAvailable: ev._contentEvidenceAvailable,
     _responseHeadersAvailable: ev._responseHeadersAvailable,
+    // CRIT defect 2a — interactive-extraction marker passes through the
+    // hydration boundary (undefined ⇒ legacy semantics in the capability
+    // layer: the extractor that produced the arrays ran).
+    _interactiveEvidenceAvailable: ev._interactiveEvidenceAvailable,
     limitations: sourceResult.limitations || [],
     coverage: sourceResult.coverage || undefined,
     // PRYSM-NEXT-01 WP-B — deep acquisition fields pass through the

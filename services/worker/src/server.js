@@ -62,6 +62,11 @@ export function createRequestHandler({
   // the orchestrator's paid-task idempotency.
   const auditCreateLimiter = createSlidingWindowLimiter({ windowMs: 60 * 60 * 1000, max: 30 });
 
+  // PRYSM-NEXT-01 WP-L security-hardening gate — rate limits on the
+  // remaining client-facing surfaces (report pages, admin boundary).
+  const reportPageLimiter = createSlidingWindowLimiter({ windowMs: 10 * 60 * 1000, max: 60 });
+  const adminRouteLimiter = createSlidingWindowLimiter({ windowMs: 10 * 60 * 1000, max: 30 });
+
   // Non-disclosing error responder: governed 4xx bodies pass through;
   // everything else is logged server-side and returned as a generic 500.
   function sendRouteError(res, err, { errors = null, fallback = "Internal error" } = {}) {
@@ -529,6 +534,11 @@ export function createRequestHandler({
             return send(res, reportAuth.status, { error: reportAuth.reason, code: reportAuth.code });
           }
 
+          // Rate limit report-page serving per tenant (sliding window).
+          if (!reportPageLimiter.hit(`report:${access.tenantId}`)) {
+            return send(res, 429, { error: "Too many report requests — try again later", code: "RATE_LIMITED" });
+          }
+
           try {
             const slug = url.searchParams.get("slug") || "";
             if (!slug) return send(res, 422, { error: "Slug query parameter is required" });
@@ -581,6 +591,12 @@ export function createRequestHandler({
         const isAdmin = auth && auth.authenticated && (auth.internal === true || auth.isPlatformAdmin === true);
         if (!isAdmin) return send(res, auth ? 403 : 401, { error: auth ? "Platform admin required" : "Unauthorized", code: auth ? "FORBIDDEN" : "UNAUTHENTICATED" });
         if (!identityRepo) return send(res, 501, { error: "Identity repository not configured" });
+
+        // Rate limit the platform-admin boundary per principal.
+        const adminRlKey = auth.internal === true ? "admin:internal" : `admin:${auth.principalSub || "unknown"}`;
+        if (!adminRouteLimiter.hit(adminRlKey)) {
+          return send(res, 429, { error: "Too many admin requests — try again later", code: "RATE_LIMITED" });
+        }
 
         // GET /api/v1/admin/authorize — side-effect-free authorization
         // probe.  Web routes call this BEFORE any external side effect

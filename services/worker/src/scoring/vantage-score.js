@@ -708,7 +708,7 @@ export function scoreAudit(input, evidence, opts = {}) {
     findings,
     suppressedFindingReasons,
     conversionPaths: buildConversionPaths(site),
-    readinessMap: topicRows(site, input),
+    readinessMap: topicRows(site, input, capabilities),
     contentIdeas: contentIdeas(site, input),
     competitors: competitorComparison(evidence.competitors || [], evidence.competitorOpportunities),
     competitorOpportunities: evidence.competitorOpportunities,

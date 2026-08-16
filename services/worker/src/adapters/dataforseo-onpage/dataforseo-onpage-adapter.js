@@ -37,7 +37,7 @@ import { selectImportantPages, normalizeUrl } from "../../evidence/important-pag
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.1.0";
+const ADAPTER_VERSION = "1.2.0";
 
 // ---------------------------------------------------------------------------
 // Default configuration (PRD v3.0 §8.4 + PRYSM-NEXT-01 WP-B)
@@ -474,6 +474,7 @@ function normalizeContentParsing(raw) {
         mainContentChars: null,
         hasMainContent: null,
         sentimentScore: null,
+        text: "",
       });
       continue;
     }
@@ -491,6 +492,10 @@ function normalizeContentParsing(raw) {
       mainContentChars: main.length || null,
       hasMainContent: main.length > 0,
       sentimentScore,
+      // CRIT defect 2a — the parsed text is evidence, not waste: retained
+      // (bounded) so trust/offer signal detection can run on key pages
+      // where the pages endpoint provides no body content.
+      text: fullText.slice(0, 20000),
     });
   }
   return out;
@@ -615,16 +620,42 @@ function summarizeSite({
   // still include all pages.
   const contentPages = pages.filter((p) => p.status >= 200 && p.status < 400);
 
+  // ── Deep sub-acquisition normalization (PRYSM-NEXT-01 WP-B-09) ──────
+  const contentParsing = normalizeContentParsing(rawContentParsing);
+  const redirectChains = normalizeRedirectChains(rawRedirectChains);
+  const nonIndexablePages = normalizeNonIndexable(rawNonIndexable);
+  const pageResources = normalizePageResources(rawResources);
+  const microdataTypes = extractMicrodataTypes(rawMicrodata);
+
+  // ── CRIT defect 2a — parsed content is evidence, not waste ────────────
+  // The pages endpoint provides no body text.  When the content-parsing
+  // endpoint returned real main content for a key page, hydrate that text
+  // into the page evidence path so content-dependent signal detection
+  // (trust/proof, offer) runs on ACTUAL parsed evidence with documented
+  // key-page scoping.  CTA/form/path evidence is NOT fabricated from
+  // parsed text — `_interactiveEvidenceAvailable: false` marks that
+  // interactive extraction did not run (capability layer honours it).
+  const cpByUrl = new Map(contentParsing.map((c) => [normalizeUrl(c.url || ""), c]));
+  for (const page of pages) {
+    const cp = cpByUrl.get(normalizeUrl(page.crawledUrl || page.url || ""));
+    if (cp && cp.hasMainContent && cp.text) {
+      page.bodyText = cp.text;
+      page._contentAvailable = true;
+      page.signals = detectTrustSignals(cp.text, page.title, page.description || "", page);
+    }
+  }
+
   // ── Content evidence availability ─────────────────────────────────────
   // DataForSEO /on_page/pages endpoint returns metadata only (no body text,
-  // no link/image arrays, no structured_data).  When every content-page has
-  // _contentAvailable === false, content-dependent signals (trust, CTAs,
-  // forms) were not extracted from real page text and must be treated as
-  // unavailable rather than confirmed-absent.
+  // no link/image arrays, no structured_data).  When no content-page has
+  // _contentAvailable === true (neither raw body text nor content-parsing
+  // text), content-dependent signals must be treated as unavailable rather
+  // than confirmed-absent.
   const contentEvidenceAvailable = contentPages.length > 0
     && contentPages.some((p) => p._contentAvailable === true);
 
   const allSchema = new Set(pages.flatMap((p) => p.schemaTypes));
+  for (const t of microdataTypes) allSchema.add(t);
   const allServices = new Set(pages.flatMap((p) => p.serviceCandidates));
 
   // Build topic keywords from validated services, titles, and H1s.
@@ -876,14 +907,6 @@ function summarizeSite({
       : false,
   };
 
-  // ── Deep sub-acquisition normalization (PRYSM-NEXT-01 WP-B-09) ──────
-  const contentParsing = normalizeContentParsing(rawContentParsing);
-  const redirectChains = normalizeRedirectChains(rawRedirectChains);
-  const nonIndexablePages = normalizeNonIndexable(rawNonIndexable);
-  const pageResources = normalizePageResources(rawResources);
-  const microdataTypes = extractMicrodataTypes(rawMicrodata);
-  for (const t of microdataTypes) allSchema.add(t);
-
   // ── Source status ────────────────────────────────────────────────────
   let sourceStatus = SOURCE_STATUS.AVAILABLE;
 
@@ -1002,6 +1025,10 @@ function summarizeSite({
       : null,
     _contentEvidenceAvailable: contentEvidenceAvailable,
     _responseHeadersAvailable: responseHeadersAvailable,
+    // CRIT defect 2a — parsed text proves CONTENT, not interactive
+    // extraction (CTAs/forms/paths).  The capability layer must not treat
+    // empty CTA/form arrays on this source as confirmed absence.
+    _interactiveEvidenceAvailable: false,
     _sourceStatus: buildSourceStatus({
       provider: "dataforseo-onpage",
       adapterVersion: ADAPTER_VERSION,
@@ -1933,6 +1960,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         limitations: envelope.limitations || [],
         _contentEvidenceAvailable: envelope._contentEvidenceAvailable || false,
         _responseHeadersAvailable: envelope._responseHeadersAvailable || false,
+        _interactiveEvidenceAvailable: envelope._interactiveEvidenceAvailable === true,
       },
     };
 

@@ -1,0 +1,32 @@
+{
+  "contractVersion": "1.0.0",
+  "artifactVersion": "1.0.0",
+  "reportVersion": "4.1.1",
+  "reportDesignVersion": "2.0.0",
+  "runId": "run-123",
+  "slug": "example-co",
+  "targetUrl": "https://example.com",
+  "targetDomain": "example.com",
+  "startedAt": "2026-08-16T12:00:00.000Z",
+  "completedAt": "2026-08-16T12:05:00.000Z",
+  "status": "draft",
+  "scores": {
+    "trust": 60,
+    "contentDepth": 55,
+    "conversionPathways": 70,
+    "technical": 80,
+    "performance": 85,
+    "conversionReadiness": 68
+  },
+  "sources": {
+    "website": "AVAILABLE",
+    "performance": "AVAILABLE",
+    "competitors": "NOT_APPLICABLE",
+    "backlinks": "NOT_APPLICABLE",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  },
+  "files": ["index.html"],
+  "lifecycleStatus": "DRAFT_RENDERED",
+  "auditId": "11111111-2222-4333-8444-555555555555"
+}

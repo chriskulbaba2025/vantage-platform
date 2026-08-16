@@ -77,7 +77,7 @@ function tokenMatch(text, tokensArr) {
   return words.some((w) => set.has(w)) || set.has(String(text || "").toLowerCase().trim());
 }
 
-function topicRows(site, input = {}) {
+function topicRows(site, input = {}, capabilities = {}) {
   // Prefer business-context services; fall back to validated crawl services;
   // finally multi-word topicKeywords.
   const business = (input.services || []).filter(Boolean);
@@ -102,6 +102,18 @@ function topicRows(site, input = {}) {
   }
 
   const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // CRIT defect 3a — per-topic trust/CTA claims require the underlying
+  // evidence.  When trust-proof evidence is not available (content was not
+  // extracted), topic rows must NOT assert blockers or trust assets from
+  // unknown booleans.  v1 row shape preserved (string fields only).
+  const trustCap = capabilities["trust.proof"];
+  const trustEvidenceAvailable =
+    trustCap?.status === "AVAILABLE" || trustCap?.status === "PARTIAL";
+  const bookingCta = (site.ctas || []).some((c) =>
+    /book|schedule|reserve|appointment/i.test(String(c?.text || "")),
+  );
+
   return services.slice(0, 8).map((service, index) => {
     const page = servicePages.get(service);
     const stage = page
@@ -111,15 +123,36 @@ function topicRows(site, input = {}) {
     // additional properties on readinessMap rows and constrains stage to
     // TOFU/MOFU/BOFU — stage semantics change, the row SHAPE does not.
     // True "Not Assessed" rows land in report design v2 (WP-G).
-    const blocker = stage === "BOFU" && !site.trust.pricing
-      ? "Offer clarity"
+    const blocker = !trustEvidenceAvailable
+      ? "Not Assessed"
+      : stage === "BOFU" && !site.trust.pricing
+        ? "Offer clarity"
+        : !site.trust.credentials
+          ? "Doubt"
+          : "Unclear next step";
+    const trustAsset = !trustEvidenceAvailable
+      ? "Not Assessed"
       : !site.trust.credentials
-        ? "Doubt"
-        : "Unclear next step";
-    const trustAsset = !site.trust.credentials ? "Credential" : !site.trust.testimonials ? "Testimonial" : "Process proof";
-    const eeat = !site.trust.credentials ? "Expertise proof" : "Experience proof";
-    const cta = site.forms.length ? "Form" : "Book";
-    const path = site.ctas.length ? (stage === "BOFU" ? "Clear" : "Weak") : "Missing";
+        ? "Credential"
+        : !site.trust.testimonials
+          ? "Testimonial"
+          : "Process proof";
+    const eeat = !trustEvidenceAvailable
+      ? "Not Assessed"
+      : !site.trust.credentials
+        ? "Expertise proof"
+        : "Experience proof";
+    // CRIT defect 3b — never invent a CTA type claim without evidence.
+    const cta = site.forms.length
+      ? "Form"
+      : bookingCta
+        ? "Book"
+        : "Not Assessed";
+    const path = site.ctas.length
+      ? stage === "BOFU"
+        ? "Clear"
+        : "Weak"
+      : "Missing";
     return {
       topic: typeof service === "string" ? pretty(service) : String(service),
       stage,

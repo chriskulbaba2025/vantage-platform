@@ -2,10 +2,26 @@ import { average, clamp, stableHash } from "../utils.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 
 // ---------------------------------------------------------------------------
-// Scoring version (PRD v3.0 §15.1 + PRYSM-NEXT-01 WP-D)
+// Scoring version (PRD v3.0 §15.1 + PRYSM-NEXT-01 WP-D/WP-J)
+//
+// CHANGELOG
+//   3.0.0 — PRD v3.0 launch scoring (superseded).
+//   4.0.0 — capability-level module eligibility; assessed-weight-weighted
+//           readiness (CRIT weighting defect corrected); business context
+//           into scoring; page-purpose funnel stages; structural-only
+//           AI-readiness; findings capability-gated; confidence unknown-
+//           factor exclusion.
+//   4.1.0 — validated conversion-path evidence (WP-E): bounded validated
+//           bonus/penalty, VAN-PATH-001 obstruction finding.
+//   4.1.1 — CRIT integrity fix (unknown ≠ full credit): scoreTechnicalV4
+//           meta/images sub-rules are EXCLUDED when their counter inputs
+//           are null/unknown instead of silently granting full points.
+//           Mathematical/eligibility correctness proven by
+//           score-components.test.js truth tables (sub-rule exclusion
+//           changes assessed sub-weights, never the dimension weights).
 // ---------------------------------------------------------------------------
 
-export const SCORING_VERSION = "4.1.0";
+export const SCORING_VERSION = "4.1.1";
 
 // ---------------------------------------------------------------------------
 // Severity / band helpers
@@ -395,8 +411,18 @@ function scoreTechnicalV4({ site, capabilities }) {
 
   const subRules = [];
 
-  // Meta rules — crawl pages evidence (always available when crawl viable).
-  {
+  // Meta rules — crawl pages evidence.  CRIT defect 4b: unknown inputs
+  // (null/undefined counters when page_metrics checks were not collected)
+  // MUST NOT grant full credit — the sub-rule is excluded instead.
+  const metaInputs = [
+    site.missingTitles,
+    site.missingDescriptions,
+    site.missingCanonicals,
+    site.h1Missing,
+    site.h1Multiple,
+  ];
+  const metaKnown = metaInputs.every((v) => typeof v === "number" && Number.isFinite(v));
+  if (metaKnown) {
     const score = clamp(
       15 * (1 - site.missingTitles / pageCount) +
       15 * (1 - site.missingDescriptions / pageCount) +
@@ -406,11 +432,16 @@ function scoreTechnicalV4({ site, capabilities }) {
     subRules.push({ key: "meta", weight: 50, score });
   }
 
-  // Image rules — crawl/summary evidence (images_count + no_image_alt).
-  {
-    const image = site.imageCount
-      ? 10 * (1 - Math.min(1, site.imagesMissingAlt / site.imageCount))
-      : 10;
+  // Image rules — CRIT defect 4a: unknown image evidence (null counts)
+  // MUST NOT grant 10/10; the sub-rule is excluded instead.
+  const imageKnown =
+    typeof site.imageCount === "number" &&
+    Number.isFinite(site.imageCount) &&
+    site.imageCount > 0 &&
+    typeof site.imagesMissingAlt === "number" &&
+    Number.isFinite(site.imagesMissingAlt);
+  if (imageKnown) {
+    const image = 10 * (1 - Math.min(1, site.imagesMissingAlt / site.imageCount));
     subRules.push({ key: "images", weight: 10, score: clamp(image) });
   }
 

@@ -46,6 +46,9 @@ const REQUIRED_SCHEMAS = [
   "capability-evidence.schema.json",
   // PRYSM-NEXT-01 WP-E — conversion-path validation evidence
   "conversion-path-validation.schema.json",
+  // PRYSM-NEXT-01 WP-J — report design v2 manifest (distinct versioned
+  // contract; v1 manifest schema remains frozen)
+  "report-manifest-v2.schema.json",
 ];
 
 // ---------------------------------------------------------------------------

@@ -164,12 +164,25 @@ async function checkMenu(page, mobileViewport) {
   return result;
 }
 
+// CRIT defect 5a — a header-search or newsletter form must NOT satisfy
+// "conversion form renders".  A form is conversion-relevant only when its
+// submit control carries conversion intent OR it has multiple editable
+// fields.  Weak evidence stays unknown (submitEnabled null + limitation),
+// never a false PASS.
+const CONVERSION_SUBMIT_RE =
+  /\b(submit|send|book|contact|request|enquir|inquir|sign|subscribe|apply|start|continue|quote|reserve|join|get started)\b/i;
+
 async function checkForm(page) {
-  const result = { found: false, fieldsEditable: null, submitEnabled: null };
+  const result = { found: false, fieldsEditable: null, submitEnabled: null, limitation: null };
   try {
-    const form = await page.$("form");
-    result.found = Boolean(form);
-    if (form) {
+    const forms = await page.$$("form");
+    result.found = forms.length > 0;
+    let selected = null;
+    let selectedFieldsEditable = null;
+    let selectedSubmitEnabled = null;
+    let selectedLimitation = null;
+
+    for (const form of forms) {
       const fields = await form.$$("input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select");
       let editable = 0;
       for (const f of fields) {
@@ -177,13 +190,36 @@ async function checkForm(page) {
           if ((await f.isVisible()) && (await f.isEnabled())) editable += 1;
         } catch { /* skip */ }
       }
-      result.fieldsEditable = editable > 0;
       const submit = await form.$('input[type="submit"], button[type="submit"], button:not([type="button"])');
+      let submitText = "";
+      let submitEnabled = null;
       if (submit) {
         try {
-          result.submitEnabled = (await submit.isVisible()) && (await submit.isEnabled());
-        } catch { result.submitEnabled = null; }
+          submitText = (await submit.textContent()) || "";
+          submitEnabled = (await submit.isVisible()) && (await submit.isEnabled());
+        } catch { submitEnabled = null; }
       }
+      const conversionRelevant = CONVERSION_SUBMIT_RE.test(submitText) || editable >= 2;
+      if (conversionRelevant) {
+        selected = form;
+        selectedFieldsEditable = editable > 0;
+        selectedSubmitEnabled = submitEnabled;
+        selectedLimitation = null;
+        break;
+      }
+      // Remember the first weak form so we can report it honestly.
+      if (!selected && !selectedLimitation) {
+        selected = form;
+        selectedFieldsEditable = editable > 0;
+        selectedSubmitEnabled = null;
+        selectedLimitation = "No conversion-relevant form identified (submit text/intent too weak to claim conversion readiness)";
+      }
+    }
+
+    if (selected) {
+      result.fieldsEditable = selectedFieldsEditable;
+      result.submitEnabled = selectedSubmitEnabled;
+      result.limitation = selectedLimitation;
     }
   } catch {
     result.fieldsEditable = null;
@@ -291,7 +327,9 @@ async function validatePage(browser, keyPage, opts) {
     const c = checks.cta || {};
     if (c.found && c.visible && c.interactable && !c.obstructed) passCount += 1; else failCount += 1;
     if (checks.menu?.usable === true) passCount += 1; else if (checks.menu?.usable === false) failCount += 1;
-    if (checks.form?.found === true) {
+    // A form check counts only when the form was conversion-relevant
+    // (CRIT defect 5a — weak forms stay unknown, not pass and not fail).
+    if (checks.form?.found === true && !checks.form.limitation) {
       if (checks.form.fieldsEditable === true && checks.form.submitEnabled !== false) passCount += 1;
       else failCount += 1;
     }

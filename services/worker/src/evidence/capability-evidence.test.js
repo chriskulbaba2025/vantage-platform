@@ -424,6 +424,59 @@ test("WP-E-03: browser NOT_ASSESSED keeps the inferred state (no penalty)", () =
   assert.ok(path.limitations.some((l) => l.includes("launch failed")));
 });
 
+// ---------------------------------------------------------------------------
+// CRIT defect 2a — interactive evidence rules (parsed text ≠ CTA/form proof)
+// ---------------------------------------------------------------------------
+
+test("CRIT 2a: text-only source never claims CTA/form/path availability from parsed content", () => {
+  // Content evidence available (parsed key pages) but the source did NOT
+  // run interactive extraction → empty CTA/form arrays are UNKNOWN.
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({
+      site: baseSite({
+        ctas: [],
+        forms: [],
+        _interactiveEvidenceAvailable: false,
+      }),
+    }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+  });
+  assert.equal(cap(result, "content.body").status, "AVAILABLE", "parsed content counts as content evidence");
+  assert.equal(cap(result, "conversion.cta").status, "UNAVAILABLE", "empty CTAs on a text-only source are unknown");
+  assert.ok(cap(result, "conversion.cta").limitations.some((l) => l.includes("not extracted")));
+  assert.equal(cap(result, "conversion.form").status, "UNAVAILABLE");
+  assert.equal(cap(result, "conversion.path").status, "UNAVAILABLE", "no path evidence without interactive extraction");
+});
+
+test("CRIT 2a: text-only source WITH CTA arrays (browser pass) claims availability", () => {
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({
+      site: baseSite({
+        ctas: [{ text: "Book", url: "https://example.com/book" }],
+        forms: [],
+        _interactiveEvidenceAvailable: false,
+      }),
+    }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+  });
+  assert.equal(cap(result, "conversion.cta").status, "AVAILABLE");
+  assert.equal(cap(result, "conversion.form").status, "UNAVAILABLE", "forms still unextracted");
+});
+
+test("CRIT 2a: legacy extractor (marker absent) keeps confirmed-absence semantics", () => {
+  // Legacy crawler evidence has no marker → the extractor ran; empty
+  // arrays are confirmed absence.
+  const result = buildCapabilityEvidence({
+    decisionEvidence: evidenceOf({ site: baseSite({ ctas: [], forms: [] }) }),
+    auditId: AUDIT_ID,
+    generatedAt: NOW,
+  });
+  assert.equal(cap(result, "conversion.cta").status, "AVAILABLE", "confirmed absence via legacy extractor");
+  assert.equal(cap(result, "conversion.form").status, "AVAILABLE");
+});
+
 test("WP-E-03: obstruction counts surface in the validation summary", () => {
   const obstructedPage = {
     url: "https://example.com/contact",

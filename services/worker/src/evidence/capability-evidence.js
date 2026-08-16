@@ -168,21 +168,16 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
     });
   }
 
-  // ── offer.clarity / trust.proof / conversion.cta / conversion.form ───
+  // ── offer.clarity / trust.proof — body-content evidence ──────────────
   const contentDependent = [
     ["offer.clarity", "Offer clarity requires body-content evidence (services, CTAs, forms, descriptions)"],
     ["trust.proof", "Trust proof requires body-content evidence (credentials, testimonials, policies)"],
-    ["conversion.cta", "CTA evidence requires body-content evidence"],
-    ["conversion.form", "Form evidence requires body-content evidence"],
   ];
   for (const [name, limitation] of contentDependent) {
     let status;
     const limitations = [];
     if (contentState === "available") {
       status = CAPABILITY_STATUS.AVAILABLE;
-    } else if (contentState === "unavailable") {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
-      limitations.push(limitation);
     } else {
       status = CAPABILITY_STATUS.UNAVAILABLE;
       limitations.push(limitation);
@@ -195,20 +190,52 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
     });
   }
 
+  // ── conversion.cta / conversion.form — INTERACTIVE evidence ──────────
+  // CRIT defect 2a: parsed text proves CONTENT, not CTAs/forms.  Empty
+  // CTA/form arrays are confirmed absence ONLY when an interactive
+  // extractor ran (legacy crawler / browser pass: marker undefined or
+  // true).  When the source explicitly marks interactive extraction as
+  // not-run (DataForSEO pages endpoint + text parsing only), empty arrays
+  // mean "not extracted" — UNAVAILABLE, never false-absent.
+  const interactiveExtracted = site?._interactiveEvidenceAvailable !== false;
+  const hasCtas = isArray(site?.ctas) && site.ctas.length > 0;
+  const hasForms = isArray(site?.forms) && site.forms.length > 0;
+  const interactiveCapabilities = [
+    ["conversion.cta", "ctas", hasCtas, "CTA evidence was not extracted from the pages endpoint (parsed text does not prove CTA absence)"],
+    ["conversion.form", "forms", hasForms, "Form evidence was not extracted from the pages endpoint (parsed text does not prove form absence)"],
+  ];
+  for (const [name, _field, present, limitation] of interactiveCapabilities) {
+    let status;
+    const limitations = [];
+    if (contentState === "available" && (present || interactiveExtracted)) {
+      status = CAPABILITY_STATUS.AVAILABLE;
+    } else if (contentState === "available") {
+      status = CAPABILITY_STATUS.UNAVAILABLE;
+      limitations.push(limitation);
+    } else {
+      status = CAPABILITY_STATUS.UNAVAILABLE;
+      limitations.push("Interactive extraction evidence was not collected");
+    }
+    caps[name] = capability({
+      capability: name, status,
+      coverage: { requested: null, completed: null, failed: null },
+      provenance: siteProv, limitations,
+      requiredFieldsPresent: contentState === "available" && (present || interactiveExtracted),
+    });
+  }
+
   // ── conversion.path (inferred until WP-E validates) ──────────────────
   {
-    const hasCtas = isArray(site?.ctas) && site.ctas.length > 0;
-    const hasForms = isArray(site?.forms) && site.forms.length > 0;
     let status;
     const limitations = [];
     if (contentState === "available" && (hasCtas || hasForms)) {
       status = CAPABILITY_STATUS.AVAILABLE;
-    } else if (contentState === "available") {
+    } else if (contentState === "available" && interactiveExtracted) {
       status = CAPABILITY_STATUS.AVAILABLE;
       limitations.push("No CTA or form evidence found — conversion path may be indirect");
-    } else if (contentState === "unavailable") {
+    } else if (contentState === "available") {
       status = CAPABILITY_STATUS.UNAVAILABLE;
-      limitations.push("Conversion path inference requires body-content evidence");
+      limitations.push("Conversion path evidence was not extracted (parsed text does not prove path absence)");
     } else {
       status = CAPABILITY_STATUS.UNAVAILABLE;
       limitations.push("Conversion path evidence was not collected");

@@ -2535,9 +2535,9 @@ function buildDeepFixtures() {
       {
         url: "https://example.com/",
         result: {
-          main_content: [{ text: "Home page body content with meaningful words" }, { text: "Second section" }],
+          main_content: [{ text: "Home page body content with meaningful words — certified coaching" }, { text: "Second section" }],
           secondary_content: [],
-          plain_text_word_count: 9,
+          plain_text_word_count: 11,
         },
       },
       {
@@ -2625,10 +2625,20 @@ test("WP-B-08/09: deep acquisitions normalize into the site envelope", async () 
   assert.equal(result.contentParsing.length, 3);
   const home = result.contentParsing.find((c) => c.url === "https://example.com/");
   assert.equal(home.hasMainContent, true);
-  assert.equal(home.wordCount, 9);
+  assert.equal(home.wordCount, 11);
   assert.ok(home.mainContentChars > 0);
   const contact = result.contentParsing.find((c) => c.url === "https://example.com/contact");
   assert.equal(contact.hasMainContent, false);
+
+  // CRIT defect 2a — parsed text hydrates the page evidence path and
+  // drives real signal detection; interactive extraction stays honest.
+  const homePage = result.pages.find((p) => p.url === "https://example.com/");
+  assert.ok(homePage.bodyText.includes("certified coaching"), "parsed text hydrated into page bodyText");
+  assert.equal(homePage._contentAvailable, true, "key page marked content-available");
+  assert.equal(homePage.signals.credentials, true, "trust signal derived from real parsed text");
+  assert.equal(result._contentEvidenceAvailable, true, "site-level content evidence from parsed key pages");
+  assert.equal(result._interactiveEvidenceAvailable, false, "interactive extraction not run (parsed text proves content only)");
+  assert.equal(result.trust.credentials, true, "site trust carries the parsed-evidence signal");
 
   // Redirect chains — homepage chain: 2 hops, 301 then 200, destination home.
   const homeChain = result.redirectChains.find((r) => r.from === "https://example.com/");
@@ -2703,7 +2713,7 @@ test("WP-B-10: raw artifact payload includes deep acquisition responses with val
   assert.ok(payload.resources, "artifact must preserve resources raw");
   assert.ok(payload.microdata, "artifact must preserve microdata raw");
   assert.equal(payload.adapterVersion, ADAPTER_VERSION);
-  assert.equal(payload.adapterVersion, "1.1.0");
+  assert.equal(payload.adapterVersion, "1.2.0");
 
   const recomputed = createHash("sha256")
     .update(result._rawArtifactBytes)

@@ -60,6 +60,31 @@ const { signPrincipal } = await import("../src/identity/authorization.js");
 const { execute: onpageExecute } = await import("../src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.js");
 const { buildArtifactKey } = await import("../src/storage/artifact-key.js");
 const { REVIEW_CHECKLIST_ITEMS, isReviewComplete } = await import("../src/audit/review-gate.js");
+const { validateConversionPaths } = await import("../src/evidence/conversion-path-validator.js");
+
+// CRIT defect 6c — the plumbing proof must exercise the REAL contract
+// schemas, never a stub validator.  Built the same way the production
+// bootstrap does (compileAllSchemas over the contracts directory).
+const { readdirSync, readFileSync } = await import("node:fs");
+const { resolve, dirname } = await import("node:path");
+const { fileURLToPath } = await import("node:url");
+const { default: Ajv2020 } = await import("ajv/dist/2020.js");
+const { default: addFormats } = await import("ajv-formats");
+const _schemasDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src", "contracts");
+const _ajv = new Ajv2020({ strict: false, allErrors: true });
+addFormats(_ajv);
+for (const f of readdirSync(_schemasDir).filter((x) => x.endsWith(".schema.json"))) {
+  _ajv.addSchema(
+    JSON.parse(readFileSync(resolve(_schemasDir, f), "utf-8")),
+    `https://vantage-platform.io/prysm/contracts/v1/${f}`,
+  );
+}
+function realValidator(sid, obj) {
+  const v = _ajv.getSchema(sid);
+  if (!v) return { valid: false, errors: [{ message: `Schema not loaded: ${sid}` }] };
+  const valid = v(obj);
+  return { valid, errors: v.errors || [] };
+}
 
 // ---------------------------------------------------------------------------
 // Controlled adapter fixtures (below the real adapter boundary)
@@ -67,7 +92,7 @@ const { REVIEW_CHECKLIST_ITEMS, isReviewComplete } = await import("../src/audit/
 function siteSourceResult() {
   return {
     contractVersion: "1.0.0", schemaVersion: "1.0.0",
-    source: "dataforseo-onpage", provider: "DataForSEO", adapterVersion: "1.1.0",
+    source: "dataforseo-onpage", provider: "DataForSEO", adapterVersion: "1.2.0",
     status: "AVAILABLE", startedAt: FIXED_TS, completedAt: FIXED_TS, retryCount: 0,
     expectedRecords: 3, returnedRecords: 3,
     coverage: { requested: 3, completed: 3, failed: 0 }, limitations: [],
@@ -119,10 +144,13 @@ function emptyResult(source, provider, adapterVersion = "1.0.0") {
   };
 }
 
+function stub(fn) {
+  return async () => ({ rawBytes: Buffer.from("{}"), contentType: "application/json", sourceResult: fn() });
+}
+
 function buildAdapters() {
-  const stub = (fn) => async () => ({ rawBytes: Buffer.from("{}"), contentType: "application/json", sourceResult: fn() });
   return {
-    "dataforseo-onpage": { adapterVersion: "1.1.0", execute: stub(siteSourceResult) },
+    "dataforseo-onpage": { adapterVersion: "1.2.0", execute: stub(siteSourceResult) },
     pagespeed: { adapterVersion: "1.1.0", execute: stub(perfSourceResult) },
     "dataforseo-serp": { adapterVersion: "1.0.0", execute: stub(() => emptyResult("dataforseo-serp", "DataForSEO")) },
     backlinks: { adapterVersion: "1.0.0", execute: stub(() => emptyResult("backlinks", "DataForSEO")) },
@@ -132,16 +160,93 @@ function buildAdapters() {
 }
 
 // ---------------------------------------------------------------------------
-// Controlled validator mock (no live browser — NOT_ASSESSED is proven here;
-// the validated path is proven by the WP-E unit + orchestrator tests).
+// CRIT defect B — the PRODUCTION validator boundary runs in the plumbing
+// proof: validateConversionPaths itself, with a controlled recording
+// playwright BELOW the browser boundary.  Zero live browsers.
 // ---------------------------------------------------------------------------
-const mockValidator = async ({ keyPages }) => ({
-  provider: "playwright-conversion-path",
-  status: "NOT_ASSESSED",
-  pages: [],
-  summary: { requested: keyPages.length, pass: 0, partial: 0, failed: 0, notAssessed: keyPages.length },
-  limitations: ["browser validation not enabled in controlled run"],
-});
+function mockElement({ visible = true, enabled = true, text = "", attrs = {} } = {}) {
+  return {
+    isVisible: async () => visible,
+    isEnabled: async () => enabled,
+    textContent: async () => text,
+    getAttribute: async (name) => attrs[name] ?? null,
+    boundingBox: async () => ({ x: 0, y: 0, width: 100, height: 40 }),
+    evaluate: async () => false,
+  };
+}
+
+function makeMockPlaywright({ launchThrows = false } = {}) {
+  const gotoLog = [];
+  const page = {
+    gotoLog,
+    async goto(url) { gotoLog.push(String(url)); return { ok: true, status: () => 200 }; },
+    async $$(selector) {
+      if (selector.includes("nav") || selector.includes("header")) return [mockElement({ text: "Home" }), mockElement({ text: "Services" })];
+      if (selector.includes("a[href]")) return [mockElement({ text: "Book Now", attrs: { href: "https://plumbing.example.com/book" } })];
+      if (selector.includes("form")) return [mockElement({ text: "form" })];
+      if (selector.includes("input") || selector.includes("textarea")) return [mockElement({ text: "name" })];
+      return [];
+    },
+    async $(selector) {
+      if (selector === "nav, header") return mockElement({ text: "nav" });
+      if (selector === "form") return mockElement({ text: "form" });
+      if (selector.includes("menu") || selector.includes("hamburger") || selector.includes("toggle")) return mockElement({ text: "menu" });
+      if (selector.includes("submit")) return mockElement({ text: "Send Request" });
+      return null;
+    },
+    async screenshot() { return Buffer.from("controlled-png"); },
+    async close() {},
+  };
+  const formElement = {
+    async $$(selector) {
+      if (selector.includes("submit")) return [mockElement({ text: "Send Request" })];
+      return [mockElement({ text: "name" }), mockElement({ text: "email" })];
+    },
+    async $(selector) {
+      if (selector.includes("submit")) return mockElement({ text: "Send Request" });
+      return null;
+    },
+  };
+  // The page's "form" selector resolves to the conversion form element
+  // (both $$ and $, so the validator's form checks run against it).
+  const pageWithForm = {
+    ...page,
+    $: async (selector) => (selector === "form" ? formElement : page.$(selector)),
+    $$: async (selector) =>
+      selector === "form" || selector.includes("form")
+        ? [formElement]
+        : page.$$(selector),
+  };
+  return {
+    chromium: {
+      launch: async () => {
+        if (launchThrows) throw new Error("controlled launch failure");
+        return {
+          async newContext() { return { async newPage() { return pageWithForm; }, async close() {} }; },
+          async newPage() { return page; }, // destination GET checks
+          async close() {},
+        };
+      },
+    },
+  };
+}
+
+// The production validator composition with the controlled browser seam.
+const realPathValidator = async ({ targetUrl, keyPages, options }) =>
+  validateConversionPaths({
+    targetUrl,
+    keyPages,
+    playwrightImpl: makeMockPlaywright(),
+    options: { ...options, allowLiveBrowser: false },
+  });
+
+const failingBrowserValidator = async ({ targetUrl, keyPages, options }) =>
+  validateConversionPaths({
+    targetUrl,
+    keyPages,
+    playwrightImpl: makeMockPlaywright({ launchThrows: true }),
+    options: { ...options, allowLiveBrowser: false },
+  });
 
 // ---------------------------------------------------------------------------
 // Harness store + services (REAL modules, memory backends)
@@ -165,10 +270,10 @@ const orchestrator = createAuditOrchestrator({
   lifecycleService,
   artifactStore,
   adapters: buildAdapters(),
-  validateContract: () => ({ valid: true, errors: [] }),
+  validateContract: realValidator,
   clock,
   narrativeMode: "mock",
-  conversionPathValidatorImpl: mockValidator,
+  conversionPathValidatorImpl: realPathValidator,
 });
 
 const reportStore = createLocalReportStore({ baseDir: ".wpi-tmp-report" });
@@ -176,7 +281,7 @@ const auditService = createAuditApplicationService({
   orchestrator, lifecycleRepo: null, lifecycleService,
   artifactStore, reportStore,
   config: { artifactDir: ".wpi-tmp-report" },
-  validateContract: () => ({ valid: true, errors: [] }),
+  validateContract: realValidator,
   clock,
 });
 
@@ -319,13 +424,15 @@ const capability = await readArtifact(scope, "canonical", "capability-evidence.j
 check(Boolean(capability), "capability evidence persisted");
 check(capability?.json?.capabilityEvidenceVersion === "2.0.0", "capability evidence v2.0.0");
 const pathCap = capability?.json?.capabilities?.["conversion.path"];
-check(pathCap?.validated === false, "browser validation NOT_ASSESSED → path stays inferred (no penalty)");
+check(pathCap?.validated === true, "REAL production validator validated the conversion path", JSON.stringify(pathCap));
+check(pathCap?.validatedBy === "playwright-conversion-path", "validatedBy provenance recorded");
+check((pathCap?.validationSummary?.pass ?? 0) >= 1, "validated checks recorded in the summary");
 
 const validation = await readArtifact(scope, "canonical", "conversion-path-validation.json");
-check(validation?.json?.status === "NOT_ASSESSED", "path-validation artifact persisted honestly");
+check(validation?.json?.status === "PASS", "path-validation artifact persisted honestly (real validator, controlled browser)");
 
 const scores = await readArtifact(scope, "canonical", "scores.json");
-check(scores?.json?.scoringVersion === "4.1.0", "scoring version 4.1.0 persisted");
+check(scores?.json?.scoringVersion === "4.1.1", "scoring version 4.1.1 persisted");
 
 const findings = await readArtifact(scope, "canonical", "findings.json");
 check(Array.isArray(findings?.json) && findings.json.length > 0, "findings persisted with records");
@@ -436,6 +543,144 @@ for (const filename of ["scorecard.html", "priority-fixes.html", "evidence-appen
 check(v1PageCount === 4, "v1 16-page set sampled present (design 1.0.0 default unchanged)", `${v1PageCount}/4 sampled`);
 const v1Manifest = await readArtifact(v1Scope, "report", "manifest.json");
 check(v1Manifest?.json?.reportDesignVersion === "1.0.0", "v1 manifest design token unchanged");
+
+console.log("— Phase 8: live-shaped REAL adapter fixture (CRIT 11a) —");
+{
+  const liveFixtures = {
+    taskPost: { taskId: "live-shaped-task", rawTask: { id: "live-shaped-task" } },
+    pollTask: { status: "ready", taskId: "live-shaped-task" },
+    summary: {
+      crawl_status: { crawl_stop_reason: "completed", max_crawl_pages: 4, pages_crawled: 4, pages_in_queue: 0 },
+      pages_crawled: 4, max_crawl_pages: 4, duplicate_content: 0, duplicate_tags: 0,
+      sitemap: { urls: [] },
+      page_metrics: { links_internal: 4, broken_links: 0, checks: { no_h1_tag: 0, no_description: 1, no_image_alt: 1 } },
+    },
+    pages: {
+      items: [
+        { url: "https://live.example.com/", status_code: 200, meta: { title: "Home", description: "D", canonical: "https://live.example.com/", htags: { h1: ["Home"], h2: [], h3: [], h4: [], h5: [], h6: [] }, content: { plain_text_word_count: 40 }, images_count: 1, internal_links_count: 2, external_links_count: 0 }, checks: { has_micromarkup: true, from_sitemap: true } },
+        { url: "https://live.example.com/services/coaching", status_code: 200, meta: { title: "Coaching Services", description: "Business coaching", canonical: "https://live.example.com/services/coaching", htags: { h1: ["Business Coaching"], h2: [], h3: [], h4: [], h5: [], h6: [] }, content: { plain_text_word_count: 60 }, images_count: 1, internal_links_count: 1, external_links_count: 0 }, checks: { has_micromarkup: true, from_sitemap: true } },
+        { url: "https://live.example.com/contact", status_code: 200, meta: { title: "Contact Us", description: "Book a consultation", canonical: "https://live.example.com/contact", htags: { h1: ["Contact"], h2: [], h3: [], h4: [], h5: [], h6: [] }, content: { plain_text_word_count: 30 }, images_count: 0, internal_links_count: 1, external_links_count: 0 }, checks: { has_micromarkup: true, from_sitemap: true } },
+        { url: "https://live.example.com/pricing", status_code: 200, meta: { title: "Pricing", description: "Pricing and packages", canonical: "https://live.example.com/pricing", htags: { h1: ["Pricing"], h2: [], h3: [], h4: [], h5: [], h6: [] }, content: { plain_text_word_count: 20 }, images_count: 0, internal_links_count: 1, external_links_count: 0 }, checks: { has_micromarkup: true, from_sitemap: true } },
+      ],
+      total_count: 4,
+    },
+    links: { items: [{ link_to: "https://live.example.com/contact", url: "https://live.example.com/" }], total_count: 1 },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+    microdata: { items: [{ type: "Organization" }] },
+    content_parsing: [
+      { url: "https://live.example.com/", result: { main_content: [{ text: "Certified business coaching with measurable outcomes — client testimonials and pricing transparency." }], secondary_content: [], plain_text_word_count: 14 } },
+      { url: "https://live.example.com/contact", result: { main_content: [{ text: "Book your consultation today." }], secondary_content: [], plain_text_word_count: 5 } },
+      { url: "https://live.example.com/pricing", result: { main_content: [{ text: "Pricing and packages." }], secondary_content: [], plain_text_word_count: 3 } },
+    ],
+    redirect_chains: [
+      { url: "https://live.example.com/", result: { items: [] } },
+      { url: "https://live.example.com/contact", result: { items: [] } },
+      { url: "https://live.example.com/pricing", result: { items: [] } },
+    ],
+    non_indexable: { items: [], total_count: 0 },
+    resources: [
+      { url: "https://live.example.com/", result: { total_resources: 4, broken_resources: [] } },
+      { url: "https://live.example.com/contact", result: { total_resources: 2, broken_resources: [] } },
+      { url: "https://live.example.com/pricing", result: { total_resources: 1, broken_resources: [] } },
+    ],
+  };
+
+  const liveRequest = {
+    contractVersion: "1.0.0",
+    auditId: randomUUID(), tenantId, clientId: "live.example.com",
+    idempotencyKey: randomUUID(),
+    targetUrl: "https://live.example.com",
+    businessName: "Live Shaped Co",
+    market: "Toronto", language: "en-CA",
+    primaryGoal: "Book consultations",
+    services: ["Coaching"],
+    competitors: [],
+    report: { designVersion: "2.0.0" },
+    crawl: { fixtures: liveFixtures, pathValidationEnabled: true },
+  };
+
+  const liveAdapters = {
+    "dataforseo-onpage": { adapterVersion: "1.2.0", execute: async (a) => onpageExecute({ ...a, source: "dataforseo-onpage" }) },
+    pagespeed: { adapterVersion: "1.1.0", execute: stub(perfSourceResult) },
+    "dataforseo-serp": { adapterVersion: "1.0.0", execute: stub(() => emptyResult("dataforseo-serp", "DataForSEO")) },
+    backlinks: { adapterVersion: "1.0.0", execute: stub(() => emptyResult("backlinks", "DataForSEO")) },
+    ga4: { adapterVersion: "1.0.0", execute: stub(() => emptyResult("ga4", "Google")) },
+    gsc: { adapterVersion: "1.0.0", execute: stub(() => emptyResult("gsc", "Google")) },
+  };
+
+  const liveOrchestrator = createAuditOrchestrator({
+    lifecycleService,
+    artifactStore,
+    adapters: liveAdapters,
+    validateContract: realValidator,
+    clock,
+    narrativeMode: "mock",
+    conversionPathValidatorImpl: realPathValidator,
+  });
+
+  let liveResult = await liveOrchestrator.execute(liveRequest, { executionId: randomUUID() });
+  let livePrev = null;
+  for (let step = 0; step < 8; step++) {
+    if (liveResult.finalState === livePrev) break;
+    livePrev = liveResult.finalState;
+    if (liveResult.finalState !== T.DRAFT_RENDERED) {
+      liveResult = await liveOrchestrator.execute(liveRequest, { executionId: randomUUID() });
+    }
+  }
+  check(liveResult.finalState === T.DRAFT_RENDERED, "live-shaped audit reached draft_rendered via the REAL adapter", liveResult.finalState);
+
+  const liveScope = { tenantId, clientId: "live.example.com", auditId: liveRequest.auditId };
+  const liveCaps = await readArtifact(liveScope, "canonical", "capability-evidence.json");
+  const liveCapMap = liveCaps?.json?.capabilities || {};
+  const contentBodyStatus = liveCapMap["content.body"]?.status;
+  check(
+    contentBodyStatus === "AVAILABLE" || contentBodyStatus === "PARTIAL",
+    "content.body available from parsed key pages",
+    `got ${contentBodyStatus}`,
+  );
+  check(liveCapMap["trust.proof"]?.status === "AVAILABLE", "trust.proof AVAILABLE — parsed text hydrated (CRIT 2a end-to-end)");
+  check(liveCapMap["conversion.path"]?.validated === true, "conversion.path validated by the production validator");
+  check(liveCapMap["schema.structured_data"]?.status === "AVAILABLE", "microdata endpoint evidence AVAILABLE");
+  const liveDecision = await readArtifact(liveScope, "canonical", "decision-evidence.json");
+  check(liveDecision?.json?.site?._contentEvidenceAvailable === true, "site-level content evidence from parsed text (live shape)");
+  const liveScores = await readArtifact(liveScope, "canonical", "scores.json");
+  check(liveScores?.json?.scoringVersion === "4.1.1", "scoring 4.1.1 on the live-shaped audit");
+  check(typeof liveScores?.json?.scores?.conversionReadiness === "number", "numeric readiness produced (no false Insufficient)");
+
+  // Browser-failure audit — the NOT_ASSESSED semantics through the SAME
+  // production validator boundary.
+  const failRequest = {
+    ...liveRequest,
+    auditId: randomUUID(), clientId: "browserfail.example.com",
+    targetUrl: "https://browserfail.example.com", businessName: "Browser Fail Co",
+    idempotencyKey: randomUUID(),
+  };
+  const failingOrchestrator = createAuditOrchestrator({
+    lifecycleService,
+    artifactStore,
+    adapters: liveAdapters,
+    validateContract: realValidator,
+    clock,
+    narrativeMode: "mock",
+    conversionPathValidatorImpl: failingBrowserValidator,
+  });
+  let failResult = await failingOrchestrator.execute(failRequest, { executionId: randomUUID() });
+  let failPrev = null;
+  for (let step = 0; step < 8; step++) {
+    if (failResult.finalState === failPrev) break;
+    failPrev = failResult.finalState;
+    if (failResult.finalState !== T.DRAFT_RENDERED) {
+      failResult = await failingOrchestrator.execute(failRequest, { executionId: randomUUID() });
+    }
+  }
+  check(failResult.finalState === T.DRAFT_RENDERED, "browser-failure audit still renders (validation never blocks the pipeline)");
+  const failScope = { tenantId, clientId: "browserfail.example.com", auditId: failRequest.auditId };
+  const failCaps = await readArtifact(failScope, "canonical", "capability-evidence.json");
+  check(failCaps?.json?.capabilities?.["conversion.path"]?.validated === false, "browser failure → path stays inferred (NOT_ASSESSED, no penalty)");
+  const failValidation = await readArtifact(failScope, "canonical", "conversion-path-validation.json");
+  check(failValidation?.json?.status === "NOT_ASSESSED", "NOT_ASSESSED validation artifact persisted");
+}
 
 console.log("— Phase 7: zero-live guards (measured) —");
 check(fetchCalls.length === 0, "zero uncontrolled network calls (guarded fetch never invoked)", `${fetchCalls.length} calls`);

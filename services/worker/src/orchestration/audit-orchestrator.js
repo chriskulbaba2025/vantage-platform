@@ -23,6 +23,7 @@ import { buildCapabilityEvidence, persistCapabilityEvidence, loadAndValidateCapa
 import { validateConversionPaths } from "../evidence/conversion-path-validator.js";
 import { selectImportantPages } from "../evidence/important-page-selector.js";
 import { REPORT_DESIGN_V2, isReportDesignV2, DEFAULT_REPORT_DESIGN } from "../report/report-design.js";
+import { loadAuditRequest } from "./audit-request-persistence.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
@@ -629,8 +630,13 @@ export function createAuditOrchestrator({
       validateContract,
     });
     if (decisionResult.errors.length > 0) {
-      // Decision evidence build had validation warnings — log but don't block.
-      // Individual source hydration failures are recorded in the evidence.
+      // CRIT defect 6b — hydration warnings are diagnostic context, never
+      // silently dropped.  Messages are validation strings only (no
+      // secrets/provider payloads); logged server-side, not returned.
+      console.error(
+        `[governedCollection] Decision-evidence hydration warnings for ${auditId}: ` +
+        decisionResult.errors.map((e) => String(e).slice(0, 300)).join(" | "),
+      );
     }
     const decisionEvidenceRecord = await persistDecisionEvidence({
       store: artifactStore,
@@ -796,14 +802,29 @@ export function createAuditOrchestrator({
 
     // Build audit input from decision evidence + business context
     // (PRYSM-NEXT-01 WP-D-05 — scoring v4 consumes intake context).
+    // CRIT defect 7a — the PERSISTED governed request is authoritative for
+    // scoring context (replay/resume must not re-derive context from a
+    // transient re-submitted request).  Fall back to the request only when
+    // the artifact predates persistence.
+    let persistedRequest = null;
+    try {
+      persistedRequest = await loadAuditRequest({
+        store: artifactStore,
+        scope: { tenantId, clientId, auditId },
+        validateContract,
+      });
+    } catch {
+      persistedRequest = null;
+    }
+    const intakeContext = persistedRequest || auditRequest;
     const auditInput = {
-      targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
-      businessName: auditRequest.businessName || "",
-      competitors: auditRequest.competitors || [],
-      services: auditRequest.services || [],
-      primaryGoal: auditRequest.primaryGoal || "",
-      language: auditRequest.language || "",
-      market: auditRequest.market || "",
+      targetUrl: decisionEvidence.site?.targetUrl || intakeContext.targetUrl,
+      businessName: intakeContext.businessName || "",
+      competitors: intakeContext.competitors || [],
+      services: intakeContext.services || [],
+      primaryGoal: intakeContext.primaryGoal || "",
+      language: intakeContext.language || "",
+      market: intakeContext.market || "",
     };
 
     // Run governed scoring — this persists findings.json and scores.json.
@@ -1019,13 +1040,16 @@ export function createAuditOrchestrator({
     const scope = { tenantId, clientId, auditId };
     let rendererCallCount = 0;
 
-    // Fail-closed: capability evidence is a required v2 input.
+    // Fail-closed: capability evidence is a required v2 input.  CRIT defect
+    // 6a — load through the GOVERNED loader (artifact verify + SHA +
+    // schema validation), never a raw get+parse.
     let capabilityEvidence;
     try {
-      const capKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "capability-evidence.json" });
-      const capBytes = await artifactStore.get(capKey);
-      if (!capBytes) throw new Error("Capability evidence artifact not found");
-      capabilityEvidence = JSON.parse(capBytes.toString("utf-8"));
+      capabilityEvidence = await loadAndValidateCapabilityEvidence({
+        store: artifactStore,
+        scope,
+        validateContract,
+      });
     } catch (err) {
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-v2-capability-missing:" + (err.message || "").slice(0, 200), null);
@@ -1097,10 +1121,12 @@ export function createAuditOrchestrator({
       throw new Error("Report v2 persist failed: " + persistErr.message);
     }
 
-    // Frozen manifest shape (report-manifest.schema) with the v2 design token.
+    // Versioned manifest contract: the v2 manifest validates against the
+    // DISTINCT report-manifest-v2 schema (frozen v1 schema remains const
+    // 1.0.0 and governs v1 manifests only).
     const manifest = {
       contractVersion: "1.0.0", artifactVersion: "1.0.0",
-      reportVersion: scoringModel.scoringVersion || "4.1.0",
+      reportVersion: scoringModel.scoringVersion || "4.1.1",
       reportDesignVersion: REPORT_DESIGN_V2,
       runId: executionId,
       slug: String(auditRequest.businessName || auditRequest.targetUrl || "audit").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
@@ -1131,7 +1157,7 @@ export function createAuditOrchestrator({
     };
 
     const manifestValidation = validateContract(
-      "https://vantage-platform.io/prysm/contracts/v1/report-manifest.schema.json", manifest);
+      "https://vantage-platform.io/prysm/contracts/v1/report-manifest-v2.schema.json", manifest);
     if (!manifestValidation.valid) {
       const errDetail = JSON.stringify((manifestValidation.errors || []).slice(0, 5).map((e) => `${e.instancePath}: ${e.message}`));
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,

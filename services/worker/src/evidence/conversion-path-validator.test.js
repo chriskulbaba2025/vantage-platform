@@ -222,6 +222,30 @@ test("WP-E-01: empty key pages → NOT_ASSESSED", async () => {
   assert.equal(result.status, PATH_VALIDATION_STATUS.NOT_ASSESSED);
 });
 
+test("CRIT 5a: a weak search-style form never yields a conversion-form PASS", async () => {
+  const weakForm = {
+    async $$(sel) {
+      if (sel.includes("submit")) return [makeMockElement({ text: "Search" })];
+      return [makeMockElement({ text: "q" })];
+    },
+    async $(sel) {
+      if (sel.includes("submit")) return makeMockElement({ text: "Search" });
+      return null;
+    },
+  };
+  const page = makeMockPage({ form: weakForm });
+  const pw = makeMockPlaywright({ page });
+  const result = await validateConversionPaths({
+    targetUrl: "https://x.com",
+    keyPages: [{ url: "https://x.com/", role: "home" }],
+    playwrightImpl: pw,
+  });
+  const formCheck = result.pages[0].checks.desktop.form;
+  assert.equal(formCheck.found, true, "a form exists");
+  assert.equal(formCheck.submitEnabled, null, "submit intent too weak — stays unknown");
+  assert.ok(formCheck.limitation && formCheck.limitation.includes("conversion-relevant"), "limitation recorded");
+});
+
 // ---------------------------------------------------------------------------
 // WP-E-02 — form-safety invariant (behavioural)
 // ---------------------------------------------------------------------------

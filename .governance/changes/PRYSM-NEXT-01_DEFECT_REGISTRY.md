@@ -33,3 +33,23 @@
 
 - acceptance-wp4 PG rollback proof requires a migrated PostgreSQL: controlled `prysm-baseline-pg` docker postgres:16 on 127.0.0.1:5433 with migrations 001-003 applied; run via `PRYSM_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/postgres`. Recorded for WP-L reproducibility.
 - Stale `.next` from the provisioning-branch checkout caused tsc TS2307 on app/admin types; `rm -rf .next` + rerun → tsc EXIT=0.
+
+## WP-J — Independent CRIT review (2026-08-16, head 4d4b7f8): 93/100
+
+Independent adversarial reviewer (fresh context) verified integrity claims: (a) assessed-weight mean PASS, (b) no index%N PASS, (c) validator no-click/submit PASS, (d) v1 renderer untouched PASS, (e) unknown≠full-credit FAIL (scoreTechnicalV4 null-input sub-rules). Correction round:
+
+| CRIT # | Defect | Severity | Correction | Proof |
+|---|---|---|---|---|
+| 4a/4b | scoreTechnicalV4 meta/images sub-rules granted full credit from null inputs | HIGH | SCORING_VERSION 4.1.1: sub-rules EXCLUDED when counter inputs are null/unknown (changelog documented in score-components.js) | score-components.test.js truth tables + full regression |
+| 2a | DFS content-parsing text discarded → live audits never yield content evidence | CRITICAL | Adapter 1.2.0: parsed text hydrated into page bodyText/signals/_contentAvailable; site `_interactiveEvidenceAvailable:false`; capability rules: conversion.cta/form/path NEVER claim availability from parsed text alone (empty arrays + no interactive extractor = UNAVAILABLE); legacy extractor semantics preserved | adapter tests (hydrated text + signal derivation), capability truth tables, WP-I Phase 8 live-shaped real-adapter proof |
+| 3a/3b | v1 readinessMap asserted per-topic trust/CTA claims from unknown evidence | MEDIUM | topicRows gated on trust.proof capability (Not Assessed strings when unavailable); CTA type claim requires form/booking evidence | score-components.test.js |
+| 6c/10a | WP-I plumbing proof stubbed schema validation (false-PASS risk) | HIGH | acceptance-wpi now builds the REAL Ajv validator over all contracts; stub removed | WP-I 52/52 with real schemas (caught a real v2-manifest contract gap — see 6d) |
+| 6d | v2 manifest failed the frozen v1 manifest schema (reportDesignVersion const 1.0.0) — hidden by the stub | HIGH | NEW versioned contract report-manifest-v2.schema.json (const 2.0.0); v2 branch validates against it; v1 schema untouched | validator suite fixtures + WP-I |
+| 6a | v2 render loaded capability evidence via raw get+parse | MEDIUM | Now uses loadAndValidateCapabilityEvidence (verify + SHA + schema) | WP-I Phase 1 |
+| 6b | decision-evidence hydration warnings silently dropped | MEDIUM | console.error diagnostics (sanitized strings) | code |
+| 7a | EVIDENCE_LOCKED replay derived auditInput from transient request | MEDIUM | Scoring context now rebuilt from the PERSISTED audit-request.json (fallback to request) | WP-I + regression |
+| 5a | First `<form>` heuristic → newsletter/search forms yielded false conversion-form PASS | MEDIUM | Conversion-relevant form rule: submit text intent OR ≥2 editable fields; weak forms stay unknown (limitation, no pass/fail) | validator tests + WP-I |
+| 8a | v2 report omitted conversion-path architecture + competitive context | MEDIUM | v2 renderer gained evidence-grounded path + competitor sections | render-report-v2 golden tests |
+| 7b | trust {} could score as all-absent | LOW | Documented: within an eligible module, missing keys = collected absence (gate ensures content evidence); no breaking schema change (decision-evidence v1 frozen) | documented |
+| 10b | pollTask ready-without-crawl_progress | LOW | Accepted documented provider-compat behaviour (fixture-compat); recorded | noted |
+| 11b | pathValidationLiveBrowser opt-in default-off | — | Live pilot item (calibration record item 3); repository boundary proven with controlled browser | noted |
