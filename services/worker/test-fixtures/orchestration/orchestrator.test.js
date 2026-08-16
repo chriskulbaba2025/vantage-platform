@@ -147,6 +147,21 @@ async function seedDecisionEvidence({ store, scope, validateContract }) {
     validateContract,
   });
   await persistDecisionEvidence({ store, scope, evidence: decisionResult.evidence, validateContract });
+
+  // Scoring v4.1 requires the governed capability-evidence artifact
+  // (production persists it during collection); recovery scenarios seed
+  // the SAME artifact from the same decision evidence.
+  const { buildCapabilityEvidence, persistCapabilityEvidence } = await import("../../src/evidence/capability-evidence.js");
+  await persistCapabilityEvidence({
+    store,
+    scope,
+    evidence: buildCapabilityEvidence({
+      decisionEvidence: decisionResult.evidence,
+      auditId: scope.auditId,
+      generatedAt: mockClock().now(),
+    }),
+    validateContract,
+  });
 }
 
 async function persistSourceCheckpoint(store, scope, source, result, rawRecord = null) {

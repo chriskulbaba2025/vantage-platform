@@ -698,7 +698,13 @@ export function scoreAudit(input, evidence, opts = {}) {
           eligible: r.eligible,
           weight: r.weight,
           reason: r.reason || null,
-          ...(r.subWeightAssessed != null ? { subWeightAssessed: r.subWeightAssessed } : {}),
+          ...(r.subWeightAssessed != null
+            ? {
+                subWeightAssessed: r.subWeightAssessed,
+                subWeightTotal: r.subWeightTotal ?? 100,
+                subScores: r.subScores ?? null,
+              }
+            : {}),
         },
       ]),
     ),

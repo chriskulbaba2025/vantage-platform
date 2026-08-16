@@ -357,6 +357,85 @@ test("WP-D-12: unknown confidence factors are excluded, not imputed at 50", () =
 });
 
 // ---------------------------------------------------------------------------
+// CRIT rescore #4 — behavioural proof for the unknown≠credit corrections
+// ---------------------------------------------------------------------------
+
+test("CRIT rescore: null meta/image counters exclude the meta/images sub-rules", () => {
+  const ev = evidenceOf();
+  // Real derivation needs content + technical capabilities; null out the
+  // meta/image counters the sub-rules would otherwise consume.
+  ev.site.missingTitles = null;
+  ev.site.missingDescriptions = null;
+  ev.site.missingCanonicals = null;
+  ev.site.h1Missing = null;
+  ev.site.h1Multiple = null;
+  ev.site.imageCount = null;
+  ev.site.imagesMissingAlt = null;
+  ev.site.acquisition = {
+    redirectChains: { requested: 2, completed: 2, failed: 0 },
+    nonIndexable: { requested: 1000, completed: 2, failed: 0 },
+    resources: { requested: 2, completed: 2, failed: 0 },
+  };
+  ev.site.redirectChains = [];
+  ev.site.nonIndexablePages = [];
+  ev.site.pageResources = [{ url: "https://x.com/", totalResources: 5, brokenResources: 0 }];
+  const model = scoreAudit(INPUT, ev);
+  const tech = model.moduleScores.technical_hygiene;
+  const subKeys = (tech.subScores || []).map((s) => s.key);
+  assert.ok(!subKeys.includes("meta"), "meta sub-rule excluded when counters unknown");
+  assert.ok(!subKeys.includes("images"), "images sub-rule excluded when counts unknown");
+  assert.ok(tech.subWeightAssessed < tech.subWeightTotal, "unknown evidence reduces the assessed sub-weight");
+});
+
+test("CRIT rescore: indexability PARTIAL with empty list grants no credit", () => {
+  const ev = evidenceOf();
+  ev.site.acquisition = {
+    nonIndexable: { requested: 1000, completed: 2, failed: 998 },
+    redirectChains: { requested: 2, completed: 2, failed: 0 },
+  };
+  ev.site.nonIndexablePages = [];
+  ev.site.redirectChains = [];
+  const model = scoreAudit(INPUT, ev);
+  const tech = model.moduleScores.technical_hygiene;
+  const subKeys = (tech.subScores || []).map((s) => s.key);
+  assert.ok(!subKeys.includes("indexability"), "failed/partial indexability evidence grants no credit");
+});
+
+test("CRIT rescore: resources with null totals grant no credit", () => {
+  const ev = evidenceOf();
+  ev.site.acquisition = {
+    resources: { requested: 2, completed: 2, failed: 0 },
+    redirectChains: { requested: 2, completed: 2, failed: 0 },
+  };
+  ev.site.pageResources = [
+    { url: "https://x.com/", totalResources: null, brokenResources: null },
+  ];
+  ev.site.redirectChains = [];
+  const model = scoreAudit(INPUT, ev);
+  const tech = model.moduleScores.technical_hygiene;
+  const subKeys = (tech.subScores || []).map((s) => s.key);
+  assert.ok(!subKeys.includes("resources"), "null resource totals grant no credit");
+});
+
+test("CRIT rescore: readinessMap rows assert Not Assessed without trust evidence", () => {
+  const s = site({
+    _contentEvidenceAvailable: false,
+    _interactiveEvidenceAvailable: false,
+    services: ["Mystery Service"],
+    ctas: [],
+    forms: [],
+    pages: [{ title: "Unrelated", headings: { h1: ["Unrelated"], h2: [], h3: [], h4: [] }, responseHeaders: {} }],
+  });
+  const model = scoreAudit(INPUT, evidenceOf({ site: s }));
+  const row = model.readinessMap.find((r) => r.topic === "Mystery Service");
+  assert.equal(row.blocker, "Not Assessed", "no trust claims from unknown evidence");
+  assert.equal(row.trustAsset, "Not Assessed");
+  assert.equal(row.eeat, "Not Assessed");
+  assert.equal(row.cta, "Not Assessed", "no invented CTA-type claim");
+  assert.equal(row.path, "Not Assessed", "path absence asserted only when extraction ran");
+});
+
+// ---------------------------------------------------------------------------
 // WP-D-10 — repeatability at model level
 // ---------------------------------------------------------------------------
 

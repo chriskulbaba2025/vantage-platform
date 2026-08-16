@@ -969,7 +969,10 @@ function summarizeSite({
     errorCategory = ERROR_CATEGORY.NO_DATA;
   }
 
-  return {
+  // CRIT rescore #3 — this was an unreachable `return {` making the
+  // SHA-256 provenance block below dead code; the rawArtifactRef never
+  // gained its hash suffix.  Now the envelope is built, THEN stamped.
+  const result = {
     evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
     source: "dataforseo-onpage",
     sourceStatus,

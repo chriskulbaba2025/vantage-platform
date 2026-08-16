@@ -148,11 +148,16 @@ function topicRows(site, input = {}, capabilities = {}) {
       : bookingCta
         ? "Book"
         : "Not Assessed";
+    // CRIT rescore #5 — "Missing" asserts absence; when interactive
+    // extraction never ran, the honest value is "Not Assessed".
+    const interactiveRan = site._interactiveEvidenceAvailable !== false;
     const path = site.ctas.length
       ? stage === "BOFU"
         ? "Clear"
         : "Weak"
-      : "Missing";
+      : interactiveRan
+        ? "Missing"
+        : "Not Assessed";
     return {
       topic: typeof service === "string" ? pretty(service) : String(service),
       stage,

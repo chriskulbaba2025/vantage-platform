@@ -2720,6 +2720,13 @@ test("WP-B-10: raw artifact payload includes deep acquisition responses with val
     .digest("hex");
   assert.equal(recomputed, result._rawSha256, "SHA-256 must be over the exact packaged bytes");
   assert.equal(result._rawBytes, result._rawArtifactBytes.length);
+
+  // CRIT rescore #3 — the provenance stamp must actually run: the artifact
+  // ref carries the SHA-256 suffix of the raw payload.
+  assert.ok(
+    result.rawArtifactRef.includes("?sha256="),
+    "rawArtifactRef carries the SHA-256 provenance suffix",
+  );
 });
 
 test("WP-B-08: live content_parsing client posts one payload per key-page URL", async () => {

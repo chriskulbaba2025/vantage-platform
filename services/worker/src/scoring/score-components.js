@@ -346,9 +346,15 @@ function scoreOfferClarityV4({ site, input }) {
   const forms = site.forms.length ? 15 : 0;
   const pricing = site.trust.pricing ? 20 : 0;
   const servicesPts = Math.min(20, services.length * 4);
-  const descCoverage = site.pageCount
-    ? 15 * (1 - site.missingDescriptions / site.pageCount)
-    : 0;
+  // CRIT rescore #2 — unknown description counters must not grant the
+  // 15-point term; it contributes only from collected numbers.
+  const descKnown =
+    typeof site.missingDescriptions === "number" &&
+    Number.isFinite(site.missingDescriptions);
+  const descCoverage =
+    descKnown && site.pageCount
+      ? 15 * (1 - site.missingDescriptions / site.pageCount)
+      : 0;
   return clamp(ctaClarity + forms + pricing + servicesPts + descCoverage);
 }
 
@@ -447,8 +453,15 @@ function scoreTechnicalV4({ site, capabilities }) {
 
   const capStatus = (key) => capabilities?.[key]?.status;
 
-  // Indexability — technical.indexability capability.
-  if (capStatus("technical.indexability") === "AVAILABLE" || capStatus("technical.indexability") === "PARTIAL") {
+  // Indexability — technical.indexability capability.  CRIT rescore #1:
+  // PARTIAL status (endpoint failures / flag-only fallback) with an empty
+  // list must NOT grant full credit — the sub-rule requires collected
+  // evidence (requiredFieldsPresent from the capability derivation).
+  const indexabilityCap = capabilities?.["technical.indexability"];
+  if (
+    indexabilityCap?.status === "AVAILABLE" &&
+    indexabilityCap?.requiredFieldsPresent === true
+  ) {
     const count = (site.nonIndexablePages || []).length;
     const score = count === 0 ? 10 : count <= 2 ? 7 : count <= 5 ? 4 : 0;
     subRules.push({ key: "indexability", weight: 10, score });
@@ -462,12 +475,26 @@ function scoreTechnicalV4({ site, capabilities }) {
     subRules.push({ key: "redirects", weight: 10, score });
   }
 
-  // Resources — technical.resources capability.
-  if (capStatus("technical.resources") === "AVAILABLE" || capStatus("technical.resources") === "PARTIAL") {
+  // Resources — technical.resources capability.  CRIT rescore #1: null
+  // total counters must NOT become full credit — the sub-rule requires at
+  // least one page with a finite numeric totalResources.
+  const resourcesCap = capabilities?.["technical.resources"];
+  if (
+    (resourcesCap?.status === "AVAILABLE" || resourcesCap?.status === "PARTIAL") &&
+    (site.pageResources || []).some(
+      (p) => typeof p?.totalResources === "number" && Number.isFinite(p.totalResources),
+    )
+  ) {
     const pages = site.pageResources || [];
-    const total = pages.reduce((s, p) => s + (p?.totalResources ?? 0), 0);
-    const broken = pages.reduce((s, p) => s + (p?.brokenResources ?? 0), 0);
-    const score = total > 0 ? Math.round(10 * (1 - Math.min(1, broken / total))) : 10;
+    const total = pages.reduce(
+      (s, p) => s + (typeof p?.totalResources === "number" ? p.totalResources : 0),
+      0,
+    );
+    const broken = pages.reduce(
+      (s, p) => s + (typeof p?.brokenResources === "number" ? p.brokenResources : 0),
+      0,
+    );
+    const score = total > 0 ? Math.round(10 * (1 - Math.min(1, broken / total))) : 0;
     subRules.push({ key: "resources", weight: 10, score });
   }
 
