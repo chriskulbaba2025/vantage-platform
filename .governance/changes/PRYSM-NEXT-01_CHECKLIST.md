@@ -16,9 +16,9 @@ Each WP has its own frozen checklist (created at WP start) with detailed IDs. Th
 - [x] PRYSM-NEXT-01-WPA-03 — GCU loaded and version recorded. Evidence: governed-coding-upgrade v2.1.0 (VERSION file); source SHA N/A (not a git repo); persistent learning NOT SUPPORTED by v2.1.0 — recorded in WORKSPACE.
 - [x] PRYSM-NEXT-01-WPA-04 — Feature branch feat/prysm-next-product-upgrade created from verified main b2e713b; main untouched.
 - [x] PRYSM-NEXT-01-WPA-05 — Production spine + producer→contract→consumer map frozen in PRYSM-NEXT-01_PRODUCTION_SPINE.md.
-- [ ] PRYSM-NEXT-01-WPA-06 — Baseline worker suite executed and recorded (npm test + acceptance-prysm, -tenant, wp2..wp12, task7/9/10) — see baseline evidence log.
-- [ ] PRYSM-NEXT-01-WPA-07 — Baseline web suite executed and recorded (tsc --noEmit, next build, playwright tests/wp11).
-- [ ] PRYSM-NEXT-01-WPA-08 — Baseline governance checkpoint committed + branch pushed.
+- [x] PRYSM-NEXT-01-WPA-06 — Baseline worker suite executed and recorded. Evidence (`.governance/evidence/baseline-worker.log` + reruns): npm test EXIT=0; acceptance-prysm/tenant/wp2/wp3/wp5/wp6/task7/wp7/wp8/wp9/task10/wp10/wp11/wp12 EXIT=0; acceptance-wp4 57/57 PASS with controlled migrated postgres (PRYSM_TEST_DATABASE_URL → docker prysm-baseline-pg:5433); acceptance-task9 12/12 PASS after proof-only harness fix (DEF-11).
+- [x] PRYSM-NEXT-01-WPA-07 — Baseline web suite executed and recorded. Evidence: tsc --noEmit EXIT=0 (after stale `.next` cleanup — TS2307 artifacts from provisioning checkout); next build EXIT=0 (10/10 pages); playwright tests/wp11 8/8 passed.
+- [x] PRYSM-NEXT-01-WPA-08 — Baseline governance checkpoint committed + branch pushed. Commits: cc6bbe1 (workspace/spine/checklist) + WP-A closure commit (defect registry, baseline evidence, task9 proof-only fix).
 
 ## Work packages (each with its own frozen checklist before implementation)
 
