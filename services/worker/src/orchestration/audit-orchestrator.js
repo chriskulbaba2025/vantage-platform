@@ -1204,11 +1204,13 @@ export function createAuditOrchestrator({
     // Fields preserved by buildScoreSet (WP12) are read directly from the
     // artifact so the renderer never reconstructs empty arrays/objects.
     let scoringModel;
+    let scoreSetRaw = null;
     try {
       const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
       const scoresBytes = await artifactStore.get(scoresKey);
       if (!scoresBytes) throw new Error("Scores artifact not found");
       const scoreSet = JSON.parse(scoresBytes.toString());
+      scoreSetRaw = scoreSet;
       scoringModel = {
         scoringVersion: scoreSet.scoringVersion || "3.0.0", generatedAt: scoreSet.generatedAt || c.now(),
         scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
@@ -1271,7 +1273,7 @@ export function createAuditOrchestrator({
     const reportDesignVersion = auditRequest.report?.designVersion || DEFAULT_REPORT_DESIGN;
     if (isReportDesignV2(reportDesignVersion)) {
       return await renderReportV2Governed({
-        auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet,
+        auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet: scoreSetRaw || {},
       });
     }
 
