@@ -351,6 +351,7 @@ function scoreOfferClarityV4({ site, input }) {
   // (adapter marker) and finite.
   const descKnown =
     site._metaCountersAvailable !== false &&
+    (site._metaFieldAvailability?.descriptions ?? true) !== false &&
     typeof site.missingDescriptions === "number" &&
     Number.isFinite(site.missingDescriptions);
   const descCoverage =
@@ -424,26 +425,33 @@ function scoreTechnicalV4({ site, capabilities }) {
   // credit — each TERM is included only from a finite collected counter,
   // and the sub-rule weight reflects exactly the known portion.
   const finiteNum = (v) => typeof v === "number" && Number.isFinite(v);
+  // Per-field availability (CRIT rescore R1): each term requires ITS field
+  // to have been collected.  Absent map ⇒ legacy extractor semantics.
+  const fieldAvail = site._metaFieldAvailability || {};
+  const fieldCollected = (field) => fieldAvail[field] !== false;
   {
     const metaTerms = [
       {
         weight: 15,
-        known: finiteNum(site.missingTitles),
+        known: fieldCollected("titles") && finiteNum(site.missingTitles),
         score: 15 * (1 - (site.missingTitles ?? 0) / pageCount),
       },
       {
         weight: 15,
-        known: finiteNum(site.missingDescriptions),
+        known: fieldCollected("descriptions") && finiteNum(site.missingDescriptions),
         score: 15 * (1 - (site.missingDescriptions ?? 0) / pageCount),
       },
       {
         weight: 10,
-        known: finiteNum(site.missingCanonicals),
+        known: fieldCollected("canonicals") && finiteNum(site.missingCanonicals),
         score: 10 * (1 - (site.missingCanonicals ?? 0) / pageCount),
       },
       {
         weight: 10,
-        known: finiteNum(site.h1Missing) && finiteNum(site.h1Multiple),
+        known:
+          fieldCollected("headings") &&
+          finiteNum(site.h1Missing) &&
+          finiteNum(site.h1Multiple),
         score: 10 * (1 - Math.min(pageCount, (site.h1Missing ?? 0) + (site.h1Multiple ?? 0)) / pageCount),
       },
     ];

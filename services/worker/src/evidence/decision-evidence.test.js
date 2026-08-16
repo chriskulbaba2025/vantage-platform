@@ -248,6 +248,33 @@ test("CRIT rescore: uncollected meta counters earn no credit end-to-end", async 
   assert.equal(errors.length, 0, "hydration clean");
   assert.equal(evidence.site._metaCountersAvailable, false, "collection marker survives hydration");
 
+  // R3 — raw artifact provenance survives hydration (capability/finding ref).
+  const srWithRef = validSr("dataforseo-onpage", {
+    adapterVersion: "1.2.0",
+    evidence: {
+      sourceStatus: "PARTIAL",
+      domain: "example.com",
+      targetUrl: "https://example.com/",
+      platform: "WordPress",
+      pages: [{ url: "https://example.com/", title: "Home", headings: { h1: ["H"], h2: [], h3: [], h4: [] }, status: 200 }],
+      services: [], trust: {}, schemaTypes: [], ctas: [], forms: [],
+      rawArtifactRef: "dataforseo://on_page/t1?sha256=abc",
+      _metaCountersAvailable: true,
+      _contentEvidenceAvailable: true,
+      _responseHeadersAvailable: true,
+      collectedAt: "2026-01-15T12:00:00.000Z",
+    },
+  });
+  const withRef = buildDecisionEvidence({
+    allSourceResults: [{ source: "dataforseo-onpage", sourceResult: srWithRef }],
+    validateContract,
+  }).evidence;
+  assert.equal(
+    withRef.site.rawArtifactRef,
+    "dataforseo://on_page/t1?sha256=abc",
+    "rawArtifactRef survives hydration",
+  );
+
   const model = scoreAudit(
     { targetUrl: "https://example.com/", businessName: "X", competitors: [] },
     { ...evidence, performance: null, ga4: null, gsc: null, backlinks: null },

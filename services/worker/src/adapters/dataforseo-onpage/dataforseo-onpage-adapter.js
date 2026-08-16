@@ -1027,14 +1027,17 @@ function summarizeSite({
       ? `dataforseo://on_page/${rawTaskId}`
       : null,
     // Evidence-audit item 2 — the frozen decision-evidence schema coerces
-    // counters to integers at hydration; this marker declares whether the
-    // counters were ACTUALLY collected (page-level data or page_metrics
-    // checks).  Scorers gate meta credit on it.
-    _metaCountersAvailable:
-      hasPageHeadingData ||
-      hasPageDescriptionData ||
-      typeof metricChecks.no_h1_tag === "number" ||
-      typeof metricChecks.no_description === "number",
+    // counters to integers at hydration; per-FIELD availability markers
+    // declare which counters were ACTUALLY collected (page-level data or
+    // page_metrics checks).  Scorers gate each meta term on its field.
+    _metaFieldAvailability: {
+      titles: true, // page-derived (computed from collected page titles)
+      descriptions:
+        hasPageDescriptionData || typeof metricChecks.no_description === "number",
+      canonicals: true, // page-derived (computed from collected canonicals)
+      headings:
+        hasPageHeadingData || typeof metricChecks.no_h1_tag === "number",
+    },
     _contentEvidenceAvailable: contentEvidenceAvailable,
     _responseHeadersAvailable: responseHeadersAvailable,
     // CRIT defect 2a — parsed text proves CONTENT, not interactive
@@ -1974,6 +1977,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         _responseHeadersAvailable: envelope._responseHeadersAvailable || false,
         _interactiveEvidenceAvailable: envelope._interactiveEvidenceAvailable === true,
         _metaCountersAvailable: envelope._metaCountersAvailable === true,
+        _metaFieldAvailability: envelope._metaFieldAvailability || null,
         rawArtifactRef: envelope.rawArtifactRef || null,
       },
     };

@@ -415,6 +415,26 @@ test("CRIT rescore: offerClarity descCoverage grants no credit from unknown coun
   );
 });
 
+test("CRIT rescore R1: mixed partial collection excludes only the uncollected field", () => {
+  const ev = evidenceOf();
+  ev.site._metaFieldAvailability = {
+    titles: true,
+    descriptions: false, // description counters NOT collected
+    canonicals: true,
+    headings: true,
+  };
+  ev.site.missingDescriptions = null;
+  const model = scoreAudit(INPUT, ev);
+  const tech = model.moduleScores.technical_hygiene;
+  const metaSub = (tech.subScores || []).find((s) => s.key === "meta");
+  assert.ok(metaSub, "collected fields still score");
+  assert.equal(metaSub.weight, 35, "descriptions term (15) excluded; titles+canonicals+headings = 35");
+  // offerClarity descCoverage excludes the uncollected field too (R2).
+  const offerWith = scoreAudit(INPUT, evidenceOf()).moduleScores.offer_clarity.score;
+  const offerMixed = model.moduleScores.offer_clarity.score;
+  assert.ok(offerMixed < offerWith, "descCoverage excluded for the uncollected field");
+});
+
 test("CRIT rescore: redirects PARTIAL without collected evidence grants no credit", () => {
   const ev = evidenceOf();
   ev.site.acquisition = {

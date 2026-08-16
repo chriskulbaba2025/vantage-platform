@@ -116,6 +116,7 @@ function hydrateSite(sourceResult) {
     imagesMissingAlt: ev.imagesMissingAlt ?? 0,
     internalLinkCount: ev.internalLinkCount ?? 0,
     _metaCountersAvailable: ev._metaCountersAvailable,
+    _metaFieldAvailability: ev._metaFieldAvailability,
     brokenInternalLinks: ev.brokenInternalLinks || [],
     securityHeaders: ev.securityHeaders || {},
     // PRYSM-NEXT-01 WP-C — unknown is NOT coerced to false. Absent stays
