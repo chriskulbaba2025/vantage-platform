@@ -687,6 +687,21 @@ export function scoreAudit(input, evidence, opts = {}) {
     dimensionEligibility,
     moduleEligibility,
     suppressedModules,
+    // WP-G: additive per-module score map for pillar display.  Same values
+    // already consumed internally — display aggregation only, no scoring
+    // semantics change.
+    moduleScores: Object.fromEntries(
+      [...moduleResults.entries()].map(([id, r]) => [
+        id,
+        {
+          score: r.score,
+          eligible: r.eligible,
+          weight: r.weight,
+          reason: r.reason || null,
+          ...(r.subWeightAssessed != null ? { subWeightAssessed: r.subWeightAssessed } : {}),
+        },
+      ]),
+    ),
 
     // Findings, root cause, and display content
     rootCause,

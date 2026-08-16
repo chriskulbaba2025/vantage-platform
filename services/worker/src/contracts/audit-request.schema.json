@@ -236,6 +236,18 @@
         "fetchImpl": {}
       },
       "description": "Backlinks configuration. fetchImpl is a controlled-dependency injection seam (tests only)."
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "designVersion": {
+          "type": "string",
+          "enum": ["1.0.0", "2.0.0"],
+          "default": "1.0.0",
+          "description": "PRYSM-NEXT-01 WP-G: governed report design version. 1.0.0 = locked v1 design (default); 2.0.0 = prysm-report-design-v2.0.0."
+        }
+      },
+      "description": "Report configuration. The design version selects the governed renderer; the default remains the locked v1 design."
     }
   }
 }

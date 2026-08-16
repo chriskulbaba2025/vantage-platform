@@ -22,6 +22,7 @@ import { buildDecisionEvidence, persistDecisionEvidence, loadAndValidateDecision
 import { buildCapabilityEvidence, persistCapabilityEvidence, loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { validateConversionPaths } from "../evidence/conversion-path-validator.js";
 import { selectImportantPages } from "../evidence/important-page-selector.js";
+import { REPORT_DESIGN_V2, isReportDesignV2, DEFAULT_REPORT_DESIGN } from "../report/report-design.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
@@ -178,6 +179,8 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
     pathValidationScreenshots: auditRequest.crawl?.pathValidationScreenshots ?? true,
     pathValidationMobile: auditRequest.crawl?.pathValidationMobile ?? true,
     pathValidationLiveBrowser: auditRequest.crawl?.pathValidationLiveBrowser ?? false,
+    // PRYSM-NEXT-01 WP-G — report design version joins the identity.
+    reportDesignVersion: auditRequest.report?.designVersion ?? DEFAULT_REPORT_DESIGN,
   };
   const normalizedConfig = stableJsonStringify(config);
   const configHash = sha256(Buffer.from(normalizedConfig, "utf-8"));
@@ -1007,6 +1010,163 @@ export function createAuditOrchestrator({
    * On failure: NARRATIVE_READY → RENDER_FAILED, fail closed.
    * Zero partial writes. Renderer call counted and instrumented.
    */
+  /**
+   * PRYSM-NEXT-01 WP-G — governed rendering for report design v2.0.0.
+   * Single-page executive report + v2 finalization + frozen manifest shape.
+   */
+  async function renderReportV2Governed({ auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet }) {
+    const { tenantId, clientId, auditId } = auditRequest;
+    const scope = { tenantId, clientId, auditId };
+    let rendererCallCount = 0;
+
+    // Fail-closed: capability evidence is a required v2 input.
+    let capabilityEvidence;
+    try {
+      const capKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "capability-evidence.json" });
+      const capBytes = await artifactStore.get(capKey);
+      if (!capBytes) throw new Error("Capability evidence artifact not found");
+      capabilityEvidence = JSON.parse(capBytes.toString("utf-8"));
+    } catch (err) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-capability-missing:" + (err.message || "").slice(0, 200), null);
+      throw new Error("Report v2 rendering failed: " + err.message);
+    }
+
+    const v2Model = {
+      scoringVersion: scoringModel.scoringVersion || "4.1.0",
+      generatedAt: scoringModel.generatedAt,
+      scores: scoringModel.scores || {},
+      bands: scoringModel.bands || {},
+      assessedWeight: scoringModel.assessedWeight ?? 0,
+      readinessStatus: scoringModel.readinessStatus || "",
+      readinessStatusDetail: scoringModel.readinessStatusDetail || scoringModel.readinessStatus || "",
+      showNumericScore: scoringModel.showNumericScore ?? false,
+      evidenceConfidenceScore: scoringModel.evidenceConfidenceScore ?? 0,
+      evidenceConfidenceFactorAvailability: scoreSet.evidenceConfidenceFactorAvailability || [],
+      rootCause: scoringModel.rootCause || "",
+      findings: scoringModel.findings || [],
+      suppressedFindingReasons: scoreSet.suppressedFindingReasons || [],
+      moduleEligibility: scoreSet.moduleEligibility || {},
+      moduleScores: scoreSet.moduleScores || {},
+      suppressedModules: scoreSet.suppressedModules || [],
+      capabilityEvidence,
+      evidence: decisionEvidence,
+      input: {
+        businessName: auditRequest.businessName || "",
+        targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
+      },
+      conversionPaths: scoreSet.conversionPaths || [],
+      readinessMap: scoreSet.readinessMap || [],
+      contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+      competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+    };
+
+    const { renderReportV2 } = await import("../report/render-report-v2.js");
+    rendererCallCount += 1;
+    let html;
+    try {
+      html = renderReportV2(v2Model);
+    } catch (renderErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-failed:" + (renderErr.message || "").slice(0, 200), null);
+      throw new Error("Report v2 page rendering failed: " + renderErr.message);
+    }
+
+    // v2 finalization: structural check (doctype + required sections).
+    if (!/^<!doctype html>/i.test(html) || !html.includes("D. Where are the problems?")) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-finalization-failed", null);
+      throw new Error("Report v2 finalization failed: required structure missing");
+    }
+
+    const bytes = Buffer.from(html, "utf-8");
+    let record;
+    try {
+      record = await artifactStore.put({
+        bytes,
+        contentType: "text/html",
+        scope: { tenantId, clientId, auditId, category: "report-v2", artifactName: "pages/index.html" },
+      });
+      const stored = await artifactStore.get(record.key);
+      if (!stored || stored.length !== bytes.length) {
+        throw new Error(`Read-back mismatch for report-v2 index (stored ${stored?.length}, expected ${bytes.length})`);
+      }
+    } catch (persistErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-persist-failed:" + (persistErr.message || "").slice(0, 200), null);
+      throw new Error("Report v2 persist failed: " + persistErr.message);
+    }
+
+    // Frozen manifest shape (report-manifest.schema) with the v2 design token.
+    const manifest = {
+      contractVersion: "1.0.0", artifactVersion: "1.0.0",
+      reportVersion: scoringModel.scoringVersion || "4.1.0",
+      reportDesignVersion: REPORT_DESIGN_V2,
+      runId: executionId,
+      slug: String(auditRequest.businessName || auditRequest.targetUrl || "audit").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+      targetUrl: auditRequest.targetUrl || "https://unknown.example.com",
+      targetDomain: (() => { try { return new URL(auditRequest.targetUrl || "https://unknown.example.com").hostname; } catch { return "unknown.example.com"; } })(),
+      startedAt,
+      completedAt: c.now(),
+      status: "draft",
+      scores: {
+        trust: scoringModel.scores?.trust ?? null,
+        contentDepth: scoringModel.scores?.contentDepth ?? null,
+        conversionPathways: scoringModel.scores?.conversionPathways ?? null,
+        technical: scoringModel.scores?.technical ?? null,
+        performance: scoringModel.scores?.performance ?? null,
+        conversionReadiness: scoringModel.scores?.conversionReadiness ?? null,
+      },
+      sources: {
+        website: decisionEvidence.site?.sourceStatus || "NOT_APPLICABLE",
+        performance: decisionEvidence.performance?.sourceStatus || "NOT_APPLICABLE",
+        competitors: decisionEvidence.competitors?.length ? (decisionEvidence.competitors[0]?.status || "NOT_APPLICABLE") : "NOT_APPLICABLE",
+        backlinks: decisionEvidence.backlinks?.sourceStatus || "NOT_APPLICABLE",
+        ga4: decisionEvidence.ga4?.sourceStatus || "NOT_APPLICABLE",
+        gsc: decisionEvidence.gsc?.sourceStatus || "NOT_APPLICABLE",
+      },
+      files: ["index.html"],
+      auditId,
+      lifecycleStatus: "DRAFT_RENDERED",
+    };
+
+    const manifestValidation = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/report-manifest.schema.json", manifest);
+    if (!manifestValidation.valid) {
+      const errDetail = JSON.stringify((manifestValidation.errors || []).slice(0, 5).map((e) => `${e.instancePath}: ${e.message}`));
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-manifest-invalid:" + errDetail.slice(0, 200), null);
+      throw new Error(`Report v2 manifest validation failed: ${errDetail}`);
+    }
+
+    const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2), "utf-8");
+    const manifestRecord = await artifactStore.put({
+      bytes: manifestBytes, contentType: "application/json",
+      scope: { tenantId, clientId, auditId, category: "report-v2", artifactName: "manifest.json" },
+    });
+
+    await doTransition(auditId, tenantId, executionId, T.DRAFT_RENDERED,
+      "governed-rendering-complete", manifestRecord.key);
+
+    return Object.freeze({
+      contractVersion: "1.0.0", auditId, executionId,
+      finalState: T.DRAFT_RENDERED, resumed: false, startedAt, completedAt: c.now(),
+      viewModelHash: null,
+      pageCount: 1,
+      manifestKey: manifestRecord.key,
+      manifestRecord,
+      pageArtifacts: Object.freeze([{ filename: "index.html", key: record.key, sha256: record.sha256, bytes: record.bytes }]),
+      renderedPages: new Map([["index.html", html]]),
+      rendererCallCount,
+      reportDesignVersion: REPORT_DESIGN_V2,
+      n8nCallCount: _n8nCallCounter.count,
+      narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
+      findingsArtifact: null, scoresArtifact: null,
+      sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
+      sources: Object.freeze([]), canonicalEvidence: null,
+    });
+  }
+
   async function runGovernedRendering({ auditRequest, executionId, startedAt, injectPageFailure }) {
     const { tenantId, clientId, auditId } = auditRequest;
     const scope = { tenantId, clientId, auditId };
@@ -1102,6 +1262,17 @@ export function createAuditOrchestrator({
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-finalization-gate-failed:" + (gate.errors || []).map((e) => e.message).join("; ").slice(0, 200), null);
       throw new Error("Finalization gate failed: " + (gate.errors || []).map((e) => e.message).join("; "));
+    }
+
+    // ── PRYSM-NEXT-01 WP-G — report design version boundary ────────────
+    // Design v2.0.0 renders a DISTINCT single-page executive report through
+    // its own renderer + artifact namespace (report-v2/).  v1.0.0 (default)
+    // continues through the locked 16-page path below, unchanged.
+    const reportDesignVersion = auditRequest.report?.designVersion || DEFAULT_REPORT_DESIGN;
+    if (isReportDesignV2(reportDesignVersion)) {
+      return await renderReportV2Governed({
+        auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet,
+      });
     }
 
     // --- Build COMPLETE ReportViewModel (validates WP8+WP9+scoring+evidence) ---

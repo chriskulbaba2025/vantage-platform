@@ -234,6 +234,10 @@ function buildScoreSet(model, findingsRecord, scoresRecord) {
     capabilityEvidence: model.capabilityEvidence,
     suppressedFindingReasons: model.suppressedFindingReasons || [],
     aiReadinessBasis: model.aiReadinessBasis || null,
+    // WP-G: report design v2 pillar inputs (display-only passthrough).
+    moduleScores: model.moduleScores || {},
+    moduleEligibility: model.moduleEligibility || {},
+    suppressedModules: model.suppressedModules || [],
     scores: model.scores,
     bands: model.bands,
     dimensionEligibility: model.dimensionEligibility,
