@@ -183,3 +183,40 @@ test("PRYSM-CLOSE-02f: AVAILABLE site with minimal evidence hydrates without fab
   assert.equal(evidence.site?.trust, undefined, "trust NOT fabricated");
   assert.equal(evidence.site?.schemaTypes, undefined, "schemaTypes NOT fabricated");
 });
+
+// PRYSM-NEXT-01 WP-B — deep acquisition fields survive the hydration
+// boundary into decision evidence (scoring consumer continuity).
+test("WP-B: deep acquisition fields pass through hydrateSite losslessly", () => {
+  const validateContract = makeValidator();
+  const deepEvidence = {
+    sourceStatus: "AVAILABLE",
+    domain: "example.com",
+    targetUrl: "https://example.com/",
+    pages: [],
+    contentParsing: [
+      { url: "https://example.com/", wordCount: 9, mainContentChars: 40, hasMainContent: true, sentimentScore: null },
+    ],
+    redirectChains: [
+      { from: "https://example.com/", to: "https://example.com/home", statusCodes: [301, 200], hops: 2 },
+    ],
+    nonIndexablePages: [{ url: "https://example.com/404-page", reason: "4xx" }],
+    pageResources: [{ url: "https://example.com/", totalResources: 12, brokenResources: 1 }],
+    microdataTypes: ["Organization", "LocalBusiness"],
+    acquisition: { contentParsing: { requested: 1, completed: 1, failed: 0 } },
+  };
+  const { evidence, errors } = buildDecisionEvidence({
+    allSourceResults: [
+      { source: "dataforseo-onpage", sourceResult: validSr("dataforseo-onpage", { evidence: deepEvidence }) },
+    ],
+    validateContract,
+  });
+  assert.equal(errors.length, 0, "no hydration errors");
+  assert.deepEqual(evidence.site.contentParsing, deepEvidence.contentParsing);
+  assert.deepEqual(evidence.site.redirectChains, deepEvidence.redirectChains);
+  assert.deepEqual(evidence.site.nonIndexablePages, deepEvidence.nonIndexablePages);
+  assert.deepEqual(evidence.site.pageResources, deepEvidence.pageResources);
+  assert.deepEqual(evidence.site.microdataTypes, deepEvidence.microdataTypes);
+  assert.deepEqual(evidence.site.acquisition, deepEvidence.acquisition);
+  // Real-validator schema acceptance of the extended site shape is covered
+  // by DE-16 (production regression with the real contract validator).
+});

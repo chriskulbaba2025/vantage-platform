@@ -390,6 +390,13 @@ export function createDataforseoOnpageClient(opts = {}) {
         store_raw_html: false,
         validate_headings: true,
         validate_page_changes: false,
+        // EVIDENCE-MATRIX: schema.structured_data — microdata endpoint
+        // requires validate_micromarkup on the task.  PRYSM-NEXT-01 WP-B-02.
+        validate_micromarkup: options.validateMicromarkup ?? true,
+        // EVIDENCE-MATRIX: content.body — /on_page/content_parsing requires
+        // enable_content_parsing on the task.  Requests stay scoped to the
+        // deterministic key-page set (PRYSM-NEXT-01 WP-B-03/WP-B-08).
+        enable_content_parsing: options.enableContentParsing ?? true,
         ...(options.customRobotsTxt != null && {
           custom_robots_txt: options.customRobotsTxt,
         }),
@@ -915,6 +922,173 @@ export function createDataforseoOnpageClient(opts = {}) {
   }
 
   /**
+   * Fetch parsed page content for specific URLs (content-parsing endpoint).
+   *
+   * POST /v3/on_page/content_parsing
+   *
+   * EVIDENCE-MATRIX: content.body.  Requires enable_content_parsing on the
+   * original task.  One request per URL; pollable through 20100.
+   *
+   * @param {string} taskId - Main crawl task ID.
+   * @param {Array<string>} urls - Page URLs to parse (key-page set).
+   * @param {object} [options] - Poll options (timeoutMs, pollIntervalMs).
+   * @returns {Promise<{results: Array<{url, items, result}>, metadata: Array<object>}>}
+   */
+  async function getContentParsing(taskId, urls = [], options) {
+    const cappedUrls = urls.slice(0, (options && options.maxUrls != null) ? options.maxUrls : 10);
+    const allResults = [];
+    const allMetadata = [];
+    const { maxUrls: _unused, ...pollOpts } = (options || {});
+    if (mode === "fixture") {
+      const fixtures = opts.fixtures || {};
+      const fixtureData = fixtures.content_parsing || fixtures.contentParsing || {};
+      for (const url of cappedUrls.length > 0 ? cappedUrls : ["https://example.com/"]) {
+        if (Array.isArray(fixtureData)) {
+          const entry = fixtureData.find((f) => f.url === url) || { url, items: [] };
+          allResults.push({ url, items: entry.items || [], result: entry.result || null });
+          allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url });
+        } else {
+          allResults.push({ url, items: fixtureData.items || [], result: fixtureData.result || null });
+          allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url });
+        }
+      }
+      return { results: allResults, metadata: allMetadata };
+    }
+    for (const url of cappedUrls) {
+      const payload = [{ id: taskId, url }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/content_parsing", payload, pollOpts);
+      allResults.push({ url, items: result?.items || [], result: result || null });
+      allMetadata.push({ ...metadata, url });
+    }
+    return { results: allResults, metadata: allMetadata };
+  }
+
+  /**
+   * Fetch redirect chains for specific URLs.
+   *
+   * POST /v3/on_page/redirect_chains
+   *
+   * EVIDENCE-MATRIX: technical.redirects.  One request per URL.
+   *
+   * @param {string} taskId - Main crawl task ID.
+   * @param {Array<string>} urls - Page URLs to check.
+   * @param {object} [options] - Poll options (timeoutMs, pollIntervalMs, maxUrls).
+   * @returns {Promise<{results: Array<{url, items, result}>, metadata: Array<object>}>}
+   */
+  async function getRedirectChains(taskId, urls = [], options) {
+    const cappedUrls = urls.slice(0, (options && options.maxUrls != null) ? options.maxUrls : 20);
+    const allResults = [];
+    const allMetadata = [];
+    const { maxUrls: _unused, ...pollOpts } = (options || {});
+    if (mode === "fixture") {
+      const fixtures = opts.fixtures || {};
+      const fixtureData = fixtures.redirect_chains || fixtures.redirectChains || {};
+      for (const url of cappedUrls.length > 0 ? cappedUrls : ["https://example.com/"]) {
+        if (Array.isArray(fixtureData)) {
+          const entry = fixtureData.find((f) => f.url === url) || { url, items: [] };
+          allResults.push({ url, items: entry.items || [], result: entry.result || null });
+          allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url });
+        } else {
+          allResults.push({ url, items: fixtureData.items || [], result: fixtureData.result || null });
+          allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url });
+        }
+      }
+      return { results: allResults, metadata: allMetadata };
+    }
+    for (const url of cappedUrls) {
+      const payload = [{ id: taskId, url }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/redirect_chains", payload, pollOpts);
+      allResults.push({ url, items: result?.items || [], result: result || null });
+      allMetadata.push({ ...metadata, url });
+    }
+    return { results: allResults, metadata: allMetadata };
+  }
+
+  /**
+   * Fetch non-indexable pages (paginated).
+   *
+   * POST /v3/on_page/non_indexable
+   *
+   * EVIDENCE-MATRIX: technical.indexability.
+   *
+   * @param {string} taskId - Main crawl task ID.
+   * @param {object} [options] - { limit, offset, maxRecords, timeoutMs, pollIntervalMs }.
+   * @returns {Promise<{items: Array<object>, totalCount: number, metadata: Array<object>}>}
+   */
+  async function getNonIndexable(taskId, options = {}) {
+    const limit = options.limit ?? 100;
+    const offset = options.offset ?? 0;
+    const maxRecords = options.maxRecords ?? 1000;
+
+    if (mode === "fixture") {
+      const fixtures = opts.fixtures || {};
+      const fixtureData = fixtures.non_indexable || fixtures.nonIndexable || { items: [], total_count: 0 };
+      const allItems = fixtureData.items || [];
+      return {
+        items: allItems.slice(offset, offset + limit),
+        totalCount: fixtureData.total_count ?? allItems.length,
+        metadata: [{ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false }],
+      };
+    }
+
+    const allItems = [];
+    const allMetadata = [];
+    let currentOffset = offset;
+    while (allItems.length < maxRecords) {
+      const payload = [{ id: taskId, limit, offset: currentOffset }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/non_indexable", payload, options);
+      allMetadata.push({ ...metadata, offset: currentOffset });
+      const items = result?.items || [];
+      if (!items.length) break;
+      allItems.push(...items);
+      if (items.length < limit) break;
+      currentOffset += items.length;
+    }
+    return { items: allItems, totalCount: allItems.length, metadata: allMetadata };
+  }
+
+  /**
+   * Fetch per-page resources (scripts, images, broken resources).
+   *
+   * POST /v3/on_page/resources
+   *
+   * EVIDENCE-MATRIX: technical.resources.  One request per URL.
+   *
+   * @param {string} taskId - Main crawl task ID.
+   * @param {Array<string>} urls - Page URLs to inspect (key-page set).
+   * @param {object} [options] - Poll options + maxUrls.
+   * @returns {Promise<{results: Array<{url, items, result}>, metadata: Array<object>}>}
+   */
+  async function getResources(taskId, urls = [], options) {
+    const cappedUrls = urls.slice(0, (options && options.maxUrls != null) ? options.maxUrls : 10);
+    const allResults = [];
+    const allMetadata = [];
+    const { maxUrls: _unused, ...pollOpts } = (options || {});
+    if (mode === "fixture") {
+      const fixtures = opts.fixtures || {};
+      const fixtureData = fixtures.resources || {};
+      for (const url of cappedUrls.length > 0 ? cappedUrls : ["https://example.com/"]) {
+        if (Array.isArray(fixtureData)) {
+          const entry = fixtureData.find((f) => f.url === url) || { url, items: [] };
+          allResults.push({ url, items: entry.items || [], result: entry.result || null });
+          allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url });
+        } else {
+          allResults.push({ url, items: fixtureData.items || [], result: fixtureData.result || null });
+          allMetadata.push({ retryCount: 0, finalCode: 20000, finalMessage: "Ok.", timedOut: false, url });
+        }
+      }
+      return { results: allResults, metadata: allMetadata };
+    }
+    for (const url of cappedUrls) {
+      const payload = [{ id: taskId, url, limit: pollOpts.limit, offset: pollOpts.offset }];
+      const { result, metadata } = await pollSubEndpoint("/on_page/resources", payload, pollOpts);
+      allResults.push({ url, items: result?.items || [], result: result || null });
+      allMetadata.push({ ...metadata, url });
+    }
+    return { results: allResults, metadata: allMetadata };
+  }
+
+  /**
    * Get the raw task metadata for artifact preservation.
    *
    * @param {string} taskId - Task ID.
@@ -939,6 +1113,10 @@ export function createDataforseoOnpageClient(opts = {}) {
     getDuplicateTags,
     getDuplicateContent,
     getMicrodata,
+    getContentParsing,
+    getRedirectChains,
+    getNonIndexable,
+    getResources,
     pollSubEndpoint,
     getRawTaskArtifact,
     TASK_STATUS,

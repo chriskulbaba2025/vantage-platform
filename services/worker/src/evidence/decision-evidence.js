@@ -112,6 +112,15 @@ function hydrateSite(sourceResult) {
     _responseHeadersAvailable: ev._responseHeadersAvailable ?? false,
     limitations: sourceResult.limitations || [],
     coverage: sourceResult.coverage || undefined,
+    // PRYSM-NEXT-01 WP-B — deep acquisition fields pass through the
+    // hydration boundary losslessly (schema allows additional site
+    // properties; decision-evidence v1.0.0 untouched).
+    contentParsing: ev.contentParsing,
+    redirectChains: ev.redirectChains,
+    nonIndexablePages: ev.nonIndexablePages,
+    pageResources: ev.pageResources,
+    microdataTypes: ev.microdataTypes,
+    acquisition: ev.acquisition,
   });
 }
 

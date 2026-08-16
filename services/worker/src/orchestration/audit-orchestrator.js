@@ -88,6 +88,14 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
     gscSiteUrl: auditRequest.gsc?.siteUrl || null,
     maxPages: auditRequest.crawl?.maxPages || 500,
     enableJavascript: auditRequest.crawl?.enableJavascript || false,
+    // PRYSM-NEXT-01 WP-B-11 — deep acquisition options participate in the
+    // source execution identity (config hashing).
+    enableContentParsing: auditRequest.crawl?.enableContentParsing ?? true,
+    validateMicromarkup: auditRequest.crawl?.validateMicromarkup ?? true,
+    contentParsingPageLimit: auditRequest.crawl?.contentParsingPageLimit ?? 10,
+    redirectChainsPageLimit: auditRequest.crawl?.redirectChainsPageLimit ?? 20,
+    nonIndexableLimit: auditRequest.crawl?.nonIndexableLimit ?? 1000,
+    resourcesPageLimit: auditRequest.crawl?.resourcesPageLimit ?? 10,
   };
   const normalizedConfig = stableJsonStringify(config);
   const configHash = sha256(Buffer.from(normalizedConfig, "utf-8"));

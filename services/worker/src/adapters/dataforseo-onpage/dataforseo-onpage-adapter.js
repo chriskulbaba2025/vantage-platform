@@ -31,15 +31,16 @@ import {
 import {
   createDataforseoOnpageClient,
 } from "./dataforseo-onpage-client.js";
+import { selectImportantPages, normalizeUrl } from "../../evidence/important-page-selector.js";
 
 // ---------------------------------------------------------------------------
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.0.0";
+const ADAPTER_VERSION = "1.1.0";
 
 // ---------------------------------------------------------------------------
-// Default configuration (PRD v3.0 §8.4)
+// Default configuration (PRD v3.0 §8.4 + PRYSM-NEXT-01 WP-B)
 // ---------------------------------------------------------------------------
 
 const DEFAULTS = Object.freeze({
@@ -49,6 +50,16 @@ const DEFAULTS = Object.freeze({
   enableJavascript: false,
   enableBrowserRendering: false,
   loadResources: true,
+  // EVIDENCE-MATRIX: schema.structured_data — microdata collection requires
+  // validate_micromarkup on the task (WP-B-02).
+  validateMicromarkup: true,
+  // EVIDENCE-MATRIX: content.body — content parsing is enabled at task level
+  // but requests are scoped to the deterministic key-page set only (WP-B-08).
+  enableContentParsing: true,
+  contentParsingPageLimit: 10,
+  redirectChainsPageLimit: 20,
+  nonIndexableLimit: 1000,
+  resourcesPageLimit: 10,
 });
 
 // ---------------------------------------------------------------------------
@@ -439,6 +450,124 @@ function extractResponseHeaders(raw) {
 }
 
 // ---------------------------------------------------------------------------
+// Deep sub-acquisition normalizers (PRYSM-NEXT-01 WP-B-09)
+// ---------------------------------------------------------------------------
+
+function extractTextFromContentParts(parts) {
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((p) => (typeof p === "string" ? p : p?.text || p?.content || ""))
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** EVIDENCE-MATRIX: content.body */
+function normalizeContentParsing(raw) {
+  const out = [];
+  for (const res of raw?.results || []) {
+    if (!res?.url) continue;
+    const item = res.result || (res.items && res.items[0]) || null;
+    if (!item) {
+      out.push({
+        url: res.url,
+        wordCount: null,
+        mainContentChars: null,
+        hasMainContent: null,
+        sentimentScore: null,
+      });
+      continue;
+    }
+    const main = extractTextFromContentParts(item.main_content);
+    const secondary = extractTextFromContentParts(item.secondary_content);
+    const fullText = `${main} ${secondary}`.trim();
+    const wordCount = item.plain_text_word_count
+      ?? item.word_count
+      ?? (fullText ? fullText.split(/\s+/).length : null);
+    const sentimentScore =
+      typeof item.sentiment_score === "number" ? item.sentiment_score : null;
+    out.push({
+      url: res.url,
+      wordCount,
+      mainContentChars: main.length || null,
+      hasMainContent: main.length > 0,
+      sentimentScore,
+    });
+  }
+  return out;
+}
+
+/** EVIDENCE-MATRIX: technical.redirects */
+function normalizeRedirectChains(raw) {
+  const out = [];
+  for (const res of raw?.results || []) {
+    if (!res?.url) continue;
+    const result = res.result || null;
+    if (!result) {
+      out.push({ from: res.url, to: null, statusCodes: [], hops: null });
+      continue;
+    }
+    // Provider shape: result.items[0].chain = [{url, status_code, location}].
+    // Defensive: treat result.items itself as the hop list.
+    const first = Array.isArray(result.items) ? result.items[0] : null;
+    const hopList = Array.isArray(first?.chain)
+      ? first.chain
+      : Array.isArray(result.items)
+        ? result.items
+        : [];
+    const statusCodes = hopList
+      .map((h) => h?.status_code ?? null)
+      .filter((c) => c != null);
+    const lastHop = hopList[hopList.length - 1];
+    const to = lastHop?.location || lastHop?.redirect_url || lastHop?.url || null;
+    out.push({ from: res.url, to, statusCodes, hops: hopList.length });
+  }
+  return out;
+}
+
+/** EVIDENCE-MATRIX: technical.indexability */
+function normalizeNonIndexable(raw) {
+  return (raw?.items || []).map((i) => ({
+    url: i?.url || "",
+    reason: i?.reason || i?.reason_code || i?.non_indexable_reason || "unknown",
+  }));
+}
+
+/** EVIDENCE-MATRIX: technical.resources */
+function normalizePageResources(raw) {
+  const out = [];
+  for (const res of raw?.results || []) {
+    if (!res?.url) continue;
+    const item = res.result || (res.items && res.items[0]) || null;
+    if (!item) {
+      out.push({ url: res.url, totalResources: null, brokenResources: null });
+      continue;
+    }
+    const broken = Array.isArray(item.broken_resources)
+      ? item.broken_resources.length
+      : typeof item.broken_resources_count === "number"
+        ? item.broken_resources_count
+        : null;
+    out.push({
+      url: res.url,
+      totalResources: item.total_resources ?? item.totalResources ?? null,
+      brokenResources: broken,
+    });
+  }
+  return out;
+}
+
+/** EVIDENCE-MATRIX: schema.structured_data (microdata endpoint) */
+function extractMicrodataTypes(raw) {
+  const types = new Set();
+  const items = raw?.items || [];
+  for (const item of items) {
+    if (item.type) types.add(item.type);
+    for (const t of item.types || []) types.add(t);
+  }
+  return [...types].sort();
+}
+
+// ---------------------------------------------------------------------------
 // Site-level summarizer
 // ---------------------------------------------------------------------------
 
@@ -458,6 +587,14 @@ function summarizeSite({
   microdataMeta,
   dtMeta,
   dcMeta,
+  rawContentParsing = { results: [], metadata: [] },
+  cpMeta = null,
+  rawRedirectChains = { results: [], metadata: [] },
+  rcMeta = null,
+  rawNonIndexable = { items: [], totalCount: 0, metadata: [] },
+  rawResources = { results: [], metadata: [] },
+  resMeta = null,
+  acquisition = null,
   links,
   limitations,
   rawTaskId,
@@ -739,6 +876,14 @@ function summarizeSite({
       : false,
   };
 
+  // ── Deep sub-acquisition normalization (PRYSM-NEXT-01 WP-B-09) ──────
+  const contentParsing = normalizeContentParsing(rawContentParsing);
+  const redirectChains = normalizeRedirectChains(rawRedirectChains);
+  const nonIndexablePages = normalizeNonIndexable(rawNonIndexable);
+  const pageResources = normalizePageResources(rawResources);
+  const microdataTypes = extractMicrodataTypes(rawMicrodata);
+  for (const t of microdataTypes) allSchema.add(t);
+
   // ── Source status ────────────────────────────────────────────────────
   let sourceStatus = SOURCE_STATUS.AVAILABLE;
 
@@ -824,6 +969,7 @@ function summarizeSite({
     imagesMissingAlt,
     imagesMissingDimensions,
     schemaTypes: [...allSchema],
+    microdataTypes,
     forms: allForms,
     ctas: allCtas,
     externalCtas,
@@ -834,6 +980,18 @@ function summarizeSite({
     platform: dominantPlatform,
     services: [...allServices].slice(0, 12),
     topicKeywords,
+    // PRYSM-NEXT-01 WP-B-09 — deep acquisition evidence (unknown stays null)
+    contentParsing,
+    redirectChains,
+    nonIndexablePages,
+    pageResources,
+    acquisition: acquisition || {
+      contentParsing: { requested: 0, completed: 0, failed: 0 },
+      redirectChains: { requested: 0, completed: 0, failed: 0 },
+      nonIndexable: { requested: 0, completed: 0, failed: 0 },
+      resources: { requested: 0, completed: 0, failed: 0 },
+      microdata: { requested: 0, completed: 0, failed: 0 },
+    },
     trust,
     securityHeaders,
     limitations: allLimitations,
@@ -869,6 +1027,13 @@ function summarizeSite({
       dtMeta: dtMeta || null,
       dcMeta: dcMeta || null,
       microdataMeta: microdataMeta || null,
+      contentParsing: rawContentParsing,
+      cpMeta: cpMeta || null,
+      redirectChains: rawRedirectChains,
+      rcMeta: rcMeta || null,
+      nonIndexable: rawNonIndexable,
+      resources: rawResources,
+      resMeta: resMeta || null,
     },
   };
 
@@ -953,6 +1118,10 @@ export async function crawlWithDataforseo(target, options = {}) {
         excludePatterns: options.excludePatterns,
         maxExternalResources: options.maxExternalResources,
         customRobotsTxt: options.customRobotsTxt || null,
+        // PRYSM-NEXT-01 WP-B-02: prerequisites for microdata and
+        // content-parsing sub-endpoints.
+        validateMicromarkup: options.validateMicromarkup ?? DEFAULTS.validateMicromarkup,
+        enableContentParsing: options.enableContentParsing ?? DEFAULTS.enableContentParsing,
       });
       rawTaskId = taskPostResult.taskId;
     }
@@ -1033,11 +1202,26 @@ export async function crawlWithDataforseo(target, options = {}) {
   let microdataMeta = null;
   let dtMeta = null;
   let dcMeta = null;
+  let rawContentParsing = { results: [], metadata: [] };
+  let rawRedirectChains = { results: [], metadata: [] };
+  let rawNonIndexable = { items: [], totalCount: 0, metadata: [] };
+  let rawResources = { results: [], metadata: [] };
+  let cpMeta = null;
+  let rcMeta = null;
+  let resMeta = null;
+  const acquisition = {
+    contentParsing: { requested: 0, completed: 0, failed: 0 },
+    redirectChains: { requested: 0, completed: 0, failed: 0 },
+    nonIndexable: { requested: 0, completed: 0, failed: 0 },
+    resources: { requested: 0, completed: 0, failed: 0 },
+    microdata: { requested: 0, completed: 0, failed: 0 },
+  };
   let cappedPages = false;
   let jsContentMissing = false;
   let robotsBlocked = false;
   let loginBlocked = false;
   let totalCrawlPages = maxPages;
+  let normalizedPages = [];
 
   try {
     // 3a. Retrieve summary
@@ -1196,6 +1380,14 @@ export async function crawlWithDataforseo(target, options = {}) {
       limitations.push(`Link retrieval failed: ${linkError.message}`);
     }
 
+    // 3c2. Normalize pages EARLY so the deterministic key-page selector can
+    // scope deep sub-acquisitions (content parsing, redirect chains,
+    // resources) to decision-bearing pages only (PRYSM-NEXT-01 WP-B-08).
+    const targetDomainEarly = domainOf(target);
+    normalizedPages = rawPages.map((raw) =>
+      normalizePage(raw, { targetDomain: targetDomainEarly }),
+    );
+
     // 3d. Retrieve duplicate tags (with required `type` fields, polls through 20100)
     try {
       rawDuplicateTags = await client.getDuplicateTags(rawTaskId,
@@ -1237,16 +1429,162 @@ export async function crawlWithDataforseo(target, options = {}) {
     }
 
     // 3f. Retrieve microdata / structured data
+    // EVIDENCE-MATRIX: schema.structured_data — valid because the task was
+    // created with validate_micromarkup (WP-B-02).
+    acquisition.microdata.requested = 1;
     try {
       const mdResult = await client.getMicrodata(rawTaskId);
       rawMicrodata = mdResult.result || {};
       microdataMeta = mdResult.metadata;
       if (microdataMeta?.finalCode !== 20000 && microdataMeta?.finalCode != null) {
+        acquisition.microdata.failed += 1;
         limitations.push(
           `Microdata retrieval returned code ${microdataMeta.finalCode}: "${microdataMeta.finalMessage || "unknown"}".`);
+      } else if (rawMicrodata?.items?.length || rawMicrodata?.types?.length) {
+        acquisition.microdata.completed += 1;
       }
     } catch (mdError) {
+      acquisition.microdata.failed += 1;
       limitations.push(`Microdata retrieval failed: ${mdError.message}`);
+    }
+
+    // 3g. Deep sub-acquisitions scoped to the deterministic key-page set
+    // (PRYSM-NEXT-01 WP-B-08).  Each failure is recorded and limited —
+    // never fails the whole source.
+    const keyPages = selectImportantPages({
+      targetUrl: target,
+      pages: normalizedPages,
+      links: rawLinks,
+      services: options.businessServices || [],
+      maxSelected: Math.max(
+        options.contentParsingPageLimit ?? DEFAULTS.contentParsingPageLimit,
+        options.resourcesPageLimit ?? DEFAULTS.resourcesPageLimit,
+      ),
+    });
+    // Provider requests use the RAW crawled URL (exact form the provider
+    // indexed); selection deduplicates on the normalized form.
+    const keyPageUrls = keyPages.selected.map((s) => {
+      const page = normalizedPages.find(
+        (p) => normalizeUrl(p.crawledUrl || p.url || "") === s.url,
+      );
+      return page ? (page.crawledUrl || page.url) : s.url;
+    });
+
+    const subPollOpts = {
+      timeoutMs: options.subPollTimeoutMs ?? 120000,
+      pollIntervalMs,
+    };
+
+    if (keyPageUrls.length === 0) {
+      limitations.push(
+        "No decision-bearing pages identified — content parsing, redirect " +
+        "chains, and resource checks were skipped for this crawl.",
+      );
+    } else {
+      // 3g1. Content parsing (key pages only)
+      if (options.enableContentParsing ?? DEFAULTS.enableContentParsing) {
+        const cpUrls = keyPageUrls.slice(
+          0, options.contentParsingPageLimit ?? DEFAULTS.contentParsingPageLimit);
+        acquisition.contentParsing.requested = cpUrls.length;
+        try {
+          rawContentParsing = await client.getContentParsing(rawTaskId, cpUrls, {
+            ...subPollOpts,
+            maxUrls: cpUrls.length,
+          });
+          cpMeta = rawContentParsing.metadata;
+          for (const res of rawContentParsing.results) {
+            if (res.items?.length || res.result) acquisition.contentParsing.completed += 1;
+            else acquisition.contentParsing.failed += 1;
+          }
+          for (const m of (cpMeta || [])) {
+            if (m.timedOut || (m.finalCode !== 20000 && m.finalCode != null)) {
+              limitations.push(
+                `Content parsing for ${m.url} ${m.timedOut ? "timed out" : `returned code ${m.finalCode}`} after ${m.retryCount} retries.`);
+            }
+          }
+        } catch (cpError) {
+          acquisition.contentParsing.failed = acquisition.contentParsing.requested;
+          limitations.push(`Content parsing retrieval failed: ${cpError.message}`);
+        }
+      }
+
+      // 3g2. Redirect chains (key pages + pages observed with 3xx statuses)
+      const redirectUrls = new Set(keyPageUrls);
+      for (const p of rawPages) {
+        const status = p.status_code ?? 0;
+        if (status >= 300 && status < 400 && p.url) redirectUrls.add(p.url);
+      }
+      const rcUrls = [...redirectUrls].slice(
+        0, options.redirectChainsPageLimit ?? DEFAULTS.redirectChainsPageLimit);
+      acquisition.redirectChains.requested = rcUrls.length;
+      try {
+        rawRedirectChains = await client.getRedirectChains(rawTaskId, rcUrls, {
+          ...subPollOpts,
+          maxUrls: rcUrls.length,
+        });
+        rcMeta = rawRedirectChains.metadata;
+        for (const res of rawRedirectChains.results) {
+          if (res.items?.length || res.result) acquisition.redirectChains.completed += 1;
+          else acquisition.redirectChains.failed += 1;
+        }
+        for (const m of (rcMeta || [])) {
+          if (m.timedOut || (m.finalCode !== 20000 && m.finalCode != null)) {
+            limitations.push(
+              `Redirect-chain check for ${m.url} ${m.timedOut ? "timed out" : `returned code ${m.finalCode}`}.`);
+          }
+        }
+      } catch (rcError) {
+        acquisition.redirectChains.failed = acquisition.redirectChains.requested;
+        limitations.push(`Redirect-chain retrieval failed: ${rcError.message}`);
+      }
+
+      // 3g3. Non-indexable pages (paginated, capped)
+      acquisition.nonIndexable.requested = options.nonIndexableLimit ?? DEFAULTS.nonIndexableLimit;
+      try {
+        rawNonIndexable = await client.getNonIndexable(rawTaskId, {
+          limit: 100,
+          maxRecords: options.nonIndexableLimit ?? DEFAULTS.nonIndexableLimit,
+          ...subPollOpts,
+        });
+        acquisition.nonIndexable.completed = rawNonIndexable.items?.length || 0;
+        acquisition.nonIndexable.failed = 0;
+        for (const m of (rawNonIndexable.metadata || [])) {
+          if (m.timedOut || (m.finalCode !== 20000 && m.finalCode != null)) {
+            limitations.push(
+              `Non-indexable retrieval ${m.timedOut ? "timed out" : `returned code ${m.finalCode}`} at offset ${m.offset}.`);
+          }
+        }
+      } catch (niError) {
+        acquisition.nonIndexable.failed = acquisition.nonIndexable.requested;
+        limitations.push(`Non-indexable retrieval failed: ${niError.message}`);
+      }
+
+      // 3g4. Resources (key pages only)
+      const resUrls = keyPageUrls.slice(
+        0, options.resourcesPageLimit ?? DEFAULTS.resourcesPageLimit);
+      acquisition.resources.requested = resUrls.length;
+      try {
+        rawResources = await client.getResources(rawTaskId, resUrls, {
+          ...subPollOpts,
+          maxUrls: resUrls.length,
+          limit: 500,
+          offset: 0,
+        });
+        resMeta = rawResources.metadata;
+        for (const res of rawResources.results) {
+          if (res.items?.length || res.result) acquisition.resources.completed += 1;
+          else acquisition.resources.failed += 1;
+        }
+        for (const m of (resMeta || [])) {
+          if (m.timedOut || (m.finalCode !== 20000 && m.finalCode != null)) {
+            limitations.push(
+              `Resource check for ${m.url} ${m.timedOut ? "timed out" : `returned code ${m.finalCode}`}.`);
+          }
+        }
+      } catch (resError) {
+        acquisition.resources.failed = acquisition.resources.requested;
+        limitations.push(`Resource retrieval failed: ${resError.message}`);
+      }
     }
 
     // 3f. Detect JavaScript-content issues
@@ -1280,14 +1618,11 @@ export async function crawlWithDataforseo(target, options = {}) {
   }
 
   // -----------------------------------------------------------------------
-  // Step 4: Normalize
+  // Step 4: Normalize (pages were normalized in step 3c2 to scope the
+  // key-page set; reuse that exact normalization here for continuity)
   // -----------------------------------------------------------------------
   const completedAt = new Date().toISOString();
   const targetDomain = domainOf(target);
-
-  const normalizedPages = rawPages.map((raw) =>
-    normalizePage(raw, { targetDomain }),
-  );
 
   const result = summarizeSite({
     targetUrl: target,
@@ -1299,6 +1634,14 @@ export async function crawlWithDataforseo(target, options = {}) {
     microdataMeta,
     dtMeta,
     dcMeta,
+    rawContentParsing,
+    cpMeta,
+    rawRedirectChains,
+    rcMeta,
+    rawNonIndexable,
+    rawResources,
+    resMeta,
+    acquisition,
     links: rawLinks,
     limitations,
     rawTaskId,
@@ -1335,6 +1678,15 @@ export async function crawlWithDataforseo(target, options = {}) {
         dtMeta,
         dcMeta,
         microdataMeta,
+        // PRYSM-NEXT-01 WP-B-10 — deep acquisition raw payloads preserved
+        contentParsing: rawContentParsing,
+        cpMeta,
+        redirectChains: rawRedirectChains,
+        rcMeta,
+        nonIndexable: rawNonIndexable,
+        resources: rawResources,
+        resMeta,
+        acquisition,
         retryCount,
       };
       const rawJson = JSON.stringify(rawPayload, null, 2);
@@ -1485,6 +1837,14 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     // PRYSM-CLOSE-12: durable provider task ID from a previous attempt —
     // resume polling on the same paid task, never re-submit.
     resumeTaskId: crawl.resumeTaskId || null,
+    // PRYSM-NEXT-01 WP-B — deep acquisition configuration (see DEFAULTS).
+    validateMicromarkup: crawl.validateMicromarkup ?? DEFAULTS.validateMicromarkup,
+    enableContentParsing: crawl.enableContentParsing ?? DEFAULTS.enableContentParsing,
+    contentParsingPageLimit: crawl.contentParsingPageLimit ?? DEFAULTS.contentParsingPageLimit,
+    redirectChainsPageLimit: crawl.redirectChainsPageLimit ?? DEFAULTS.redirectChainsPageLimit,
+    nonIndexableLimit: crawl.nonIndexableLimit ?? DEFAULTS.nonIndexableLimit,
+    resourcesPageLimit: crawl.resourcesPageLimit ?? DEFAULTS.resourcesPageLimit,
+    businessServices: auditRequest.services || [],
     clientOptions: {
       mode: crawl.fixtures || crawl.fetchImpl ? (crawl.fixtures ? "fixture" : "live") : "live",
       fixtures: crawl.fixtures || null,
@@ -1550,6 +1910,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         imagesMissingAlt: envelope.imagesMissingAlt,
         imagesMissingDimensions: envelope.imagesMissingDimensions,
         schemaTypes: envelope.schemaTypes || [],
+        microdataTypes: envelope.microdataTypes || [],
         forms: envelope.forms || [],
         ctas: envelope.ctas || [],
         externalCtas: envelope.externalCtas || [],
@@ -1560,6 +1921,11 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         platform: envelope.platform || "Unknown",
         services: envelope.services || [],
         topicKeywords: envelope.topicKeywords || [],
+        contentParsing: envelope.contentParsing || [],
+        redirectChains: envelope.redirectChains || [],
+        nonIndexablePages: envelope.nonIndexablePages || [],
+        pageResources: envelope.pageResources || [],
+        acquisition: envelope.acquisition || null,
         trust: envelope.trust || {},
         securityHeaders: envelope.securityHeaders || {},
         collectedAt: envelope.collectedAt,

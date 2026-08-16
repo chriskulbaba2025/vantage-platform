@@ -141,6 +141,44 @@
         "pollTimeoutMs": { "type": "integer", "minimum": 1 },
         "pollIntervalMs": { "type": "integer", "minimum": 1 },
         "resumeTaskId": { "type": "string" },
+        "enableContentParsing": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-B: enable DFS content parsing at task level. Requests are scoped to the deterministic key-page set only."
+        },
+        "validateMicromarkup": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-B: enable DFS micromarkup validation so the microdata endpoint returns structured data."
+        },
+        "contentParsingPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10,
+          "description": "PRYSM-NEXT-01 WP-B: max key pages parsed for content evidence."
+        },
+        "redirectChainsPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20,
+          "description": "PRYSM-NEXT-01 WP-B: max pages checked for redirect chains (key pages + 3xx pages)."
+        },
+        "nonIndexableLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000,
+          "default": 1000,
+          "description": "PRYSM-NEXT-01 WP-B: max non-indexable page records collected."
+        },
+        "resourcesPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10,
+          "description": "PRYSM-NEXT-01 WP-B: max key pages inspected for resource/broken-resource evidence."
+        },
         "fixtures": {},
         "fetchImpl": {},
         "localRunner": {}
