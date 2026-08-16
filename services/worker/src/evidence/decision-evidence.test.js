@@ -200,6 +200,92 @@ test("PRYSM-CLOSE-02f: AVAILABLE site with minimal evidence hydrates without fab
   );
 });
 
+// Evidence-audit item 2 — end-to-end through the PRODUCTION hydration
+// boundary: the adapter declares counter-collection truth via
+// `_metaCountersAvailable`; fabricated 0s at hydration (frozen schema
+// forces integers) must NOT earn scoring credit when the marker is false.
+test("CRIT rescore: uncollected meta counters earn no credit end-to-end", async () => {
+  const { buildDecisionEvidence } = await import("./decision-evidence.js");
+  const { scoreAudit } = await import("../scoring/vantage-score.js");
+  const validateContract = makeValidator();
+
+  // Adapter-shaped metadata-only SourceResult: page_metrics checks and
+  // page-level counter data absent → adapter marks counters uncollected.
+  const sr = validSr("dataforseo-onpage", {
+    status: "PARTIAL",
+    adapterVersion: "1.2.0",
+    evidence: {
+      sourceStatus: "PARTIAL",
+      domain: "example.com",
+      targetUrl: "https://example.com/",
+      platform: "WordPress",
+      pages: [{ url: "https://example.com/", title: "Home", headings: { h1: [], h2: [], h3: [], h4: [] }, status: 200 }],
+      services: [],
+      trust: {},
+      schemaTypes: [],
+      ctas: [],
+      forms: [],
+      missingTitles: null,
+      missingDescriptions: null,
+      missingCanonicals: null,
+      h1Missing: null,
+      h1Multiple: null,
+      imageCount: null,
+      imagesMissingAlt: null,
+      _metaCountersAvailable: false,
+      _contentEvidenceAvailable: true,
+      _responseHeadersAvailable: true,
+      _interactiveEvidenceAvailable: false,
+      collectedAt: "2026-01-15T12:00:00.000Z",
+      coverage: { requested: 500, completed: 2, failed: 498 },
+    },
+  });
+
+  const { evidence, errors } = buildDecisionEvidence({
+    allSourceResults: [{ source: "dataforseo-onpage", sourceResult: sr }],
+    validateContract,
+  });
+  assert.equal(errors.length, 0, "hydration clean");
+  assert.equal(evidence.site._metaCountersAvailable, false, "collection marker survives hydration");
+
+  const model = scoreAudit(
+    { targetUrl: "https://example.com/", businessName: "X", competitors: [] },
+    { ...evidence, performance: null, ga4: null, gsc: null, backlinks: null },
+  );
+  const tech = model.moduleScores.technical_hygiene;
+  const subKeys = (tech.subScores || []).map((s) => s.key);
+  assert.ok(!subKeys.includes("meta"), "uncollected meta counters earn no credit end-to-end");
+  assert.ok(!subKeys.includes("images"), "uncollected image counters earn no credit end-to-end");
+
+  // Legacy semantics preserved: without the marker, collected-counter
+  // evidence (extractor ran) keeps scoring the meta sub-rule.
+  const legacySr = validSr("dataforseo-onpage", {
+    status: "AVAILABLE",
+    evidence: {
+      sourceStatus: "AVAILABLE",
+      domain: "example.com",
+      targetUrl: "https://example.com/",
+      platform: "WordPress",
+      pages: [{ url: "https://example.com/", title: "Home", headings: { h1: ["Home"], h2: [], h3: [], h4: [] }, status: 200 }],
+      services: [], trust: {}, schemaTypes: [], ctas: [], forms: [],
+      missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
+      h1Missing: 0, h1Multiple: 0, imageCount: 2, imagesMissingAlt: 0,
+      _contentEvidenceAvailable: true, _responseHeadersAvailable: true,
+      collectedAt: "2026-01-15T12:00:00.000Z",
+    },
+  });
+  const legacyEvidence = buildDecisionEvidence({
+    allSourceResults: [{ source: "dataforseo-onpage", sourceResult: legacySr }],
+    validateContract,
+  }).evidence;
+  const legacyModel = scoreAudit(
+    { targetUrl: "https://example.com/", businessName: "X", competitors: [] },
+    { ...legacyEvidence, performance: null, ga4: null, gsc: null, backlinks: null },
+  );
+  const legacySubKeys = (legacyModel.moduleScores.technical_hygiene.subScores || []).map((s) => s.key);
+  assert.ok(legacySubKeys.includes("meta"), "legacy collected counters keep meta scoring");
+});
+
 // WP-C-03: adapterVersion survives hydration for capability provenance,
 // and explicit false markers are preserved exactly.
 test("WP-C: explicit content-evidence markers and adapterVersion pass through hydrateSite", () => {

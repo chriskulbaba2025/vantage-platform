@@ -99,6 +99,12 @@ function hydrateSite(sourceResult) {
     externalCtas: ev.externalCtas || [],
     socialLinks: ev.socialLinks || [],
     statusCounts: ev.statusCounts || {},
+    // The FROZEN decision-evidence v1 schema types every counter as
+    // integer — hydration must emit integers.  Unknown-counter honesty is
+    // therefore carried by the `_metaCountersAvailable` marker (the
+    // adapter declares whether the counters were actually collected);
+    // scorers gate credit on the marker, and the images sub-rule requires
+    // imageCount > 0 (a fabricated 0 grants no credit).
     totalWords: ev.totalWords ?? 0,
     averageWords: ev.averageWords ?? 0,
     missingTitles: ev.missingTitles ?? 0,
@@ -109,6 +115,7 @@ function hydrateSite(sourceResult) {
     imageCount: ev.imageCount ?? 0,
     imagesMissingAlt: ev.imagesMissingAlt ?? 0,
     internalLinkCount: ev.internalLinkCount ?? 0,
+    _metaCountersAvailable: ev._metaCountersAvailable,
     brokenInternalLinks: ev.brokenInternalLinks || [],
     securityHeaders: ev.securityHeaders || {},
     // PRYSM-NEXT-01 WP-C — unknown is NOT coerced to false. Absent stays
@@ -120,6 +127,9 @@ function hydrateSite(sourceResult) {
     // hydration boundary (undefined ⇒ legacy semantics in the capability
     // layer: the extractor that produced the arrays ran).
     _interactiveEvidenceAvailable: ev._interactiveEvidenceAvailable,
+    // Evidence-audit provenance gap: the SHA-suffixed raw artifact ref must
+    // survive hydration into capability/finding provenance.
+    rawArtifactRef: ev.rawArtifactRef,
     limitations: sourceResult.limitations || [],
     coverage: sourceResult.coverage || undefined,
     // PRYSM-NEXT-01 WP-B — deep acquisition fields pass through the

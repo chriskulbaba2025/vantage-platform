@@ -22,26 +22,26 @@ Each WP has its own frozen checklist (created at WP start) with detailed IDs. Th
 
 ## Work packages (each with its own frozen checklist before implementation)
 
-- [ ] PRYSM-NEXT-01-WPB — WP-B Evidence Acquisition Sufficiency — checklist frozen, implemented, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPC — WP-C Capability Evidence V2 — checklist frozen, implemented, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPD — WP-D Scoring V4 / Eligibility Closure — math independently proven; CRIT weighting defect reproduced-or-disproven; checklist frozen, implemented, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPE — WP-E Functional Conversion Path — checklist frozen, implemented, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPF — WP-F User Provisioning — ACCT-PROVISION-01 integrated via cherry-pick; checklist frozen, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPG — WP-G Report Design V2 — v1 compatibility proven; v2.0.0 version boundary; checklist frozen, implemented, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPH — WP-H Application Product UX — checklist frozen, implemented, verified, checkpoint committed.
-- [ ] PRYSM-NEXT-01-WPI — WP-I Full Plumbing Proof — controlled end-to-end through real composition boundaries incl. failure paths; no hardcoded counters; global escape guards; full regression.
-- [ ] PRYSM-NEXT-01-WPJ — WP-J CRIT Adversarial Review — independent scoring in ≥11 areas; every <99 corrected or honestly held.
-- [ ] PRYSM-NEXT-01-WPK — WP-K Calibration Harness — ≥10 deterministic fixture sites with proven ranking/assessment behaviour + convergence measurement.
-- [ ] PRYSM-NEXT-01-WPL — WP-L Final Governed Closure — full verification sequence, app-security-hardening gate, exact-head CI green, three independent audits, PR created/updated, NO MERGE.
+- [x] PRYSM-NEXT-01-WPB — WP-B Evidence Acquisition Sufficiency — checklist 15/15 [x]; evidence matrix committed; checkpoint 03d9f6e.
+- [x] PRYSM-NEXT-01-WPC — WP-C Capability Evidence V2 — checklist 8/8 [x]; capability matrix committed; checkpoint 0ca90c6.
+- [x] PRYSM-NEXT-01-WPD — WP-D Scoring V4 / Eligibility Closure — math independently proven (WP-D-01 hand-derived test); CRIT weighting defect corrected; checklist 13/13 [x]; checkpoint 81eff44.
+- [x] PRYSM-NEXT-01-WPE — WP-E Functional Conversion Path — checklist 7/7 [x]; checkpoint 1feee1d.
+- [x] PRYSM-NEXT-01-WPF — WP-F User Provisioning — ACCT-PROVISION-01 integrated via cherry-pick 014d2b8+4d1f1e7; checklist 6/6 [x]; checkpoint 1c9ab3d.
+- [x] PRYSM-NEXT-01-WPG — WP-G Report Design V2 — v1 compatibility proven (template lock + zero v1 file changes); v2.0.0 boundary; checklist 6/6 [x]; checkpoint ce47e91.
+- [x] PRYSM-NEXT-01-WPH — WP-H Application Product UX — checklist 5/5 [x]; checkpoint 62d2db4.
+- [x] PRYSM-NEXT-01-WPI — WP-I Full Plumbing Proof — checklist PRYSM-NEXT-01_WPI_CHECKLIST.md; 52-gate controlled end-to-end with REAL schemas + REAL validator; escape guards measured; checkpoint 4d4b7f8 (reworked in WP-J).
+- [x] PRYSM-NEXT-01-WPJ — WP-J CRIT Adversarial Review — independent reviews 93 → 95 → final rescore (recorded in DEFECT_REGISTRY); every repository-controlled defect corrected; checkpoints c7ced68 + 948c87f.
+- [x] PRYSM-NEXT-01-WPK — WP-K Calibration Harness — checklist PRYSM-NEXT-01_WPK_CHECKLIST.md; 10 fixture sites, 19 behavioural gates, convergence record; checkpoint d866006.
+- [x] PRYSM-NEXT-01-WPL — WP-L Final Governed Closure — full verification at 948c87f (npm 775/775, CI-equivalent set, WP-I 52/52, calibration 19/19, 17 acceptance suites, template lock, tsc/build, Playwright 15/15 clean); exact-head CI green (run 31970585666); three independent audits; PR #50; NO MERGE.
 
 ## Programme-wide counters (verified by executable guards at WP-I/WP-L, not prose)
 
-- [ ] Live paid DataForSEO calls: 0
-- [ ] Live model/provider calls: 0
-- [ ] Live Cognito user creations: 0
-- [ ] Real form submissions: 0
-- [ ] Production deployments: 0
-- [ ] Merges: 0
+- [x] Live paid DataForSEO calls: 0 — guarded fetch never invoked (WP-I Phase 7, zero violations); fixture-mode-only transports.
+- [x] Live model/provider calls: 0 — WP7-REPLAY-02 static+behavioural; WP-I narrativeCallsMade null, cost null.
+- [x] Live Cognito user creations: 0 — PRYSM_IDENTITY_MODE=mock below the provider boundary; AP-06 zero-live guard armed.
+- [x] Real form submissions: 0 — validator has zero click/fill/submit paths (grep + behavioural tests).
+- [x] Production deployments: 0 — single workflow, no deploy steps.
+- [x] Merges: 0 — `git log --merges b2e713b..HEAD` empty; PR #50 unmerged.
 
 ## Frozen decisions (see WORKSPACE D-01..D-11)
 

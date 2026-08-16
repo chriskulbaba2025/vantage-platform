@@ -33,12 +33,18 @@ console.log("\nPRYSM-NEXT-01 WP-I — Full Plumbing Proof\n");
 
 // ---------------------------------------------------------------------------
 // Global network guard — any real fetch attempt is recorded AND blocked.
+// INSTALLED as globalThis.fetch BEFORE any production module import, so the
+// guard intercepts the actual production dependency (Governed Build Standard
+// §9 — no disconnected counters).  A regression that introduces a live
+// network call will THROW here and fail the harness loudly.
 // ---------------------------------------------------------------------------
 const fetchCalls = [];
 const guardedFetch = async (url, init) => {
   fetchCalls.push({ url: String(url), init });
   throw new Error(`UNCONTROLLED NETWORK ACCESS BLOCKED: ${url}`);
 };
+const _savedGlobalFetch = globalThis.fetch;
+globalThis.fetch = guardedFetch;
 
 const FIXED_TS = "2026-01-15T12:00:00.000Z";
 const clock = { now: () => FIXED_TS, sleep: async () => {}, setTimeout: (f, m) => setTimeout(f, Math.min(m, 100)) };
@@ -686,6 +692,9 @@ console.log("— Phase 7: zero-live guards (measured) —");
 check(fetchCalls.length === 0, "zero uncontrolled network calls (guarded fetch never invoked)", `${fetchCalls.length} calls`);
 check(draftResult.n8nCallCount === 0, "zero n8n calls (mock narrative mode)", `n8nCallCount=${draftResult.n8nCallCount}`);
 check(draftResult.narrativeCallsMade === null && draftResult.narrativeCost === null, "zero model calls and zero cost recorded");
+
+// Teardown: restore the real fetch before exit (harness hygiene).
+globalThis.fetch = _savedGlobalFetch;
 
 console.log(`\nWP-I Full Plumbing Proof: ${pass} PASS, ${fail} FAIL\n`);
 process.exit(fail > 0 ? 1 : 0);

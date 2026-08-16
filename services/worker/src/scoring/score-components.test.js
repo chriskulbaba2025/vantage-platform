@@ -401,6 +401,32 @@ test("CRIT rescore: indexability PARTIAL with empty list grants no credit", () =
   assert.ok(!subKeys.includes("indexability"), "failed/partial indexability evidence grants no credit");
 });
 
+test("CRIT rescore: offerClarity descCoverage grants no credit from unknown counters", () => {
+  const ev = evidenceOf();
+  ev.site.missingDescriptions = null;
+  const offerKnown = scoreAudit(INPUT, evidenceOf()).moduleScores.offer_clarity.score;
+  const offerUnknown = scoreAudit(INPUT, ev).moduleScores.offer_clarity.score;
+  // Base fixture: missingDescriptions=0/pageCount=2 → known term = 15 pts.
+  // Unknown must contribute 0 — the score must drop by exactly the term.
+  assert.ok(offerUnknown < offerKnown, `unknown (${offerUnknown}) < known (${offerKnown})`);
+  assert.ok(
+    offerKnown - offerUnknown <= 15,
+    `descCoverage delta bounded by the 15-point term (got ${offerKnown - offerUnknown})`,
+  );
+});
+
+test("CRIT rescore: redirects PARTIAL without collected evidence grants no credit", () => {
+  const ev = evidenceOf();
+  ev.site.acquisition = {
+    redirectChains: { requested: 3, completed: 0, failed: 3 },
+  };
+  ev.site.redirectChains = [];
+  const model = scoreAudit(INPUT, ev);
+  const tech = model.moduleScores.technical_hygiene;
+  const subKeys = (tech.subScores || []).map((s) => s.key);
+  assert.ok(!subKeys.includes("redirects"), "uncollected redirect evidence grants no credit");
+});
+
 test("CRIT rescore: resources with null totals grant no credit", () => {
   const ev = evidenceOf();
   ev.site.acquisition = {

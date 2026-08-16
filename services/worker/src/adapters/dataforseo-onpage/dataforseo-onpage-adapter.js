@@ -1026,6 +1026,15 @@ function summarizeSite({
     rawArtifactRef: rawTaskId
       ? `dataforseo://on_page/${rawTaskId}`
       : null,
+    // Evidence-audit item 2 — the frozen decision-evidence schema coerces
+    // counters to integers at hydration; this marker declares whether the
+    // counters were ACTUALLY collected (page-level data or page_metrics
+    // checks).  Scorers gate meta credit on it.
+    _metaCountersAvailable:
+      hasPageHeadingData ||
+      hasPageDescriptionData ||
+      typeof metricChecks.no_h1_tag === "number" ||
+      typeof metricChecks.no_description === "number",
     _contentEvidenceAvailable: contentEvidenceAvailable,
     _responseHeadersAvailable: responseHeadersAvailable,
     // CRIT defect 2a — parsed text proves CONTENT, not interactive
@@ -1964,6 +1973,8 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         _contentEvidenceAvailable: envelope._contentEvidenceAvailable || false,
         _responseHeadersAvailable: envelope._responseHeadersAvailable || false,
         _interactiveEvidenceAvailable: envelope._interactiveEvidenceAvailable === true,
+        _metaCountersAvailable: envelope._metaCountersAvailable === true,
+        rawArtifactRef: envelope.rawArtifactRef || null,
       },
     };
 

@@ -58,7 +58,10 @@ const EFFORT_LABEL = { H: "High effort", M: "Medium effort", L: "Low effort" };
 function capabilityStatusClass(status) {
   if (status === "AVAILABLE") return "cap-ok";
   if (status === "PARTIAL") return "cap-partial";
-  return "cap-missing";
+  if (status === "FAILED") return "cap-missing";
+  // UNAVAILABLE / NOT_CONNECTED / NOT_APPLICABLE are NOT failures —
+  // neutral styling so unavailable evidence is never shown as a defect.
+  return "cap-neutral";
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +104,7 @@ function executiveScorecard(model, pillars) {
         <h2>C. Evidence Coverage</h2>
         <div class="coverage">${e(model.assessedWeight)}<span class="readiness-max">%</span></div>
         <p class="muted">${e(assessedCapabilities)}</p>
-        <p class="muted">Modules assessed: ${Object.values(model.moduleEligibility || {}).filter(Boolean).length} of ${Object.values(model.moduleEligibility || {}).length}</p>
+        <p class="muted">Modules assessed: ${Object.values(model.moduleScores || {}).filter((m) => m?.score !== null && m?.score !== undefined).length} of ${Object.values(model.moduleScores || {}).length}</p>
       </div>
     </div>
   </section>`;
@@ -320,6 +323,7 @@ section > h2 { margin-top:.2rem; font-size:1.15rem; border-bottom:1px solid var(
 .band-moderate, .cap-partial { background:#fdf3e3; color:var(--warn); }
 .band-limited { background:#fdf0f0; color:var(--bad); }
 .band-weak, .cap-missing { background:#fbeaea; color:var(--bad); }
+.cap-neutral { background:#eef2f8; color:var(--muted); }
 .muted { color:var(--muted); }
 .small { font-size:.78rem; color:var(--muted); }
 .table-wrap { overflow-x:auto; }

@@ -346,9 +346,11 @@ function scoreOfferClarityV4({ site, input }) {
   const forms = site.forms.length ? 15 : 0;
   const pricing = site.trust.pricing ? 20 : 0;
   const servicesPts = Math.min(20, services.length * 4);
-  // CRIT rescore #2 — unknown description counters must not grant the
-  // 15-point term; it contributes only from collected numbers.
+  // CRIT rescore #2 + evidence-audit item 2 — the descCoverage term
+  // contributes only when the description counters were ACTUALLY collected
+  // (adapter marker) and finite.
   const descKnown =
+    site._metaCountersAvailable !== false &&
     typeof site.missingDescriptions === "number" &&
     Number.isFinite(site.missingDescriptions);
   const descCoverage =
@@ -417,25 +419,50 @@ function scoreTechnicalV4({ site, capabilities }) {
 
   const subRules = [];
 
-  // Meta rules — crawl pages evidence.  CRIT defect 4b: unknown inputs
-  // (null/undefined counters when page_metrics checks were not collected)
-  // MUST NOT grant full credit — the sub-rule is excluded instead.
-  const metaInputs = [
-    site.missingTitles,
-    site.missingDescriptions,
-    site.missingCanonicals,
-    site.h1Missing,
-    site.h1Multiple,
-  ];
-  const metaKnown = metaInputs.every((v) => typeof v === "number" && Number.isFinite(v));
-  if (metaKnown) {
-    const score = clamp(
-      15 * (1 - site.missingTitles / pageCount) +
-      15 * (1 - site.missingDescriptions / pageCount) +
-      10 * (1 - site.missingCanonicals / pageCount) +
-      10 * (1 - Math.min(pageCount, site.h1Missing + site.h1Multiple) / pageCount),
-    );
-    subRules.push({ key: "meta", weight: 50, score });
+  // Meta rules — crawl pages evidence.  CRIT defect 4b + evidence-audit
+  // item 2: unknown counters (null coerced at hydration) MUST NOT grant
+  // credit — each TERM is included only from a finite collected counter,
+  // and the sub-rule weight reflects exactly the known portion.
+  const finiteNum = (v) => typeof v === "number" && Number.isFinite(v);
+  {
+    const metaTerms = [
+      {
+        weight: 15,
+        known: finiteNum(site.missingTitles),
+        score: 15 * (1 - (site.missingTitles ?? 0) / pageCount),
+      },
+      {
+        weight: 15,
+        known: finiteNum(site.missingDescriptions),
+        score: 15 * (1 - (site.missingDescriptions ?? 0) / pageCount),
+      },
+      {
+        weight: 10,
+        known: finiteNum(site.missingCanonicals),
+        score: 10 * (1 - (site.missingCanonicals ?? 0) / pageCount),
+      },
+      {
+        weight: 10,
+        known: finiteNum(site.h1Missing) && finiteNum(site.h1Multiple),
+        score: 10 * (1 - Math.min(pageCount, (site.h1Missing ?? 0) + (site.h1Multiple ?? 0)) / pageCount),
+      },
+    ];
+    const knownTerms = metaTerms.filter((t) => t.known);
+    // Evidence-audit item 2: the frozen decision-evidence schema coerces
+    // counters to integers, so the ADAPTER declares collection truth via
+    // `_metaCountersAvailable`.  Legacy evidence (marker undefined) keeps
+    // its historical semantics (extractor ran).
+    const metaCollected = site._metaCountersAvailable !== false;
+    if (metaCollected && knownTerms.length > 0) {
+      // The meta sub-rule is worth 50 points on the 0-100 module scale.
+      // Collected terms sum their points; the score is normalized to the
+      // KNOWN portion's scale (perfect collected evidence = 50) and the
+      // sub-rule weight is exactly the known portion.
+      const weight = knownTerms.reduce((s, t) => s + t.weight, 0);
+      const points = knownTerms.reduce((s, t) => s + t.score, 0);
+      const score = clamp(points * (50 / weight));
+      subRules.push({ key: "meta", weight, score });
+    }
   }
 
   // Image rules — CRIT defect 4a: unknown image evidence (null counts)
@@ -467,8 +494,11 @@ function scoreTechnicalV4({ site, capabilities }) {
     subRules.push({ key: "indexability", weight: 10, score });
   }
 
-  // Redirects — technical.redirects capability.
-  if (capStatus("technical.redirects") === "AVAILABLE" || capStatus("technical.redirects") === "PARTIAL") {
+  // Redirects — technical.redirects capability.  Evidence-audit item 2:
+  // PARTIAL status without collected evidence must not yield 10/10 from an
+  // empty chain list — the sub-rule requires collected fields.
+  const redirectsCap = capabilities?.["technical.redirects"];
+  if (redirectsCap?.status === "AVAILABLE" && redirectsCap?.requiredFieldsPresent === true) {
     const chains = site.redirectChains || [];
     const maxHops = chains.reduce((m, c) => Math.max(m, c?.hops ?? 0), 0);
     const score = maxHops <= 1 ? 10 : maxHops === 2 ? 5 : 0;

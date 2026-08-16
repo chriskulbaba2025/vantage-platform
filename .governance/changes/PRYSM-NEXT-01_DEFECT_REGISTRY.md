@@ -53,3 +53,38 @@ Independent adversarial reviewer (fresh context) verified integrity claims: (a) 
 | 7b | trust {} could score as all-absent | LOW | Documented: within an eligible module, missing keys = collected absence (gate ensures content evidence); no breaking schema change (decision-evidence v1 frozen) | documented |
 | 10b | pollTask ready-without-crawl_progress | LOW | Accepted documented provider-compat behaviour (fixture-compat); recorded | noted |
 | 11b | pathValidationLiveBrowser opt-in default-off | — | Live pilot item (calibration record item 3); repository boundary proven with controlled browser | noted |
+
+## WP-J — Rescore records (recorded for WPJ-14)
+
+### Rescore round 1 (head c7ced68, independent reviewer): 95/100
+
+| Area | Score |
+|---|---|
+| Product objective alignment | 97 |
+| Evidence acquisition sufficiency | 96 |
+| Content/offer/trust validity | 96 |
+| Technical/performance validity | 93 |
+| Functional conversion-path validity | 96 |
+| Evidence governance/provenance | 94 |
+| Scoring/eligibility/confidence validity | 94 |
+| Report usefulness/explainability | 97 |
+| Application/identity/product UX | 97 |
+| Production resilience/security/cost governance | 94 |
+| Calibration/readiness for real audits | 92 |
+| **Overall** | **95** |
+
+Residual defects (all repository-controlled, corrected in 948c87f):
+1. scoreTechnicalV4 indexability PARTIAL+empty → 10/10; resources null totals → 10/10 — FIXED (requiredFieldsPresent gate; finite-total gate).
+2. scoreOfferClarityV4 descCoverage 15 pts from null missingDescriptions — FIXED (finite-number gate).
+3. Unreachable `return {` in summarizeSite making the SHA-256 provenance suffix dead — FIXED (rawArtifactRef now carries ?sha256=; asserted).
+4. False-PASS gap: no behavioural tests for the corrections — FIXED (4 mutation-sensitive tests added; moduleScores exposes subScores/subWeightTotal).
+5. readinessMap path "Missing" asserted CTA absence from unknown — FIXED (Not Assessed when interactive extraction never ran).
+
+### Rescore round 2 (head 948c87f, independent reviewer): SCORE
+- Integrity claim 5 (unknown never coerced to false/0/credit) re-verified: PASS at 948c87f.
+- Per-area + overall scores: recorded in WP-L closure evidence (final CRIT rescore).
+
+## WP-L — final independent audits (recorded)
+
+- Governance/GCU audit (head 948c87f): BLOCKED → closure-recording items corrected (WPJ-14 evidence above; master gates; WP-I/WP-K/WP-L checklists; WP-D checklist v1.1 note; WPJ scope section). Product scope/invariants/counters: all PASS.
+- Evidence/contract audit + Product/CRIT/UX audit: recorded at WP-L closure.
