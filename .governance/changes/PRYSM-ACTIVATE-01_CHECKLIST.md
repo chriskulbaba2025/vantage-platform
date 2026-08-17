@@ -1,6 +1,6 @@
 # PRYSM-ACTIVATE-01 — Production Product Boundary Closure
 
-**Version:** 1.0.0 (frozen before implementation)
+**Version:** 1.0.1 (refrozen before implementation)
 **Skill:** governed-coding-upgrade v2.1.0
 **Starting production SHA:** `4d9cf307096dd9073a980628ff90350261946e4d`
 **Branch:** `fix/prysm-production-activation`
@@ -19,6 +19,7 @@ No report renderer, scoring semantics, evidence acquisition, tenant authorizatio
 ## Permitted files
 
 - [ ] `.governance/changes/PRYSM-ACTIVATE-01_CHECKLIST.md`
+- [ ] `.github/workflows/prysm-activate-01-autofix.yml` — temporary branch-only exact-patch runner; must be absent from final diff
 - [ ] `app/audits/new/page.tsx`
 - [ ] `lib/audit-request.ts`
 - [ ] `app/audits/[auditId]/page.tsx`
@@ -106,6 +107,7 @@ No report renderer, scoring semantics, evidence acquisition, tenant authorizatio
 
 - [ ] changed files are a subset of the permitted list.
 - [ ] no prohibited subsystem changed.
+- [ ] temporary patch workflow absent from the final branch diff.
 - [ ] branch remains unmerged until explicit authorization.
 - [ ] production remains on `4d9cf307096dd9073a980628ff90350261946e4d` until explicit deployment authorization.
 - [ ] first paid production audit remains separately authorized.
