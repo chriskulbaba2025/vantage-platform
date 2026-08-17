@@ -262,6 +262,16 @@ export function createProductionRuntime({
     };
     if (input.ga4?.propertyId) auditRequest.ga4 = { propertyId: String(input.ga4.propertyId).replace(/\D/g, "") };
     if (input.gsc?.siteUrl) auditRequest.gsc = { siteUrl: String(input.gsc.siteUrl).trim() };
+    // PRYSM-V2-PROD-01 — production boundary parity with the base application
+    // service (PRYSM-NEXT-ACTIVATION defect A): the report design selection
+    // must survive the production request boundary.  Strict allowlist; v1
+    // remains the default when the field is absent.
+    if (input.report && typeof input.report === "object") {
+      auditRequest.report = {
+        designVersion:
+          input.report.designVersion === "2.0.0" ? "2.0.0" : "1.0.0",
+      };
+    }
 
     // Governed optional configuration pass-through (schema-validated):
     // crawl overrides, performance configuration, SERP/backlinks config,
