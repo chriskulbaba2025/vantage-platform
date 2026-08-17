@@ -1,0 +1,11 @@
+{
+  "contractVersion": "1.0.0",
+  "validationVersion": "1.0.0",
+  "auditId": "11111111-2222-4333-8444-555555555555",
+  "generatedAt": "2026-08-16T12:00:00.000Z",
+  "provider": "some-other-tool",
+  "status": "MAYBE",
+  "pages": [],
+  "summary": { "requested": 0, "pass": 0, "partial": 0, "failed": 0, "notAssessed": 0 },
+  "limitations": []
+}

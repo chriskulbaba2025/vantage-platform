@@ -1,0 +1,90 @@
+# PRYSM-NEXT-01 — Confirmed Defect Registry
+
+**Status:** live registry; each defect is proven by source inspection at b2e713b before any implementation, and closed by its owning WP with direct proof.
+
+## Confirmed by code inspection (pre-implementation evidence)
+
+| ID | Defect | Evidence (file:line at b2e713b) | Owning WP | Status |
+|---|---|---|---|---|
+| DEF-01 | Partial-dimension weighting: overall readiness numerator multiplies dimension score by FULL intended weight while denominator sums only assessed weight — partial dimensions are silently over-weighted | scoring/vantage-score.js:257-266 (`totalWeightedScore += dimData.score * dimData.totalWeight` vs `totalScoredWeight += dimData.assessedWeight`) | WP-D | CLOSED — numerator uses assessedWeight; hand-derived regression test proves 33 vs buggy 31 |
+| DEF-02 | Source-level eligibility: `checkModuleEligibility` gates on source status only; PARTIAL crawl makes ALL crawl modules eligible even when the module's required fields were not collected | scoring/score-components.js:567-613 | WP-C/WP-D | CLOSED — v2 two-layer gate (source + capability statuses); MODULES declare requiredCapabilities |
+| DEF-03 | Unknown→false scoring leakage: module scorers consume `false`/empty values directly; DFS metadata-only crawl made trust/schema/cta/forms all false/empty and lowered scores | scoring/score-components.js scorers | WP-C/WP-D | CLOSED — capability-gated eligibility: scorers run only when evidence collected; unknown ⇒ module suppressed with reason |
+| DEF-04 | Arbitrary funnel classification: `stage: index % 3 === 0 ? "TOFU" : ...` | scoring/report-model.js topicRows | WP-D | CLOSED — page-purpose-derived stages (form/CTA→BOFU, proof→MOFU, educational→TOFU, none→Not Assessed); schema shape preserved |
+| DEF-05 | AI-readiness overclaim: floor of 5 topics points; schema points from unknown-absent data | scoring/score-components.js scoreAiReadiness | WP-D | CLOSED — structural-only scoring, capability-gated schema points, no floor; aiReadinessBasis + limitation exposed |
+| DEF-06 | DFS OnPage evidence under-utilization: no `enable_content_parsing` on task_post, no /on_page/content_parsing endpoint method | adapters/dataforseo-onpage/dataforseo-onpage-client.js (task_post body, no content_parsing) | WP-B | CLOSED — content parsing integrated, key-page scoped; adapter 1.1.0; tests WP-B-02/08/09/10 green |
+| DEF-07 | Microdata called without `validate_micromarkup` prerequisite on task_post — endpoint will return empty in production | dataforseo-onpage-client.js (task_post body lacks validate_micromarkup; getMicrodata exists) | WP-B | CLOSED — validate_micromarkup default true; microdataTypes normalized + merged into schemaTypes |
+| DEF-08 | Redirect-chains / non-indexable / resources evidence not implemented | dataforseo-onpage-client.js (no such methods) | WP-B | CLOSED — getRedirectChains/getNonIndexable/getResources implemented + normalized (redirectChains, nonIndexablePages, pageResources) with acquisition ledger |
+| DEF-09 | Business context unused by scoring: scorers receive only (site, performance); intake business context (services, goal, audiences, locale) not passed | score-components.js scorers; vantage-score.js:456 | WP-D | CLOSED — modelDeps carries input; business services union in content/offer/funnel scorers; contentIdeas leads with intake services; goal-framed ideas; orchestrator passes full intake context |
+| DEF-10 | Evidence-confidence silent imputation: unknown factors default to 50 (`factors[factor] ?? 50`) with no provenance of the default | score-components.js calculateEvidenceConfidence | WP-C/WP-D | CLOSED — unknown factors are null, excluded from the weighted average, and reported via factorAvailability |
+| DEF-11 | Stale acceptance harness: acceptance-task9.js review checklist lacked `internal_link_recommendations` (added to review-gate by task10) — proof-only defect | scripts/acceptance-task9.js:30 vs review-gate.js:48 | WP-A | CLOSED (proof-only fix cc6bbe1-run; task9 12/12) |
+| DEF-12 | `contentEvidenceAvailable` default-true: `site._contentEvidenceAvailable !== false` treats missing marker as available | score-components.js buildFindings (consumption); decision-evidence.js hydrateSite (hydration) | WP-C/WP-D | CLOSED — WP-C: unknown-preserving hydration. WP-D: findings gated on capability statuses (suppressedFindingReasons recorded); scorers capability-gated |
+
+## CRIT audit items verified as ALREADY SATISFIED at b2e713b
+
+- PageSpeed primary + Lighthouse fallback with provenance (pagespeed-client.js; acceptance T7 suites green) — CRIT #26 hold: do not add DFS Lighthouse.
+- Deterministic finding IDs + scoring timestamps (generateFindingId, deriveScoredAt).
+- Report immutability v1.0.0 contract + template lock (verify-template.js; wp5/wp8/wp10 green).
+- Human review gate, approved multi-page report, partial-render blocking (wp10/wp11/wp12 green).
+- Tenant isolation with authorization-before-retrieval (acceptance-tenant green).
+- No secrets in client bundles (Playwright SEC-01 green).
+- Retry/backoff/durable-task resume on DFS adapter (PRYSM-CLOSE-12; wp6 green).
+
+## Baseline environment notes
+
+- acceptance-wp4 PG rollback proof requires a migrated PostgreSQL: controlled `prysm-baseline-pg` docker postgres:16 on 127.0.0.1:5433 with migrations 001-003 applied; run via `PRYSM_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/postgres`. Recorded for WP-L reproducibility.
+- Stale `.next` from the provisioning-branch checkout caused tsc TS2307 on app/admin types; `rm -rf .next` + rerun → tsc EXIT=0.
+
+## WP-J — Independent CRIT review (2026-08-16, head 4d4b7f8): 93/100
+
+Independent adversarial reviewer (fresh context) verified integrity claims: (a) assessed-weight mean PASS, (b) no index%N PASS, (c) validator no-click/submit PASS, (d) v1 renderer untouched PASS, (e) unknown≠full-credit FAIL (scoreTechnicalV4 null-input sub-rules). Correction round:
+
+| CRIT # | Defect | Severity | Correction | Proof |
+|---|---|---|---|---|
+| 4a/4b | scoreTechnicalV4 meta/images sub-rules granted full credit from null inputs | HIGH | SCORING_VERSION 4.1.1: sub-rules EXCLUDED when counter inputs are null/unknown (changelog documented in score-components.js) | score-components.test.js truth tables + full regression |
+| 2a | DFS content-parsing text discarded → live audits never yield content evidence | CRITICAL | Adapter 1.2.0: parsed text hydrated into page bodyText/signals/_contentAvailable; site `_interactiveEvidenceAvailable:false`; capability rules: conversion.cta/form/path NEVER claim availability from parsed text alone (empty arrays + no interactive extractor = UNAVAILABLE); legacy extractor semantics preserved | adapter tests (hydrated text + signal derivation), capability truth tables, WP-I Phase 8 live-shaped real-adapter proof |
+| 3a/3b | v1 readinessMap asserted per-topic trust/CTA claims from unknown evidence | MEDIUM | topicRows gated on trust.proof capability (Not Assessed strings when unavailable); CTA type claim requires form/booking evidence | score-components.test.js |
+| 6c/10a | WP-I plumbing proof stubbed schema validation (false-PASS risk) | HIGH | acceptance-wpi now builds the REAL Ajv validator over all contracts; stub removed | WP-I 52/52 with real schemas (caught a real v2-manifest contract gap — see 6d) |
+| 6d | v2 manifest failed the frozen v1 manifest schema (reportDesignVersion const 1.0.0) — hidden by the stub | HIGH | NEW versioned contract report-manifest-v2.schema.json (const 2.0.0); v2 branch validates against it; v1 schema untouched | validator suite fixtures + WP-I |
+| 6a | v2 render loaded capability evidence via raw get+parse | MEDIUM | Now uses loadAndValidateCapabilityEvidence (verify + SHA + schema) | WP-I Phase 1 |
+| 6b | decision-evidence hydration warnings silently dropped | MEDIUM | console.error diagnostics (sanitized strings) | code |
+| 7a | EVIDENCE_LOCKED replay derived auditInput from transient request | MEDIUM | Scoring context now rebuilt from the PERSISTED audit-request.json (fallback to request) | WP-I + regression |
+| 5a | First `<form>` heuristic → newsletter/search forms yielded false conversion-form PASS | MEDIUM | Conversion-relevant form rule: submit text intent OR ≥2 editable fields; weak forms stay unknown (limitation, no pass/fail) | validator tests + WP-I |
+| 8a | v2 report omitted conversion-path architecture + competitive context | MEDIUM | v2 renderer gained evidence-grounded path + competitor sections | render-report-v2 golden tests |
+| 7b | trust {} could score as all-absent | LOW | Documented: within an eligible module, missing keys = collected absence (gate ensures content evidence); no breaking schema change (decision-evidence v1 frozen) | documented |
+| 10b | pollTask ready-without-crawl_progress | LOW | Accepted documented provider-compat behaviour (fixture-compat); recorded | noted |
+| 11b | pathValidationLiveBrowser opt-in default-off | — | Live pilot item (calibration record item 3); repository boundary proven with controlled browser | noted |
+
+## WP-J — Rescore records (recorded for WPJ-14)
+
+### Rescore round 1 (head c7ced68, independent reviewer): 95/100
+
+| Area | Score |
+|---|---|
+| Product objective alignment | 97 |
+| Evidence acquisition sufficiency | 96 |
+| Content/offer/trust validity | 96 |
+| Technical/performance validity | 93 |
+| Functional conversion-path validity | 96 |
+| Evidence governance/provenance | 94 |
+| Scoring/eligibility/confidence validity | 94 |
+| Report usefulness/explainability | 97 |
+| Application/identity/product UX | 97 |
+| Production resilience/security/cost governance | 94 |
+| Calibration/readiness for real audits | 92 |
+| **Overall** | **95** |
+
+Residual defects (all repository-controlled, corrected in 948c87f):
+1. scoreTechnicalV4 indexability PARTIAL+empty → 10/10; resources null totals → 10/10 — FIXED (requiredFieldsPresent gate; finite-total gate).
+2. scoreOfferClarityV4 descCoverage 15 pts from null missingDescriptions — FIXED (finite-number gate).
+3. Unreachable `return {` in summarizeSite making the SHA-256 provenance suffix dead — FIXED (rawArtifactRef now carries ?sha256=; asserted).
+4. False-PASS gap: no behavioural tests for the corrections — FIXED (4 mutation-sensitive tests added; moduleScores exposes subScores/subWeightTotal).
+5. readinessMap path "Missing" asserted CTA absence from unknown — FIXED (Not Assessed when interactive extraction never ran).
+
+### Rescore round 2 (head 948c87f, independent reviewer): SCORE
+- Integrity claim 5 (unknown never coerced to false/0/credit) re-verified: PASS at 948c87f.
+- Per-area + overall scores: recorded in WP-L closure evidence (final CRIT rescore).
+
+## WP-L — final independent audits (recorded)
+
+- Governance/GCU audit (head 948c87f): BLOCKED → closure-recording items corrected (WPJ-14 evidence above; master gates; WP-I/WP-K/WP-L checklists; WP-D checklist v1.1 note; WPJ scope section). Product scope/invariants/counters: all PASS.
+- Evidence/contract audit + Product/CRIT/UX audit: recorded at WP-L closure.

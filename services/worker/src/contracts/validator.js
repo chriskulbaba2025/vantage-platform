@@ -42,6 +42,13 @@ const REQUIRED_SCHEMAS = [
   "report-manifest.schema.json",
   "lifecycle-event.schema.json",
   "lifecycle-state.schema.json",
+  // PRYSM-NEXT-01 WP-C — capability evidence v2 (additive canonical artifact)
+  "capability-evidence.schema.json",
+  // PRYSM-NEXT-01 WP-E — conversion-path validation evidence
+  "conversion-path-validation.schema.json",
+  // PRYSM-NEXT-01 WP-J — report design v2 manifest (distinct versioned
+  // contract; v1 manifest schema remains frozen)
+  "report-manifest-v2.schema.json",
 ];
 
 // ---------------------------------------------------------------------------

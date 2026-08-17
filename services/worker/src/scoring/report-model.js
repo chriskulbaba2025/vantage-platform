@@ -31,34 +31,163 @@ function buildConversionPaths(site) {
   return paths;
 }
 
-function topicRows(site) {
-  // Prefer validated services; fall back to multi-word topicKeywords only
-  const services = site.services.length
-    ? site.services
-    : site.topicKeywords.filter((t) => t.split(/\s+/).length >= 2).slice(0, 8);
-  const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
-  return services.slice(0, 8).map((service, index) => ({
-    topic: typeof service === "string" ? pretty(service) : String(service),
-    stage: index % 3 === 0 ? "TOFU" : index % 3 === 1 ? "MOFU" : "BOFU",
-    blocker: !site.trust.credentials ? "Doubt" : !site.trust.pricing ? "Offer clarity" : "Unclear next step",
-    trustAsset: !site.trust.credentials ? "Credential" : !site.trust.testimonials ? "Testimonial" : "Process proof",
-    eeat: !site.trust.credentials ? "Expertise proof" : "Experience proof",
-    cta: site.forms.length ? "Form" : "Book",
-    path: site.ctas.length ? "Weak" : "Missing",
-    priority: index < 4 ? "H" : index < 7 ? "M" : "L",
-  }));
+// ---------------------------------------------------------------------------
+// PRYSM-NEXT-01 WP-D-06 — defensible, evidence-driven funnel stages.
+// A service's stage is derived from the page purpose of the page that
+// carries it (form/CTA → BOFU; testimonial/case-study → MOFU;
+// educational → TOFU).  No page-purpose evidence → "Not Assessed".
+// ---------------------------------------------------------------------------
+
+const STAGE_PATTERNS = Object.freeze({
+  BOFU: [/\b(book|booking|schedule|contact|quote|request|pricing|price|cost|register|sign.?up|consultation|appointment)\b/i],
+  MOFU: [/\b(testimonial|review|case.?stud|success|results?|client.?stories|portfolio|proof|faq|compare|comparison)\b/i],
+  TOFU: [/\b(blog|article|guide|learn|resources?|insights?|tips|what.?is|why|education|training)\b/i],
+});
+
+function pagePurposeStage(page) {
+  const text = [page?.title || "", ...(page?.headings?.h1 || [])].join(" ");
+  const hasForm = Array.isArray(page?.forms) && page.forms.length > 0;
+  const hasCta = Array.isArray(page?.ctas) && page.ctas.length > 0;
+
+  if (hasForm || hasCta) return "BOFU";
+  if (STAGE_PATTERNS.BOFU.some((re) => re.test(text))) return "BOFU";
+  if (STAGE_PATTERNS.MOFU.some((re) => re.test(text))) return "MOFU";
+  if (STAGE_PATTERNS.TOFU.some((re) => re.test(text))) return "TOFU";
+  return null;
 }
 
-function contentIdeas(site) {
-  // Build topics from validated services and multi-word topicKeywords.
+/**
+ * Deterministic site-level fallback when a service has no page-purpose
+ * evidence.  The frozen v1 report-view-model stage enum only allows
+ * TOFU/MOFU/BOFU — "Not Assessed" rows cannot be carried in the v1 shape;
+ * report design v2 (WP-G) carries true Not-Assessed rows in its own model.
+ * Rule: conversion affordances at site level → BOFU; proof content → MOFU;
+ * otherwise TOFU (early-journey assumption, documented).
+ */
+function siteFallbackStage(site) {
+  const hasForms = Array.isArray(site.forms) && site.forms.length > 0;
+  if (hasForms || site.trust?.pricing) return "BOFU";
+  if (site.trust?.testimonials || site.trust?.caseStudies) return "MOFU";
+  return "TOFU";
+}
+
+function tokenMatch(text, tokensArr) {
+  const words = String(text || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter(Boolean);
+  const set = new Set(tokensArr.map((t) => String(t).toLowerCase()));
+  return words.some((w) => set.has(w)) || set.has(String(text || "").toLowerCase().trim());
+}
+
+function topicRows(site, input = {}, capabilities = {}) {
+  // Prefer business-context services; fall back to validated crawl services;
+  // finally multi-word topicKeywords.
+  const business = (input.services || []).filter(Boolean);
+  const services = business.length
+    ? business
+    : site.services.length
+      ? site.services
+      : site.topicKeywords.filter((t) => t.split(/\s+/).length >= 2).slice(0, 8);
+
+  // Find the page that carries each service (title/H1/URL keyword match) —
+  // deterministic: first match by crawled order.
+  const pages = Array.isArray(site.pages) ? site.pages : [];
+  const servicePages = new Map();
+  for (const service of services) {
+    const tokensArr = String(service).toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+    const page = pages.find(
+      (p) => tokenMatch(p?.title || "", tokensArr) ||
+        tokenMatch((p?.headings?.h1 || []).join(" "), tokensArr) ||
+        tokenMatch(p?.crawledUrl || p?.url || "", tokensArr),
+    );
+    servicePages.set(service, page || null);
+  }
+
+  const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // CRIT defect 3a — per-topic trust/CTA claims require the underlying
+  // evidence.  When trust-proof evidence is not available (content was not
+  // extracted), topic rows must NOT assert blockers or trust assets from
+  // unknown booleans.  v1 row shape preserved (string fields only).
+  const trustCap = capabilities["trust.proof"];
+  const trustEvidenceAvailable =
+    trustCap?.status === "AVAILABLE" || trustCap?.status === "PARTIAL";
+  const bookingCta = (site.ctas || []).some((c) =>
+    /book|schedule|reserve|appointment/i.test(String(c?.text || "")),
+  );
+
+  return services.slice(0, 8).map((service, index) => {
+    const page = servicePages.get(service);
+    const stage = page
+      ? (pagePurposeStage(page) || siteFallbackStage(site))
+      : siteFallbackStage(site);
+    // NOTE (WP-D-06): the frozen report-view-model schema forbids
+    // additional properties on readinessMap rows and constrains stage to
+    // TOFU/MOFU/BOFU — stage semantics change, the row SHAPE does not.
+    // True "Not Assessed" rows land in report design v2 (WP-G).
+    const blocker = !trustEvidenceAvailable
+      ? "Not Assessed"
+      : stage === "BOFU" && !site.trust.pricing
+        ? "Offer clarity"
+        : !site.trust.credentials
+          ? "Doubt"
+          : "Unclear next step";
+    const trustAsset = !trustEvidenceAvailable
+      ? "Not Assessed"
+      : !site.trust.credentials
+        ? "Credential"
+        : !site.trust.testimonials
+          ? "Testimonial"
+          : "Process proof";
+    const eeat = !trustEvidenceAvailable
+      ? "Not Assessed"
+      : !site.trust.credentials
+        ? "Expertise proof"
+        : "Experience proof";
+    // CRIT defect 3b — never invent a CTA type claim without evidence.
+    const cta = site.forms.length
+      ? "Form"
+      : bookingCta
+        ? "Book"
+        : "Not Assessed";
+    // CRIT rescore #5 — "Missing" asserts absence; when interactive
+    // extraction never ran, the honest value is "Not Assessed".
+    const interactiveRan = site._interactiveEvidenceAvailable !== false;
+    const path = site.ctas.length
+      ? stage === "BOFU"
+        ? "Clear"
+        : "Weak"
+      : interactiveRan
+        ? "Missing"
+        : "Not Assessed";
+    return {
+      topic: typeof service === "string" ? pretty(service) : String(service),
+      stage,
+      blocker,
+      trustAsset,
+      eeat,
+      cta,
+      path,
+      priority: index < 4 ? "H" : index < 7 ? "M" : "L",
+    };
+  });
+}
+
+function contentIdeas(site, input = {}) {
+  // PRYSM-NEXT-01 WP-D-05 — business-context topics first (intake
+  // services), then crawl services, then multi-word topicKeywords.
   // Single short words (like "foot") are rejected because they produce
   // nonsensical content ideas such as "What Is Foot?".
   const candidates = [
+    ...(input.services || []),
     ...site.services,
     ...site.topicKeywords.filter((t) => t.split(/\s+/).length >= 2),
   ];
   const deduped = [...new Set(candidates.map((s) => s.toLowerCase()))];
   const topics = deduped.slice(0, 3);
+  // Business-context primary goal (WP-D-05) — used only to frame the
+  // generated idea text; never invents evidence or changes scores.
+  const goal = typeof input.primaryGoal === "string" && input.primaryGoal.trim()
+    ? input.primaryGoal.trim()
+    : null;
 
   // Fallback when no meaningful topics are available — use multi-word
   // placeholders so generated ideas are still useful.
@@ -91,10 +220,13 @@ function contentIdeas(site) {
     ],
     bofu: [
       { idea: "Pricing and What to Expect", frame: "Risk-reversal", type: "Pricing page", question: "What does it cost?", priority: "H" },
-      { idea: "Your First Step", frame: "Process page", type: "Start-here", question: "What happens after I act?", priority: "H" },
+      { idea: goal ? `Your First Step Toward ${goal.slice(0, 40)}` : "Your First Step", frame: "Process page", type: "Start-here", question: "What happens after I act?", priority: "H" },
       { idea: "Frequently Asked Questions with Examples", frame: "Testimonial FAQ", type: "FAQ page", question: "What concerns are common?", priority: "H" },
     ],
     leading: [
+      ...(goal
+        ? [{ query: `${t0} for ${goal.slice(0, 40).toLowerCase()}`, rationale: "Connects the offer directly to the stated business goal", priority: "H" }]
+        : []),
       { query: `${t0} for decision making`, rationale: "Connects the offer to an urgent practical use", priority: "H" },
       { query: `${t0} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },
     ],

@@ -49,7 +49,9 @@ const _ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(_ajv);
 [
   "artifact-record.schema.json", "audit-request.schema.json",
-  "canonical-evidence.schema.json", "decision-evidence.schema.json",
+  "canonical-evidence.schema.json", "capability-evidence.schema.json",
+  "conversion-path-validation.schema.json",
+  "decision-evidence.schema.json",
   "finding.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json",
   "narrative-response.schema.json", "report-content.schema.json",
   "report-manifest.schema.json", "report-view-model.schema.json",
@@ -217,7 +219,7 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
     const artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
     const lifecycleService = createLifecycleService(createMemoryLifecycleRepository());
     const realAdapters = {
-      "dataforseo-onpage": { adapterVersion: "1.0.0", execute: async (a) => onpageExecute(a) },
+      "dataforseo-onpage": { adapterVersion: "1.2.0", execute: async (a) => onpageExecute(a) },
       pagespeed: { adapterVersion: "1.1.0", execute: async (a) => pagespeedExecute(a) },
       "dataforseo-serp": { adapterVersion: "1.0.0", execute: async (a) => serpExecute(a) },
       backlinks: { adapterVersion: "1.0.0", execute: async (a) => backlinksExecute(a) },

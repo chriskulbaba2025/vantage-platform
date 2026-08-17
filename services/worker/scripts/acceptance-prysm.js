@@ -109,12 +109,27 @@ const onpageFixtures = {
       },
       microdata: { types: [{ type: "Service", name: SENTINELS.service }] },
       checks: {},
+      // Adapter 1.2.0 evidence path: interactive extraction payloads so
+      // the conversion modules have real CTA/form evidence.
+      resources: {
+        buttons: [{ text: "Book Now", url: `https://${SENTINELS.domain}/book` }],
+        forms: [{ action: "/submit", inputs_count: 2 }],
+      },
     }],
   },
   links: { items: [], total_count: 0 },
   duplicate_tags: { items: [] },
   duplicate_content: { items: [] },
-  microdata: { items: [] },
+  microdata: { items: [{ type: "Service" }] },
+  // WP-J adapter 1.2.0: the content-parsing endpoint feeds key pages.
+  content_parsing: [{
+    url: `https://${SENTINELS.domain}`,
+    result: {
+      main_content: [{ text: `${SENTINELS.service} by a certified team. Client testimonials, case studies, FAQ, transparent pricing, and a privacy policy. Contact us today.` }],
+      secondary_content: [],
+      plain_text_word_count: 24,
+    },
+  }],
 };
 
 // --- PageSpeed transport ---

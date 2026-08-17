@@ -56,6 +56,12 @@ const AVAILABLE_SITE = {
     contact: true,
   },
   limitations: [],
+  // PRYSM-NEXT-01 WP-D — fixture models DFS evidence WITH collected
+  // content (trust/CTA fields present); v4 capability derivation requires
+  // the explicit markers.  Headers: this fixture carries response headers
+  // on pages, so they are collected.
+  _contentEvidenceAvailable: true,
+  _responseHeadersAvailable: true,
   pages: [
     {
       title: "Example",

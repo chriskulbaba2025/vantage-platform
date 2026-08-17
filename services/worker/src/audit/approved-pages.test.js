@@ -172,7 +172,7 @@ test("8. every page contains business name, audit date, and approval status", ()
   for (const [filename, html] of pages) {
     assert.match(html, /Example Business/, `${filename} missing business name`);
     assert.match(html, /APPROVED CLIENT REPORT/, `${filename} missing approval status`);
-    assert.match(html, /Scoring v3\./, `${filename} missing scoring version`);
+    assert.match(html, /Scoring v4\./, `${filename} missing scoring version`);
     // Date rendered (any month name)
     assert.match(html, /(January|February|March|April|May|June|July|August|September|October|November|December)/, `${filename} missing audit date`);
   }

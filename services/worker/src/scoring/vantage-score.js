@@ -25,6 +25,7 @@ import {
   competitorComparison,
 } from "./report-model.js";
 import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
+import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 
 // ---------------------------------------------------------------------------
 // Source gate helpers (PRD v3.0 §8.6, §15.2)
@@ -64,7 +65,7 @@ function isPerformanceViable(performance) {
  *  - overallAssessedWeight: percentage of total dimension weight assessed
  *  - totalIntendedWeight: 100 (always)
  */
-function scoreModules(evidence) {
+function scoreModules(evidence, capabilities, input) {
   const site = evidence.site;
   const performance = evidence.performance;
 
@@ -78,7 +79,6 @@ function scoreModules(evidence) {
       label: dim.label,
       totalWeight: dim.weight,
       scoredWeight: 0,
-      eligibleWeight: 0,
       moduleScores: [],
       eligible: false,
     });
@@ -86,7 +86,7 @@ function scoreModules(evidence) {
 
   // Score each module
   for (const mod of Object.values(MODULES)) {
-    const eligibility = checkModuleEligibility(mod, evidence);
+    const eligibility = checkModuleEligibility(mod, evidence, capabilities);
 
     if (!eligibility.eligible) {
       moduleResults.set(mod.id, {
@@ -101,11 +101,17 @@ function scoreModules(evidence) {
       continue;
     }
 
-    // Module is eligible — compute score
-    const score = mod.scorer(site, performance, { site, performance });
+    // Module is eligible — compute score.  modelDeps carries the business
+    // context (WP-D-05) and capability map (WP-D-02/07).
+    const modelDeps = { site, performance, input, capabilities };
+    const rawScore = mod.scorer(site, performance, modelDeps);
+    // v4 technical hygiene returns { score, subWeightAssessed, ... }.
+    const score = (rawScore && typeof rawScore === "object" && "score" in rawScore)
+      ? rawScore.score
+      : rawScore;
     const finalScore = score === null ? null : clamp(score);
 
-    moduleResults.set(mod.id, {
+    const resultEntry = {
       moduleId: mod.id,
       dimension: mod.dimension,
       label: mod.label,
@@ -113,16 +119,19 @@ function scoreModules(evidence) {
       eligible: true,
       reason: null,
       weight: mod.weight,
-    });
+    };
+    if (rawScore && typeof rawScore === "object") {
+      resultEntry.subWeightAssessed = rawScore.subWeightAssessed ?? null;
+      resultEntry.subWeightTotal = rawScore.subWeightTotal ?? null;
+      resultEntry.subScores = rawScore.subScores ?? null;
+    }
+    moduleResults.set(mod.id, resultEntry);
 
     // Accumulate into dimension
     const dim = dimensionData.get(mod.dimension);
     if (dim && finalScore !== null) {
       dim.scoredWeight += mod.weight;
       dim.moduleScores.push({ moduleId: mod.id, score: finalScore, weight: mod.weight });
-    }
-    if (dim) {
-      dim.eligibleWeight += mod.weight;
     }
   }
 
@@ -191,7 +200,7 @@ function scoreModules(evidence) {
 // Funnel-stage scores (derived for report backward compatibility)
 // ---------------------------------------------------------------------------
 
-function computeFunnelScores(site, dimensionScores) {
+function computeFunnelScores(site, dimensionScores, capabilities) {
   const trustScore = dimensionScores.get("trust_eeat")?.score ?? null;
   const contentScore = dimensionScores.get("content_funnel")?.score ?? null;
   const conversionScore = dimensionScores.get("conversion_pathways")?.score ?? null;
@@ -221,14 +230,19 @@ function computeFunnelScores(site, dimensionScores) {
       )
     : null;
 
-  // AI readiness is always computed when crawl is viable
+  // WP-D-07 — structural machine-readability only; no floor for unknown
+  // evidence; schema points require the structured-data capability.
+  const schemaCap = capabilities?.["schema.structured_data"];
+  const schemaAvailable =
+    schemaCap?.status === SOURCE_STATUS.AVAILABLE ||
+    schemaCap?.status === SOURCE_STATUS.PARTIAL;
   const aiReadiness = trustScore !== null
     ? clamp(
-        (site.schemaTypes.length ? 25 : 0) +
+        (schemaAvailable && site.schemaTypes.length ? 25 : 0) +
           (site.pages[0]?.headings?.h1?.length ? 15 : 0) +
           (site.trust.faq ? 20 : 0) +
           Math.min(20, site.pageCount * 3) +
-          (site.topicKeywords.length >= 5 ? 20 : 5),
+          (site.topicKeywords.length >= 5 ? 20 : site.topicKeywords.length >= 3 ? 10 : 0),
       )
     : null;
 
@@ -249,14 +263,17 @@ function buildLegacyScoreMap(dimensionScores, moduleResults, site, performance) 
   const technical = moduleResults.get("technical_hygiene")?.score ?? null;
   const perfScore = moduleResults.get("performance")?.score ?? null;
 
-  // Overall readiness: weighted sum of dimension scores / assessed weight
+  // Overall readiness: assessed-weight-weighted mean (PRYSM-NEXT-01 WP-D-01).
+  // Numerator MUST use the dimension's ASSESSED weight, never its full
+  // intended weight — a partial dimension may only influence the overall
+  // score in proportion to the evidence actually assessed (CRIT defect 15).
   let conversionReadiness = null;
   let totalWeightedScore = 0;
   let totalScoredWeight = 0;
 
   for (const [, dimData] of dimensionScores) {
     if (dimData.eligible && dimData.score !== null) {
-      totalWeightedScore += dimData.score * dimData.totalWeight;
+      totalWeightedScore += dimData.score * dimData.assessedWeight;
       totalScoredWeight += dimData.assessedWeight;
     }
   }
@@ -379,6 +396,7 @@ function buildNotAssessedModel(input, evidence, scoredAt) {
     assessedWeight: hasPerformance ? 10 : 0, // Only performance contributes when crawl is down
     evidenceConfidenceScore,
     evidenceConfidenceFactors: evidenceConfidence.factors,
+    evidenceConfidenceFactorAvailability: evidenceConfidence.factorAvailability,
     dimensionEligibility: Object.fromEntries(
       Object.keys(DIMENSIONS).map((k) => [k, false]),
     ),
@@ -388,6 +406,16 @@ function buildNotAssessedModel(input, evidence, scoredAt) {
     suppressedModules,
     rootCause,
     findings: [],
+    suppressedFindingReasons: [],
+    // WP-D capability transparency + AI-readiness basis on the
+    // Not-Assessed path too (renderers may read these unconditionally).
+    capabilityEvidence: {
+      capabilityEvidenceVersion: "2.0.0",
+      summary: { total: 0, available: 0, partial: 0, unavailable: 0, failed: 0, notConnected: 0, notApplicable: 0, assessed: 0 },
+      capabilities: {},
+    },
+    aiReadinessBasis: "structural",
+    aiReadinessLimitation: "Crawl evidence unavailable — machine-readability readiness was not assessed.",
     conversionPaths: [
       {
         name: "Primary conversion path",
@@ -458,6 +486,18 @@ export function scoreAudit(input, evidence, opts = {}) {
   const performance = evidence.performance;
   const scoredAt = deriveScoredAt(evidence, opts.scoredAt);
 
+  // PRYSM-NEXT-01 WP-D-02 — capability evidence.  When the caller supplies
+  // the governed persisted artifact (scoring-service), use it.  Otherwise
+  // (legacy harness path) derive deterministically from the SAME evidence —
+  // derivation is pure, so both paths produce identical capability maps.
+  const capabilityEvidence = opts.capabilityEvidence
+    || buildCapabilityEvidence({
+      decisionEvidence: evidence,
+      auditId: input?.auditId || input?.id || "derived",
+      generatedAt: scoredAt,
+    });
+  const capabilities = capabilityEvidence.capabilities || {};
+
   // ── Crawl gate (PRD v3.0 §8.6) ────────────────────────────────────
   // A viable status without actual crawl content (domain + pages) is
   // treated as unavailable — prevents hollow evidence from masquerading
@@ -505,12 +545,12 @@ export function scoreAudit(input, evidence, opts = {}) {
     return buildNotAssessedModel(input, evidence, scoredAt);
   }
 
-  // ── Score modules with source gates ────────────────────────────────
+  // ── Score modules with source + capability gates ────────────────────
   const {
     moduleResults,
     dimensionScores,
     overallAssessedWeight,
-  } = scoreModules(evidence);
+  } = scoreModules(evidence, capabilities, input);
 
   // ── Build legacy score map ─────────────────────────────────────────
   const legacyScores = buildLegacyScoreMap(
@@ -521,14 +561,18 @@ export function scoreAudit(input, evidence, opts = {}) {
   );
 
   // ── Funnel-stage scores ────────────────────────────────────────────
-  const funnelScores = computeFunnelScores(site, dimensionScores);
+  const funnelScores = computeFunnelScores(site, dimensionScores, capabilities);
 
   // ── Rendering-integrity diagnostics ─────────────────────────────────
   const renderingDiagnostics = classifyRenderingDiagnostics(performance, { now: scoredAt });
 
-  // ── Build findings ─────────────────────────────────────────────────
+  // ── Build findings (capability-gated — WP-D-11) ─────────────────────
   const gsc = evidence.gsc;
-  const findings = buildFindings(site, performance, gsc);
+  const suppressedFindingReasons = [];
+  const findings = buildFindings(site, performance, gsc, {
+    capabilities,
+    suppressedReasons: suppressedFindingReasons,
+  });
 
   // Append rendering-diagnostic findings for material site-rendering defects
   const diagnosticFindings = buildRenderingDiagnosticFindings(
@@ -637,22 +681,60 @@ export function scoreAudit(input, evidence, opts = {}) {
     // PRD §15.5 — evidence confidence
     evidenceConfidenceScore: evidenceConfidence.score,
     evidenceConfidenceFactors: evidenceConfidence.factors,
+    evidenceConfidenceFactorAvailability: evidenceConfidence.factorAvailability,
 
     // Module and dimension eligibility
     dimensionEligibility,
     moduleEligibility,
     suppressedModules,
+    // WP-G: additive per-module score map for pillar display.  Same values
+    // already consumed internally — display aggregation only, no scoring
+    // semantics change.
+    moduleScores: Object.fromEntries(
+      [...moduleResults.entries()].map(([id, r]) => [
+        id,
+        {
+          score: r.score,
+          eligible: r.eligible,
+          weight: r.weight,
+          reason: r.reason || null,
+          ...(r.subWeightAssessed != null
+            ? {
+                subWeightAssessed: r.subWeightAssessed,
+                subWeightTotal: r.subWeightTotal ?? 100,
+                subScores: r.subScores ?? null,
+              }
+            : {}),
+        },
+      ]),
+    ),
 
     // Findings, root cause, and display content
     rootCause,
     findings,
+    suppressedFindingReasons,
     conversionPaths: buildConversionPaths(site),
-    readinessMap: topicRows(site),
-    contentIdeas: contentIdeas(site),
+    readinessMap: topicRows(site, input, capabilities),
+    contentIdeas: contentIdeas(site, input),
     competitors: competitorComparison(evidence.competitors || [], evidence.competitorOpportunities),
     competitorOpportunities: evidence.competitorOpportunities,
     evidence,
     renderingDiagnostics: renderingDiagnostics.diagnostics,
+
+    // ── PRYSM-NEXT-01 WP-D capability transparency ──────────────────────
+    capabilityEvidence: {
+      capabilityEvidenceVersion: capabilityEvidence.capabilityEvidenceVersion,
+      summary: capabilityEvidence.summary,
+      capabilities,
+    },
+    // WP-D-07 — the AI-readiness number is structural machine-readability
+    // only; it is never described as actual AI visibility.
+    aiReadinessBasis: "structural",
+    aiReadinessLimitation:
+      capabilities["schema.structured_data"]?.status === "AVAILABLE" ||
+      capabilities["schema.structured_data"]?.status === "PARTIAL"
+        ? null
+        : "Structured-data evidence was not collected — machine-readability readiness is scored on available signals only.",
   };
 }
 

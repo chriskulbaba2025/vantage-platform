@@ -2,10 +2,26 @@ import { average, clamp, stableHash } from "../utils.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 
 // ---------------------------------------------------------------------------
-// V3 Scoring version (PRD v3.0 §15.1)
+// Scoring version (PRD v3.0 §15.1 + PRYSM-NEXT-01 WP-D/WP-J)
+//
+// CHANGELOG
+//   3.0.0 — PRD v3.0 launch scoring (superseded).
+//   4.0.0 — capability-level module eligibility; assessed-weight-weighted
+//           readiness (CRIT weighting defect corrected); business context
+//           into scoring; page-purpose funnel stages; structural-only
+//           AI-readiness; findings capability-gated; confidence unknown-
+//           factor exclusion.
+//   4.1.0 — validated conversion-path evidence (WP-E): bounded validated
+//           bonus/penalty, VAN-PATH-001 obstruction finding.
+//   4.1.1 — CRIT integrity fix (unknown ≠ full credit): scoreTechnicalV4
+//           meta/images sub-rules are EXCLUDED when their counter inputs
+//           are null/unknown instead of silently granting full points.
+//           Mathematical/eligibility correctness proven by
+//           score-components.test.js truth tables (sub-rule exclusion
+//           changes assessed sub-weights, never the dimension weights).
 // ---------------------------------------------------------------------------
 
-export const SCORING_VERSION = "3.0.0";
+export const SCORING_VERSION = "4.1.1";
 
 // ---------------------------------------------------------------------------
 // Severity / band helpers
@@ -65,11 +81,17 @@ export const DIMENSIONS = Object.freeze({
 
 /**
  * Each module declares:
- *  - id:           stable identifier
- *  - dimension:    parent dimension key
- *  - weight:       contribution to its dimension (out of that dimension's total)
- *  - sources:      required evidence sources for eligibility
- *  - scorer:       (site, performance) => 0-100 or null
+ *  - id:                    stable identifier
+ *  - dimension:             parent dimension key
+ *  - weight:                contribution to its dimension (out of that dimension's total)
+ *  - sources:               required evidence sources for eligibility (back-compat)
+ *  - requiredCapabilities:  capability keys that MUST be AVAILABLE/PARTIAL with
+ *                           requiredFieldsPresent for the module to execute
+ *                           (PRYSM-NEXT-01 WP-D-02; capability map per
+ *                           .governance/changes/PRYSM-NEXT-01_CAPABILITY_MATRIX.md).
+ *                           technical_hygiene partitions sub-rules per capability
+ *                           instead (see scoreTechnicalV4).
+ *  - scorer:                (site, perf, modelDeps) => 0-100 or null
  */
 export const MODULES = Object.freeze({
   // ── Conversion Pathways and Offer Clarity (25%) ──────────────────────
@@ -78,16 +100,18 @@ export const MODULES = Object.freeze({
     dimension: "conversion_pathways",
     weight: 12.5,
     sources: ["crawl"],
+    requiredCapabilities: ["conversion.cta", "conversion.form"],
     label: "Conversion Paths",
-    scorer: (_site, _perf, modelDeps) => scoreConversion(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreConversionV4(modelDeps),
   },
   offer_clarity: {
     id: "offer_clarity",
     dimension: "conversion_pathways",
     weight: 12.5,
     sources: ["crawl"],
+    requiredCapabilities: ["offer.clarity"],
     label: "Offer Clarity",
-    scorer: (_site, _perf, modelDeps) => scoreOfferClarity(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreOfferClarityV4(modelDeps),
   },
 
   // ── Trust, E-E-A-T, and Risk Reduction (25%) ────────────────────────
@@ -96,16 +120,18 @@ export const MODULES = Object.freeze({
     dimension: "trust_eeat",
     weight: 12.5,
     sources: ["crawl"],
+    requiredCapabilities: ["trust.proof"],
     label: "Trust Signals",
-    scorer: (_site, _perf, modelDeps) => scoreTrust(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreTrustV4(modelDeps),
   },
   risk_reduction: {
     id: "risk_reduction",
     dimension: "trust_eeat",
     weight: 12.5,
     sources: ["crawl"],
+    requiredCapabilities: ["trust.proof", "technical.headers"],
     label: "Risk Reduction",
-    scorer: (_site, _perf, modelDeps) => scoreRiskReduction(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreRiskReductionV4(modelDeps),
   },
 
   // ── Content and Funnel Coverage (20%) ────────────────────────────────
@@ -114,16 +140,18 @@ export const MODULES = Object.freeze({
     dimension: "content_funnel",
     weight: 10,
     sources: ["crawl"],
+    requiredCapabilities: ["content.body"],
     label: "Content Depth",
-    scorer: (_site, _perf, modelDeps) => scoreContent(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreContentV4(modelDeps),
   },
   funnel_coverage: {
     id: "funnel_coverage",
     dimension: "content_funnel",
     weight: 10,
     sources: ["crawl"],
+    requiredCapabilities: ["content.body", "trust.proof"],
     label: "Funnel Coverage",
-    scorer: (_site, _perf, modelDeps) => scoreFunnelCoverage(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreFunnelCoverageV4(modelDeps),
   },
 
   // ── Technical and Performance Readiness (20%) ────────────────────────
@@ -132,14 +160,19 @@ export const MODULES = Object.freeze({
     dimension: "technical_performance",
     weight: 10,
     sources: ["crawl"],
+    // Core meta rules need only crawl pages evidence; capability-scoped
+    // sub-rules (indexability/redirects/resources/headers) are weighted in
+    // only when their capability evidence is present (WP-D-04).
+    requiredCapabilities: [],
     label: "Technical Hygiene",
-    scorer: (_site, _perf, modelDeps) => scoreTechnical(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreTechnicalV4(modelDeps),
   },
   performance: {
     id: "performance",
     dimension: "technical_performance",
     weight: 10,
     sources: ["performance"],
+    requiredCapabilities: ["performance.lab"],
     label: "Performance",
     scorer: (_site, perf, _modelDeps) => scorePerformance(perf),
   },
@@ -150,16 +183,18 @@ export const MODULES = Object.freeze({
     dimension: "entity_schema_ai",
     weight: 5,
     sources: ["crawl"],
+    requiredCapabilities: ["schema.structured_data"],
     label: "Schema & Entity",
-    scorer: (_site, _perf, modelDeps) => scoreSchemaEntity(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreSchemaEntityV4(modelDeps),
   },
   ai_readiness: {
     id: "ai_readiness",
     dimension: "entity_schema_ai",
     weight: 5,
     sources: ["crawl"],
+    requiredCapabilities: ["schema.structured_data"],
     label: "AI-Search Readiness",
-    scorer: (_site, _perf, modelDeps) => scoreAiReadiness(modelDeps.site),
+    scorer: (_site, _perf, modelDeps) => scoreAiReadinessV4(modelDeps),
   },
 });
 
@@ -250,21 +285,84 @@ export function scorePerformance(performance) {
 }
 
 // ---------------------------------------------------------------------------
-// New module scorers (dimension decomposition)
+// PRYSM-NEXT-01 WP-D — v4 module scorers
+//
+// Every v4 scorer receives modelDeps = { site, performance, input,
+// capabilities } and executes ONLY under capability-gated eligibility
+// (checkModuleEligibility v2).  Inside an eligible module, false/empty
+// values mean CONFIRMED ABSENCE — unknown evidence was filtered at the gate.
 // ---------------------------------------------------------------------------
 
-function scoreOfferClarity(site) {
+function businessServices(site, input) {
+  const seen = new Set();
+  const out = [];
+  for (const s of [...(input?.services || []), ...(site?.services || [])]) {
+    const key = String(s || "").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+/** v4 trust: same formula; eligibility gates unknown. */
+function scoreTrustV4({ site }) {
+  return scoreTrust(site);
+}
+
+/** v4 content: business-context services union (WP-D-05). */
+function scoreContentV4({ site, input }) {
+  const services = businessServices(site, input);
+  const pages = Math.min(30, site.pageCount * 5);
+  const depth = Math.min(25, site.averageWords / 20);
+  const servicesPts = Math.min(20, services.length * 4);
+  const education = (site.trust.faq ? 15 : 0) + (site.pageCount >= 5 ? 10 : 0);
+  return clamp(pages + depth + servicesPts + education);
+}
+
+/**
+ * v4.1 conversion: base inferred score; when the conversion.path capability
+ * is browser-validated (WP-E), verified pages add a bounded bonus and
+ * obstructed CTAs subtract — validated evidence, never inferred strings.
+ * Validation NOT_ASSESSED keeps the inferred baseline (no penalty).
+ */
+function scoreConversionV4({ site, capabilities }) {
+  const base = scoreConversion(site);
+  const pathCap = capabilities?.["conversion.path"];
+  const summary = pathCap?.validationSummary;
+  if (pathCap?.validated === true && summary) {
+    const verified = (summary.pass ?? 0) + (summary.partial ?? 0);
+    const bonus = Math.min(10, verified * 2);
+    const obstructionPenalty = (summary.obstructionCount ?? 0) > 0 ? 10 : 0;
+    return clamp(base + bonus - obstructionPenalty);
+  }
+  return base;
+}
+
+/** v4 offer clarity: business-context services union. */
+function scoreOfferClarityV4({ site, input }) {
+  const services = businessServices(site, input);
   const ctaClarity = Math.min(30, site.ctas.length * 6);
   const forms = site.forms.length ? 15 : 0;
   const pricing = site.trust.pricing ? 20 : 0;
-  const services = Math.min(20, site.services.length * 4);
-  const descCoverage = site.pageCount
-    ? 15 * (1 - site.missingDescriptions / site.pageCount)
-    : 0;
-  return clamp(ctaClarity + forms + pricing + services + descCoverage);
+  const servicesPts = Math.min(20, services.length * 4);
+  // CRIT rescore #2 + evidence-audit item 2 — the descCoverage term
+  // contributes only when the description counters were ACTUALLY collected
+  // (adapter marker) and finite.
+  const descKnown =
+    site._metaCountersAvailable !== false &&
+    (site._metaFieldAvailability?.descriptions ?? true) !== false &&
+    typeof site.missingDescriptions === "number" &&
+    Number.isFinite(site.missingDescriptions);
+  const descCoverage =
+    descKnown && site.pageCount
+      ? 15 * (1 - site.missingDescriptions / site.pageCount)
+      : 0;
+  return clamp(ctaClarity + forms + pricing + servicesPts + descCoverage);
 }
 
-function scoreRiskReduction(site) {
+/** v4 risk reduction: same formula; eligibility gates unknown. */
+function scoreRiskReductionV4({ site }) {
   const policies = site.trust.policies ? 25 : 0;
   const contact = site.trust.contact ? 20 : 0;
   const security = 25 * (Object.values(site.securityHeaders).filter(Boolean).length / 4);
@@ -273,19 +371,19 @@ function scoreRiskReduction(site) {
   return clamp(policies + contact + security + https + faq);
 }
 
-function scoreFunnelCoverage(site) {
-  // TOFU: awareness content based on page count and topic breadth
+/** v4 funnel coverage: business-context services union. */
+function scoreFunnelCoverageV4({ site, input }) {
+  const services = businessServices(site, input);
   const tofu = Math.min(30, site.pageCount * 4 + site.topicKeywords.length * 2);
-  // MOFU: consideration — FAQ, case studies, comparison content
   const mofu = (site.trust.faq ? 20 : 0) + (site.trust.caseStudies ? 15 : 0) +
-    (site.services.length >= 3 ? 10 : 0);
-  // BOFU: decision — pricing, contact, forms, CTAs
+    (services.length >= 3 ? 10 : 0);
   const bofu = (site.trust.pricing ? 20 : 0) + (site.trust.contact ? 10 : 0) +
     (site.forms.length ? 10 : 0) + Math.min(10, site.ctas.length * 2);
   return clamp(tofu + mofu + bofu);
 }
 
-function scoreSchemaEntity(site) {
+/** v4 schema entity: same formula; eligibility gates unknown. */
+function scoreSchemaEntityV4({ site }) {
   const validSchema = site.schemaTypes.filter((x) => x !== "InvalidJSONLD");
   const schemaCount = Math.min(40, validSchema.length * 10);
   const hasOrg = validSchema.some((t) => /organization|localbusiness/i.test(t)) ? 20 : 0;
@@ -295,13 +393,166 @@ function scoreSchemaEntity(site) {
   return clamp(schemaCount + hasOrg + hasFaq + hasService + socialProof);
 }
 
-function scoreAiReadiness(site) {
-  const schema = site.schemaTypes.length ? 25 : 0;
-  const headings = site.pages[0]?.headings?.h1?.length ? 15 : 0;
+/**
+ * v4 AI-readiness: STRUCTURAL machine-readability only (WP-D-07).
+ * No floor for unknown evidence; schema points require the structured-data
+ * capability to be AVAILABLE (not merely an empty array).
+ */
+function scoreAiReadinessV4({ site, capabilities }) {
+  const schemaCap = capabilities?.["schema.structured_data"];
+  const schemaAvailable = schemaCap?.status === "AVAILABLE" || schemaCap?.status === "PARTIAL";
+  const schema = schemaAvailable && site.schemaTypes.length ? 25 : 0;
+  const headings = site.pages?.[0]?.headings?.h1?.length ? 15 : 0;
   const faq = site.trust.faq ? 20 : 0;
   const depth = Math.min(20, site.pageCount * 3);
-  const topics = site.topicKeywords.length >= 5 ? 20 : site.topicKeywords.length >= 3 ? 10 : 5;
+  const topics = site.topicKeywords.length >= 5 ? 20 : site.topicKeywords.length >= 3 ? 10 : 0;
   return clamp(schema + headings + faq + depth + topics);
+}
+
+/**
+ * v4 technical hygiene: capability-partitioned sub-rules (WP-D-04).
+ * Sub-rule weights are included ONLY when their capability evidence is
+ * present; the module score is the weighted mean over INCLUDED sub-weights.
+ * Returns { score, subWeightAssessed, subWeightTotal, subScores }.
+ */
+function scoreTechnicalV4({ site, capabilities }) {
+  const pageCount = Math.max(1, site.pageCount);
+
+  const subRules = [];
+
+  // Meta rules — crawl pages evidence.  CRIT defect 4b + evidence-audit
+  // item 2: unknown counters (null coerced at hydration) MUST NOT grant
+  // credit — each TERM is included only from a finite collected counter,
+  // and the sub-rule weight reflects exactly the known portion.
+  const finiteNum = (v) => typeof v === "number" && Number.isFinite(v);
+  // Per-field availability (CRIT rescore R1): each term requires ITS field
+  // to have been collected.  Absent map ⇒ legacy extractor semantics.
+  const fieldAvail = site._metaFieldAvailability || {};
+  const fieldCollected = (field) => fieldAvail[field] !== false;
+  {
+    const metaTerms = [
+      {
+        weight: 15,
+        known: fieldCollected("titles") && finiteNum(site.missingTitles),
+        score: 15 * (1 - (site.missingTitles ?? 0) / pageCount),
+      },
+      {
+        weight: 15,
+        known: fieldCollected("descriptions") && finiteNum(site.missingDescriptions),
+        score: 15 * (1 - (site.missingDescriptions ?? 0) / pageCount),
+      },
+      {
+        weight: 10,
+        known: fieldCollected("canonicals") && finiteNum(site.missingCanonicals),
+        score: 10 * (1 - (site.missingCanonicals ?? 0) / pageCount),
+      },
+      {
+        weight: 10,
+        known:
+          fieldCollected("headings") &&
+          finiteNum(site.h1Missing) &&
+          finiteNum(site.h1Multiple),
+        score: 10 * (1 - Math.min(pageCount, (site.h1Missing ?? 0) + (site.h1Multiple ?? 0)) / pageCount),
+      },
+    ];
+    const knownTerms = metaTerms.filter((t) => t.known);
+    // Evidence-audit item 2: the frozen decision-evidence schema coerces
+    // counters to integers, so the ADAPTER declares collection truth via
+    // `_metaCountersAvailable`.  Legacy evidence (marker undefined) keeps
+    // its historical semantics (extractor ran).
+    const metaCollected = site._metaCountersAvailable !== false;
+    if (metaCollected && knownTerms.length > 0) {
+      // The meta sub-rule is worth 50 points on the 0-100 module scale.
+      // Collected terms sum their points; the score is normalized to the
+      // KNOWN portion's scale (perfect collected evidence = 50) and the
+      // sub-rule weight is exactly the known portion.
+      const weight = knownTerms.reduce((s, t) => s + t.weight, 0);
+      const points = knownTerms.reduce((s, t) => s + t.score, 0);
+      const score = clamp(points * (50 / weight));
+      subRules.push({ key: "meta", weight, score });
+    }
+  }
+
+  // Image rules — CRIT defect 4a: unknown image evidence (null counts)
+  // MUST NOT grant 10/10; the sub-rule is excluded instead.
+  const imageKnown =
+    typeof site.imageCount === "number" &&
+    Number.isFinite(site.imageCount) &&
+    site.imageCount > 0 &&
+    typeof site.imagesMissingAlt === "number" &&
+    Number.isFinite(site.imagesMissingAlt);
+  if (imageKnown) {
+    const image = 10 * (1 - Math.min(1, site.imagesMissingAlt / site.imageCount));
+    subRules.push({ key: "images", weight: 10, score: clamp(image) });
+  }
+
+  const capStatus = (key) => capabilities?.[key]?.status;
+
+  // Indexability — technical.indexability capability.  CRIT rescore #1:
+  // PARTIAL status (endpoint failures / flag-only fallback) with an empty
+  // list must NOT grant full credit — the sub-rule requires collected
+  // evidence (requiredFieldsPresent from the capability derivation).
+  const indexabilityCap = capabilities?.["technical.indexability"];
+  if (
+    indexabilityCap?.status === "AVAILABLE" &&
+    indexabilityCap?.requiredFieldsPresent === true
+  ) {
+    const count = (site.nonIndexablePages || []).length;
+    const score = count === 0 ? 10 : count <= 2 ? 7 : count <= 5 ? 4 : 0;
+    subRules.push({ key: "indexability", weight: 10, score });
+  }
+
+  // Redirects — technical.redirects capability.  Evidence-audit item 2:
+  // PARTIAL status without collected evidence must not yield 10/10 from an
+  // empty chain list — the sub-rule requires collected fields.
+  const redirectsCap = capabilities?.["technical.redirects"];
+  if (redirectsCap?.status === "AVAILABLE" && redirectsCap?.requiredFieldsPresent === true) {
+    const chains = site.redirectChains || [];
+    const maxHops = chains.reduce((m, c) => Math.max(m, c?.hops ?? 0), 0);
+    const score = maxHops <= 1 ? 10 : maxHops === 2 ? 5 : 0;
+    subRules.push({ key: "redirects", weight: 10, score });
+  }
+
+  // Resources — technical.resources capability.  CRIT rescore #1: null
+  // total counters must NOT become full credit — the sub-rule requires at
+  // least one page with a finite numeric totalResources.
+  const resourcesCap = capabilities?.["technical.resources"];
+  if (
+    (resourcesCap?.status === "AVAILABLE" || resourcesCap?.status === "PARTIAL") &&
+    (site.pageResources || []).some(
+      (p) => typeof p?.totalResources === "number" && Number.isFinite(p.totalResources),
+    )
+  ) {
+    const pages = site.pageResources || [];
+    const total = pages.reduce(
+      (s, p) => s + (typeof p?.totalResources === "number" ? p.totalResources : 0),
+      0,
+    );
+    const broken = pages.reduce(
+      (s, p) => s + (typeof p?.brokenResources === "number" ? p.brokenResources : 0),
+      0,
+    );
+    const score = total > 0 ? Math.round(10 * (1 - Math.min(1, broken / total))) : 0;
+    subRules.push({ key: "resources", weight: 10, score });
+  }
+
+  // Headers — technical.headers capability.
+  if (capStatus("technical.headers") === "AVAILABLE") {
+    const headersPresent = Object.values(site.securityHeaders || {}).filter(Boolean).length;
+    const score = Math.round(10 * (headersPresent / 4));
+    subRules.push({ key: "headers", weight: 10, score });
+  }
+
+  const totalWeight = subRules.reduce((s, r) => s + r.weight, 0);
+  const weighted = subRules.reduce((s, r) => s + r.score * r.weight, 0);
+  const score = totalWeight > 0 ? clamp(weighted / totalWeight) : null;
+
+  return {
+    score,
+    subWeightAssessed: totalWeight,
+    subWeightTotal: 100,
+    subScores: subRules,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +677,7 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     ? Math.round(sourceScore / sourceCount)
     : 0;
 
-  // 2. Data completeness (0–100)
+  // 2. Data completeness (0–100; null when unknown — WP-D-12)
   const completenessScores = [];
   for (const src of sources) {
     const ev = evidence[src.key];
@@ -438,7 +689,7 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
   }
   factors.dataCompleteness = completenessScores.length
     ? Math.round(completenessScores.reduce((a, b) => a + b, 0) / completenessScores.length)
-    : 50; // neutral when no coverage data
+    : null; // unknown — excluded from the weighted average
 
   // 3. Source validity (0–100)
   const validityScores = [];
@@ -487,12 +738,12 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
   }
   factors.dataFreshness = freshnessScores.length
     ? Math.round(freshnessScores.reduce((a, b) => a + b, 0) / freshnessScores.length)
-    : 50;
+    : null; // unknown — excluded from the weighted average
 
   // 5. URL matching (0–100)
   // Evidence matches when crawl target equals the input URL domain
   const siteTarget = evidence.site?.targetUrl || evidence.site?.domain || "";
-  factors.urlMatching = siteTarget ? 100 : 0; // Present = match; simplified for MVP
+  factors.urlMatching = siteTarget ? 100 : null; // Present = match; missing = unknown
 
   // 6. Cross-source agreement (0–100)
   // When crawl and performance both available, agreement is higher
@@ -516,7 +767,7 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
   // 8. Rule certainty (0–100)
   // Based on finding confidence levels
   if (!findings || findings.length === 0) {
-    factors.ruleCertainty = 50; // neutral — no findings to assess
+    factors.ruleCertainty = null; // unknown — excluded from the weighted average
   } else {
     const certaintyMap = {
       [CONFIDENCE_LEVELS.DETERMINISTIC]: 100,
@@ -545,15 +796,26 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     ruleCertainty: 0.10,
   };
 
+  // WP-D-12 — no silent imputation: unknown factors (null) are excluded from
+  // the weighted average and reported in factorAvailability.
   let totalWeight = 0;
   let weightedSum = 0;
+  const factorAvailability = [];
   for (const [factor, weight] of Object.entries(factorWeights)) {
-    weightedSum += (factors[factor] ?? 50) * weight;
+    const value = factors[factor];
+    if (value === null || value === undefined) {
+      factorAvailability.push({ factor, available: false });
+      continue;
+    }
+    factorAvailability.push({ factor, available: true, weight });
+    weightedSum += value * weight;
     totalWeight += weight;
   }
 
+  // All factors unknown ⇒ neutral 50 with empty availability (no evidence to
+  // prefer either direction).
   const score = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 50;
-  return { score: clamp(score), factors };
+  return { score: clamp(score), factors, factorAvailability };
 }
 
 // ---------------------------------------------------------------------------
@@ -561,10 +823,20 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
 // ---------------------------------------------------------------------------
 
 /**
- * Determine if a module is eligible based on its source dependencies.
+ * Determine if a module is eligible (PRYSM-NEXT-01 WP-D-02).
+ *
+ * Two-layer gate:
+ *  1. source-level: every declared evidence source must be viable
+ *     (AVAILABLE or PARTIAL) — unchanged semantics;
+ *  2. capability-level: every `requiredCapabilities` entry must have status
+ *     AVAILABLE or PARTIAL in the capability map.  Status derivation itself
+ *     encodes whether required fields were collected (UNAVAILABLE ⇒ nothing
+ *     usable collected; PARTIAL ⇒ some real fields exist), so unknown
+ *     evidence can never make a module eligible.
+ *
  * Returns { eligible, reason }.
  */
-export function checkModuleEligibility(moduleDef, evidence) {
+export function checkModuleEligibility(moduleDef, evidence, capabilities) {
   const reasons = [];
 
   for (const sourceKey of moduleDef.sources) {
@@ -606,6 +878,20 @@ export function checkModuleEligibility(moduleDef, evidence) {
     );
   }
 
+  for (const capKey of moduleDef.requiredCapabilities || []) {
+    const cap = capabilities?.[capKey];
+    if (!cap) {
+      reasons.push(`Capability "${capKey}" not assessed — module suppressed`);
+      continue;
+    }
+    const status = cap.status;
+    if (status !== SOURCE_STATUS.AVAILABLE && status !== SOURCE_STATUS.PARTIAL) {
+      reasons.push(
+        `Capability "${capKey}" is ${status} — module suppressed`,
+      );
+    }
+  }
+
   return {
     eligible: reasons.length === 0,
     reason: reasons.length ? reasons.join("; ") : null,
@@ -634,22 +920,37 @@ const RULE_VERSION = SCORING_VERSION;
  *  - scoreBearing
  *  - rawPriority, finalPriority
  */
-export function buildFindings(site, performance, gsc) {
+export function buildFindings(site, performance, gsc, opts = {}) {
   const findings = [];
+  const capabilities = opts.capabilities || {};
+  const suppressedReasons = opts.suppressedReasons || [];
 
-  // When page body content was not extracted (DataForSEO pages endpoint
-  // returns metadata only), content-dependent findings MUST be suppressed
-  // because false/empty/null values represent "not available" rather than
-  // "confirmed absent".  This gate prevents false-positive findings for
-  // trust signals, CTAs, forms, structured data, and body-content rules
-  // that depend on extracted page text (PRD v3.0 §8.6).
-  const contentEvidenceAvailable = site._contentEvidenceAvailable !== false;
-  // Response headers (x-frame-options, CSP, etc.) are not returned by the
-  // DataForSEO pages endpoint.  Findings that depend on them must be
-  // suppressed when they were not actually collected.
-  const responseHeadersAvailable = site._responseHeadersAvailable !== false;
+  // PRYSM-NEXT-01 WP-D-11 — capability-gated findings.  When body content
+  // was not collected (DataForSEO pages endpoint returns metadata only),
+  // content-dependent findings MUST be suppressed because false/empty/null
+  // values represent "not available" rather than "confirmed absent"
+  // (PRD v3.0 §8.6).  Capability statuses come from the WP-C layer —
+  // unknown is never treated as confirmed absence.
+  const capOk = (key) => {
+    const status = capabilities[key]?.status;
+    return status === SOURCE_STATUS.AVAILABLE || status === SOURCE_STATUS.PARTIAL;
+  };
 
   const add = (opts) => {
+    // Capability gate: when the finding's evidence capability is not
+    // available, record the suppression and never emit the finding.
+    if (opts.requires) {
+      if (!capOk(opts.requires)) {
+        suppressedReasons.push({
+          ruleId: opts.ruleId,
+          title: opts.title,
+          capability: opts.requires,
+          capabilityStatus: capabilities[opts.requires]?.status ?? "NOT_ASSESSED",
+        });
+        return;
+      }
+    }
+
     const evidenceRecords = (opts.evidence || []).map((er) => ({
       provider: er.provider || "dataforseo_onpage",
       sourceStatus: er.sourceStatus || SOURCE_STATUS.AVAILABLE,
@@ -722,9 +1023,10 @@ export function buildFindings(site, performance, gsc) {
 
   // ── Crawl-dependent findings ──────────────────────────────────────
 
-  if (!site.trust.testimonials && !site.trust.caseStudies && !site.trust.credentials && contentEvidenceAvailable) {
+  if (!site.trust.testimonials && !site.trust.caseStudies && !site.trust.credentials) {
     add({
       ruleId: "VAN-TRUST-001",
+      requires: "trust.proof",
       dimension: "trust_eeat",
       module: "trust_signals",
       title: "No visible trust proof",
@@ -775,9 +1077,10 @@ export function buildFindings(site, performance, gsc) {
     });
   }
 
-  if (!site.schemaTypes.length && contentEvidenceAvailable) {
+  if (!site.schemaTypes.length) {
     add({
       ruleId: "VAN-SCHEMA-001",
+      requires: "schema.structured_data",
       dimension: "entity_schema_ai",
       module: "schema_entity",
       title: "No structured data detected",
@@ -890,9 +1193,10 @@ export function buildFindings(site, performance, gsc) {
   const missingSecurity = Object.entries(site.securityHeaders)
     .filter(([, present]) => !present)
     .map(([name]) => name);
-  if (missingSecurity.length && responseHeadersAvailable) {
+  if (missingSecurity.length) {
     add({
       ruleId: "VAN-TECH-003",
+      requires: "technical.headers",
       dimension: "technical_performance",
       module: "technical_hygiene",
       title: "Security headers are incomplete",
@@ -915,9 +1219,10 @@ export function buildFindings(site, performance, gsc) {
     });
   }
 
-  if (!site.trust.faq && contentEvidenceAvailable) {
+  if (!site.trust.faq) {
     add({
       ruleId: "VAN-CONTENT-002",
+      requires: "trust.proof",
       dimension: "content_funnel",
       module: "funnel_coverage",
       title: "No buyer-question content detected",
@@ -940,9 +1245,10 @@ export function buildFindings(site, performance, gsc) {
     });
   }
 
-  if (!site.trust.pricing && contentEvidenceAvailable) {
+  if (!site.trust.pricing) {
     add({
       ruleId: "VAN-TRUST-002",
+      requires: "trust.proof",
       dimension: "trust_eeat",
       module: "risk_reduction",
       title: "Pricing or investment context is absent",
@@ -962,6 +1268,39 @@ export function buildFindings(site, performance, gsc) {
       competitiveSignal: 50,
       implementationPracticality: 80,
       verificationMethod: "Re-crawl and confirm pricing information is visible on relevant pages.",
+    });
+  }
+
+  // ── PRYSM-NEXT-01 WP-E — validated-path findings ────────────────────
+  const pathValidation = capabilities["conversion.path"]?.validationSummary;
+  if (pathValidation && (pathValidation.obstructionCount ?? 0) > 0) {
+    add({
+      ruleId: "VAN-PATH-001",
+      dimension: "conversion_pathways",
+      module: "conversion_paths",
+      title: "Primary conversion action is obstructed",
+      severity: "High",
+      key: "path_obstruction",
+      confidence: CONFIDENCE_LEVELS.STRONGLY_SUPPORTED,
+      evidence: [
+        {
+          provider: "playwright-conversion-path",
+          sourceStatus: SOURCE_STATUS.AVAILABLE,
+          field: "conversion.path.obstruction",
+          observedValue: pathValidation.obstructionCount,
+          artifactRef: null,
+        },
+      ],
+      evidenceText: `${pathValidation.obstructionCount} browser-validated page(s) have an obstructed CTA`,
+      businessImpact: "Visitors cannot reliably reach the primary action on key pages",
+      recommendation: "Remove or reposition overlays, cookie banners, or stacked elements covering the primary CTA",
+      effort: "M",
+      conversionImpact: 90,
+      gapSeverity: 80,
+      businessRelevance: 85,
+      competitiveSignal: 40,
+      implementationPracticality: 60,
+      verificationMethod: "Re-run conversion-path validation and confirm no obstruction is detected.",
     });
   }
 

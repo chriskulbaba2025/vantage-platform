@@ -9,6 +9,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { buildArtifactKey } from "../storage/artifact-key.js";
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -97,6 +98,14 @@ export function createAuditApplicationService({
     // BELOW the production adapter layer.
     if (input.crawl && typeof input.crawl === "object") {
       auditRequest.crawl = { ...(auditRequest.crawl || {}), ...input.crawl };
+      // PRYSM-NEXT-01 WP-E — production default: live browser validation ON
+      // unless the intake explicitly disables it or the env kill-switch is
+      // set.  Controlled requests (tests) bypass this service — zero live
+      // browsers in governed suites.
+      if (auditRequest.crawl.pathValidationLiveBrowser === undefined) {
+        auditRequest.crawl.pathValidationLiveBrowser =
+          process.env.PRYSM_DISABLE_LIVE_BROWSER ? false : true;
+      }
     }
     if (input.performance && typeof input.performance === "object") {
       auditRequest.performance = input.performance;
@@ -273,6 +282,66 @@ export function createAuditApplicationService({
       approvedAt: c.now(),
       reviewRef: { reviewedAt: c.now() },
     };
+
+    // PRYSM-NEXT-01 WP-I — report-design v2 approval branch: the governed
+    // v2 page set (report-v2/pages/index.html) must exist; approval updates
+    // the governed manifest to status approved.  The report-access route's
+    // state gate then exposes the same page bytes to approved viewers.
+    try {
+      const current = await lifecycleService.currentState(auditId, tenantId);
+      const clientId = current?.clientId || "";
+      if (clientId) {
+        const v2ManifestKey = buildArtifactKey({
+          tenantId, clientId, auditId,
+          category: "report-v2", artifactName: "manifest.json",
+        });
+        let manifestBytes = null;
+        try {
+          manifestBytes = await artifactStore.get(v2ManifestKey);
+        } catch {
+          manifestBytes = null;
+        }
+        if (manifestBytes && manifestBytes.length > 0) {
+          const pageKey = buildArtifactKey({
+            tenantId, clientId, auditId,
+            category: "report-v2", artifactName: "pages/index.html",
+          });
+          let pageBytes = null;
+          try {
+            pageBytes = await artifactStore.get(pageKey);
+          } catch {
+            pageBytes = null;
+          }
+          if (!pageBytes || pageBytes.length === 0) {
+            const err = new Error("Report v2 approval failed: rendered page missing");
+            err.statusCode = 500;
+            throw err;
+          }
+          const manifest = JSON.parse(manifestBytes.toString("utf-8"));
+          const approvedManifest = { ...manifest, status: "approved", approval: approvalRecord };
+          const bytes = Buffer.from(JSON.stringify(approvedManifest, null, 2), "utf-8");
+          // The governed store is immutable — approval is recorded as a NEW
+          // artifact (approved-manifest.json); the draft manifest is never
+          // overwritten.  Report exposure is controlled by the lifecycle
+          // state gate, not by mutating the draft artifact.
+          const record = await artifactStore.put({
+            bytes, contentType: "application/json",
+            scope: { tenantId, clientId, auditId, category: "report-v2", artifactName: "approved-manifest.json" },
+          });
+          return {
+            auditId,
+            tenantId,
+            status: "approved",
+            designVersion: "2.0.0",
+            approval: approvalRecord,
+            artifacts: [{ filename: "index.html", manifestKey: record.key }],
+          };
+        }
+      }
+    } catch (err) {
+      if (err && err.statusCode) throw err;
+      // Non-status errors fall through to the v1 path.
+    }
 
     // Use report store for lifecycle-managed approval with page validation
     const updated = await reportStore.writeApprovedPages(

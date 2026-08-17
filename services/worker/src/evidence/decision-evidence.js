@@ -78,6 +78,9 @@ function hydrateSite(sourceResult) {
   return stripUndefined({
     sourceStatus: status,
     collectedAt: sourceResult.completedAt || undefined,
+    // PRYSM-NEXT-01 WP-C — adapter version survives hydration for
+    // capability provenance.
+    adapterVersion: sourceResult.adapterVersion || undefined,
     // DE-04 critical structural fields: passed through WITHOUT defaults.
     // When the adapter did not supply them, the hydrated evidence omits
     // them and decision-evidence.schema.json rejects the AVAILABLE/PARTIAL
@@ -96,6 +99,12 @@ function hydrateSite(sourceResult) {
     externalCtas: ev.externalCtas || [],
     socialLinks: ev.socialLinks || [],
     statusCounts: ev.statusCounts || {},
+    // The FROZEN decision-evidence v1 schema types every counter as
+    // integer — hydration must emit integers.  Unknown-counter honesty is
+    // therefore carried by the `_metaCountersAvailable` marker (the
+    // adapter declares whether the counters were actually collected);
+    // scorers gate credit on the marker, and the images sub-rule requires
+    // imageCount > 0 (a fabricated 0 grants no credit).
     totalWords: ev.totalWords ?? 0,
     averageWords: ev.averageWords ?? 0,
     missingTitles: ev.missingTitles ?? 0,
@@ -106,12 +115,33 @@ function hydrateSite(sourceResult) {
     imageCount: ev.imageCount ?? 0,
     imagesMissingAlt: ev.imagesMissingAlt ?? 0,
     internalLinkCount: ev.internalLinkCount ?? 0,
+    _metaCountersAvailable: ev._metaCountersAvailable,
+    _metaFieldAvailability: ev._metaFieldAvailability,
     brokenInternalLinks: ev.brokenInternalLinks || [],
     securityHeaders: ev.securityHeaders || {},
-    _contentEvidenceAvailable: ev._contentEvidenceAvailable ?? false,
-    _responseHeadersAvailable: ev._responseHeadersAvailable ?? false,
+    // PRYSM-NEXT-01 WP-C — unknown is NOT coerced to false. Absent stays
+    // absent (undefined → stripped); capability derivation treats
+    // undefined as "unknown", never "confirmed absent".
+    _contentEvidenceAvailable: ev._contentEvidenceAvailable,
+    _responseHeadersAvailable: ev._responseHeadersAvailable,
+    // CRIT defect 2a — interactive-extraction marker passes through the
+    // hydration boundary (undefined ⇒ legacy semantics in the capability
+    // layer: the extractor that produced the arrays ran).
+    _interactiveEvidenceAvailable: ev._interactiveEvidenceAvailable,
+    // Evidence-audit provenance gap: the SHA-suffixed raw artifact ref must
+    // survive hydration into capability/finding provenance.
+    rawArtifactRef: ev.rawArtifactRef,
     limitations: sourceResult.limitations || [],
     coverage: sourceResult.coverage || undefined,
+    // PRYSM-NEXT-01 WP-B — deep acquisition fields pass through the
+    // hydration boundary losslessly (schema allows additional site
+    // properties; decision-evidence v1.0.0 untouched).
+    contentParsing: ev.contentParsing,
+    redirectChains: ev.redirectChains,
+    nonIndexablePages: ev.nonIndexablePages,
+    pageResources: ev.pageResources,
+    microdataTypes: ev.microdataTypes,
+    acquisition: ev.acquisition,
   });
 }
 

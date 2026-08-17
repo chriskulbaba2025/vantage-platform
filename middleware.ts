@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-const PROTECTED_PREFIXES = ["/audits", "/api/audits"];
+const PROTECTED_PREFIXES = ["/audits", "/api/audits", "/admin", "/api/admin"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

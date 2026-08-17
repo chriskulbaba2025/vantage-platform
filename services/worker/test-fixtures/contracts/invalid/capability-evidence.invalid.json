@@ -1,0 +1,17 @@
+{
+  "contractVersion": "1.0.0",
+  "capabilityEvidenceVersion": "2.0.0",
+  "auditId": "11111111-2222-4333-8444-555555555555",
+  "generatedAt": "2026-08-16T12:00:00.000Z",
+  "capabilities": {
+    "content.body": {
+      "capability": "content.body",
+      "status": "MAYBE",
+      "coverage": { "requested": 3, "completed": 3, "failed": 0 },
+      "provenance": { "source": "dataforseo-onpage" },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    }
+  },
+  "summary": { "total": 13, "assessed": 1 }
+}

@@ -192,11 +192,11 @@ if (model.generatedAt === "2026-01-15T12:00:00.000Z") {
   fail("generatedAt", `Expected FIXED_TS, got ${model.generatedAt}`);
 }
 
-// scoringVersion
-if (model.scoringVersion === "3.0.0") {
-  pass("scoringVersion is 3.0.0");
+// scoringVersion — PRYSM-NEXT-01 WP-D-08/WP-E-05/WP-J: v4.1.1 (versioned semantics)
+if (model.scoringVersion === "4.1.1") {
+  pass("scoringVersion is 4.1.1");
 } else {
-  fail("scoringVersion", `Expected 3.0.0, got ${model.scoringVersion}`);
+  fail("scoringVersion", `Expected 4.1.1, got ${model.scoringVersion}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -345,9 +345,9 @@ if (allRuleIdsValid) {
   fail("Invalid ruleIds", invalid.map((f) => f.ruleId).join(", "));
 }
 
-const allRuleVersionsMatch = model.findings.every((f) => f.ruleVersion === "3.0.0");
+const allRuleVersionsMatch = model.findings.every((f) => f.ruleVersion === "4.1.1");
 if (allRuleVersionsMatch) {
-  pass("All finding ruleVersions equal SCORING_VERSION (3.0.0)");
+  pass("All finding ruleVersions equal SCORING_VERSION (4.1.1)");
 } else {
   fail("ruleVersion mismatch");
 }
@@ -782,6 +782,21 @@ try {
 try {
   const pipelineStore = createMemoryArtifactStore();
   const pipelineScope = { tenantId: "wp7-test", clientId: "test-client", auditId: "660e8400-e29b-41d4-a716-446655440002" };
+
+  // PRYSM-NEXT-01 WP-D — capability evidence is a governed scoring input.
+  // The production orchestrator persists it during collection (step 5c);
+  // this harness pre-persists the SAME artifact the orchestrator would.
+  const capabilityMod = await import(pathToFileURL(join(ROOT, "src", "evidence", "capability-evidence.js")).href);
+  await capabilityMod.persistCapabilityEvidence({
+    store: pipelineStore,
+    scope: pipelineScope,
+    evidence: capabilityMod.buildCapabilityEvidence({
+      decisionEvidence: fixture,
+      auditId: pipelineScope.auditId,
+      generatedAt: fixture.site?.collectedAt || fixture.generatedAt || new Date(0).toISOString(),
+    }),
+  });
+
   const result = await scoreFromCanonicalEvidence({
     store: pipelineStore,
     scope: pipelineScope,

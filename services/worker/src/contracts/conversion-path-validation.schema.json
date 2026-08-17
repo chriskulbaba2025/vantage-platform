@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v1/conversion-path-validation.schema.json",
+  "title": "Conversion Path Validation Evidence",
+  "description": "PRYSM-NEXT-01 WP-E: governed evidence produced by the Playwright conversion-path validator. Read-only browser observation only — no submissions.",
+  "type": "object",
+  "version": "1.0.0",
+  "contractVersion": "1.0.0",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "validationVersion",
+    "auditId",
+    "generatedAt",
+    "provider",
+    "status",
+    "pages",
+    "summary",
+    "limitations"
+  ],
+  "properties": {
+    "contractVersion": { "type": "string", "const": "1.0.0" },
+    "validationVersion": { "type": "string", "const": "1.0.0" },
+    "auditId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "provider": { "type": "string", "const": "playwright-conversion-path" },
+    "status": {
+      "type": "string",
+      "enum": ["PASS", "PARTIAL", "FAILED", "NOT_ASSESSED"]
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url", "role", "status", "checks", "limitations"],
+        "properties": {
+          "url": { "type": "string" },
+          "role": { "type": ["string", "null"] },
+          "status": {
+            "type": "string",
+            "enum": ["PASS", "PARTIAL", "FAILED", "NOT_ASSESSED"]
+          },
+          "checks": { "type": "object" },
+          "limitations": { "type": "array", "items": { "type": "string" } },
+          "screenshotRef": {
+            "type": ["object", "null"],
+            "properties": {
+              "key": { "type": "string" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "bytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["requested", "pass", "partial", "failed", "notAssessed"],
+      "properties": {
+        "requested": { "type": "integer", "minimum": 0 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "partial": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "notAssessed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}

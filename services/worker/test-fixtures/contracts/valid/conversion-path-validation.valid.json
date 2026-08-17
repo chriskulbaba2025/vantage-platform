@@ -1,0 +1,39 @@
+{
+  "contractVersion": "1.0.0",
+  "validationVersion": "1.0.0",
+  "auditId": "11111111-2222-4333-8444-555555555555",
+  "generatedAt": "2026-08-16T12:00:00.000Z",
+  "provider": "playwright-conversion-path",
+  "status": "PARTIAL",
+  "pages": [
+    {
+      "url": "https://x.com/contact",
+      "role": "conversion",
+      "status": "PASS",
+      "checks": {
+        "desktop": {
+          "cta": { "found": true, "visible": true, "interactable": true, "target": "https://x.com/book", "targetResolves": true, "obstructed": false },
+          "menu": { "found": true, "usable": true },
+          "form": { "found": true, "fieldsEditable": true, "submitEnabled": true },
+          "destination": { "checked": true, "loaded": true }
+        }
+      },
+      "limitations": [],
+      "screenshotRef": { "key": "evidence/path-validation-0.png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": 1234 }
+    },
+    {
+      "url": "https://x.com/",
+      "role": "home",
+      "status": "FAILED",
+      "checks": {
+        "desktop": {
+          "cta": { "found": true, "visible": true, "interactable": true, "target": "https://x.com/book", "targetResolves": true, "obstructed": true }
+        }
+      },
+      "limitations": ["CTA obstructed by overlay"],
+      "screenshotRef": null
+    }
+  ],
+  "summary": { "requested": 2, "pass": 1, "partial": 0, "failed": 1, "notAssessed": 0 },
+  "limitations": []
+}

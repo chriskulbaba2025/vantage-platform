@@ -9,6 +9,8 @@ artifacts/local/backlink-tests/
 
 # Build and test artifacts
 .next/
+services/worker/artifacts/
+.governance/evidence/
 test-results/
 tsconfig.tsbuildinfo
 next-env.d.ts

@@ -57,6 +57,15 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
 
       <div className="card">
         {status!.targetUrl && <p><strong>Website:</strong> {status!.targetUrl}</p>}
+        {(status! as Record<string, unknown>).services && ((status! as Record<string, unknown>).services as string[]).length > 0 && (
+          <p><strong>Services:</strong> {((status! as Record<string, unknown>).services as string[]).join(", ")}</p>
+        )}
+        {(status! as Record<string, unknown>).primaryGoal && (
+          <p><strong>Primary goal:</strong> {(status! as Record<string, unknown>).primaryGoal as string}</p>
+        )}
+        {(status! as Record<string, unknown>).market && (
+          <p><strong>Market:</strong> {(status! as Record<string, unknown>).market as string}</p>
+        )}
         <p><strong>Audit ID:</strong> <code>{auditId}</code></p>
         <p><strong>Version:</strong> {status!.version}</p>
         <p><strong>Created:</strong> {status!.createdAt ? new Date(status!.createdAt).toLocaleString() : "—"}</p>

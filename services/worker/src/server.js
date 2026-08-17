@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { extname } from "node:path";
+import { randomUUID } from "node:crypto";
 import { runAudit, submitReview, approveAudit, getAuditStatus } from "./audit/run-audit.js";
 import { loadConfig } from "./config.js";
 import { createLocalReportStore, createReportStore } from "./storage/report-store.js";
@@ -31,6 +32,9 @@ export function createRequestHandler({
   auditService,
   lifecycleRepo,
   identityRepo,
+  // PRYSM-NEXT-01 WP-H — governed artifact store for report-design v2
+  // page serving.  Optional: absent ⇒ v2 pages are not served (v1 only).
+  governedArtifacts,
 }) {
   const _runAudit = runAuditFn || runAudit;
   const _submitReview = submitReviewFn || submitReview;
@@ -57,6 +61,11 @@ export function createRequestHandler({
   // trigger.  In-memory (resets on restart); the durable cost backstop is
   // the orchestrator's paid-task idempotency.
   const auditCreateLimiter = createSlidingWindowLimiter({ windowMs: 60 * 60 * 1000, max: 30 });
+
+  // PRYSM-NEXT-01 WP-L security-hardening gate — rate limits on the
+  // remaining client-facing surfaces (report pages, admin boundary).
+  const reportPageLimiter = createSlidingWindowLimiter({ windowMs: 10 * 60 * 1000, max: 60 });
+  const adminRouteLimiter = createSlidingWindowLimiter({ windowMs: 10 * 60 * 1000, max: 30 });
 
   // Non-disclosing error responder: governed 4xx bodies pass through;
   // everything else is logged server-side and returned as a generic 500.
@@ -525,10 +534,38 @@ export function createRequestHandler({
             return send(res, reportAuth.status, { error: reportAuth.reason, code: reportAuth.code });
           }
 
+          // Rate limit report-page serving per tenant (sliding window).
+          if (!reportPageLimiter.hit(`report:${access.tenantId}`)) {
+            return send(res, 429, { error: "Too many report requests — try again later", code: "RATE_LIMITED" });
+          }
+
           try {
             const slug = url.searchParams.get("slug") || "";
             if (!slug) return send(res, 422, { error: "Slug query parameter is required" });
             const clientId = url.searchParams.get("clientId") || "";
+
+            // PRYSM-NEXT-01 WP-H — report-design v2 serving.  Authorization
+            // (tenant + role gate) has ALREADY passed above; the v2 page is
+            // retrieved from the governed artifact store only for audits
+            // whose manifest declares design 2.0.0.
+            if (governedArtifacts && filename === "index.html") {
+              const v2Key = `tenants/${reportAuth.tenantId}/clients/${clientId}/audits/${auditId}/report-v2/pages/index.html`;
+              try {
+                const v2Bytes = await governedArtifacts.get(v2Key);
+                if (v2Bytes && v2Bytes.length > 0) {
+                  res.writeHead(200, {
+                    "content-type": "text/html; charset=utf-8",
+                    "content-length": v2Bytes.length,
+                    "cache-control": "no-store",
+                  });
+                  return res.end(v2Bytes);
+                }
+              } catch (v2Err) {
+                // Fall through to the v1 path when no v2 artifact exists.
+                void v2Err;
+              }
+            }
+
             const result = await auditService.getReportPage(reportAuth.tenantId, clientId, auditId, filename, slug);
             const ct = result.contentType || "text/html; charset=utf-8";
             const payload = result.bytes;
@@ -541,6 +578,136 @@ export function createRequestHandler({
             return sendRouteError(res, err);
           }
         }
+      }
+
+      // -------------------------------------------------------------------
+      // ACCT-PROVISION: platform-admin boundary — company/user/membership
+      // administration.  Authorized ONLY for platform_admin principals or
+      // the secret-authenticated internal boundary.  The browser can never
+      // provision itself.
+      // -------------------------------------------------------------------
+      if (url.pathname.startsWith("/api/v1/admin/")) {
+        const auth = await resolveRequestAuth(req);
+        const isAdmin = auth && auth.authenticated && (auth.internal === true || auth.isPlatformAdmin === true);
+        if (!isAdmin) return send(res, auth ? 403 : 401, { error: auth ? "Platform admin required" : "Unauthorized", code: auth ? "FORBIDDEN" : "UNAUTHENTICATED" });
+        if (!identityRepo) return send(res, 501, { error: "Identity repository not configured" });
+
+        // Rate limit the platform-admin boundary per principal.
+        const adminRlKey = auth.internal === true ? "admin:internal" : `admin:${auth.principalSub || "unknown"}`;
+        if (!adminRouteLimiter.hit(adminRlKey)) {
+          return send(res, 429, { error: "Too many admin requests — try again later", code: "RATE_LIMITED" });
+        }
+
+        // GET /api/v1/admin/authorize — side-effect-free authorization
+        // probe.  Web routes call this BEFORE any external side effect
+        // (e.g., Cognito user creation).
+        if (req.method === "GET" && url.pathname === "/api/v1/admin/authorize") {
+          return send(res, 200, { platformAdmin: true, internal: auth.internal === true });
+        }
+
+        // POST /api/v1/admin/tenants — create a company (tenant)
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/tenants") {
+          try {
+            const input = await readJson(req);
+            const name = String(input?.name || "").trim();
+            const id = String(input?.id || "").trim();
+            if (!name) return send(res, 422, { error: "Company name is required" });
+            if (name.length > 120) return send(res, 422, { error: "Company name too long" });
+            const tenantId = id || `tenant-${randomUUID()}`;
+            if (!/^[a-z0-9][a-z0-9_-]{1,63}$/.test(tenantId)) {
+              return send(res, 422, { error: "Company id must be lowercase letters, digits, - or _" });
+            }
+            await identityRepo.createTenant({ id: tenantId, name, slug: tenantId });
+            return send(res, 201, { id: tenantId, name, slug: tenantId });
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // GET /api/v1/admin/tenants — list companies
+        if (req.method === "GET" && url.pathname === "/api/v1/admin/tenants") {
+          try {
+            const tenants = await identityRepo.listTenants();
+            return send(res, 200, tenants);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/admin/users — persist an invited Prysm user
+        // (the WEB performs the Cognito invite and passes the real sub)
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/users") {
+          try {
+            const input = await readJson(req);
+            const cognitoSub = String(input?.cognitoSub || "").trim();
+            const email = String(input?.email || "").trim().toLowerCase();
+            const displayName = String(input?.displayName || "").trim();
+            if (!cognitoSub || !email) return send(res, 422, { error: "cognitoSub and email are required" });
+            if (!email.includes("@")) return send(res, 422, { error: "Invalid email" });
+            const existing = await identityRepo.findUserByCognitoSub(cognitoSub);
+            if (existing) return send(res, 200, existing);
+            const id = randomUUID();
+            await identityRepo.createUser({ id, cognitoSub, email, displayName });
+            return send(res, 201, await identityRepo.findUserByCognitoSub(cognitoSub));
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/admin/memberships — assign a role to a company
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/memberships") {
+          try {
+            const input = await readJson(req);
+            const tenantId = String(input?.tenantId || "").trim();
+            const cognitoSub = String(input?.cognitoSub || "").trim();
+            const role = String(input?.role || "").trim();
+            if (!tenantId || !cognitoSub || !role) return send(res, 422, { error: "tenantId, cognitoSub and role are required" });
+            const allowedRoles = ["viewer", "reviewer", "tenant_admin", "platform_admin"];
+            if (!allowedRoles.includes(role)) return send(res, 422, { error: `role must be one of ${allowedRoles.join(", ")}` });
+            const tenant = await identityRepo.findTenantById(tenantId);
+            if (!tenant) return send(res, 404, { error: "Company not found" });
+            const user = await identityRepo.findUserByCognitoSub(cognitoSub);
+            if (!user) return send(res, 404, { error: "User not found — invite the user first" });
+            const existingRows = await identityRepo.findMembershipsForUser(user.id);
+            if (!existingRows.some((m) => m.tenant_id === tenantId && m.role === role)) {
+              await identityRepo.createMembership({ id: randomUUID(), tenantId, userId: user.id, role });
+            }
+            const rows = await identityRepo.findMembershipsForUser(user.id);
+            return send(res, 200, { tenantId, role, status: "active", memberships: rows });
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/admin/memberships/disable — disable a membership
+        if (req.method === "POST" && url.pathname === "/api/v1/admin/memberships/disable") {
+          try {
+            const input = await readJson(req);
+            const tenantId = String(input?.tenantId || "").trim();
+            const cognitoSub = String(input?.cognitoSub || "").trim();
+            if (!tenantId || !cognitoSub) return send(res, 422, { error: "tenantId and cognitoSub are required" });
+            const user = await identityRepo.findUserByCognitoSub(cognitoSub);
+            if (!user) return send(res, 404, { error: "User not found" });
+            const changed = await identityRepo.updateMembershipStatus({ tenantId, userId: user.id, status: "disabled" });
+            return send(res, 200, { tenantId, userId: user.id, changed });
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // GET /api/v1/admin/tenants/:id/memberships — membership management view
+        const adminMembershipsMatch = url.pathname.match(/^\/api\/v1\/admin\/tenants\/([a-z0-9_-]+)\/memberships$/);
+        if (req.method === "GET" && adminMembershipsMatch) {
+          try {
+            const tenantId = adminMembershipsMatch[1];
+            const rows = await identityRepo.listMembershipsForTenant(tenantId);
+            return send(res, 200, rows);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        return send(res, 404, { error: "Not found" });
       }
 
       return send(res, 404, { error: "Not found" });
@@ -777,6 +944,9 @@ const requestListener = createRequestHandler({
   auditService,
   lifecycleRepo,
   identityRepo,
+  // PRYSM-NEXT-01 WP-H — report-design v2 pages live in the governed
+  // artifact store (same store the orchestrator persists through).
+  governedArtifacts: artifactStore,
 });
 
 const server = createServer(requestListener);

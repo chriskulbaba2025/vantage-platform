@@ -31,7 +31,7 @@ function check(label, condition, detail) {
 const schemasDir = resolve(__dirname, "..", "src", "contracts");
 const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(ajv);
-["report-view-model.schema.json","report-content.schema.json","narrative-response.schema.json","finding.schema.json","score.schema.json","report-manifest.schema.json","artifact-record.schema.json","audit-request.schema.json","source-result.schema.json","canonical-evidence.schema.json","decision-evidence.schema.json","lifecycle-event.schema.json","lifecycle-state.schema.json"].forEach(f => {
+["report-view-model.schema.json","report-content.schema.json","narrative-response.schema.json","finding.schema.json","score.schema.json","report-manifest.schema.json","artifact-record.schema.json","audit-request.schema.json","source-result.schema.json","canonical-evidence.schema.json","capability-evidence.schema.json","conversion-path-validation.schema.json","decision-evidence.schema.json","lifecycle-event.schema.json","lifecycle-state.schema.json"].forEach(f => {
   ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f),"utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
 });
 function validate(sid, obj) { const v = ajv.getSchema(sid); return v ? { valid: v(obj), errors: v.errors || [] } : { valid: false, errors: [{ message: `Schema not found: ${sid}` }] }; }

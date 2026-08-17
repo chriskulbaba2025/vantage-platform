@@ -19,6 +19,11 @@ import { executeNarrative, NARRATIVE_MODE } from "../narrative/narrative-service
 import { buildReportViewModel, LOCKED_REPORT_DESIGN_VERSION } from "../report-view-model/build-view-model.js";
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
 import { buildDecisionEvidence, persistDecisionEvidence, loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
+import { buildCapabilityEvidence, persistCapabilityEvidence, loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
+import { validateConversionPaths } from "../evidence/conversion-path-validator.js";
+import { selectImportantPages } from "../evidence/important-page-selector.js";
+import { REPORT_DESIGN_V2, isReportDesignV2, DEFAULT_REPORT_DESIGN } from "../report/report-design.js";
+import { loadAuditRequest } from "./audit-request-persistence.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
@@ -62,6 +67,79 @@ function artifactScope({ tenantId, clientId, auditId, category, artifactName }) 
   return { tenantId, clientId, auditId, category, artifactName };
 }
 
+/**
+ * PRYSM-NEXT-01 WP-E — persist conversion-path validation evidence:
+ * per-page screenshots (governed evidence artifacts) + the schema-validated
+ * canonical validation artifact.  Fail-closed on schema validation.
+ */
+async function persistPathValidationEvidence({
+  artifactStore, scope, auditId, generatedAt, validationResult, validateContract,
+}) {
+  const pages = [];
+  const pagesRaw = Array.isArray(validationResult?.pages) ? validationResult.pages : [];
+  for (let i = 0; i < pagesRaw.length; i++) {
+    const p = pagesRaw[i];
+    let screenshotRef = null;
+    const shot = p?._screenshotBuffer;
+    if (shot && Buffer.isBuffer(shot) && shot.length > 0) {
+      const record = await artifactStore.put({
+        bytes: shot,
+        contentType: "application/octet-stream",
+        scope: { ...scope, category: "evidence", artifactName: `path-validation-${i}.png` },
+      });
+      screenshotRef = { key: record.key, sha256: record.sha256, bytes: record.bytes };
+    }
+    pages.push({
+      url: p?.url || "",
+      role: p?.role ?? null,
+      status: p?.status || "NOT_ASSESSED",
+      checks: p?.checks || {},
+      limitations: p?.limitations || [],
+      screenshotRef,
+    });
+  }
+
+  const evidence = {
+    contractVersion: "1.0.0",
+    validationVersion: "1.0.0",
+    auditId,
+    generatedAt,
+    provider: validationResult?.provider || "playwright-conversion-path",
+    status: validationResult?.status || "NOT_ASSESSED",
+    pages,
+    summary: validationResult?.summary || {
+      requested: pages.length, pass: 0, partial: 0, failed: 0, notAssessed: pages.length,
+    },
+    limitations: validationResult?.limitations || [],
+  };
+
+  if (validateContract) {
+    const sv = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/conversion-path-validation.schema.json",
+      evidence,
+    );
+    if (!sv || !sv.valid) {
+      throw new Error(
+        `Conversion-path validation evidence failed schema validation: ${JSON.stringify((sv?.errors || []).slice(0, 5))}`,
+      );
+    }
+  }
+
+  const bytes = Buffer.from(JSON.stringify(evidence), "utf-8");
+  const record = await artifactStore.put({
+    bytes,
+    contentType: "application/json",
+    scope: { ...scope, category: "canonical", artifactName: "conversion-path-validation.json" },
+  });
+
+  const stored = await artifactStore.get(record.key);
+  if (!stored || stored.length !== bytes.length) {
+    throw new Error("Conversion-path validation read-back byte mismatch");
+  }
+
+  return evidence;
+}
+
 // ---------------------------------------------------------------------------
 // Source execution identity — stable deterministic key across runs
 // ---------------------------------------------------------------------------
@@ -88,6 +166,22 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
     gscSiteUrl: auditRequest.gsc?.siteUrl || null,
     maxPages: auditRequest.crawl?.maxPages || 500,
     enableJavascript: auditRequest.crawl?.enableJavascript || false,
+    // PRYSM-NEXT-01 WP-B-11 — deep acquisition options participate in the
+    // source execution identity (config hashing).
+    enableContentParsing: auditRequest.crawl?.enableContentParsing ?? true,
+    validateMicromarkup: auditRequest.crawl?.validateMicromarkup ?? true,
+    contentParsingPageLimit: auditRequest.crawl?.contentParsingPageLimit ?? 10,
+    redirectChainsPageLimit: auditRequest.crawl?.redirectChainsPageLimit ?? 20,
+    nonIndexableLimit: auditRequest.crawl?.nonIndexableLimit ?? 1000,
+    resourcesPageLimit: auditRequest.crawl?.resourcesPageLimit ?? 10,
+    // PRYSM-NEXT-01 WP-E-06 — path-validation options join the identity.
+    pathValidationEnabled: auditRequest.crawl?.pathValidationEnabled ?? true,
+    pathValidationPageLimit: auditRequest.crawl?.pathValidationPageLimit ?? 6,
+    pathValidationScreenshots: auditRequest.crawl?.pathValidationScreenshots ?? true,
+    pathValidationMobile: auditRequest.crawl?.pathValidationMobile ?? true,
+    pathValidationLiveBrowser: auditRequest.crawl?.pathValidationLiveBrowser ?? false,
+    // PRYSM-NEXT-01 WP-G — report design version joins the identity.
+    reportDesignVersion: auditRequest.report?.designVersion ?? DEFAULT_REPORT_DESIGN,
   };
   const normalizedConfig = stableJsonStringify(config);
   const configHash = sha256(Buffer.from(normalizedConfig, "utf-8"));
@@ -108,6 +202,10 @@ export function createAuditOrchestrator({
   clock, timer, retryPolicyResolver,
   narrativeExecutor, narrativeMode, narrativeDependencies,
   n8nCallCounter, rendererImpl,
+  // PRYSM-NEXT-01 WP-E — testability seam: injected mock replaces the whole
+  // Playwright validation call.  Default production behaviour unchanged
+  // (real validator with allowLiveBrowser).
+  conversionPathValidatorImpl,
 }) {
   const c = clock || defaultClock();
   const _narrativeExecutor = narrativeExecutor || executeNarrative;
@@ -122,6 +220,7 @@ export function createAuditOrchestrator({
   // renderer).  Regression proof: default path verified by WP10-LOCK-01 and
   // the production acceptance suite.
   const _rendererImpl = rendererImpl || null;
+  const _conversionPathValidatorImpl = conversionPathValidatorImpl || null;
 
   // -------------------------------------------------------------------
   // Validation
@@ -531,13 +630,84 @@ export function createAuditOrchestrator({
       validateContract,
     });
     if (decisionResult.errors.length > 0) {
-      // Decision evidence build had validation warnings — log but don't block.
-      // Individual source hydration failures are recorded in the evidence.
+      // CRIT defect 6b — hydration warnings are diagnostic context, never
+      // silently dropped.  Messages are validation strings only (no
+      // secrets/provider payloads); logged server-side, not returned.
+      console.error(
+        `[governedCollection] Decision-evidence hydration warnings for ${auditId}: ` +
+        decisionResult.errors.map((e) => String(e).slice(0, 300)).join(" | "),
+      );
     }
     const decisionEvidenceRecord = await persistDecisionEvidence({
       store: artifactStore,
       scope,
       evidence: decisionResult.evidence,
+      validateContract,
+    });
+
+    // 5b2. PRYSM-NEXT-01 WP-E — narrow Playwright conversion-path
+    //     validation on the deterministic key-page set.  Browser failure
+    //     produces NOT_ASSESSED evidence and never blocks the pipeline.
+    let pathValidationEvidence = null;
+    const pathValidationEnabled = auditRequest.crawl?.pathValidationEnabled !== false;
+    if (pathValidationEnabled) {
+      const siteEvidence = decisionResult.evidence.site || {};
+      const keyPages = selectImportantPages({
+        targetUrl: siteEvidence.targetUrl || auditRequest.targetUrl,
+        pages: siteEvidence.pages || [],
+        links: [],
+        services: auditRequest.services || [],
+        maxSelected: auditRequest.crawl?.pathValidationPageLimit ?? 6,
+      }).selected;
+
+      const validatorFn = _conversionPathValidatorImpl || validateConversionPaths;
+      let validationResult;
+      try {
+        validationResult = await validatorFn({
+          targetUrl: siteEvidence.targetUrl || auditRequest.targetUrl,
+          keyPages,
+          // Live browser requires the EXPLICIT production opt-in flag.
+          // Tests never set it — zero live browsers in governed suites.
+          options: {
+            pageLimit: auditRequest.crawl?.pathValidationPageLimit ?? 6,
+            mobile: auditRequest.crawl?.pathValidationMobile !== false,
+            screenshots: auditRequest.crawl?.pathValidationScreenshots !== false,
+            allowLiveBrowser: auditRequest.crawl?.pathValidationLiveBrowser === true,
+          },
+        });
+      } catch (err) {
+        validationResult = {
+          provider: "playwright-conversion-path",
+          status: "NOT_ASSESSED",
+          pages: [],
+          summary: { requested: keyPages.length, pass: 0, partial: 0, failed: 0, notAssessed: keyPages.length },
+          limitations: [`Conversion-path validation failed: ${err.message}`],
+        };
+      }
+      pathValidationEvidence = await persistPathValidationEvidence({
+        artifactStore,
+        scope,
+        auditId,
+        generatedAt: c.now(),
+        validationResult,
+        validateContract,
+      });
+    }
+
+    // 5c. PRYSM-NEXT-01 WP-C — capability evidence v2: additive canonical
+    //     artifact derived from the SAME decision evidence (+ WP-E path
+    //     validation); consumed by scoring v4 module eligibility (WP-D).
+    //     Fail-closed persistence.
+    const capabilityEvidence = buildCapabilityEvidence({
+      decisionEvidence: decisionResult.evidence,
+      auditId,
+      generatedAt: c.now(),
+      pathValidationEvidence,
+    });
+    const capabilityEvidenceRecord = await persistCapabilityEvidence({
+      store: artifactStore,
+      scope,
+      evidence: capabilityEvidence,
       validateContract,
     });
 
@@ -561,7 +731,7 @@ export function createAuditOrchestrator({
       artifactKey: manifestKey,
     });
 
-    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, isResumed };
+    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, capabilityEvidenceRecord, pathValidationEvidence, isResumed };
   }
 
   // -------------------------------------------------------------------
@@ -630,11 +800,31 @@ export function createAuditOrchestrator({
       validateContract,
     });
 
-    // Build audit input from decision evidence
+    // Build audit input from decision evidence + business context
+    // (PRYSM-NEXT-01 WP-D-05 — scoring v4 consumes intake context).
+    // CRIT defect 7a — the PERSISTED governed request is authoritative for
+    // scoring context (replay/resume must not re-derive context from a
+    // transient re-submitted request).  Fall back to the request only when
+    // the artifact predates persistence.
+    let persistedRequest = null;
+    try {
+      persistedRequest = await loadAuditRequest({
+        store: artifactStore,
+        scope: { tenantId, clientId, auditId },
+        validateContract,
+      });
+    } catch {
+      persistedRequest = null;
+    }
+    const intakeContext = persistedRequest || auditRequest;
     const auditInput = {
-      targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
-      businessName: auditRequest.businessName || "",
-      competitors: auditRequest.competitors || [],
+      targetUrl: decisionEvidence.site?.targetUrl || intakeContext.targetUrl,
+      businessName: intakeContext.businessName || "",
+      competitors: intakeContext.competitors || [],
+      services: intakeContext.services || [],
+      primaryGoal: intakeContext.primaryGoal || "",
+      language: intakeContext.language || "",
+      market: intakeContext.market || "",
     };
 
     // Run governed scoring — this persists findings.json and scores.json.
@@ -841,6 +1031,168 @@ export function createAuditOrchestrator({
    * On failure: NARRATIVE_READY → RENDER_FAILED, fail closed.
    * Zero partial writes. Renderer call counted and instrumented.
    */
+  /**
+   * PRYSM-NEXT-01 WP-G — governed rendering for report design v2.0.0.
+   * Single-page executive report + v2 finalization + frozen manifest shape.
+   */
+  async function renderReportV2Governed({ auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet }) {
+    const { tenantId, clientId, auditId } = auditRequest;
+    const scope = { tenantId, clientId, auditId };
+    let rendererCallCount = 0;
+
+    // Fail-closed: capability evidence is a required v2 input.  CRIT defect
+    // 6a — load through the GOVERNED loader (artifact verify + SHA +
+    // schema validation), never a raw get+parse.
+    let capabilityEvidence;
+    try {
+      capabilityEvidence = await loadAndValidateCapabilityEvidence({
+        store: artifactStore,
+        scope,
+        validateContract,
+      });
+    } catch (err) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-capability-missing:" + (err.message || "").slice(0, 200), null);
+      throw new Error("Report v2 rendering failed: " + err.message);
+    }
+
+    const v2Model = {
+      scoringVersion: scoringModel.scoringVersion || "4.1.0",
+      generatedAt: scoringModel.generatedAt,
+      scores: scoringModel.scores || {},
+      bands: scoringModel.bands || {},
+      assessedWeight: scoringModel.assessedWeight ?? 0,
+      readinessStatus: scoringModel.readinessStatus || "",
+      readinessStatusDetail: scoringModel.readinessStatusDetail || scoringModel.readinessStatus || "",
+      showNumericScore: scoringModel.showNumericScore ?? false,
+      evidenceConfidenceScore: scoringModel.evidenceConfidenceScore ?? 0,
+      evidenceConfidenceFactorAvailability: scoreSet.evidenceConfidenceFactorAvailability || [],
+      rootCause: scoringModel.rootCause || "",
+      findings: scoringModel.findings || [],
+      suppressedFindingReasons: scoreSet.suppressedFindingReasons || [],
+      moduleEligibility: scoreSet.moduleEligibility || {},
+      moduleScores: scoreSet.moduleScores || {},
+      suppressedModules: scoreSet.suppressedModules || [],
+      capabilityEvidence,
+      evidence: decisionEvidence,
+      input: {
+        businessName: auditRequest.businessName || "",
+        targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
+      },
+      conversionPaths: scoreSet.conversionPaths || [],
+      readinessMap: scoreSet.readinessMap || [],
+      contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
+      competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+    };
+
+    const { renderReportV2 } = await import("../report/render-report-v2.js");
+    rendererCallCount += 1;
+    let html;
+    try {
+      html = renderReportV2(v2Model);
+    } catch (renderErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-failed:" + (renderErr.message || "").slice(0, 200), null);
+      throw new Error("Report v2 page rendering failed: " + renderErr.message);
+    }
+
+    // v2 finalization: structural check (doctype + required sections).
+    if (!/^<!doctype html>/i.test(html) || !html.includes("D. Where are the problems?")) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-finalization-failed", null);
+      throw new Error("Report v2 finalization failed: required structure missing");
+    }
+
+    const bytes = Buffer.from(html, "utf-8");
+    let record;
+    try {
+      record = await artifactStore.put({
+        bytes,
+        contentType: "text/html",
+        scope: { tenantId, clientId, auditId, category: "report-v2", artifactName: "pages/index.html" },
+      });
+      const stored = await artifactStore.get(record.key);
+      if (!stored || stored.length !== bytes.length) {
+        throw new Error(`Read-back mismatch for report-v2 index (stored ${stored?.length}, expected ${bytes.length})`);
+      }
+    } catch (persistErr) {
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-persist-failed:" + (persistErr.message || "").slice(0, 200), null);
+      throw new Error("Report v2 persist failed: " + persistErr.message);
+    }
+
+    // Versioned manifest contract: the v2 manifest validates against the
+    // DISTINCT report-manifest-v2 schema (frozen v1 schema remains const
+    // 1.0.0 and governs v1 manifests only).
+    const manifest = {
+      contractVersion: "1.0.0", artifactVersion: "1.0.0",
+      reportVersion: scoringModel.scoringVersion || "4.1.1",
+      reportDesignVersion: REPORT_DESIGN_V2,
+      runId: executionId,
+      slug: String(auditRequest.businessName || auditRequest.targetUrl || "audit").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+      targetUrl: auditRequest.targetUrl || "https://unknown.example.com",
+      targetDomain: (() => { try { return new URL(auditRequest.targetUrl || "https://unknown.example.com").hostname; } catch { return "unknown.example.com"; } })(),
+      startedAt,
+      completedAt: c.now(),
+      status: "draft",
+      scores: {
+        trust: scoringModel.scores?.trust ?? null,
+        contentDepth: scoringModel.scores?.contentDepth ?? null,
+        conversionPathways: scoringModel.scores?.conversionPathways ?? null,
+        technical: scoringModel.scores?.technical ?? null,
+        performance: scoringModel.scores?.performance ?? null,
+        conversionReadiness: scoringModel.scores?.conversionReadiness ?? null,
+      },
+      sources: {
+        website: decisionEvidence.site?.sourceStatus || "NOT_APPLICABLE",
+        performance: decisionEvidence.performance?.sourceStatus || "NOT_APPLICABLE",
+        competitors: decisionEvidence.competitors?.length ? (decisionEvidence.competitors[0]?.status || "NOT_APPLICABLE") : "NOT_APPLICABLE",
+        backlinks: decisionEvidence.backlinks?.sourceStatus || "NOT_APPLICABLE",
+        ga4: decisionEvidence.ga4?.sourceStatus || "NOT_APPLICABLE",
+        gsc: decisionEvidence.gsc?.sourceStatus || "NOT_APPLICABLE",
+      },
+      files: ["index.html"],
+      auditId,
+      lifecycleStatus: "DRAFT_RENDERED",
+    };
+
+    const manifestValidation = validateContract(
+      "https://vantage-platform.io/prysm/contracts/v1/report-manifest-v2.schema.json", manifest);
+    if (!manifestValidation.valid) {
+      const errDetail = JSON.stringify((manifestValidation.errors || []).slice(0, 5).map((e) => `${e.instancePath}: ${e.message}`));
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        "render-v2-manifest-invalid:" + errDetail.slice(0, 200), null);
+      throw new Error(`Report v2 manifest validation failed: ${errDetail}`);
+    }
+
+    const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2), "utf-8");
+    const manifestRecord = await artifactStore.put({
+      bytes: manifestBytes, contentType: "application/json",
+      scope: { tenantId, clientId, auditId, category: "report-v2", artifactName: "manifest.json" },
+    });
+
+    await doTransition(auditId, tenantId, executionId, T.DRAFT_RENDERED,
+      "governed-rendering-complete", manifestRecord.key);
+
+    return Object.freeze({
+      contractVersion: "1.0.0", auditId, executionId,
+      finalState: T.DRAFT_RENDERED, resumed: false, startedAt, completedAt: c.now(),
+      viewModelHash: null,
+      pageCount: 1,
+      manifestKey: manifestRecord.key,
+      manifestRecord,
+      pageArtifacts: Object.freeze([{ filename: "index.html", key: record.key, sha256: record.sha256, bytes: record.bytes }]),
+      renderedPages: new Map([["index.html", html]]),
+      rendererCallCount,
+      reportDesignVersion: REPORT_DESIGN_V2,
+      n8nCallCount: _n8nCallCounter.count,
+      narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
+      findingsArtifact: null, scoresArtifact: null,
+      sourceCounts: Object.freeze({ total: 0, available: 0, partial: 0, failed: 0, blocked: 0, unavailable: 0, notConnected: 0, notApplicable: 0 }),
+      sources: Object.freeze([]), canonicalEvidence: null,
+    });
+  }
+
   async function runGovernedRendering({ auditRequest, executionId, startedAt, injectPageFailure }) {
     const { tenantId, clientId, auditId } = auditRequest;
     const scope = { tenantId, clientId, auditId };
@@ -878,11 +1230,13 @@ export function createAuditOrchestrator({
     // Fields preserved by buildScoreSet (WP12) are read directly from the
     // artifact so the renderer never reconstructs empty arrays/objects.
     let scoringModel;
+    let scoreSetRaw = null;
     try {
       const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
       const scoresBytes = await artifactStore.get(scoresKey);
       if (!scoresBytes) throw new Error("Scores artifact not found");
       const scoreSet = JSON.parse(scoresBytes.toString());
+      scoreSetRaw = scoreSet;
       scoringModel = {
         scoringVersion: scoreSet.scoringVersion || "3.0.0", generatedAt: scoreSet.generatedAt || c.now(),
         scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
@@ -936,6 +1290,17 @@ export function createAuditOrchestrator({
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-finalization-gate-failed:" + (gate.errors || []).map((e) => e.message).join("; ").slice(0, 200), null);
       throw new Error("Finalization gate failed: " + (gate.errors || []).map((e) => e.message).join("; "));
+    }
+
+    // ── PRYSM-NEXT-01 WP-G — report design version boundary ────────────
+    // Design v2.0.0 renders a DISTINCT single-page executive report through
+    // its own renderer + artifact namespace (report-v2/).  v1.0.0 (default)
+    // continues through the locked 16-page path below, unchanged.
+    const reportDesignVersion = auditRequest.report?.designVersion || DEFAULT_REPORT_DESIGN;
+    if (isReportDesignV2(reportDesignVersion)) {
+      return await renderReportV2Governed({
+        auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet: scoreSetRaw || {},
+      });
     }
 
     // --- Build COMPLETE ReportViewModel (validates WP8+WP9+scoring+evidence) ---

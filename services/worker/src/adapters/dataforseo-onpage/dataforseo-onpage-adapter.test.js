@@ -9,6 +9,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { crawlWithDataforseo, ADAPTER_VERSION } from "./dataforseo-onpage-adapter.js";
 import { createDataforseoOnpageClient } from "./dataforseo-onpage-client.js";
 import { SOURCE_STATUS, ERROR_CATEGORY } from "../../scoring/evidence-contracts.js";
@@ -2471,6 +2472,308 @@ test("T-BLOCKED-04: customRobotsTxt option reaches client taskPost", async () =>
     assert.ok(capturedBody, "Must have captured taskPost body");
     assert.equal(capturedBody[0].custom_robots_txt, "User-agent: *\nDisallow: /",
       "custom_robots_txt must be in the task_post request");
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PRYSM-NEXT-01 WP-B — deep acquisition evidence (content parsing, microdata,
+// redirect chains, non-indexable, resources)
+// ---------------------------------------------------------------------------
+
+/** Fixtures for deep-acquisition tests: homepage, contact, pricing, one 3xx. */
+function buildDeepFixtures() {
+  const pages = [
+    buildPageFixture(0, {
+      url: "https://example.com/",
+      title: "Home",
+      h1: ["Home"],
+      forms: [{ action: "/submit" }],
+    }),
+    buildPageFixture(1, {
+      url: "https://example.com/contact",
+      title: "Contact Us",
+      h1: ["Contact"],
+      forms: [{ action: "/submit" }],
+    }),
+    buildPageFixture(2, {
+      url: "https://example.com/pricing",
+      title: "Pricing and Packages",
+      h1: ["Pricing"],
+    }),
+    buildPageFixture(3, { url: "https://example.com/old", status_code: 301 }),
+  ];
+  return {
+    taskPost: { taskId: "deep-task-001", rawTask: { id: "deep-task-001" } },
+    pollTask: { status: "ready", taskId: "deep-task-001" },
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "completed",
+        max_crawl_pages: 4,
+        pages_crawled: 4,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 4,
+      max_crawl_pages: 4,
+      duplicate_content: 0,
+      duplicate_tags: 0,
+      sitemap: { urls: [] },
+    },
+    pages: { items: pages, total_count: 4 },
+    links: {
+      items: [
+        { link_to: "https://example.com/contact", url: "https://example.com/" },
+        { link_to: "https://example.com/pricing", url: "https://example.com/contact" },
+      ],
+      total_count: 2,
+    },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+    microdata: { items: [{ type: "Organization" }, { type: "LocalBusiness" }] },
+    content_parsing: [
+      {
+        url: "https://example.com/",
+        result: {
+          main_content: [{ text: "Home page body content with meaningful words — certified coaching" }, { text: "Second section" }],
+          secondary_content: [],
+          plain_text_word_count: 11,
+        },
+      },
+      {
+        url: "https://example.com/contact",
+        result: { main_content: [], secondary_content: [], plain_text_word_count: 0 },
+      },
+      {
+        url: "https://example.com/pricing",
+        result: { main_content: [{ text: "Pricing details for all packages" }], plain_text_word_count: 5 },
+      },
+    ],
+    redirect_chains: [
+      {
+        url: "https://example.com/",
+        result: {
+          items: [{
+            chain: [
+              { url: "https://example.com/", status_code: 301, location: "https://example.com/home" },
+              { url: "https://example.com/home", status_code: 200 },
+            ],
+          }],
+        },
+      },
+      { url: "https://example.com/contact", result: { items: [] } },
+      { url: "https://example.com/pricing", result: { items: [] } },
+      {
+        url: "https://example.com/old",
+        result: {
+          items: [{
+            chain: [{ url: "https://example.com/old", status_code: 301, location: "https://example.com/" }],
+          }],
+        },
+      },
+    ],
+    non_indexable: {
+      items: [{ url: "https://example.com/404-page", reason: "4xx" }],
+      total_count: 1,
+    },
+    resources: [
+      {
+        url: "https://example.com/",
+        result: { total_resources: 12, broken_resources: [{ url: "/broken.js" }] },
+      },
+      { url: "https://example.com/contact", result: { total_resources: 5, broken_resources: [] } },
+      { url: "https://example.com/pricing", result: { total_resources: 3, broken_resources: [] } },
+      { url: "https://example.com/old", result: { total_resources: 0, broken_resources: [] } },
+    ],
+  };
+}
+
+test("WP-B-02: live task_post body includes validate_micromarkup and enable_content_parsing", async () => {
+  let capturedBody = null;
+  const fetchImpl = async (url, init) => {
+    if (url.includes("task_post")) {
+      capturedBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        tasks: [{ id: "wp-b-task", status_code: 20000, result: [{ id: "wp-b-task" }] }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ status_code: 20000, result: [{ crawl_progress: "finished" }] }],
+    }), { status: 200 });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    await client.taskPost("example.com", {});
+    assert.ok(capturedBody, "Must capture task_post body");
+    assert.equal(capturedBody[0].validate_micromarkup, true, "validate_micromarkup must default true");
+    assert.equal(capturedBody[0].enable_content_parsing, true, "enable_content_parsing must default true");
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+test("WP-B-08/09: deep acquisitions normalize into the site envelope", async () => {
+  const fixtures = buildDeepFixtures();
+  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+
+  // Content parsing — homepage has real main content; contact does not.
+  assert.equal(result.contentParsing.length, 3);
+  const home = result.contentParsing.find((c) => c.url === "https://example.com/");
+  assert.equal(home.hasMainContent, true);
+  assert.equal(home.wordCount, 11);
+  assert.ok(home.mainContentChars > 0);
+  const contact = result.contentParsing.find((c) => c.url === "https://example.com/contact");
+  assert.equal(contact.hasMainContent, false);
+
+  // CRIT defect 2a — parsed text hydrates the page evidence path and
+  // drives real signal detection; interactive extraction stays honest.
+  const homePage = result.pages.find((p) => p.url === "https://example.com/");
+  assert.ok(homePage.bodyText.includes("certified coaching"), "parsed text hydrated into page bodyText");
+  assert.equal(homePage._contentAvailable, true, "key page marked content-available");
+  assert.equal(homePage.signals.credentials, true, "trust signal derived from real parsed text");
+  assert.equal(result._contentEvidenceAvailable, true, "site-level content evidence from parsed key pages");
+  assert.equal(result._interactiveEvidenceAvailable, false, "interactive extraction not run (parsed text proves content only)");
+  assert.equal(result.trust.credentials, true, "site trust carries the parsed-evidence signal");
+
+  // Redirect chains — homepage chain: 2 hops, 301 then 200, destination home.
+  const homeChain = result.redirectChains.find((r) => r.from === "https://example.com/");
+  assert.equal(homeChain.hops, 2);
+  assert.deepEqual(homeChain.statusCodes, [301, 200]);
+  assert.equal(homeChain.to, "https://example.com/home");
+  // 3xx page included even though it is not a key page.
+  const oldChain = result.redirectChains.find((r) => r.from === "https://example.com/old");
+  assert.equal(oldChain.hops, 1);
+  assert.equal(oldChain.to, "https://example.com/");
+
+  // Non-indexable pages
+  assert.deepEqual(result.nonIndexablePages, [
+    { url: "https://example.com/404-page", reason: "4xx" },
+  ]);
+
+  // Resources — broken resources counted on the homepage.
+  const homeRes = result.pageResources.find((r) => r.url === "https://example.com/");
+  assert.equal(homeRes.totalResources, 12);
+  assert.equal(homeRes.brokenResources, 1);
+
+  // Microdata types merged into schema types.
+  assert.deepEqual(result.microdataTypes, ["LocalBusiness", "Organization"]);
+  assert.ok(result.schemaTypes.includes("Organization"));
+  assert.ok(result.schemaTypes.includes("LocalBusiness"));
+
+  // Acquisition ledger — requested/collected for every deep endpoint.
+  assert.equal(result.acquisition.contentParsing.requested, 3);
+  assert.equal(result.acquisition.contentParsing.completed, 3);
+  assert.equal(result.acquisition.redirectChains.requested, 4);
+  assert.equal(result.acquisition.resources.requested, 3);
+  assert.equal(result.acquisition.nonIndexable.completed, 1);
+  assert.equal(result.acquisition.microdata.completed, 1);
+
+  // No "skipped" limitation — decision-bearing pages were identified.
+  assert.ok(!result.limitations.some((l) => l.includes("No decision-bearing pages")));
+});
+
+test("WP-B-08: missing sub-endpoint results produce failed counts without degrading the source", async () => {
+  const fixtures = buildDeepFixtures();
+  // Content parsing returns nothing for the pricing URL.
+  fixtures.content_parsing = fixtures.content_parsing.filter(
+    (f) => f.url !== "https://example.com/pricing",
+  );
+  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE, "sub-endpoint gaps must not fail the crawl");
+  assert.equal(result.acquisition.contentParsing.requested, 3);
+  assert.equal(result.acquisition.contentParsing.completed, 2);
+  assert.equal(result.acquisition.contentParsing.failed, 1);
+  // The pricing entry must remain present with null content, not fabricated text.
+  const pricing = result.contentParsing.find((c) => c.url === "https://example.com/pricing");
+  assert.equal(pricing.hasMainContent, null);
+  assert.equal(pricing.wordCount, null);
+});
+
+test("WP-B-10: raw artifact payload includes deep acquisition responses with valid SHA-256", async () => {
+  const fixtures = buildDeepFixtures();
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures, { artifactSlug: "audit-wpb", artifactRunId: "exec-wpb-1" }),
+  );
+
+  assert.ok(result._rawArtifactBytes, "raw artifact bytes must be packaged");
+  assert.ok(result._rawSha256, "raw artifact SHA must be computed");
+  assert.ok(result._rawBytes > 0);
+
+  const payload = JSON.parse(result._rawArtifactBytes.toString("utf-8"));
+  assert.ok(payload.contentParsing, "artifact must preserve contentParsing raw");
+  assert.ok(payload.redirectChains, "artifact must preserve redirectChains raw");
+  assert.ok(payload.nonIndexable, "artifact must preserve nonIndexable raw");
+  assert.ok(payload.resources, "artifact must preserve resources raw");
+  assert.ok(payload.microdata, "artifact must preserve microdata raw");
+  assert.equal(payload.adapterVersion, ADAPTER_VERSION);
+  assert.equal(payload.adapterVersion, "1.2.0");
+
+  const recomputed = createHash("sha256")
+    .update(result._rawArtifactBytes)
+    .digest("hex");
+  assert.equal(recomputed, result._rawSha256, "SHA-256 must be over the exact packaged bytes");
+  assert.equal(result._rawBytes, result._rawArtifactBytes.length);
+
+  // CRIT rescore #3 — the provenance stamp must actually run: the artifact
+  // ref carries the SHA-256 suffix of the raw payload.
+  assert.ok(
+    result.rawArtifactRef.includes("?sha256="),
+    "rawArtifactRef carries the SHA-256 provenance suffix",
+  );
+});
+
+test("WP-B-08: live content_parsing client posts one payload per key-page URL", async () => {
+  const postedPayloads = [];
+  const fetchImpl = async (url, init) => {
+    postedPayloads.push({ url, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ status_code: 20000, result: [{ items: [{ main_content: [{ text: "x" }] }] }] }],
+    }), { status: 200 });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const res = await client.getContentParsing("t1", ["https://example.com/", "https://example.com/contact"]);
+    assert.equal(res.results.length, 2);
+    assert.equal(postedPayloads.length, 2);
+    for (const p of postedPayloads) {
+      assert.ok(p.url.includes("/on_page/content_parsing"));
+      assert.equal(p.body[0].id, "t1");
+      assert.equal(typeof p.body[0].url, "string");
+    }
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+test("WP-B-08: live non_indexable client paginates until short page", async () => {
+  let calls = 0;
+  const fetchImpl = async (url, init) => {
+    calls += 1;
+    const body = JSON.parse(init.body);
+    const items = calls === 1
+      ? Array.from({ length: body[0].limit }, (_, i) => ({ url: `https://example.com/n/${calls}-${i}`, reason: "noindex" }))
+      : [];
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ status_code: 20000, result: [{ items, total_count: items.length }] }],
+    }), { status: 200 });
+  };
+  setTestCredentials();
+  try {
+    const client = createDataforseoOnpageClient({ mode: "live", fetchImpl });
+    const res = await client.getNonIndexable("t1", { limit: 3, maxRecords: 10 });
+    assert.equal(res.items.length, 3);
+    assert.equal(calls, 2, "second page returns empty and pagination stops");
+    assert.equal(res.metadata.length, 2);
   } finally {
     clearTestCredentials();
   }

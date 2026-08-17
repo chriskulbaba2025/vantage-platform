@@ -141,6 +141,71 @@
         "pollTimeoutMs": { "type": "integer", "minimum": 1 },
         "pollIntervalMs": { "type": "integer", "minimum": 1 },
         "resumeTaskId": { "type": "string" },
+        "enableContentParsing": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-B: enable DFS content parsing at task level. Requests are scoped to the deterministic key-page set only."
+        },
+        "validateMicromarkup": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-B: enable DFS micromarkup validation so the microdata endpoint returns structured data."
+        },
+        "contentParsingPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10,
+          "description": "PRYSM-NEXT-01 WP-B: max key pages parsed for content evidence."
+        },
+        "redirectChainsPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 20,
+          "description": "PRYSM-NEXT-01 WP-B: max pages checked for redirect chains (key pages + 3xx pages)."
+        },
+        "nonIndexableLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000,
+          "default": 1000,
+          "description": "PRYSM-NEXT-01 WP-B: max non-indexable page records collected."
+        },
+        "resourcesPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10,
+          "description": "PRYSM-NEXT-01 WP-B: max key pages inspected for resource/broken-resource evidence."
+        },
+        "pathValidationEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-E: enable the narrow Playwright conversion-path validation layer (read-only; never submits)."
+        },
+        "pathValidationPageLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 6,
+          "description": "PRYSM-NEXT-01 WP-E: max key pages browser-validated."
+        },
+        "pathValidationScreenshots": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-E: capture controlled desktop screenshots into governed evidence artifacts."
+        },
+        "pathValidationMobile": {
+          "type": "boolean",
+          "default": true,
+          "description": "PRYSM-NEXT-01 WP-E: run the mobile viewport pass."
+        },
+        "pathValidationLiveBrowser": {
+          "type": "boolean",
+          "default": false,
+          "description": "PRYSM-NEXT-01 WP-E: explicit production opt-in to launch a real browser. Default false — controlled tests never launch browsers."
+        },
         "fixtures": {},
         "fetchImpl": {},
         "localRunner": {}
@@ -171,6 +236,18 @@
         "fetchImpl": {}
       },
       "description": "Backlinks configuration. fetchImpl is a controlled-dependency injection seam (tests only)."
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "designVersion": {
+          "type": "string",
+          "enum": ["1.0.0", "2.0.0"],
+          "default": "1.0.0",
+          "description": "PRYSM-NEXT-01 WP-G: governed report design version. 1.0.0 = locked v1 design (default); 2.0.0 = prysm-report-design-v2.0.0."
+        }
+      },
+      "description": "Report configuration. The design version selects the governed renderer; the default remains the locked v1 design."
     }
   }
 }
