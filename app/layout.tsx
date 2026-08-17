@@ -20,6 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="app-nav">
               <a href="/">Dashboard</a>
               <a href="/audits/new">New Audit</a>
+              {/* PRYSM-NEXT-ACTIVATION defect D — the platform-admin console
+                  must be reachable through normal product navigation.  The
+                  page itself (and the worker admin boundary) enforce the
+                  platform_admin role server-side; non-admins see the
+                  governed denial state. */}
+              {authenticated ? <a href="/admin">Admin</a> : null}
               {authenticated ? <LogoutButton /> : <a href="/login">Sign in</a>}
             </nav>
           </div>

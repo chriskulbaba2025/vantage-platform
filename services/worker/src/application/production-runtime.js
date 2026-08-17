@@ -506,12 +506,33 @@ export function createProductionRuntime({
 
     let governedPages = pages;
     if (!(governedPages instanceof Map)) {
-      governedPages = new Map();
-      for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
-        const key = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`;
-        const bytes = await artifactStore.get(key);
-        if (!bytes) throw Object.assign(new Error(`Draft report page missing: ${filename}`), { statusCode: 422 });
-        governedPages.set(filename, Buffer.from(bytes).toString("utf8"));
+      // PRYSM-NEXT-ACTIVATION defect C — report-design v2 audits have a v2
+      // artifact contract (report-v2/), NOT the locked v1 16-page set.
+      // Detect the design version first; the base approval branch then
+      // validates the correct artifact contract.  Historical v1 approval
+      // behaviour (16-page preload + 422 on missing pages) is unchanged.
+      const v2ManifestKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/manifest.json`;
+      let v2ManifestBytes = null;
+      try {
+        v2ManifestBytes = await artifactStore.get(v2ManifestKey);
+      } catch {
+        v2ManifestBytes = null;
+      }
+      if (v2ManifestBytes && v2ManifestBytes.length > 0) {
+        governedPages = new Map();
+      } else {
+        governedPages = new Map();
+        for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
+          const key = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`;
+          let bytes = null;
+          try {
+            bytes = await artifactStore.get(key);
+          } catch {
+            bytes = null; // store implementations differ on missing-key semantics
+          }
+          if (!bytes) throw Object.assign(new Error(`Draft report page missing: ${filename}`), { statusCode: 422 });
+          governedPages.set(filename, Buffer.from(bytes).toString("utf8"));
+        }
       }
     }
 
