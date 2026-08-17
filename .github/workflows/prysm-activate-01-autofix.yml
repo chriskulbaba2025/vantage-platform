@@ -17,6 +17,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Confirm governed Linux runtime
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          command -v node
+          node --version
+          node -e 'if (process.platform !== "linux") process.exit(1)'
+
       - name: Disambiguate the one duplicated controlled-test anchor
         run: |
           python3 <<'PY'
