@@ -168,6 +168,16 @@ test("V2R-03: internal-link opportunities render canonical source/target/anchor/
   assert.match(html, /Internal-Link Opportunities/i, "section heading present");
   assert.match(html, /https:\/\/x\.com\/coaching/, "canonical source URL rendered");
   assert.match(html, /https:\/\/x\.com\/pricing/, "canonical target URL rendered");
+  // Defense-in-depth: non-http(s) schemes must never become link targets.
+  const evil = scoreAudit(INPUT, {
+    ...richEvidence(),
+    internalLinkOpportunities: {
+      ...richEvidence().internalLinkOpportunities,
+      opportunities: [{ sourceUrl: "javascript:alert(1)", targetUrl: "https://x.com/ok", proposedAnchor: "evil", reasonForLink: "pages_belong_to_same_topic_hierarchy", funnelStage: "tofu", confidence: "low" }],
+    },
+  });
+  const evilHtml = await render(evil);
+  assert.ok(!evilHtml.includes('href="javascript:'), "non-http(s) schemes must not render as link targets");
   assert.match(html, /coaching options and pricing/, "canonical proposed anchor rendered");
   assert.match(html, /Consideration → conversion/, "canonical reason label rendered");
   assert.match(html, /high/, "confidence rendered");

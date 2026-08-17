@@ -332,6 +332,15 @@ function cmsPlatformSection(model) {
   </section>`;
 }
 
+/** Only http/https URLs may become link targets — anything else renders inert. */
+function safeHref(u) {
+  try {
+    const parsed = new URL(String(u || ""), "https://placeholder.local");
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return e(u);
+  } catch { /* fall through */ }
+  return "#";
+}
+
 const LINK_REASON_LABEL = {
   source_content_supports_related_service_page: "Content supports related service",
   informational_content_progresses_to_commercial_page: "Info content → commercial",
@@ -364,8 +373,8 @@ function internalLinksSection(model) {
 <thead><tr><th>Source</th><th>Target</th><th>Anchor</th><th>Reason</th><th>Stage</th><th>Confidence</th></tr></thead>
 <tbody>${opportunities.slice(0, 25).map((o) => `
   <tr>
-    <td class="small"><a href="${e(o.sourceUrl || "")}">${e((o.sourceUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
-    <td class="small"><a href="${e(o.targetUrl || "")}">${e((o.targetUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
+    <td class="small"><a href="${safeHref(o.sourceUrl)}">${e((o.sourceUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
+    <td class="small"><a href="${safeHref(o.targetUrl)}">${e((o.targetUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
     <td>${e(o.proposedAnchor || "")}</td>
     <td class="small">${e(LINK_REASON_LABEL[o.reasonForLink] || o.reasonForLink || "")}</td>
     <td>${e(o.funnelStage || "")}</td>
