@@ -65,7 +65,7 @@ jobs:
           set -euo pipefail
           npm install --no-audit --no-fund
           npx tsc --noEmit
-          npm run build
+          npx next build
           npx playwright test tests/wp11/full-flow.spec.ts tests/provisioning/admin-flow.spec.ts
 
       - name: Commit verified patch
