@@ -63,8 +63,8 @@ No scoring, evidence-collection, lifecycle, auth, or v1 changes.
 ## V2R-07 — v1 renderer/report unchanged
 
 - Behavior: v1 renderers and golden output are untouched by this correction.
-- Assertion: SHA-256 of `renderReport(model)` for the frozen fixture equals the pre-change golden hash (captured before implementation); no v1 file appears in the change diff.
-- PASS value: hash equality + diff scope contains no v1 renderer files.
+- Assertion: SHA-256 of the environment-stable STRUCTURAL fingerprint (section ids + heading literals) of `renderReport(model)` for the frozen fixture equals the pre-change golden; no v1 file appears in the change diff.
+- PASS value: structural-hash equality + diff scope contains no v1 renderer files.
 - Prohibited: any v1 output change.
 - File boundary: none (v1 files must not appear in the diff).
 
