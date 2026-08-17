@@ -66,6 +66,9 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
         {(status! as Record<string, unknown>).market && (
           <p><strong>Market:</strong> {(status! as Record<string, unknown>).market as string}</p>
         )}
+        {(status! as Record<string, unknown>).reportDesignVersion === "2.0.0" && (
+          <p><strong>Report design:</strong> 2.0.0 — Executive conversion-readiness report</p>
+        )}
         <p><strong>Audit ID:</strong> <code>{auditId}</code></p>
         <p><strong>Version:</strong> {status!.version}</p>
         <p><strong>Created:</strong> {status!.createdAt ? new Date(status!.createdAt).toLocaleString() : "—"}</p>
@@ -95,9 +98,14 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
       {(state === "draft_rendered" || state === "in_review") && (
         <div className="card" style={{ borderColor: "var(--amber)" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Draft Report</h2>
-          {isValidReviewerToken(cookies().get(REVIEWER_COOKIE)?.value) ? (
+          {/* PRYSM-NEXT-ACTIVATION defect B — a separately authenticated
+              principal reaches the draft report through their session; the
+              WORKER still enforces the tenant/role gate server-side before
+              any report bytes are served.  The legacy reviewer-session
+              cookie remains supported for internal reviewer compatibility. */}
+          {principal || isValidReviewerToken(cookies().get(REVIEWER_COOKIE)?.value) ? (
             <>
-              <p>The governed draft report is ready for review. Pages are visible only to the reviewer.</p>
+              <p>The governed draft report is ready. Access is enforced by your account role.</p>
               <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Draft Report</a>
             </>
           ) : (

@@ -13,6 +13,7 @@ export interface AuditFormInput {
   primaryGoal?: string;
   services?: string[];
   competitors?: string[];
+  reportDesignVersion?: "1.0.0" | "2.0.0";
   ga4PropertyId?: string;
   gscSiteUrl?: string;
 }
@@ -107,6 +108,13 @@ export function buildAuditPayload(input: AuditFormInput): Record<string, unknown
   if (input.gscSiteUrl?.trim()) {
     payload.gsc = { siteUrl: input.gscSiteUrl.trim() };
   }
+
+  // PRYSM-NEXT-ACTIVATION defect A — the report design version is part of
+  // the governed request contract.  Explicit v1 default; only "2.0.0" is a
+  // valid upgrade selection.
+  payload.report = {
+    designVersion: input.reportDesignVersion === "2.0.0" ? "2.0.0" : "1.0.0",
+  };
 
   return payload;
 }

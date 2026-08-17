@@ -110,6 +110,15 @@ export function createAuditApplicationService({
     if (input.performance && typeof input.performance === "object") {
       auditRequest.performance = input.performance;
     }
+    // PRYSM-NEXT-ACTIVATION defect A — the report design selection must
+    // survive the production request boundary.  Strict allowlist; v1
+    // remains the default when the field is absent.
+    if (input.report && typeof input.report === "object") {
+      auditRequest.report = {
+        designVersion:
+          input.report.designVersion === "2.0.0" ? "2.0.0" : "1.0.0",
+      };
+    }
     if (input.serp && typeof input.serp === "object") {
       auditRequest.serp = input.serp;
     }

@@ -47,6 +47,7 @@ export default function NewAuditPage() {
   const [audienceScope, setAudienceScope] = useState<AudienceScope>("local");
   const [servicesRaw, setServicesRaw] = useState("");
   const [primaryGoal, setPrimaryGoal] = useState(GOAL_OPTIONS[0]);
+  const [reportDesignVersion, setReportDesignVersion] = useState<"1.0.0" | "2.0.0">("1.0.0");
   const [customGoal, setCustomGoal] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -77,6 +78,7 @@ export default function NewAuditPage() {
       competitors,
       services: parseServices(servicesRaw),
       primaryGoal: goal || "Generate qualified enquiries",
+      reportDesignVersion,
     };
 
     const validation = validateAuditForm(input);
@@ -204,6 +206,22 @@ export default function NewAuditPage() {
             <option value="regional">Regional</option>
             <option value="national">National</option>
           </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="reportDesignVersion">Report design *</label>
+          <select
+            id="reportDesignVersion"
+            value={reportDesignVersion}
+            onChange={(e) => setReportDesignVersion(e.target.value as "1.0.0" | "2.0.0")}
+          >
+            <option value="1.0.0">Standard multi-page report (v1)</option>
+            <option value="2.0.0">Executive conversion-readiness report (v2)</option>
+          </select>
+          <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>
+            The executive report answers readiness, evidence confidence,
+            coverage, problem pillars, and top blockers in one view.
+          </p>
         </div>
 
         <div className="form-group">
