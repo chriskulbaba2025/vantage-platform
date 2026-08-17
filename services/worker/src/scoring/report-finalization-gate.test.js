@@ -35,9 +35,9 @@ function baseModel(overrides = {}) {
       ...(overrides.bands || {}),
     },
     assessedWeight: "assessedWeight" in overrides ? overrides.assessedWeight : 85,
-    readinessStatus: "Complete",
-    readinessStatusDetail: "Complete",
-    showNumericScore: true,
+    readinessStatus: "readinessStatus" in overrides ? overrides.readinessStatus : "Complete",
+    readinessStatusDetail: "readinessStatusDetail" in overrides ? overrides.readinessStatusDetail : "Complete",
+    showNumericScore: "showNumericScore" in overrides ? overrides.showNumericScore : true,
     evidenceConfidenceScore: "evidenceConfidenceScore" in overrides ? overrides.evidenceConfidenceScore : 65,
     evidenceConfidenceFactors: {},
     dimensionEligibility: {},
@@ -163,6 +163,95 @@ test("T-GATE-07: blocks high confidence with low assessed weight", () => {
   assert.equal(passed, false);
   const err = errors.find((e) => e.field === "evidenceConfidenceScore");
   assert.ok(err, "Must block high confidence unsupported by assessed weight");
+});
+
+// PRYSM-INCIDENT-01 — production incident regression.  The real production
+// v2 audit produced confidence 86 with assessed weight 30%; scoring declared
+// the PRD-governed "Insufficient Evidence for Overall Score" state (numeric
+// suppressed).  The gate must RENDER that honest state, not fail the whole
+// pipeline (render_failed).  Mutation-sensitive: at b93d8cc this passes
+// `passed === false`.
+test("T-GATE-INCIDENT-01: governed Insufficient-Evidence state renders (numeric suppressed)", () => {
+  const model = baseModel({
+    evidenceConfidenceScore: 86,
+    assessedWeight: 30,
+    showNumericScore: false,
+    readinessStatus: "Insufficient Evidence for Overall Score",
+    readinessStatusDetail: "Insufficient Evidence for Overall Score",
+    bands: { conversionReadiness: "Not Assessed", trust: "Not Assessed", evidenceConfidence: "High" },
+    scores: {
+      trust: null, contentDepth: null, conversionPathways: null,
+      technical: 43, performance: 76, conversionReadiness: null,
+      awareness: null, consideration: null, decision: null, aiReadiness: null,
+    },
+  });
+  const { passed, errors } = runFinalizationGate(model, model.evidence);
+  assert.equal(passed, true, `gate must pass for the governed insufficiency state: ${JSON.stringify(errors.map((e) => e.message))}`);
+});
+
+// End-to-end through the REAL scoring path: the production-shaped
+// metadata-only crawl produces exactly this combination; the gate must
+// accept the scored model.
+test("T-GATE-INCIDENT-02: real scoring model with suppressed numeric passes the gate", async () => {
+  const { scoreAudit } = await import("./vantage-score.js");
+  const FIXED_TS = "2026-01-15T12:00:00.000Z";
+  const evidence = {
+    contractVersion: "1.0.0",
+    decisionEvidenceVersion: "1.0.0",
+    site: {
+      sourceStatus: SOURCE_STATUS.PARTIAL,
+      targetUrl: "https://incident.example.com/",
+      domain: "incident.example.com",
+      platform: "WordPress",
+      pageCount: 4,
+      pages: [
+        { url: "https://incident.example.com/", title: "Home", headings: { h1: ["Home"], h2: [], h3: [], h4: [] }, status: 200 },
+        { url: "https://incident.example.com/services", title: "Services", headings: { h1: ["Services"], h2: [], h3: [], h4: [] }, status: 200 },
+      ],
+      services: [], topicKeywords: [], ctas: [], forms: [], externalCtas: [],
+      socialLinks: [], schemaTypes: ["Organization"], microdataTypes: [],
+      trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false },
+      securityHeaders: { xFrameOptions: false, xContentTypeOptions: false, referrerPolicy: false, contentSecurityPolicy: false },
+      totalWords: 0, averageWords: 0,
+      missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
+      h1Missing: 0, h1Multiple: 0, imageCount: 0, imagesMissingAlt: 0,
+      internalLinkCount: 0, brokenInternalLinks: [], statusCounts: {},
+      limitations: ["JavaScript content may be partially missing on some pages"],
+      collectedAt: FIXED_TS,
+      coverage: { requested: 500, completed: 450, failed: 50 },
+      _contentEvidenceAvailable: false,
+      _responseHeadersAvailable: false,
+      _interactiveEvidenceAvailable: false,
+      _metaCountersAvailable: false,
+      acquisition: {
+        contentParsing: { requested: 3, completed: 0, failed: 3 },
+        redirectChains: { requested: 3, completed: 0, failed: 3 },
+        nonIndexable: { requested: 1000, completed: 0, failed: 1000 },
+        resources: { requested: 3, completed: 0, failed: 3 },
+        microdata: { requested: 1, completed: 1, failed: 0 },
+      },
+    },
+    performance: {
+      sourceStatus: SOURCE_STATUS.AVAILABLE,
+      provider: "pagespeed-insights",
+      mobile: { status: SOURCE_STATUS.AVAILABLE, source: "psi", scores: { performance: 80 }, metrics: { fcpMs: 1000, lcpMs: 2000 } },
+      desktop: { status: SOURCE_STATUS.AVAILABLE, source: "psi", scores: { performance: 90 }, metrics: { fcpMs: 800, lcpMs: 1500 } },
+      fieldData: {}, limitations: [],
+      collectedAt: FIXED_TS,
+      coverage: { requested: 2, completed: 2, failed: 0 },
+    },
+    competitors: null, backlinks: null, ga4: null, gsc: null,
+  };
+  const model = scoreAudit(
+    { targetUrl: "https://incident.example.com/", businessName: "Incident Co", competitors: [] },
+    evidence,
+  );
+  // The real production incident's exact signature.
+  assert.ok(model.evidenceConfidenceScore >= 80, "confidence is High");
+  assert.ok(model.assessedWeight < 60, "assessed weight is below 60");
+  assert.equal(model.showNumericScore, false, "numeric score suppressed");
+  const { passed } = runFinalizationGate(model, evidence);
+  assert.equal(passed, true, "governed insufficiency state must render, not render_failed");
 });
 
 test("T-GATE-08: blocks completed tests that produced unusable rendering defects", () => {

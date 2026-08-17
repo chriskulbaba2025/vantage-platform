@@ -230,10 +230,18 @@ function _checkContradictions(model, evidence, errors, warnings) {
     }
   }
 
-  // High confidence unsupported by assessed evidence
+  // High confidence unsupported by assessed evidence.
+  // PRYSM-INCIDENT-01: readiness and confidence are SEPARATE axes
+  // (PRD v3 §3.1).  When assessed weight is below 60% the scoring model
+  // already declares "Insufficient Evidence for Overall Score" and
+  // suppresses the numeric score (showNumericScore=false) — that is a
+  // GOVERNED output state, not a contradiction.  The gate must render
+  // that honest state (both report designs render it), not fail the
+  // whole pipeline.  The rule only protects against a numeric score
+  // being shown with high confidence from thin assessed evidence.
   const confidenceScore = model.evidenceConfidenceScore || 0;
   const assessedWeight = model.assessedWeight || 0;
-  if (confidenceScore >= 85 && assessedWeight < 60) {
+  if (model.showNumericScore !== false && confidenceScore >= 85 && assessedWeight < 60) {
     errors.push(_err("evidenceConfidenceScore", "evidence-appendix",
       `Evidence confidence is ${confidenceScore} (High) but assessed weight is only ${assessedWeight}%. High confidence requires at least 60% assessed weight.`));
   }

@@ -1,4 +1,5 @@
 import { workerClient } from "@/lib/worker-client";
+import { formatAuditDate } from "@/lib/format-time";
 import { currentPrincipal } from "@/lib/identity/session";
 import { redirect } from "next/navigation";
 
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
                 <td><strong>{a.businessName as string || a.auditId as string}</strong></td>
                 <td style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{a.targetUrl as string || "—"}</td>
                 <td><span className={`status-badge ${statusClass(a.latestState as string)}`}>{a.latestState as string}</span></td>
-                <td style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{a.createdAt ? new Date(a.createdAt as string).toLocaleDateString() : "—"}</td>
+                <td style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{formatAuditDate(a.createdAt as string)}</td>
                 <td><a href={`/audits/${a.auditId}`}>View</a></td>
               </tr>
             ))}

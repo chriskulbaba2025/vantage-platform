@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { REVIEWER_COOKIE, isValidReviewerToken } from "@/lib/reviewer-auth";
 import { currentPrincipal } from "@/lib/identity/session";
+import { formatAuditTimestamp, formatAuditTime } from "@/lib/format-time";
 
 export const dynamic = "force-dynamic";
 
@@ -71,24 +72,35 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
         )}
         <p><strong>Audit ID:</strong> <code>{auditId}</code></p>
         <p><strong>Version:</strong> {status!.version}</p>
-        <p><strong>Created:</strong> {status!.createdAt ? new Date(status!.createdAt).toLocaleString() : "—"}</p>
-        <p><strong>Updated:</strong> {status!.updatedAt ? new Date(status!.updatedAt).toLocaleString() : "—"}</p>
+        <p><strong>Created:</strong> {formatAuditTimestamp(status!.createdAt)}</p>
+        <p><strong>Updated:</strong> {formatAuditTimestamp(status!.updatedAt)}</p>
       </div>
 
       <div className="card">
         <h2 style={{ fontSize: "1rem", marginBottom: 12 }}>Lifecycle History</h2>
         <table>
           <thead>
-            <tr><th>From</th><th>To</th><th>Time</th></tr>
+            <tr><th>From</th><th>To</th><th>Time</th><th>Reason</th></tr>
           </thead>
           <tbody>
-            {(status!.lifecycle || []).map((e: Record<string, unknown>, i: number) => (
-              <tr key={i}>
-                <td>{e.from as string || "—"}</td>
-                <td><span className={`status-badge ${stateClass(e.to as string)}`}>{e.to as string}</span></td>
-                <td style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{e.at ? new Date(e.at as string).toLocaleTimeString() : "—"}</td>
-              </tr>
-            ))}
+            {(status!.lifecycle || []).map((e: Record<string, unknown>, i: number) => {
+              const toState = String(e.to || "");
+              const failed = /failed|render_failed/i.test(toState);
+              const reason = typeof e.reason === "string" && e.reason.trim() ? e.reason : null;
+              return (
+                <tr key={i} style={failed ? { background: "var(--amber)" } : undefined}>
+                  <td>{e.from as string || "—"}</td>
+                  <td><span className={`status-badge ${stateClass(toState)}`}>{toState}</span></td>
+                  <td style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{formatAuditTime(e.at as string)}</td>
+                  <td style={{ fontSize: "0.8rem" }}>
+                    {/* PRYSM-INCIDENT-01 — governed lifecycle transition reasons
+                        are safe display strings (no secrets/payloads); failed
+                        events surface them clearly for diagnosis. */}
+                    {reason || "—"}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
