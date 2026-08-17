@@ -763,9 +763,16 @@ export function createAuditOrchestrator({
   // -------------------------------------------------------------------
   // Lifecycle helper — execution-scoped idempotency keys
   // -------------------------------------------------------------------
+  // PRYSM-OBSERVABILITY-01: the transition suffix doubles as the governed
+  // reason text (e.g. "render-finalization-gate-failed:<message>").  It was
+  // previously consumed ONLY by the idempotency key, so the canonical
+  // lifecycle event persisted an empty reason and production diagnosis
+  // depended on logs.  Persist it as the event reason — lifecycleService
+  // already accepts `reason` and the event schema/repository store it.
   async function doTransition(auditId, tenantId, executionId, toState, suffix, artifactKey) {
     await lifecycleService.transition({
       auditId, tenantId, toState,
+      reason: suffix || "",
       transitionIdempotencyKey: `${auditId}:${executionId}:${suffix}`,
       ...(artifactKey ? { artifactKey } : {}),
     });
