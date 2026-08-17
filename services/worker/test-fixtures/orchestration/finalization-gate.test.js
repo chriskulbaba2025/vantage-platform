@@ -367,6 +367,19 @@ test("PRYSM-CLOSE-06b: failing finalization gate blocks renderer with zero page 
   const cs = await lifecycleService.currentState(auditId, tenantId);
   assert.equal(cs.state, T.RENDER_FAILED, "lifecycle must be render_failed");
 
+  // PRYSM-OBSERVABILITY-01: the governed failure reason must be persisted on
+  // the canonical lifecycle event.  Regression: the orchestrator previously
+  // passed the reason only into the transition idempotency key, so the event
+  // reason column stayed empty and production diagnosis depended on logs.
+  const history = await lifecycleService.history(auditId, tenantId);
+  const failedEvent = (history || []).find((e) => e.nextState === T.RENDER_FAILED);
+  assert.ok(failedEvent, "render_failed event must exist in lifecycle history");
+  assert.match(
+    failedEvent.reason || "",
+    /^render-finalization-gate-failed:/,
+    "render_failed event must persist the governed gate-failure reason",
+  );
+
   // Renderer page artifacts = 0
   const prefix = pageArtifactPrefix({ tenantId, clientId, auditId });
   const indexKey = `${prefix}index.html`;
