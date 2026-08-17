@@ -1,6 +1,6 @@
 # PRYSM-ACTIVATE-01 — Production Product Boundary Closure
 
-**Version:** 1.0.1 (refrozen before implementation)
+**Version:** 1.0.2 (refrozen before implementation)
 **Skill:** governed-coding-upgrade v2.1.0
 **Starting production SHA:** `4d9cf307096dd9073a980628ff90350261946e4d`
 **Branch:** `fix/prysm-production-activation`
@@ -28,7 +28,7 @@ No report renderer, scoring semantics, evidence acquisition, tenant authorizatio
 - [ ] `tests/provisioning/admin-flow.spec.ts` only if an activation assertion is required
 - [ ] `services/worker/src/application/audit-service.js`
 - [ ] `services/worker/src/application/production-runtime.js`
-- [ ] `services/worker/src/application/production-activation.test.js` (new)
+- [ ] `services/worker/src/audit/production-activation.test.js` (new; included by the existing `npm test` glob)
 - [ ] `services/worker/scripts/acceptance-wpi.js` only if needed to correct an escaped proof
 
 ## Prohibited files
@@ -89,13 +89,13 @@ No report renderer, scoring semantics, evidence acquisition, tenant authorizatio
 
 ### ACT-06 — Controlled proof and regression
 
-- [ ] new focused production-activation regression proves ACT-02/03 with zero provider/model/Cognito calls.
-- [ ] `npm test` PASS.
+- [ ] focused production-activation regression proves ACT-02/03 with zero live provider/model/Cognito calls.
+- [ ] `npm test` PASS, including the production-activation regression.
 - [ ] `npm run check:template` PASS (v1 lock).
 - [ ] `npm run acceptance:provisioning` PASS.
 - [ ] `npm run acceptance:wp12` PASS.
-- [ ] `npm run acceptance:tenant` or equivalent tenant acceptance PASS.
-- [ ] WP-I plumbing proof PASS if touched/needed.
+- [ ] tenant acceptance PASS.
+- [ ] WP-I plumbing proof PASS and proves persisted v2 design selection.
 - [ ] root TypeScript check/build PASS.
 - [ ] Playwright activation/provisioning E2E PASS in controlled identity mode.
 - [ ] exact-head GitHub CI PASS.
