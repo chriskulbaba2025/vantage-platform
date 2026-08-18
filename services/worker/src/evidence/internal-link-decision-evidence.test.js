@@ -32,7 +32,7 @@ function viableSiteSourceResult() {
   return {
     contractVersion: "1.0.0",
     schemaVersion: "1.0.0",
-    source: "dataforseo-onpage",
+    source: "site",
     provider: "DataForSEO",
     adapterVersion: "1.2.0",
     status: "AVAILABLE",
@@ -85,7 +85,7 @@ function failedSiteSourceResult() {
   return {
     contractVersion: "1.0.0",
     schemaVersion: "1.0.0",
-    source: "dataforseo-onpage",
+    source: "site",
     provider: "DataForSEO",
     adapterVersion: "1.2.0",
     status: "FAILED",
