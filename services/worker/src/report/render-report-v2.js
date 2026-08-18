@@ -370,26 +370,39 @@ function internalLinksSection(model) {
     body = `<h3>Implementation-Ready Recommendations (${opportunities.length})</h3>
 <p class="muted small">High- and medium-confidence recommendations traceable to crawled source and target page content.</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Source</th><th>Target</th><th>Anchor</th><th>Reason</th><th>Stage</th><th>Confidence</th></tr></thead>
+<thead><tr><th>Source</th><th>Target</th><th>Anchor</th><th>Source context</th><th>Reason</th><th>Stage</th><th>Confidence</th><th>Warning</th></tr></thead>
 <tbody>${opportunities.slice(0, 25).map((o) => `
   <tr>
     <td class="small"><a href="${safeHref(o.sourceUrl)}">${e((o.sourceUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
     <td class="small"><a href="${safeHref(o.targetUrl)}">${e((o.targetUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
     <td>${e(o.proposedAnchor || "")}</td>
+    <td class="small">${e(o.relevantSurroundingText || "—")}</td>
     <td class="small">${e(LINK_REASON_LABEL[o.reasonForLink] || o.reasonForLink || "")}</td>
     <td>${e(o.funnelStage || "")}</td>
     <td><span class="chip ${o.confidence === "high" ? "cap-ok" : "cap-partial"}">${e(o.confidence || "")}</span></td>
+    <td class="small">${o.duplicateAnchorWarning ? e(o.duplicateAnchorWarning) : "—"}</td>
   </tr>`).join("")}</tbody>
 </table></div>`;
   }
 
-  const brokenBlock = brokenLinks.length
-    ? `<h3>Broken Internal Links (${brokenLinks.length})</h3>
+  // PRYSM production defect 3 — broken links are either traced
+  // ({source, url} records from the link graph) or untraced (historical
+  // strings / records without a proven source).  Untraced destinations
+  // render an honest count-only state — never "unknown → unknown".
+  const tracedBroken = brokenLinks.filter((b) => typeof b === "object" && b && b.source && (b.url || b.target));
+  const untracedBroken = brokenLinks.filter((b) => !(typeof b === "object" && b && b.source));
+  const brokenTable = tracedBroken.length
+    ? `<h3>Broken Internal Links (${tracedBroken.length} traced)</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Source</th><th>Target</th></tr></thead>
-<tbody>${brokenLinks.slice(0, 10).map((b) => `<tr><td class="small">${e(b.source || "unknown")}</td><td class="small">${e(b.url || b.target || "unknown")}</td></tr>`).join("")}</tbody>
+<tbody>${tracedBroken.slice(0, 10).map((b) => `<tr><td class="small">${e(b.source)}</td><td class="small">${e(b.url || b.target)}</td></tr>`).join("")}</tbody>
 </table></div>`
     : "";
+  const untracedNote = untracedBroken.length
+    ? `<h3>Broken Internal Links (${untracedBroken.length} untraced)</h3>
+<p class="small">${e(untracedBroken.length)} broken link destination(s) could not be traced to a source page from the collected evidence — count only, no source implied.</p>`
+    : "";
+  const brokenBlock = brokenTable + untracedNote;
 
   const orphanBlock = orphans.length && opp?.coverage?.crawlComplete !== false
     ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>

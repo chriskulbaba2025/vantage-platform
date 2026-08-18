@@ -241,3 +241,65 @@ test("T10-19: consulting article excludes coaching recommendation without target
   // Blog H2 is "AI in Consulting", "Remote Strategy" — no "Coaching" mention → no recommendation
   assert.equal(blogToCoaching, undefined, "Blog should not link to coaching without target-specific evidence");
 });
+
+// ── PRYSM production defect 2 — topic-hierarchy-only qualification ────────
+
+const REBOOT_STYLE = {
+  domain: "rebootbusinesscoaching.com", pageCount: 4, internalLinkCount: 0, brokenInternalLinks: [], services: ["business coaching"],
+  coverage: { completed: 4, requested: 4 },
+  pages: [
+    { url: "https://rebootbusinesscoaching.com/", title: "Business Coaching", status: 200, headings: { h1: ["Business Coaching"], h2: ["Business Coaching Services"], h3: [] }, links: [], words: 600 },
+    { url: "https://rebootbusinesscoaching.com/services", title: "Services", status: 200, headings: { h1: ["Business Coaching Services"], h2: ["Business Coaching"], h3: [] }, links: [], words: 500 },
+    { url: "https://rebootbusinesscoaching.com/about", title: "About", status: 200, headings: { h1: ["About Business Coaching"], h2: ["Business Coaching"], h3: [] }, links: [], words: 400 },
+    { url: "https://rebootbusinesscoaching.com/blog/coaching-benefits", title: "Benefits", status: 200, headings: { h1: ["Business Coaching Benefits"], h2: [], h3: [] }, links: [], words: 900 },
+  ],
+};
+
+test("T10-20: shared topic words alone do NOT become client-facing recommendations", () => {
+  const r = generateInternalLinkOpportunities(REBOOT_STYLE, { targetUrl: "https://rebootbusinesscoaching.com", businessName: "Reboot" });
+  const toHome = r.opportunities.filter((o) => o.targetUrl === "https://rebootbusinesscoaching.com/");
+  assert.equal(toHome.length, 0, "repetitive shared-heading home links must not be client-facing");
+  const excluded = r.excludedCandidates.filter((e) => e.reason === "topic_hierarchy_only_insufficient" || e.reason === "homepage_target_insufficient");
+  assert.ok(excluded.length > 0, "insufficient home/topic pairs remain visible as excluded diagnostics");
+});
+
+test("T10-21: strong source→service relationship still passes", () => {
+  const r = generateInternalLinkOpportunities(SITE, INPUT);
+  const svc = r.opportunities.some((o) => o.reasonForLink === "source_content_supports_related_service_page");
+  assert.ok(svc, "target-specific service relationships remain client-facing");
+});
+
+test("T10-22: informational→commercial relationship still passes", () => {
+  const fixture = {
+    domain: "example.com", pageCount: 3, internalLinkCount: 0, brokenInternalLinks: [], services: ["Coaching"],
+    coverage: { completed: 3, requested: 3 },
+    pages: [
+      { url: "https://example.com/", title: "Home", status: 200, headings: { h1: ["Home"], h2: [], h3: [] }, links: [], words: 300 },
+      { url: "https://example.com/services/coaching", title: "Leadership Coaching", status: 200, headings: { h1: ["Leadership Coaching"], h2: [], h3: [] }, links: [], words: 400 },
+      { url: "https://example.com/blog/coaching-benefits", title: "Coaching Benefits", status: 200, headings: { h1: ["Business Coaching Benefits"], h2: ["Coaching Results"], h3: [] }, links: [], words: 900 },
+    ],
+  };
+  const r = generateInternalLinkOpportunities(fixture, { targetUrl: "https://example.com", businessName: "Example" });
+  const info = r.opportunities.some((o) => o.reasonForLink === "informational_content_progresses_to_commercial_page" && o.sourceUrl === "https://example.com/blog/coaching-benefits" && o.targetUrl === "https://example.com/services/coaching");
+  assert.ok(info, "blog → service URL progression remains client-facing");
+});
+
+test("T10-23: consideration→conversion relationship still passes", () => {
+  const fixture = {
+    domain: "example.com", pageCount: 3, internalLinkCount: 0, brokenInternalLinks: [], services: ["Coaching"],
+    coverage: { completed: 3, requested: 3 },
+    pages: [
+      { url: "https://example.com/", title: "Home", status: 200, headings: { h1: ["Home"], h2: [], h3: [] }, links: [], words: 400 },
+      { url: "https://example.com/services/coaching", title: "Leadership Coaching", status: 200, headings: { h1: ["Leadership Coaching"], h2: ["Coaching Session Booking"], h3: [] }, links: [], words: 700 },
+      { url: "https://example.com/booking", title: "Book Coaching", status: 200, headings: { h1: ["Book Coaching"], h2: [], h3: [] }, links: [], words: 300 },
+    ],
+  };
+  const r = generateInternalLinkOpportunities(fixture, { targetUrl: "https://example.com", businessName: "Example" });
+  const conv = r.opportunities.some((o) => o.reasonForLink === "consideration_content_progresses_to_conversion_page" && o.targetUrl === "https://example.com/booking");
+  assert.ok(conv, "service page → booking progression remains client-facing");
+});
+
+test("T10-25: low-confidence items remain excluded from client-facing recommendations", () => {
+  const r = generateInternalLinkOpportunities(SITE, INPUT);
+  assert.ok(r.opportunities.every((o) => o.confidence === "high" || o.confidence === "medium"), "client-facing list contains only high/medium confidence");
+});

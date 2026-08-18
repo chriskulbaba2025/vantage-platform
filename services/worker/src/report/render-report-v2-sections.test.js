@@ -152,6 +152,75 @@ test("V2R-01: topical/content opportunities section renders canonical ideas from
 });
 
 // ---------------------------------------------------------------------------
+// PRYSM production defect 2/3 — link context, duplicate warnings, broken shapes
+// ---------------------------------------------------------------------------
+
+test("IL-01: relevantSurroundingText and duplicateAnchorWarning are rendered when present", async () => {
+  const ev = {
+    ...richEvidence(),
+    internalLinkOpportunities: {
+      ...richEvidence().internalLinkOpportunities,
+      opportunities: [
+        {
+          sourceUrl: "https://x.com/coaching", targetUrl: "https://x.com/pricing",
+          proposedAnchor: "coaching options and pricing",
+          relevantSurroundingText: "Compare coaching options before committing to a pricing plan",
+          reasonForLink: "consideration_content_progresses_to_conversion_page",
+          funnelStage: "mofu", confidence: "high",
+          duplicateAnchorWarning: "Anchor already used for: https://x.com/other",
+        },
+      ],
+    },
+  };
+  const html = await render(scoreAudit(INPUT, ev));
+  assert.match(html, /Compare coaching options before committing to a pricing plan/, "surrounding context rendered");
+  assert.match(html, /Anchor already used for: https:\/\/x\.com\/other/, "duplicate-anchor warning rendered");
+});
+
+test("IL-02: absent context/warning renders explicit non-misleading cells, no fabrication", async () => {
+  const ev = {
+    ...richEvidence(),
+    internalLinkOpportunities: {
+      ...richEvidence().internalLinkOpportunities,
+      opportunities: [
+        {
+          sourceUrl: "https://x.com/coaching", targetUrl: "https://x.com/pricing",
+          proposedAnchor: "coaching options and pricing",
+          reasonForLink: "consideration_content_progresses_to_conversion_page",
+          funnelStage: "mofu", confidence: "high",
+        },
+      ],
+    },
+  };
+  const html = await render(scoreAudit(INPUT, ev));
+  assert.ok(!/INVENTED-CONTEXT-SENTINEL/.test(html), "no fabricated context text");
+  assert.match(html, /—|Not captured/, "explicit empty cell marker present");
+});
+
+test("IL-03: traced broken links render actual source and target", async () => {
+  const ev = {
+    ...richEvidence(),
+    site: { ...richEvidence().site, brokenInternalLinks: [{ source: "https://x.com/old", url: "https://x.com/missing" }] },
+    internalLinkOpportunities: null,
+  };
+  const html = await render(scoreAudit(INPUT, ev));
+  assert.match(html, /https:\/\/x\.com\/old/, "actual source rendered");
+  assert.match(html, /https:\/\/x\.com\/missing/, "actual target rendered");
+  assert.ok(!html.includes("unknown"), "no unknown → unknown rendering for traced records");
+});
+
+test("IL-04: historical string broken links render an honest count-only state", async () => {
+  const ev = {
+    ...richEvidence(),
+    site: { ...richEvidence().site, brokenInternalLinks: ["https://x.com/missing"] },
+    internalLinkOpportunities: null,
+  };
+  const html = await render(scoreAudit(INPUT, ev));
+  assert.ok(!html.includes("unknown"), "no unknown → unknown rendering for historical strings");
+  assert.match(html, /could not be traced to a source page|not traced|count-only/i, "honest count-only limitation rendered");
+});
+
+// ---------------------------------------------------------------------------
 // V2R-02 — CMS/platform constraints
 // ---------------------------------------------------------------------------
 

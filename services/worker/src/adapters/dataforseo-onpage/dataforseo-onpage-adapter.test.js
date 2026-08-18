@@ -331,6 +331,66 @@ test("production-shaped link graph is attached to pages and suppresses existing-
 // 2. Task submission retry
 // ---------------------------------------------------------------------------
 
+test("broken destinations are traced to source pages from the retrieved link graph", async () => {
+  const sourceUrl = "https://example.com/blog/old-guide";
+  const brokenUrl = "https://example.com/gone-page";
+  const fixtures = {
+    taskPost: { taskId: "broken-trace-001", rawTask: { id: "broken-trace-001", status: "pending" } },
+    pollTask: { status: "ready", taskId: "broken-trace-001" },
+    summary: {
+      crawl_status: { crawl_stop_reason: "completed", max_crawl_pages: 2, pages_crawled: 2, pages_in_queue: 0 },
+      pages_crawled: 2, total_pages: 2, max_crawl_pages: 2,
+      domain_info: { start_page_status_code: 200, checks: {} },
+    },
+    pages: {
+      items: [
+        { url: sourceUrl, status_code: 200, meta: { title: "Old Guide", description: "D", canonical: sourceUrl, htags: { h1: ["Old Guide"], h2: [], h3: [] }, content: { plain_text_word_count: 300 }, follow: true } },
+        { url: brokenUrl, status_code: 404, meta: { title: "", description: "", canonical: "", htags: { h1: [], h2: [], h3: [] }, content: { plain_text_word_count: 0 }, follow: false } },
+      ],
+      total_count: 2,
+    },
+    links: { items: [{ link_from: sourceUrl, link_to: brokenUrl, anchor: "Gone" }], total_count: 1 },
+    duplicateTags: { items: [] }, duplicateContent: { items: [] }, microdata: { items: [] },
+  };
+  const site = await crawlWithDataforseo("https://example.com", {
+    maxPages: 2, pollTimeoutMs: 1000, pollIntervalMs: 1, enableContentParsing: false,
+    clientOptions: { mode: "fixture", fixtures },
+  });
+  const traced = (site.brokenInternalLinks || []).find((b) => (b.url || b) === brokenUrl);
+  assert.ok(traced, "broken destination recorded");
+  assert.equal(typeof traced, "object", "traceable record shape");
+  assert.equal(traced.source, sourceUrl, "source page traced from link_from");
+  assert.equal(traced.url, brokenUrl, "broken destination preserved");
+});
+
+test("untraceable broken destinations never fabricate a source page", async () => {
+  const brokenUrl = "https://example.com/orphan-404";
+  const fixtures = {
+    taskPost: { taskId: "broken-nosrc-001", rawTask: { id: "broken-nosrc-001", status: "pending" } },
+    pollTask: { status: "ready", taskId: "broken-nosrc-001" },
+    summary: {
+      crawl_status: { crawl_stop_reason: "completed", max_crawl_pages: 1, pages_crawled: 1, pages_in_queue: 0 },
+      pages_crawled: 1, total_pages: 1, max_crawl_pages: 1,
+      domain_info: { start_page_status_code: 200, checks: {} },
+    },
+    pages: {
+      items: [
+        { url: brokenUrl, status_code: 404, meta: { title: "", description: "", canonical: "", htags: { h1: [], h2: [], h3: [] }, content: { plain_text_word_count: 0 }, follow: false } },
+      ],
+      total_count: 1,
+    },
+    links: { items: [], total_count: 0 },
+    duplicateTags: { items: [] }, duplicateContent: { items: [] }, microdata: { items: [] },
+  };
+  const site = await crawlWithDataforseo("https://example.com", {
+    maxPages: 1, pollTimeoutMs: 1000, pollIntervalMs: 1, enableContentParsing: false,
+    clientOptions: { mode: "fixture", fixtures },
+  });
+  const rec = (site.brokenInternalLinks || []).find((b) => (b.url || b) === brokenUrl);
+  assert.ok(rec, "broken destination recorded");
+  assert.equal(rec.source, undefined, "no source field fabricated without a proven edge");
+});
+
 test("task submission retries twice with exponential backoff on transient errors", async () => {
   setTestCredentials();
   try {
@@ -978,8 +1038,11 @@ test("pages with error status codes are tracked in brokenInternalLinks", async (
 
   assert.equal(result.pageCount, 5);
   assert.equal(result.brokenInternalLinks.length, 2);
-  assert.ok(result.brokenInternalLinks.some((u) => u.includes("page-1")));
-  assert.ok(result.brokenInternalLinks.some((u) => u.includes("page-3")));
+  // Governed record shape ({url} with optional traced source) — never a bare
+  // string that downstream renderers would display as "unknown → unknown".
+  assert.ok(result.brokenInternalLinks.every((b) => typeof b === "object" && typeof b.url === "string" && b.url.length > 0));
+  assert.ok(result.brokenInternalLinks.some((b) => b.url.includes("page-1")));
+  assert.ok(result.brokenInternalLinks.some((b) => b.url.includes("page-3")));
 });
 
 // ---------------------------------------------------------------------------
@@ -2094,8 +2157,10 @@ test("404 pages are excluded from content-quality counts", async () => {
 
   // Total pageCount still includes all
   assert.equal(result.pageCount, 6);
-  // 404 pages in brokenInternalLinks
+  // 404 pages in brokenInternalLinks — governed record shape ({url}, source
+  // only when the link graph proves one)
   assert.equal(result.brokenInternalLinks.length, 3);
+  assert.ok(result.brokenInternalLinks.every((b) => typeof b === "object" && typeof b.url === "string" && b.url.length > 0));
   // Content-quality counts use only non-404 pages (3 content pages)
   // Since no page-level heading data was extracted, h1Missing uses
   // page_metrics.checks.no_h1_tag (1)

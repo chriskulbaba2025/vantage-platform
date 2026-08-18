@@ -241,6 +241,22 @@ export function generateInternalLinkOpportunities(site, input) {
       const rel = relationship(src, tgt, services);
       if (!rel) { excludedCandidates.push({ sourceUrl: src.url, targetUrl: tgt.url, reason: "no_meaningful_relationship" }); continue; }
       if (rel === "generic_topic_mention") { excludedCandidates.push({ sourceUrl: src.url, targetUrl: tgt.url, reason: "generic_topic_mention", detail: "Single shared word — not sufficient for a recommendation" }); continue; }
+      // PRYSM production defect 2 — shared topic words alone are not an
+      // implementation-ready relationship.  Topic-hierarchy-only pairs remain
+      // available as diagnostic/excluded candidates but never become
+      // client-facing recommendations (which require target-specific service,
+      // informational→commercial, consideration→conversion, or explicit
+      // target-service evidence).
+      if (rel === "pages_belong_to_same_topic_hierarchy") { excludedCandidates.push({ sourceUrl: src.url, targetUrl: tgt.url, reason: "topic_hierarchy_only_insufficient", detail: "Shared topic words alone are not implementation-ready evidence" }); continue; }
+      // PRYSM production defect 2 (second path) — a heading-only service match
+      // against the SITE ROOT must not qualify the homepage as a service
+      // target (this produced repetitive "link back to the homepage"
+      // recommendations).  Service-target evidence requires a non-root
+      // service URL; the homepage has no URL-slug evidence by definition.
+      if (norm(tgt.url) === norm(input.targetUrl) && (rel === "source_content_supports_related_service_page" || rel === "source_content_references_target_service" || rel === "informational_content_progresses_to_commercial_page")) {
+        excludedCandidates.push({ sourceUrl: src.url, targetUrl: tgt.url, reason: "homepage_target_insufficient", detail: "Homepage heading match alone is not service-page evidence" });
+        continue;
+      }
 
       const anchor = sourceAnchor(src, tgt, services);
       if (!anchor) { excludedCandidates.push({ sourceUrl: src.url, targetUrl: tgt.url, reason: "no_source_anchor", detail: "No target-specific source heading available" }); continue; }
