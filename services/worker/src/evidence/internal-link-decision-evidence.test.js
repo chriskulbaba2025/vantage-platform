@@ -149,11 +149,11 @@ test("PRYSM-INTERNAL-LINK-01: canonical derivation is deterministic for identica
   assert.equal(first.evidence.internalLinkOpportunities._sourceStatus.completedAt, FIXED_TIME);
 });
 
-test("PRYSM-INTERNAL-LINK-01: schema 1.1.0 explicitly governs the new optional field while accepting historical 1.0.0 payloads", () => {
+test("PRYSM-INTERNAL-LINK-01: frozen decision-evidence v1 schema accepts historical and derived extension payloads", () => {
   const validateContract = createValidator();
 
-  assert.equal(decisionSchema.version, "1.1.0");
-  assert.ok(decisionSchema.properties.internalLinkOpportunities);
+  assert.equal(decisionSchema.version, "1.0.0");
+  assert.equal(decisionSchema.additionalProperties, undefined, "frozen v1 schema permits governed extension fields");
 
   const historicalEvidence = {
     contractVersion: "1.0.0",
@@ -166,4 +166,13 @@ test("PRYSM-INTERNAL-LINK-01: schema 1.1.0 explicitly governs the new optional f
   };
   const historicalValidation = validateContract(decisionSchema.$id, historicalEvidence);
   assert.equal(historicalValidation.valid, true, JSON.stringify(historicalValidation.errors));
+
+  const derivedEvidence = buildDecisionEvidence({
+    allSourceResults: [{ source: "dataforseo-onpage", sourceResult: viableSiteSourceResult() }],
+    suppliedCompetitors: [],
+    validateContract,
+  }).evidence;
+  assert.ok(derivedEvidence.internalLinkOpportunities);
+  const derivedValidation = validateContract(decisionSchema.$id, derivedEvidence);
+  assert.equal(derivedValidation.valid, true, JSON.stringify(derivedValidation.errors));
 });
