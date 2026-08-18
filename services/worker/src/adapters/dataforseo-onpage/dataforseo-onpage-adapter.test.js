@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { crawlWithDataforseo, ADAPTER_VERSION } from "./dataforseo-onpage-adapter.js";
 import { createDataforseoOnpageClient } from "./dataforseo-onpage-client.js";
 import { SOURCE_STATUS, ERROR_CATEGORY } from "../../scoring/evidence-contracts.js";
+import { generateInternalLinkOpportunities } from "../../evidence/internal-link-opportunity.js";
 
 // ---------------------------------------------------------------------------
 // Test credential setup — required for live-mode client tests so the
@@ -224,6 +225,106 @@ test("successful crawl normalizes pages into canonical evidence envelope", async
   assert.ok(result.rawArtifactRef.includes("test-task-20260726-001"));
   assert.ok(result._raw);
   assert.equal(result._raw.taskId, "test-task-20260726-001");
+});
+
+test("production-shaped link graph is attached to pages and suppresses existing-link recommendations", async () => {
+  const sourceUrl = "https://example.com/blog/seo-services-guide";
+  const targetUrl = "https://example.com/services/seo-services";
+  const fixtures = {
+    taskPost: {
+      taskId: "link-graph-task-001",
+      rawTask: { id: "link-graph-task-001", status: "pending" },
+    },
+    pollTask: { status: "ready", taskId: "link-graph-task-001" },
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "completed",
+        max_crawl_pages: 2,
+        pages_crawled: 2,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 2,
+      total_pages: 2,
+      max_crawl_pages: 2,
+      domain_info: { start_page_status_code: 200, checks: {} },
+    },
+    pages: {
+      items: [
+        {
+          url: sourceUrl,
+          status_code: 200,
+          meta: {
+            title: "SEO Services Guide",
+            description: "A practical SEO services guide.",
+            canonical: sourceUrl,
+            htags: { h1: ["SEO Services Guide"], h2: ["SEO Services"], h3: [] },
+            content: { plain_text_word_count: 350 },
+            follow: true,
+          },
+        },
+        {
+          url: targetUrl,
+          status_code: 200,
+          meta: {
+            title: "SEO Services",
+            description: "SEO services for businesses.",
+            canonical: targetUrl,
+            htags: { h1: ["SEO Services"], h2: [], h3: [] },
+            content: { plain_text_word_count: 250 },
+            follow: true,
+          },
+          structured_data: { items: [{ type: "Service", name: "SEO Services" }] },
+        },
+      ],
+      total_count: 2,
+    },
+    links: {
+      items: [{
+        link_from: sourceUrl,
+        link_to: targetUrl,
+        anchor: "SEO Services",
+      }],
+      total_count: 1,
+    },
+    duplicateTags: { items: [] },
+    duplicateContent: { items: [] },
+    microdata: { items: [] },
+  };
+
+  const site = await crawlWithDataforseo("https://example.com", {
+    maxPages: 2,
+    pollTimeoutMs: 1000,
+    pollIntervalMs: 1,
+    enableContentParsing: false,
+    clientOptions: { mode: "fixture", fixtures },
+  });
+
+  const sourcePage = site.pages.find((p) => p.url === sourceUrl);
+  assert.ok(sourcePage, "source page is normalized");
+  assert.deepEqual(sourcePage.links, [{
+    url: targetUrl,
+    text: "SEO Services",
+    target: "",
+  }], "link_from/link_to edge is retained on its source page");
+
+  const derived = generateInternalLinkOpportunities(site, {
+    targetUrl: "https://example.com",
+  });
+  assert.equal(
+    derived.allOpportunities.some(
+      (o) => o.sourceUrl === sourceUrl && o.targetUrl === targetUrl,
+    ),
+    false,
+    "existing A→B link is never emitted as a new opportunity",
+  );
+  assert.ok(
+    derived.excludedCandidates.some(
+      (c) => c.sourceUrl === sourceUrl &&
+        c.targetUrl === targetUrl &&
+        c.reason === "already_linked",
+    ),
+    "existing A→B link is explicitly excluded as already_linked",
+  );
 });
 
 // ---------------------------------------------------------------------------
