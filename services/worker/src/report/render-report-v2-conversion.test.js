@@ -15,6 +15,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import {
   calculateFindingPriority,
@@ -509,6 +510,10 @@ test("CR-15: strengths require assessed evidence", () => {
 
 const itemById = (list, id) => list.find((i) => i.id === id);
 
+/** HTML-escape exactly as the renderer does, so comparisons are like-for-like. */
+const esc = (v) => String(v ?? "")
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
 test("CR-16: an assessed foundation candidate can PASS", () => {
   const checklist = buildFoundationChecklist(scoreWith(assessedSite()));
   assert.equal(itemById(checklist, "https").status, FOUNDATION_STATUS.PASS);
@@ -707,7 +712,30 @@ const FROZEN = {
   },
   availabilityLabel: "Site availability",
   robotsLabel: "robots.txt configuration",
+  outageSentence: "Visitors reaching these URLs cannot use the site.",
 };
+
+/**
+ * Fixture matrix covering every foundation branch that production can reach.
+ * Used by the whole-checklist golden freeze and the render-fidelity check.
+ */
+function foundationMatrix() {
+  return [
+    ["assessed", assessedSite()],
+    ["unassessed", unassessedSite()],
+    ["provider-failed", failedSiteEvidence("FAILED", "Task submission failed: network error")],
+    ["crawl-blocked", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")],
+    ["target-outage", assessedSite({
+      statusCounts: { 503: 2 },
+      pages: [{ crawledUrl: "https://x.com/", statusCode: 503, headings: {} }],
+    })],
+    ["http-and-noindex", assessedSite({
+      targetUrl: "http://x.com/",
+      nonIndexablePages: [{ url: "https://x.com/", reason: "noindex" }],
+    })],
+    ["robots-retrieved", assessedSite({ robotsText: "User-agent: *\nAllow: /" })],
+  ];
+}
 
 test("CR-36: the exported wording constants match the frozen contract", () => {
   // Importing a constant and asserting `endsWith(it)` proves identity, not
@@ -798,11 +826,18 @@ test("CR-39: no client-rendered foundation field ever claims site behaviour outs
         if (!value) continue;
         assert.ok(!CLAIM.test(scrub(value)), `${i.id}.${field} must make no site-behaviour claim, got: ${value}`);
       }
-      // `detail` may contain such words ONLY inside the frozen scope note or
-      // the frozen target-side-outage sentence, both of which are governed.
-      const stripped = scrub(String(i.detail || "")
-        .replace(FROZEN.scopeNote, "")
-        .replace(/Visitors reaching these URLs cannot use the site\./, ""));
+      // `detail` may contain such words ONLY inside the frozen scope note, or
+      // inside the target-side-outage sentence — and that sentence is allowed
+      // ONLY on site_availability when target-side evidence proved an outage.
+      // A previous audit exploited a blanket strip of that sentence to smuggle
+      // the claim onto an unrelated item, so the exemption is now scoped.
+      const outageAllowed =
+        i.id === "site_availability" && i.status === FOUNDATION_STATUS.ACTION_REQUIRED;
+      const stripped = scrub(
+        String(i.detail || "")
+          .replace(FROZEN.scopeNote, "")
+          .replace(outageAllowed ? FROZEN.outageSentence : "", ""),
+      );
       assert.ok(!CLAIM.test(stripped), `${i.id}.detail claim outside the frozen wording, got: ${stripped}`);
     }
   }
@@ -824,6 +859,96 @@ test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", (
       required, [],
       `${label} must produce no ACTION REQUIRED foundation (got: ${required.join(", ")})`,
     );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CR-40 / CR-41 — GLOBAL freeze.
+//
+// Rounds 2–4 each froze only the wording the previous audit had attacked, so
+// the next audit simply attacked a different item or a different layer. The
+// governed invariant is global: NO checklist item, and no rendered cell, may
+// describe website behaviour except where target-side evidence proves it.
+// These two tests enforce it across every item and at render time.
+// ---------------------------------------------------------------------------
+
+/**
+ * Frozen fingerprint of the COMPLETE checklist (all 14 candidates, all
+ * client-rendered fields) for each fixture.  Reviewed before freezing:
+ * a provider failure renders evidence-scoped wording with the provider's own
+ * text attributed, and the only site-behaviour claim in the whole matrix is
+ * the "target-outage" fixture, where every crawled page returned HTTP 503.
+ *
+ * To change wording deliberately: run the suite, review each reported diff
+ * against the no-fabrication invariant, then paste the new fingerprint here.
+ */
+const CHECKLIST_GOLDEN = {
+  assessed: "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  unassessed: "1ab14008b83d55af0d91ac2cb54b7fc187ece111f877c4f87154c2e9fe395693",
+  "provider-failed": "bbe77121f8d4396c8a7e2e32834ccc49aff8e95caebd5ed9bbee0d83e2fb4bd0",
+  "crawl-blocked": "f87770094b25d3395b99c38e73de66763cafbc4384d2b4ddc17fa0ad742b15eb",
+  "target-outage": "b249c5d0b671094d224ea4ac751292abea10af854b5e12bab199b79d90213698",
+  "http-and-noindex": "76514e6aa9b39b65708e0be60db0f4547ecb1d6489bbc597d6b205749be20496",
+  "robots-retrieved": "46c0e4738f6eddae9f3c31b491ec3fe1a831fcab561776e2d8b84eb0e425174d",
+};
+
+test("CR-40: the complete foundation checklist is frozen for every branch", () => {
+  // Covers ALL 14 candidates and every client-rendered field, not just the two
+  // that a past defect happened to touch. Any wording, status, or requires
+  // change anywhere fails until it is deliberately reviewed and re-frozen.
+  const actual = {};
+  for (const [name, siteEvidence] of foundationMatrix()) {
+    const checklist = checklistForSite(siteEvidence).map((i) => ({
+      id: i.id, label: i.label, status: i.status,
+      detail: i.detail, requires: i.requires, evidenceNote: i.evidenceNote,
+      assessed: i.assessed, foundational: i.foundational,
+    }));
+    actual[name] = createHash("sha256").update(JSON.stringify(checklist)).digest("hex");
+  }
+  // Compared as a whole so one run reports every drift, not just the first.
+  assert.deepEqual(
+    actual, CHECKLIST_GOLDEN,
+    "foundation checklist wording/status changed — review each change, then re-freeze",
+  );
+});
+
+test("CR-41: rendered foundation cells reproduce the model verbatim", () => {
+  // Every prior assertion was model-level, so a claim appended at RENDER time,
+  // or a dropped attribution prefix, was undetectable. This closes that layer.
+  for (const [name, siteEvidence] of foundationMatrix()) {
+    const evidence = evidenceWith(siteEvidence);
+    const capabilityEvidence = buildCapabilityEvidence({
+      decisionEvidence: evidence, auditId: INPUT.auditId, generatedAt: FIXED_TS, pathValidationEvidence: null,
+    });
+    const model = scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS });
+    const checklist = buildFoundationChecklist(model);
+    const html = renderReportV2(model);
+    const start = html.indexOf('<section id="foundations"');
+    const section = html.slice(start, html.indexOf("</section>", start));
+
+    for (const i of checklist) {
+      assert.ok(section.includes(esc(i.label)), `${name}/${i.id}: label must render verbatim`);
+      assert.ok(section.includes(esc(i.detail)), `${name}/${i.id}: detail must render verbatim`);
+      if (i.requires) {
+        assert.ok(section.includes(esc(i.requires)), `${name}/${i.id}: requires must render verbatim`);
+      }
+      if (i.evidenceNote) {
+        // Attribution is a governed guarantee: provider text must never reach
+        // the client stripped of the prefix that marks it as quoted.
+        assert.ok(
+          i.evidenceNote.startsWith(EVIDENCE_ATTRIBUTION_PREFIX),
+          `${name}/${i.id}: evidenceNote must carry the attribution prefix`,
+        );
+        assert.ok(
+          section.includes(esc(i.evidenceNote)),
+          `${name}/${i.id}: attributed evidence note must render verbatim`,
+        );
+      }
+    }
+
+    // Nothing may be appended to the section beyond the governed model text.
+    const claims = section.match(/\b(unreachable|inaccessible)\b|\bdid not respond\b|\bcannot be used by anyone\b|\bdoes not load\b/gi) || [];
+    assert.deepEqual(claims, [], `${name}: renderer introduced a site-behaviour claim: ${claims.join("; ")}`);
   }
 });
 

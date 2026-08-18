@@ -606,6 +606,71 @@ message did.
 
 ---
 
+## 12. Correction round 5 — the freeze was scoped; the invariant is global
+
+The exact-head audit of `2e28469b` confirmed all ten round-4 defeats were
+caught, then defeated the guard with **8 new mutations**. Accepted in full.
+
+**Why it kept failing.** Rounds 2, 3 and 4 each froze exactly the wording the
+previous audit had attacked. The next audit simply attacked a different item
+or a different layer. The invariant stated at the top of
+`foundation-readiness.js` is global — *no* checklist item may describe website
+behaviour without target-side evidence — but the round-4 freeze covered only
+`site_availability` and `robots_txt`, two of fourteen candidates, and every
+assertion in the suite was model-level, leaving the renderer unguarded.
+
+**Defeats accepted.**
+
+| Class | Example |
+|---|---|
+| Unfrozen candidates | `indexability`, `https`, `conversion_measurement` details carried inline claims (N3, N4, N5) |
+| Strip exploit | CR-39 blanket-stripped the outage sentence, so *any* item could carry it (N6) |
+| Re-interpolation | provider text re-entered the ACTION_REQUIRED outage prose (N7) |
+| Render layer | the renderer could append a claim to every row, add one to the summary, or drop the attribution prefix — no test read rendered HTML (N1, N8, N2) |
+
+**Correction — enforce globally, at both layers.**
+
+1. **CR-40 — whole-checklist golden freeze.** A SHA-256 fingerprint of the
+   complete checklist (all 14 candidates × `label`, `status`, `detail`,
+   `requires`, `evidenceNote`, `assessed`, `foundational`) is frozen for a
+   7-fixture matrix covering every reachable branch: assessed, unassessed,
+   provider-failed, crawl-blocked, target-outage, http-and-noindex,
+   robots-retrieved. Any wording or status change anywhere in any item fails
+   until reviewed and re-frozen. Fingerprints are compared as a whole so one
+   run reports every drift.
+2. **CR-41 — render fidelity.** For every fixture, each item's `label`,
+   `detail`, `requires` and `evidenceNote` must appear verbatim (HTML-escaped)
+   in the rendered foundation section, `evidenceNote` must still carry the
+   attribution prefix at render time, and the section must contain no
+   site-behaviour claim beyond the governed model text.
+3. **CR-39 strip exploit closed.** The target-side outage sentence is now
+   permitted only on `site_availability` when its status is `ACTION_REQUIRED`.
+
+The frozen wording was reviewed before the fingerprints were accepted: across
+the whole matrix the only site-behaviour claim is on the `target-outage`
+fixture, where every crawled page returned HTTP 503.
+
+**Mutation challenge — all 8 new defeats, plus prior-round spot checks.**
+
+| # | Mutation | Round-4 result | Round-5 result |
+|---|---|---|---|
+| N6 | Outage sentence smuggled onto `indexability` | green | **2 fail** |
+| N3 | `indexability` claim, synonym-free phrasing | green | **2 fail** |
+| N4 | `https` ACTION_REQUIRED branch claim | green | **2 fail** |
+| N5 | `conversion_measurement` claim | green | **2 fail** |
+| N7 | Provider text re-interpolated into outage prose | green | **1 fail** |
+| N1 | Renderer appends a claim to every row | green | **1 fail** |
+| N2 | Renderer drops the attribution prefix | green | **1 fail** |
+| N8 | Renderer summary-paragraph claim | green | **1 fail** |
+| M-B | Claim in `requires` (round-4 regression check) | 2 fail | **4 fail** |
+| M-J | `EVIDENCE_SCOPE_NOTE` content (round-4 regression check) | 4 fail | **6 fail** |
+| M-H | robots `NOT_RETURNED` branch (round-4 regression check) | 2 fail | **3 fail** |
+| — | Restore | — | **43 pass / 0 fail** |
+
+**PROOF HARNESS RE-FREEZE (round 5): PASS**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |
