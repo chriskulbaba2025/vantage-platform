@@ -27,7 +27,28 @@ function buildConversionPaths(site) {
       status: blockers.length === 0 ? "Clear" : blockers.length <= 1 ? "Weak" : "Missing support",
     };
   });
-  if (!paths.length) paths.push({ name: "Primary conversion path", cta: null, host: "none", steps: ["Land on the website", "Search for a clear next step"], blockers: ["no clear conversion action detected"], status: "Missing" });
+  if (!paths.length) {
+    // PRYSM production defect 1 — an absent CTA is only a "Missing" finding
+    // when interactive conversion evidence was actually assessed.  When
+    // interactive evidence was never collected (browser validation
+    // unavailable/disabled), the honest state is Not Assessed — never a
+    // fabricated negative conversion claim.
+    if (site._interactiveEvidenceAvailable !== true) {
+      paths.push({
+        name: "Primary conversion path",
+        cta: null,
+        host: "none",
+        // The limitation message rides in the existing steps field — the
+        // frozen report-view-model path item has no separate limitation
+        // property (additionalProperties: false).
+        steps: ["Interactive conversion-path evidence was not collected for this audit."],
+        blockers: [],
+        status: "Not Assessed",
+      });
+    } else {
+      paths.push({ name: "Primary conversion path", cta: null, host: "none", steps: ["Land on the website", "Search for a clear next step"], blockers: ["no clear conversion action detected"], status: "Missing" });
+    }
+  }
   return paths;
 }
 

@@ -812,10 +812,31 @@ function summarizeSite({
   // Social links across all pages
   const allSocialLinks = pages.flatMap((p) => p.socialLinks);
 
-  // Broken internal links
-  const brokenInternalLinks = pages
-    .filter((p) => p.status >= 400)
-    .map((p) => p.url);
+  // Broken internal links — PRYSM production defect 3.
+  // Trace every broken destination to its source page using the
+  // already-retrieved link graph (link_from → link_to).  Destinations
+  // without a proven source edge keep a record WITHOUT a source field so
+  // downstream renderers never fabricate "unknown → unknown" traceability.
+  const brokenInternalLinks = [];
+  // Proven source edges from the already-retrieved link graph (link_from →
+  // link_to), keyed by destination.  One record per broken page; the source
+  // is attached only when an edge proves it — never fabricated.
+  const sourceByDest = new Map();
+  for (const l of links) {
+    const dest = linkDestinationUrl(l);
+    if (!dest) continue;
+    const key = normalizeUrl(dest);
+    if (!sourceByDest.has(key)) sourceByDest.set(key, []);
+    if (l.link_from) sourceByDest.get(key).push(l.link_from);
+  }
+  for (const p of pages) {
+    if (p.status >= 400) {
+      const sources = sourceByDest.get(normalizeUrl(p.url || "")) || [];
+      const record = { url: p.url };
+      if (sources.length) record.source = sources[0];
+      brokenInternalLinks.push(record);
+    }
+  }
 
   // ── Aggregate metrics from DataForSEO summary page_metrics ──────────
   // When page_metrics is present it contains authoritative provider-side
