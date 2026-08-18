@@ -575,14 +575,16 @@ function failedSiteEvidence(status, limitation) {
   return { sourceStatus: status, collectedAt: FIXED_TS, limitations: limitation ? [limitation] : [] };
 }
 
-function checklistForSite(siteEvidence) {
-  const evidence = evidenceWith(siteEvidence);
+function modelForSite(siteEvidence, evidenceOverrides = {}) {
+  const evidence = evidenceWith(siteEvidence, evidenceOverrides);
   const capabilityEvidence = buildCapabilityEvidence({
     decisionEvidence: evidence, auditId: INPUT.auditId, generatedAt: FIXED_TS, pathValidationEvidence: null,
   });
-  return buildFoundationChecklist(
-    scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS }),
-  );
+  return scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS });
+}
+
+function checklistForSite(siteEvidence, evidenceOverrides = {}) {
+  return buildFoundationChecklist(modelForSite(siteEvidence, evidenceOverrides));
 }
 
 const PROVIDER_FAILURES = [
@@ -715,27 +717,88 @@ const FROZEN = {
   outageSentence: "Visitors reaching these URLs cannot use the site.",
 };
 
+const NO_PERF = { performance: null };
+
 /**
- * Fixture matrix covering every foundation branch that production can reach.
- * Used by the whole-checklist golden freeze and the render-fidelity check.
+ * BRANCH-COMPLETE fixture matrix.
+ *
+ * Rounds 2–5 each froze only the branches a prior audit had attacked, and the
+ * next audit simply moved to an uncovered one.  This matrix is built to reach
+ * EVERY (item, status) pair the checklist can produce; CR-42 proves that
+ * completeness mechanically, so an uncovered branch cannot exist silently.
+ *
+ * Each entry is [name, siteEvidence, evidenceOverrides].
  */
 function foundationMatrix() {
+  const ga4 = (over) => ({ ga4: { sourceStatus: "AVAILABLE", collectedAt: FIXED_TS, ...over } });
   return [
-    ["assessed", assessedSite()],
-    ["unassessed", unassessedSite()],
-    ["provider-failed", failedSiteEvidence("FAILED", "Task submission failed: network error")],
-    ["crawl-blocked", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")],
+    ["assessed", assessedSite(), {}],
+    ["unassessed", unassessedSite(), {}],
+    ["provider-failed", failedSiteEvidence("FAILED", "Task submission failed: network error"), {}],
+    ["crawl-blocked", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt"), {}],
     ["target-outage", assessedSite({
       statusCounts: { 503: 2 },
       pages: [{ crawledUrl: "https://x.com/", statusCode: 503, headings: {} }],
-    })],
+    }), {}],
+    // Outage WITH provider limitations — proves no limitation text leaks into
+    // the outage sentence even when both are present simultaneously.
+    ["outage-with-limitations", assessedSite({
+      statusCounts: { 500: 1 },
+      pages: [{ crawledUrl: "https://x.com/", statusCode: 500, headings: {} }],
+      limitations: ["Provider reported partial coverage"],
+    }), {}],
     ["http-and-noindex", assessedSite({
       targetUrl: "http://x.com/",
       nonIndexablePages: [{ url: "https://x.com/", reason: "noindex" }],
+    }), {}],
+    ["robots-retrieved", assessedSite({ robotsText: "User-agent: *\nAllow: /" }), {}],
+    ["canonical-missing", assessedSite({ missingCanonicals: 2 }), {}],
+    ["no-conversion-mechanism", assessedSite({ ctas: [], forms: [] }), {}],
+    ["no-contact", assessedSite({
+      trust: { ...assessedSite().trust, contact: false },
+      pages: [{ ...assessedSite().pages[0], phoneLinks: [], emailLinks: [] }],
+    }), {}],
+    ["headers-all-present", assessedSite({
+      securityHeaders: { xFrameOptions: true, xContentTypeOptions: true, referrerPolicy: true, contentSecurityPolicy: true },
+    }), {}],
+    ["ga4-ready", assessedSite(), ga4({ measurementReadiness: { ready: true, issues: [], issueCount: 0 } })],
+    ["ga4-issues", assessedSite(), ga4({
+      measurementReadiness: { ready: false, issueCount: 1, issues: [{ type: "missing_key_events", detail: "No key events configured" }] },
     })],
-    ["robots-retrieved", assessedSite({ robotsText: "User-agent: *\nAllow: /" })],
+    ["ga4-not-applicable", assessedSite(), { ga4: { sourceStatus: "NOT_APPLICABLE", collectedAt: FIXED_TS, limitations: [] } }],
+    ["slow-mobile", assessedSite(), {
+      performance: {
+        ...evidenceWith(assessedSite()).performance,
+        mobile: { status: "AVAILABLE", source: "pagespeed-insights", url: "https://x.com/", isLabData: true, scores: { performance: 31 }, metrics: {} },
+      },
+    }],
+    ["no-performance", assessedSite(), NO_PERF],
   ];
 }
+
+/**
+ * Every (item, status) pair the checklist implementation can produce.
+ * Derived by reading each assessor in foundation-readiness.js.  CR-42 asserts
+ * the matrix reaches exactly this set: a new branch that no fixture covers
+ * makes the assertion fail rather than silently escaping the freeze.
+ */
+const REACHABLE_BRANCHES = [
+  "bing_indexability:NOT_ASSESSED",
+  "canonical:ACTION_REQUIRED", "canonical:NOT_ASSESSED", "canonical:PASS",
+  "conversion_measurement:ACTION_REQUIRED", "conversion_measurement:NOT_APPLICABLE",
+  "conversion_measurement:NOT_ASSESSED", "conversion_measurement:PASS",
+  "conversion_mechanism:ACTION_REQUIRED", "conversion_mechanism:NOT_ASSESSED", "conversion_mechanism:PASS",
+  "google_business_profile:NOT_ASSESSED",
+  "https:ACTION_REQUIRED", "https:NOT_ASSESSED", "https:PASS",
+  "indexability:ACTION_REQUIRED", "indexability:NOT_ASSESSED", "indexability:PASS",
+  "mobile_experience:ACTION_REQUIRED", "mobile_experience:NOT_ASSESSED", "mobile_experience:PASS",
+  "nap_consistency:NOT_ASSESSED",
+  "primary_contact:ACTION_REQUIRED", "primary_contact:NOT_ASSESSED", "primary_contact:PASS",
+  "robots_txt:NOT_ASSESSED", "robots_txt:PASS",
+  "security_headers:ACTION_REQUIRED", "security_headers:NOT_ASSESSED", "security_headers:PASS",
+  "site_availability:ACTION_REQUIRED", "site_availability:NOT_ASSESSED", "site_availability:PASS",
+  "sitemap:NOT_ASSESSED", "sitemap:PASS",
+];
 
 test("CR-36: the exported wording constants match the frozen contract", () => {
   // Importing a constant and asserting `endsWith(it)` proves identity, not
@@ -808,13 +871,8 @@ test("CR-38: all three robots branches render exactly the frozen wording", () =>
 test("CR-39: no client-rendered foundation field ever claims site behaviour outside the frozen note", () => {
   // Sweep EVERY item of EVERY state — including the ACTION_REQUIRED branch and
   // the assessed fixtures — across label, detail, requires and evidenceNote.
-  const models = [
-    checklistForSite(assessedSite()),
-    checklistForSite(unassessedSite()),
-    checklistForSite(failedSiteEvidence("FAILED", "Task submission failed: network error")),
-    checklistForSite(failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")),
-    checklistForSite(assessedSite({ statusCounts: { 503: 2 }, pages: [{ crawledUrl: "https://x.com/", statusCode: 503, headings: {} }] })),
-  ];
+  // Sweeps the whole branch-complete matrix, not a hand-picked subset.
+  const models = foundationMatrix().map(([, site, over]) => checklistForSite(site, over));
   // Words that assert something about how the website behaved for people.
   // "user agent" is a protocol term, not an audience claim, so it is removed
   // before the check rather than being allowed to weaken the pattern.
@@ -826,19 +884,21 @@ test("CR-39: no client-rendered foundation field ever claims site behaviour outs
         if (!value) continue;
         assert.ok(!CLAIM.test(scrub(value)), `${i.id}.${field} must make no site-behaviour claim, got: ${value}`);
       }
-      // `detail` may contain such words ONLY inside the frozen scope note, or
-      // inside the target-side-outage sentence — and that sentence is allowed
-      // ONLY on site_availability when target-side evidence proved an outage.
-      // A previous audit exploited a blanket strip of that sentence to smuggle
-      // the claim onto an unrelated item, so the exemption is now scoped.
-      const outageAllowed =
-        i.id === "site_availability" && i.status === FOUNDATION_STATUS.ACTION_REQUIRED;
-      const stripped = scrub(
-        String(i.detail || "")
-          .replace(FROZEN.scopeNote, "")
-          .replace(outageAllowed ? FROZEN.outageSentence : "", ""),
-      );
-      assert.ok(!CLAIM.test(stripped), `${i.id}.detail claim outside the frozen wording, got: ${stripped}`);
+      // An UNASSESSED item may make no claim about the site at all. An
+      // ASSESSED item may, because evidence was actually collected — that is
+      // the whole distinction this package exists to enforce.
+      if (i.assessed !== true) {
+        const unassessed = scrub(String(i.detail || "").replace(FROZEN.scopeNote, ""));
+        assert.ok(
+          !CLAIM.test(unassessed),
+          `${i.id}: an unassessed item must make no site-behaviour claim, got: ${unassessed}`,
+        );
+        continue;
+      }
+      // An ASSESSED item's detail MAY describe site behaviour, because
+      // evidence was collected to support it (e.g. an observed HTTP-only URL,
+      // or a crawl that found no CTA).  Its exact wording is not left to a
+      // pattern check — it is frozen byte-for-byte by CR-40 and CR-43.
     }
   }
 });
@@ -888,8 +948,18 @@ const CHECKLIST_GOLDEN = {
   "provider-failed": "bbe77121f8d4396c8a7e2e32834ccc49aff8e95caebd5ed9bbee0d83e2fb4bd0",
   "crawl-blocked": "f87770094b25d3395b99c38e73de66763cafbc4384d2b4ddc17fa0ad742b15eb",
   "target-outage": "b249c5d0b671094d224ea4ac751292abea10af854b5e12bab199b79d90213698",
+  "outage-with-limitations": "61a260947f7d335d9b1fe6ba0342c579e18257530a987b14f4dace938f9cc317",
   "http-and-noindex": "76514e6aa9b39b65708e0be60db0f4547ecb1d6489bbc597d6b205749be20496",
   "robots-retrieved": "46c0e4738f6eddae9f3c31b491ec3fe1a831fcab561776e2d8b84eb0e425174d",
+  "canonical-missing": "dc364988408a8465f436dd46d0d733a1a503484a5b59954288e7f97bcc71197d",
+  "no-conversion-mechanism": "b0ecd7cf4bc3f42fa56d8c18d69dbc27b8b11c26a52422df7f3c73b439cca830",
+  "no-contact": "71ffdb1e959c0a991535b23488ca8db7f9afbd6afa0893fd668d4df35c3f580f",
+  "headers-all-present": "689110ddd7776ede14ee9cd733228f8ae52fd529620928cc7e97bba15cf55190",
+  "ga4-ready": "c7bd6bd5a8c0bc0c0d68f8c2200038d66e9d8cbc7fcde6072fca4e6219b7cf31",
+  "ga4-issues": "1cbecf377ea5dd15895ac9564da53f7df1cba6e6e817961ce57b7263456aa45f",
+  "ga4-not-applicable": "0da4905e864c5efaf77e9c6a93508dad458e9841d0967577c321467f3ceb10c9",
+  "slow-mobile": "0c821d9be502fbeead3496dbe1e42fa7388d8b25cad88a77301f978184b06b0b",
+  "no-performance": "7e9ea2ca973838201bb61fd27c71084f228ec5e1cb56c1cecdd61f9c3cb7a31e",
 };
 
 test("CR-40: the complete foundation checklist is frozen for every branch", () => {
@@ -897,8 +967,8 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
   // that a past defect happened to touch. Any wording, status, or requires
   // change anywhere fails until it is deliberately reviewed and re-frozen.
   const actual = {};
-  for (const [name, siteEvidence] of foundationMatrix()) {
-    const checklist = checklistForSite(siteEvidence).map((i) => ({
+  for (const [name, siteEvidence, overrides] of foundationMatrix()) {
+    const checklist = checklistForSite(siteEvidence, overrides).map((i) => ({
       id: i.id, label: i.label, status: i.status,
       detail: i.detail, requires: i.requires, evidenceNote: i.evidenceNote,
       assessed: i.assessed, foundational: i.foundational,
@@ -912,15 +982,72 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
   );
 });
 
+test("CR-42: the fixture matrix reaches every branch the checklist can produce", () => {
+  // Without this, a freeze is only as good as the branches it happens to
+  // touch — the exact gap that let five successive audits hide a claim in an
+  // uncovered branch.  Adding a branch to the implementation without adding a
+  // fixture now fails here instead of shipping unguarded.
+  const reached = new Set();
+  for (const [, siteEvidence, overrides] of foundationMatrix()) {
+    for (const i of checklistForSite(siteEvidence, overrides)) reached.add(`${i.id}:${i.status}`);
+  }
+  assert.deepEqual(
+    [...reached].sort(), REACHABLE_BRANCHES,
+    "fixture matrix must reach exactly the reachable (item, status) pairs — add a fixture for any new branch",
+  );
+});
+
+/**
+ * Frozen fingerprint of the FULL rendered report for each fixture.
+ *
+ * To change the report deliberately: run the suite, review every reported
+ * fixture diff against the no-fabrication invariant, then paste the new
+ * fingerprints here. A change that cannot be justified against collected
+ * evidence must not be re-frozen.
+ */
+const RENDER_GOLDEN = {
+  assessed: "95debf70ea7c3ceb5f3fb4e76d796f33ed6054baae82916f55f5813fcfba3b47",
+  unassessed: "cd0e0376965cb9021485e2dbaa7a2d6e59422225a1b688b5ffb1b218f728cf49",
+  "provider-failed": "a6345dfdcc305dac5c61241f5efd077264ec3073c22d6eb3a8ccf64395999fd2",
+  "crawl-blocked": "67b0a4f293a715c3a7ffc83addcc62b5500ee400f957be97260d8c9f94612567",
+  "target-outage": "a23a82cb88c9ae940150714b1051ab4fe1137f2b37dea0551555b6d5b2a4cc7b",
+  "outage-with-limitations": "a739d706e612fdfeabda042acfc8b362dd39a5094b993fd335b5d59538b2256e",
+  "http-and-noindex": "bff3339f0da1eb7fb6758f74af3fe04b1621013a8f2c3ecda0c7559e5bb66dee",
+  "robots-retrieved": "9350139c5e2016075913ada97d57fc4a4e07c6976e2e1e71d4df4deb85343a24",
+  "canonical-missing": "a1c8c00ffa9e8bc9389c9d2dfaf199026c7a5e510bc809363badabee8fdabcbe",
+  "no-conversion-mechanism": "84f495d3dce073f26647c90f4de6863e92492769bc4a1226206845224a7184cd",
+  "no-contact": "e4c4712ede6c796100c011c12869cb3d47c15dc1d41eac1201c182e87bdbde5f",
+  "headers-all-present": "bced62eba79708c81d641e59bcfc9074483ba6dba6a31fc57003d17eb441dd02",
+  "ga4-ready": "ab635a858558f98c78518df44ce09dec93d29b5399ff6f14f9314b3006457a9c",
+  "ga4-issues": "17067aadb83a2eadd76d9cf290eda69c4c78c12b4c0bed80121e2298b65f94a5",
+  "ga4-not-applicable": "43ea5671d4fdbe44ee2b35dad35a85bb6e489b9464e4127cf5fae1221866cc2d",
+  "slow-mobile": "a8ead5bc421533a2e4bb1e513db1f89f866ebaa3c59da3b9b8597f9d0018bc36",
+  "no-performance": "81f76f0b1419360d3d8b7e6e93a18f25dfe42d237930b6fce4b5ff8c63eea5b7",
+};
+
+test("CR-43: the full rendered report is frozen for every branch", () => {
+  // The terminal guard.  Every previous round asserted selected fields or
+  // banned selected phrases, so each audit simply moved to a field, branch or
+  // layer that was not enumerated.  Hashing the whole rendered document means
+  // ANY change to ANY rendered byte — model wording, status chip, renderer
+  // template, summary line, action plan, strengths — fails, whatever the
+  // phrasing.  It is not a blacklist and has nothing to enumerate.
+  const actual = {};
+  for (const [name, siteEvidence, overrides] of foundationMatrix()) {
+    const html = renderReportV2(modelForSite(siteEvidence, overrides));
+    actual[name] = createHash("sha256").update(html).digest("hex");
+  }
+  assert.deepEqual(
+    actual, RENDER_GOLDEN,
+    "rendered report changed — review every diff against the no-fabrication invariant, then re-freeze",
+  );
+});
+
 test("CR-41: rendered foundation cells reproduce the model verbatim", () => {
   // Every prior assertion was model-level, so a claim appended at RENDER time,
   // or a dropped attribution prefix, was undetectable. This closes that layer.
-  for (const [name, siteEvidence] of foundationMatrix()) {
-    const evidence = evidenceWith(siteEvidence);
-    const capabilityEvidence = buildCapabilityEvidence({
-      decisionEvidence: evidence, auditId: INPUT.auditId, generatedAt: FIXED_TS, pathValidationEvidence: null,
-    });
-    const model = scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS });
+  for (const [name, siteEvidence, overrides] of foundationMatrix()) {
+    const model = modelForSite(siteEvidence, overrides);
     const checklist = buildFoundationChecklist(model);
     const html = renderReportV2(model);
     const start = html.indexOf('<section id="foundations"');

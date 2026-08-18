@@ -671,6 +671,75 @@ fixture, where every crawled page returned HTTP 503.
 
 ---
 
+## 13. Correction round 6 — terminal guard: branch completeness + full-render freeze
+
+The exact-head audit of `fe1d3c66` confirmed all 8 round-5 defeats were caught,
+then defeated the guard with **10 new mutations**. Accepted in full. One of
+them (`conversion_measurement` NOT_APPLICABLE) stayed green across the entire
+854-test worker suite while rendering a false claim to the client.
+
+**Diagnosis — five rounds of the same mistake.** Rounds 2–5 each extended the
+guard to cover the branches the previous audit had attacked. Each time, the
+next audit moved to a branch or layer that was not enumerated. The guard was
+always *enumeration-shaped*: a list of banned phrases, then a list of frozen
+fields, then a list of fixtures. Enumeration loses to an adversary who picks
+the item you did not list. Measured directly: the round-5 matrix reached only
+**16 of the 35** (item, status) pairs the checklist can produce, so 19 branches
+were free space.
+
+**Correction — stop enumerating; make the guard total.**
+
+1. **CR-42 — branch completeness, proven.** `REACHABLE_BRANCHES` declares all
+   35 (item, status) pairs the implementation can produce, and CR-42 asserts
+   the fixture matrix reaches **exactly** that set. The matrix grew from 7 to
+   17 fixtures to satisfy it. A new branch that no fixture reaches now fails
+   here instead of silently escaping every freeze.
+2. **CR-43 — full rendered-report freeze.** A SHA-256 of the **entire rendered
+   document** is frozen per fixture. Any change to any rendered byte — model
+   wording, status-chip label, renderer template, summary line, action plan,
+   strengths — fails regardless of phrasing. There is nothing to enumerate and
+   no novel wording that can evade it. This is the same golden-artifact
+   technique the repository already applies to the v1 report (V2R-07).
+3. **CR-39 sharpened to the real rule.** An item whose `assessed !== true` may
+   make no site-behaviour claim at all. An **assessed** item may, because
+   evidence was collected to support it — and its exact wording is frozen by
+   CR-40/CR-43 rather than policed by a pattern. This removes the last
+   blacklist from the suite.
+
+**Mutation challenge — all 10 new defeats.**
+
+| # | Mutation | Round-5 | Round-6 |
+|---|---|---|---|
+| M-NEW-1 | ga4 NOT_APPLICABLE claim (was green across all 854 tests) | green | **2 fail** |
+| M-NEW-2 | ga4 AVAILABLE+issues claim | green | **2 fail** |
+| M-NEW-3 | `conversion_mechanism` ACTION_REQUIRED claim | green | **2 fail** |
+| M-NEW-4 | `primary_contact` ACTION_REQUIRED claim | green | **2 fail** |
+| M-NEW-5 | `canonical` ACTION_REQUIRED claim | green | **3 fail** |
+| M-NEW-6 | `mobile_experience` ACTION_REQUIRED claim | green | **2 fail** |
+| M-NEW-7 | Renderer, novel phrasing | green | **1 fail** |
+| M-NEW-8 | Status-chip label (satisfies the checklist hash) | green | **1 fail** |
+| M-NEW-9 | Conditional re-interpolation into outage prose | green | **2 fail** |
+| M-NEW-10 | `actionPlanSection` claim | green | **1 fail** |
+| — | Restore | — | **45 pass / 0 fail** |
+
+**Newly-covered wording reviewed before freezing.** The six ACTION_REQUIRED
+branches the matrix now reaches were read individually. Two make visitor
+claims — `conversion_mechanism` ("Visitors have no clear way to convert") and
+`primary_contact` ("Visitors ready to act have no direct way to reach the
+business") — and both are legitimate: each is gated on its capability being
+AVAILABLE, so the absence was assessed, not assumed. The rest cite observed
+counts or scores.
+
+**Residual limitation (recorded).** CR-42 compares the matrix against a
+*declared* branch list. Adding a branch to the implementation requires adding
+it to `REACHABLE_BRANCHES` and supplying a fixture; the declaration is
+maintained by review. CR-43 bounds the blast radius: any new branch that
+changes rendered output for an existing fixture still fails.
+
+**PROOF HARNESS RE-FREEZE (round 6): PASS**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |
