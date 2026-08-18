@@ -1,47 +1,25 @@
-name: Vantage Worker CI
+name: PRYSM Internal Link One Shot
 
 on:
-  pull_request:
   push:
-    branches: [main]
+    branches: [fix/prysm-internal-link-evidence]
 
 permissions:
   contents: write
 
 jobs:
-  verify:
-    # Dedicated self-hosted runner (prysm-selfhosted) — $0 hosted-runner cost.
-    # The runner lives in WSL Ubuntu-24.04 on the dev machine and provides
-    # Docker for the postgres:16 service container.
+  patch:
+    if: github.actor != 'github-actions[bot]'
     runs-on: [self-hosted, Linux, X64, prysm]
-    defaults:
-      run:
-        working-directory: services/worker
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: prysm_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: fix/prysm-internal-link-evidence
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply governed production-parity correction in test workspace
-        working-directory: .
+      - name: Apply production-parity correction
         shell: bash
         run: |
           python3 - <<'PY'
@@ -56,8 +34,8 @@ jobs:
             ? raw.links
             : (context.links || []);
           '''
-          if old_links not in adapter:
-              raise SystemExit('normalizePage rawLinks assignment not found')
+          if adapter.count(old_links) != 1:
+              raise SystemExit(f'expected one normalizePage rawLinks assignment, found {adapter.count(old_links)}')
           adapter = adapter.replace(old_links, new_links, 1)
 
           old_normalize = '''    const targetDomainEarly = domainOf(target);
@@ -96,6 +74,7 @@ jobs:
 
           test_path = Path('services/worker/src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.test.js')
           tests = test_path.read_text()
+
           import_anchor = 'import { SOURCE_STATUS, ERROR_CATEGORY } from "../../scoring/evidence-contracts.js";\n'
           import_line = 'import { generateInternalLinkOpportunities } from "../../evidence/internal-link-opportunity.js";\n'
           if import_line not in tests:
@@ -158,6 +137,7 @@ jobs:
                 ],
                 total_count: 2,
               },
+              // Production shape: link relationships live here, not on page.items[*].links.
               links: {
                 items: [{
                   link_from: sourceUrl,
@@ -217,48 +197,26 @@ jobs:
               tests = tests.replace(section_anchor, regression, 1)
           test_path.write_text(tests)
           PY
+
+          rm .github/workflows/prysm-internal-link-one-shot.yml
           git diff --check
-      - run: npm install --no-audit --no-fund
-      - run: npm run check:template
-      - run: npm test
-      - run: npm run test:schemas
-      - run: npm run test:artifacts
-      - run: npm run test:lifecycle
-      - run: npm run test:lifecycle:postgres
-        env:
-          PGHOST: localhost
-          PGPORT: 5432
-          PGUSER: postgres
-          PGPASSWORD: postgres
-          PGDATABASE: prysm_test
-      - run: npm run acceptance:wp2
-      - run: npm run acceptance:wp3
-      - run: npm run acceptance:wp4
-      - run: npm run test:orchestrator
-      - run: npm run acceptance:wp5
-      - run: npm run acceptance:wp6
-      - run: npm run acceptance:wp7
-      - run: npm run test:wp8
-      - run: npm run acceptance:wp8
-      - run: npm run test:wp9
-      - run: npm run acceptance:wp9
-      - run: npm run test:wp10
-      - run: npm run acceptance:wp10
-      - run: npm run acceptance:wp11
-      - run: npm run acceptance:wp12
-      - run: npm run acceptance:provisioning
-      - name: Commit only the governed correction and restore CI
-        working-directory: .
+
+      - name: Focused governed regression
+        shell: bash
+        working-directory: services/worker
+        run: |
+          npm install --no-audit --no-fund
+          node --test \
+            src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.test.js \
+            src/evidence/internal-link-decision-evidence.test.js
+
+      - name: Commit correction and remove one-shot workflow
         shell: bash
         run: |
-          git show origin/main:.github/workflows/worker-ci.yml > .github/workflows/worker-ci.yml
-          rm -f .github/workflows/prysm-internal-link-one-shot.yml
-          git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add services/worker/src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.js \
                   services/worker/src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.test.js \
-                  .github/workflows/worker-ci.yml \
                   .github/workflows/prysm-internal-link-one-shot.yml
           git commit -m "fix(evidence): retain production internal-link graph"
           git push origin HEAD:fix/prysm-internal-link-evidence
