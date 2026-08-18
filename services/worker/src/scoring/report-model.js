@@ -192,6 +192,68 @@ function topicRows(site, input = {}, capabilities = {}) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// PRYSM-V2-REPORT-DEPTH-01 — deterministic goal-phrase grammar.
+//
+// The v1 generator interpolated the raw primaryGoal into noun slots, which
+// produced client-visible breakage such as "Your First Step Toward Generate
+// qualified enquiries" and "Business Coaching for generate qualified
+// enquiries".  A supplied goal is usually an imperative verb phrase; a noun
+// slot needs a gerund.  This is a fixed grammatical transform — no LLM, no
+// rewriting of the supplied business wording beyond the leading verb.
+// ---------------------------------------------------------------------------
+
+/** Conversion verbs whose gerund form is safe to derive deterministically. */
+const GOAL_VERBS = new Set([
+  "generate", "book", "increase", "request", "schedule", "get", "grow", "drive",
+  "boost", "build", "convert", "capture", "attract", "sell", "improve", "raise",
+  "win", "secure", "fill", "reduce", "start", "launch", "expand", "acquire",
+  "contact", "call", "buy", "join", "subscribe", "register", "enquire",
+  "inquire", "apply", "download", "order", "reserve", "close", "earn", "add",
+]);
+
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+
+/** Standard English gerund formation, applied only to known verbs. */
+function toGerund(verb) {
+  if (verb.endsWith("ie")) return `${verb.slice(0, -2)}ying`;
+  if (verb.endsWith("ee") || verb.endsWith("oe") || verb.endsWith("ye")) return `${verb}ing`;
+  if (verb.endsWith("e")) return `${verb.slice(0, -1)}ing`;
+  // Consonant–vowel–consonant doubling for short verbs (run -> running).
+  if (verb.length <= 5) {
+    const [c1, v1, c2] = [verb.at(-3), verb.at(-2), verb.at(-1)];
+    if (c1 && !VOWELS.has(c1) && v1 && VOWELS.has(v1) && c2 && !VOWELS.has(c2) && !"wxy".includes(c2)) {
+      return `${verb}${c2}ing`;
+    }
+  }
+  return `${verb}ing`;
+}
+
+/** Truncate on a word boundary so a goal is never cut mid-word. */
+function trimToWords(text, max) {
+  const value = String(text || "").trim();
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max);
+  const boundary = cut.lastIndexOf(" ");
+  return (boundary > 0 ? cut.slice(0, boundary) : cut).trim();
+}
+
+/**
+ * Build grammatical renderings of a supplied primary goal.
+ *
+ * @returns {{raw: string, gerund: string|null}|null}
+ */
+function goalPhrases(goal) {
+  const raw = trimToWords(goal, 40);
+  if (!raw) return null;
+  const [first, ...rest] = raw.split(/\s+/);
+  const lead = first.toLowerCase();
+  const gerund = GOAL_VERBS.has(lead)
+    ? [toGerund(lead), ...rest].join(" ")
+    : null;
+  return { raw, gerund };
+}
+
 function contentIdeas(site, input = {}) {
   // PRYSM-NEXT-01 WP-D-05 — business-context topics first (intake
   // services), then crawl services, then multi-word topicKeywords.
@@ -209,6 +271,7 @@ function contentIdeas(site, input = {}) {
   const goal = typeof input.primaryGoal === "string" && input.primaryGoal.trim()
     ? input.primaryGoal.trim()
     : null;
+  const goalPhrase = goalPhrases(goal);
 
   // Fallback when no meaningful topics are available — use multi-word
   // placeholders so generated ideas are still useful.
@@ -241,12 +304,27 @@ function contentIdeas(site, input = {}) {
     ],
     bofu: [
       { idea: "Pricing and What to Expect", frame: "Risk-reversal", type: "Pricing page", question: "What does it cost?", priority: "H" },
-      { idea: goal ? `Your First Step Toward ${goal.slice(0, 40)}` : "Your First Step", frame: "Process page", type: "Start-here", question: "What happens after I act?", priority: "H" },
+      {
+        // A noun slot needs a noun: use the gerund when the goal begins with a
+        // known conversion verb, otherwise avoid the preposition entirely.
+        idea: goalPhrase
+          ? goalPhrase.gerund
+            ? `Your First Step Toward ${goalPhrase.gerund}`
+            : `Your First Step — ${goalPhrase.raw}`
+          : "Your First Step",
+        frame: "Process page", type: "Start-here", question: "What happens after I act?", priority: "H",
+      },
       { idea: "Frequently Asked Questions with Examples", frame: "Testimonial FAQ", type: "FAQ page", question: "What concerns are common?", priority: "H" },
     ],
     leading: [
-      ...(goal
-        ? [{ query: `${t0} for ${goal.slice(0, 40).toLowerCase()}`, rationale: "Connects the offer directly to the stated business goal", priority: "H" }]
+      ...(goalPhrase
+        ? [{
+            // "<Service> for generate qualified enquiries" is ungrammatical —
+            // a preposition takes the gerund, never a bare imperative verb.
+            query: `${t0} for ${(goalPhrase.gerund || goalPhrase.raw).toLowerCase()}`,
+            rationale: "Connects the offer directly to the stated business goal",
+            priority: "H",
+          }]
         : []),
       { query: `${t0} for decision making`, rationale: "Connects the offer to an urgent practical use", priority: "H" },
       { query: `${t0} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },

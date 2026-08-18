@@ -899,9 +899,11 @@ test("deterministic confidence: raw = final priority", () => {
   assert.equal(result.raw, result.final);
   assert.equal(result.scoreBearing, true);
 
-  // Verify raw calculation
+  // Verify raw calculation — PRYSM-V2-REPORT-DEPTH-01 conversion-first
+  // action weighting: conversion 0.40, relevance 0.20, severity 0.15,
+  // practicality 0.15, competitive 0.10.
   const expectedRaw = clamp(
-    80 * 0.30 + 70 * 0.25 + 80 * 0.20 + 50 * 0.15 + 60 * 0.10,
+    80 * 0.40 + 80 * 0.20 + 70 * 0.15 + 60 * 0.15 + 50 * 0.10,
   );
   assert.equal(result.raw, expectedRaw);
 });

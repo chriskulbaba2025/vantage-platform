@@ -560,13 +560,21 @@ function scoreTechnicalV4({ site, capabilities }) {
 // ---------------------------------------------------------------------------
 
 /**
- * Raw Priority = Conversion Impact × 0.30
- *              + Gap Severity × 0.25
- *              + Business Relevance × 0.20
- *              + Competitive Signal × 0.15
- *              + Implementation Practicality × 0.10
+ * PRYSM-V2-REPORT-DEPTH-01 — conversion-first ACTION priority.
  *
- * Final Priority = Raw Priority × Confidence Modifier
+ * Raw Priority = Conversion Impact           × 0.40
+ *              + Business Relevance          × 0.20
+ *              + Gap Severity                × 0.15
+ *              + Implementation Practicality × 0.15
+ *              + Competitive Signal          × 0.10
+ *
+ * Final Priority = Raw Priority × Confidence Modifier   (UNCHANGED)
+ *
+ * This governs recommendation/action ordering only.  Conversion Readiness is
+ * produced by the module scorers and DIMENSIONS weights, which are frozen and
+ * untouched — no readiness score depends on this function.
+ *
+ * Superseded weighting (report design v1): 0.30 / 0.25 / 0.20 / 0.15 / 0.10.
  */
 export function calculateFindingPriority(fields) {
   const conversionImpact = fields.conversionImpact ?? 50;
@@ -576,11 +584,11 @@ export function calculateFindingPriority(fields) {
   const implementationPracticality = fields.implementationPracticality ?? 50;
 
   const raw =
-    conversionImpact * 0.30 +
-    gapSeverity * 0.25 +
+    conversionImpact * 0.40 +
     businessRelevance * 0.20 +
-    competitiveSignal * 0.15 +
-    implementationPracticality * 0.10;
+    gapSeverity * 0.15 +
+    implementationPracticality * 0.15 +
+    competitiveSignal * 0.10;
 
   const clampedRaw = clamp(raw, 0, 100);
 

@@ -1076,6 +1076,10 @@ export function createAuditOrchestrator({
       evidenceConfidenceFactorAvailability: scoreSet.evidenceConfidenceFactorAvailability || [],
       rootCause: scoringModel.rootCause || "",
       findings: scoringModel.findings || [],
+      // PRYSM-V2-REPORT-DEPTH-01 — carry the governed rendering-integrity
+      // diagnostics into the v2 model.  Absent (undefined) renders as Not
+      // Assessed; an empty array is the only proof that none was raised.
+      renderingDiagnostics: scoringModel.renderingDiagnostics,
       suppressedFindingReasons: scoreSet.suppressedFindingReasons || [],
       moduleEligibility: scoreSet.moduleEligibility || {},
       moduleScores: scoreSet.moduleScores || {},

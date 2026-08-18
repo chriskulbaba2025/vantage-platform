@@ -1,0 +1,316 @@
+/**
+ * PRYSM-V2-REPORT-DEPTH-01 — "First Things First" foundational readiness.
+ *
+ * Answers: "before optimizing content and conversion, are the website
+ * fundamentals in place?"
+ *
+ * NO-FABRICATION INVARIANT
+ *   ASSESSED + absent      -> ACTION_REQUIRED   (a proven deficiency)
+ *   NOT ASSESSED / absent  -> NOT_ASSESSED      (names the required source)
+ *   provably out of scope  -> NOT_APPLICABLE
+ *
+ * Every item carries `assessed`, which is true only when the governed
+ * capability / availability marker proves the check actually ran.  A caller
+ * may therefore never read ACTION_REQUIRED without assessed evidence — this
+ * is asserted directly by checklist item CR-20.
+ *
+ * This module adds no data source and makes no provider call.  Candidates
+ * that cannot be assessed from Phase 1 evidence stay NOT_ASSESSED and state
+ * the exact evidence they would need.
+ */
+
+export const FOUNDATION_STATUS = Object.freeze({
+  PASS: "PASS",
+  ACTION_REQUIRED: "ACTION_REQUIRED",
+  NOT_ASSESSED: "NOT_ASSESSED",
+  NOT_APPLICABLE: "NOT_APPLICABLE",
+});
+
+export const FOUNDATION_STATUS_LABEL = Object.freeze({
+  PASS: "PASS / PRESENT",
+  ACTION_REQUIRED: "ACTION REQUIRED",
+  NOT_ASSESSED: "NOT ASSESSED",
+  NOT_APPLICABLE: "NOT APPLICABLE",
+});
+
+const AVAILABLE = new Set(["AVAILABLE", "PARTIAL"]);
+
+function capStatus(model, key) {
+  return model?.capabilityEvidence?.capabilities?.[key]?.status ?? "NOT_ASSESSED";
+}
+
+function capAvailable(model, key) {
+  return AVAILABLE.has(capStatus(model, key));
+}
+
+function item(id, label, status, detail, extra = {}) {
+  return {
+    id,
+    label,
+    status,
+    detail,
+    requires: extra.requires || null,
+    assessed: status === FOUNDATION_STATUS.PASS || status === FOUNDATION_STATUS.ACTION_REQUIRED,
+    foundational: extra.foundational === true,
+    linkedRuleIds: extra.linkedRuleIds || [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Individual candidate assessors
+// ---------------------------------------------------------------------------
+
+function https(model) {
+  const site = model?.evidence?.site || {};
+  const url = site.targetUrl || site.pages?.[0]?.crawledUrl || site.pages?.[0]?.url || "";
+  if (!url) {
+    return item("https", "HTTPS (URL scheme)", FOUNDATION_STATUS.NOT_ASSESSED,
+      "No crawled URL was available to observe the scheme.",
+      { requires: "a completed crawl of the target URL", foundational: true });
+  }
+  const secure = /^https:/i.test(String(url));
+  return item(
+    "https",
+    "HTTPS (URL scheme)",
+    secure ? FOUNDATION_STATUS.PASS : FOUNDATION_STATUS.ACTION_REQUIRED,
+    secure
+      ? "The audited URL was served over HTTPS. Certificate validity and expiry were not assessed in Phase 1."
+      : "The audited URL was served over plain HTTP. Visitors may see a browser security warning before they can contact you.",
+    { foundational: true },
+  );
+}
+
+function availability(model) {
+  const site = model?.evidence?.site || {};
+  const status = site.sourceStatus;
+  if (status === "AVAILABLE" || status === "PARTIAL") {
+    const pages = site.pageCount ?? 0;
+    return item("site_availability", "Site availability", FOUNDATION_STATUS.PASS,
+      `The site responded and ${pages} page(s) were retrieved during the crawl.`,
+      { foundational: true });
+  }
+  if (status === "FAILED" || status === "BLOCKED") {
+    return item("site_availability", "Site availability", FOUNDATION_STATUS.ACTION_REQUIRED,
+      `The crawl could not retrieve the site (source status: ${status}). Nothing downstream of availability can convert.`,
+      { foundational: true });
+  }
+  return item("site_availability", "Site availability", FOUNDATION_STATUS.NOT_ASSESSED,
+    "Site retrieval status was not recorded for this audit.",
+    { requires: "a completed crawl attempt", foundational: true });
+}
+
+function indexability(model) {
+  const site = model?.evidence?.site || {};
+  if (!capAvailable(model, "technical.indexability")) {
+    return item("indexability", "Google indexability", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Page-level indexability signals were not collected for this audit.",
+      { requires: "crawl evidence including per-page robots directives and status codes", foundational: true });
+  }
+  const blocked = Array.isArray(site.nonIndexablePages) ? site.nonIndexablePages : [];
+  if (blocked.length > 0) {
+    const sample = blocked.slice(0, 3).map((p) => `${p.url}${p.reason ? ` (${p.reason})` : ""}`).join("; ");
+    return item("indexability", "Google indexability", FOUNDATION_STATUS.ACTION_REQUIRED,
+      `${blocked.length} crawled page(s) cannot be indexed: ${sample}. Pages that cannot be indexed cannot be found in search.`,
+      { foundational: true });
+  }
+  return item("indexability", "Google indexability", FOUNDATION_STATUS.PASS,
+    "No crawled page was found blocking search-engine indexing.",
+    { foundational: true });
+}
+
+function canonical(model) {
+  const site = model?.evidence?.site || {};
+  const collected = site._metaFieldAvailability?.canonicals === true;
+  if (!collected) {
+    return item("canonical", "Canonical tags", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Canonical-tag evidence was not collected for this audit.",
+      { requires: "per-page canonical extraction from the crawl" });
+  }
+  const missing = site.missingCanonicals ?? 0;
+  return missing > 0
+    ? item("canonical", "Canonical tags", FOUNDATION_STATUS.ACTION_REQUIRED,
+        `${missing} of ${site.pageCount ?? 0} crawled page(s) have no canonical URL, which can split how search engines treat duplicate addresses.`)
+    : item("canonical", "Canonical tags", FOUNDATION_STATUS.PASS,
+        "Every crawled page declared a canonical URL.");
+}
+
+function sitemap(model) {
+  const urls = model?.evidence?.site?.sitemapUrls;
+  if (Array.isArray(urls) && urls.length > 0) {
+    return item("sitemap", "XML sitemap", FOUNDATION_STATUS.PASS,
+      `${urls.length} sitemap URL(s) were discovered and used to seed the crawl.`);
+  }
+  // An empty list on the production path means "not returned", NOT "absent".
+  return item("sitemap", "XML sitemap", FOUNDATION_STATUS.NOT_ASSESSED,
+    "No sitemap URLs were returned with the crawl evidence. This does not establish that a sitemap is absent.",
+    { requires: "a direct fetch of /sitemap.xml or the sitemap declared in robots.txt" });
+}
+
+function robots(model) {
+  const site = model?.evidence?.site || {};
+  const blockedByRobots = site.sourceStatus === "BLOCKED"
+    && (site.limitations || []).some((l) => /robots/i.test(String(l)));
+  if (blockedByRobots) {
+    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.ACTION_REQUIRED,
+      "The crawl was refused by robots.txt. A robots.txt that blocks crawlers also blocks search engines.",
+      { foundational: true });
+  }
+  if (typeof site.robotsText === "string" && site.robotsText.trim().length > 0) {
+    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.PASS,
+      "A robots.txt file was retrieved and did not block the audit crawl.");
+  }
+  return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
+    "robots.txt content was not returned by the crawl provider, so its directives were not evaluated.",
+    { requires: "a direct robots.txt fetch with directive parsing" });
+}
+
+function conversionMechanism(model) {
+  const site = model?.evidence?.site || {};
+  const assessed = capAvailable(model, "conversion.cta") || capAvailable(model, "conversion.form");
+  if (!assessed) {
+    return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Buttons and forms were not extracted for this audit, so the presence of a conversion action could not be established.",
+      {
+        requires: "interactive page evidence (rendered CTA/form extraction)",
+        foundational: true,
+        linkedRuleIds: ["VAN-PATH-001"],
+      });
+  }
+  const ctas = (site.ctas || []).length;
+  const forms = (site.forms || []).length;
+  if (ctas === 0 && forms === 0) {
+    return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.ACTION_REQUIRED,
+      "No call-to-action or form was detected on the assessed pages. Visitors have no clear way to convert.",
+      { foundational: true, linkedRuleIds: ["VAN-PATH-001"] });
+  }
+  return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.PASS,
+    `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
+    { foundational: true, linkedRuleIds: ["VAN-PATH-001"] });
+}
+
+function conversionMeasurement(model) {
+  const ga4 = model?.evidence?.ga4;
+  const status = ga4?.sourceStatus;
+
+  if (status === "NOT_APPLICABLE") {
+    return item("conversion_measurement", "Conversion measurement", FOUNDATION_STATUS.NOT_APPLICABLE,
+      "Conversion measurement was marked not applicable for this audit.",
+      { foundational: true });
+  }
+
+  if (status === "AVAILABLE") {
+    const readiness = ga4.measurementReadiness || {};
+    const issues = Array.isArray(readiness.issues) ? readiness.issues : [];
+    if (readiness.ready === false || issues.length > 0) {
+      const detail = issues.slice(0, 3).map((i) => i.detail || i.type).filter(Boolean).join("; ");
+      return item("conversion_measurement", "Conversion measurement", FOUNDATION_STATUS.ACTION_REQUIRED,
+        `Analytics is connected but conversion outcomes cannot be verified reliably: ${detail || `${issues.length} readiness issue(s)`}. Improvements cannot be proven without trustworthy measurement.`,
+        { foundational: true });
+    }
+    return item("conversion_measurement", "Conversion measurement", FOUNDATION_STATUS.PASS,
+      "Analytics is connected and key conversion events were readable.",
+      { foundational: true });
+  }
+
+  // NOT_CONNECTED / FAILED / UNAVAILABLE / absent — an unconnected analytics
+  // property is NOT proof that measurement is absent on the website.
+  return item("conversion_measurement", "Conversion measurement", FOUNDATION_STATUS.NOT_ASSESSED,
+    "No analytics property was connected to this audit, so conversion measurement could not be evaluated. This does not establish that the website has no tracking.",
+    {
+      requires: "a connected GA4 property, or on-page analytics-tag detection, or CRM/booking-platform evidence",
+      foundational: true,
+    });
+}
+
+function primaryContact(model) {
+  const site = model?.evidence?.site || {};
+  if (!capAvailable(model, "content.body")) {
+    return item("primary_contact", "Primary contact information", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Page body content was not extracted, so contact details could not be located.",
+      { requires: "page content extraction" });
+  }
+  const pages = Array.isArray(site.pages) ? site.pages : [];
+  const phone = pages.some((p) => (p?.phoneLinks || []).length > 0);
+  const email = pages.some((p) => (p?.emailLinks || []).length > 0);
+  if (site.trust?.contact === true || phone || email) {
+    const found = [phone ? "phone" : null, email ? "email" : null].filter(Boolean).join(" and ");
+    return item("primary_contact", "Primary contact information", FOUNDATION_STATUS.PASS,
+      found ? `Direct ${found} contact link(s) were detected.` : "Contact information was detected on the assessed pages.");
+  }
+  return item("primary_contact", "Primary contact information", FOUNDATION_STATUS.ACTION_REQUIRED,
+    "No contact detail was detected on the assessed pages. Visitors ready to act have no direct way to reach the business.");
+}
+
+function securityHeaders(model) {
+  const site = model?.evidence?.site || {};
+  if (!capAvailable(model, "technical.headers")) {
+    return item("security_headers", "Basic security headers", FOUNDATION_STATUS.NOT_ASSESSED,
+      "HTTP response headers were not returned by the crawl provider, so security headers were not evaluated.",
+      { requires: "a crawl source that returns HTTP response headers" });
+  }
+  const headers = site.securityHeaders || {};
+  const absent = Object.entries(headers).filter(([, present]) => !present).map(([name]) => name);
+  return absent.length > 0
+    ? item("security_headers", "Basic security headers", FOUNDATION_STATUS.ACTION_REQUIRED,
+        `Observed response headers do not include: ${absent.join(", ")}.`)
+    : item("security_headers", "Basic security headers", FOUNDATION_STATUS.PASS,
+        "The checked browser-protection headers were present in the response.");
+}
+
+function mobileExperience(model) {
+  const mobile = model?.evidence?.performance?.mobile;
+  const score = mobile?.scores?.performance;
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return item("mobile_experience", "Mobile experience (performance signal)", FOUNDATION_STATUS.NOT_ASSESSED,
+      "No mobile performance result was available for this audit. Mobile usability itself was not assessed.",
+      { requires: "a completed mobile PageSpeed/Lighthouse run", foundational: true });
+  }
+  return score < 50
+    ? item("mobile_experience", "Mobile experience (performance signal)", FOUNDATION_STATUS.ACTION_REQUIRED,
+        `The mobile performance score was ${score}/100 in lab testing. Mobile usability itself was not assessed.`,
+        { foundational: true })
+    : item("mobile_experience", "Mobile experience (performance signal)", FOUNDATION_STATUS.PASS,
+        `The mobile performance score was ${score}/100 in lab testing. Mobile usability itself was not assessed.`,
+        { foundational: true });
+}
+
+// Candidates that Phase 1 evidence genuinely cannot assess.  Each names the
+// exact source that would be required — no paid call is added by this package.
+function unassessableCandidates() {
+  return [
+    item("bing_indexability", "Bing indexability", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Bing index status is not collected by any Phase 1 source.",
+      { requires: "Bing Webmaster Tools API access" }),
+    item("google_business_profile", "Google Business Profile", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Presence and completeness of a Google Business Profile is not collected by any Phase 1 source.",
+      { requires: "Google Business Profile API access, or SERP local-pack evidence" }),
+    item("nap_consistency", "NAP consistency (name, address, phone)", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Business address is not extracted, and no directory source is available to compare against.",
+      { requires: "structured NAP extraction plus at least one directory source" }),
+  ];
+}
+
+/**
+ * Build the complete First Things First checklist for a scored model.
+ *
+ * @param {object} model — scored audit model (scoreAudit output)
+ * @returns {Array<object>} checklist items in display order
+ */
+export function buildFoundationChecklist(model) {
+  return [
+    availability(model),
+    https(model),
+    indexability(model),
+    robots(model),
+    sitemap(model),
+    canonical(model),
+    conversionMechanism(model),
+    conversionMeasurement(model),
+    primaryContact(model),
+    mobileExperience(model),
+    securityHeaders(model),
+    ...unassessableCandidates(),
+  ];
+}
+
+export default { FOUNDATION_STATUS, FOUNDATION_STATUS_LABEL, buildFoundationChecklist };
