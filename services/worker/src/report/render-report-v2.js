@@ -233,6 +233,185 @@ function competitorSection(model) {
   </section>`;
 }
 
+// ---------------------------------------------------------------------------
+// PRYSM-V2-RENDER-01 — required informational sections.
+// All content is rendered FROM the governed model only (contentIdeas, site
+// evidence, internalLinkOpportunities).  Absent data renders an explicit
+// governed unavailable/not-computed state — never silent omission, never
+// fabrication, and never a business-failure framing of missing evidence.
+// ---------------------------------------------------------------------------
+
+function contentOpportunitiesSection(model) {
+  const ideas = model.contentIdeas || {};
+  const tofu = ideas.tofu || [];
+  const mofu = ideas.mofu || [];
+  const bofu = ideas.bofu || [];
+  const leading = ideas.leading || [];
+  const ideaRow = (i) => `
+    <tr>
+      <td>${e(i.idea || "")}</td>
+      <td>${e(i.type || "")}</td>
+      <td>${e(i.frame || "")}</td>
+      <td class="small">${e(i.question || "")}</td>
+      <td>${e(i.priority || "")}</td>
+    </tr>`;
+  const stageBlock = (label, rows, stageIdeas) =>
+    stageIdeas.length
+      ? `<h3>${e(label)}</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Content idea</th><th>Type</th><th>Frame</th><th>Buyer question answered</th><th>Priority</th></tr></thead>
+<tbody>${stageIdeas.map(ideaRow).join("")}</tbody>
+</table></div>`
+      : `<h3>${e(label)}</h3><p class="small">No qualified ideas available from the assessed evidence for this stage.</p>`;
+
+  const leadingBlock = leading.length
+    ? `<h3>Qualified search intents</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Query</th><th>Rationale</th><th>Priority</th></tr></thead>
+<tbody>${leading.map((q) => `<tr><td>${e(q.query || "")}</td><td class="small">${e(q.rationale || "")}</td><td>${e(q.priority || "")}</td></tr>`).join("")}</tbody>
+</table></div>`
+    : "";
+
+  if (tofu.length + mofu.length + bofu.length + leading.length === 0) {
+    return `<section id="content-ideas" class="card"><h2>Topical Map &amp; Content Opportunities</h2><p>Not available: no qualified topical/content opportunity evidence was produced for this assessment.</p></section>`;
+  }
+  return `
+  <section id="content-ideas" class="card">
+    <h2>Topical Map &amp; Content Opportunities</h2>
+    <p class="muted small">Ideas are derived from the business-context topics supplied at intake and multi-word topics found in crawled site content — no external content research is implied.</p>
+    ${stageBlock("Top of Funnel — Awareness", "", tofu)}
+    ${stageBlock("Middle of Funnel — Evaluation", "", mofu)}
+    ${stageBlock("Bottom of Funnel — Decision", "", bofu)}
+    ${leadingBlock}
+  </section>`;
+}
+
+function cmsPlatformSection(model) {
+  const site = model.evidence?.site || {};
+  const platform = site.platform || "Unknown";
+  const proprietary = /GoDaddy|Wix|Squarespace|Shopify/i.test(platform);
+  const risk = proprietary
+    ? "Medium — proprietary platform constraints may limit implementation"
+    : platform === "Unknown"
+      ? "Uncertain — platform could not be verified from the assessed evidence"
+      : "Low to Medium — implementation depends on hosting and theme controls";
+  const rows = [
+    ["Add meta descriptions", "Likely", "CMS or page settings", "—"],
+    ["Add canonical URLs", proprietary ? "Uncertain" : "Likely", proprietary ? "May require code injection or platform setting" : "Framework or SEO configuration", "If platform blocks control"],
+    ["Add schema markup", proprietary ? "Uncertain" : "Likely", "Custom code or template access", "If custom code is blocked"],
+    ["Fix heading hierarchy", "Likely", "Template or page editor", "—"],
+    ["Add security headers", "Hosting-dependent", "Server, CDN, or platform settings", "May require hosting change"],
+    ["Create dedicated service pages", "Likely", "Page creation and navigation", "If current plan limits pages"],
+    ["Add testimonials and FAQ", "Likely", "Content blocks", "—"],
+    ["Add inline lead capture", "Likely", "Native form or embedded form", "If forms are restricted"],
+    ["Optimize images", "Likely", "Optimized asset upload", "—"],
+  ];
+  return `
+  <section id="cms" class="card">
+    <h2>CMS &amp; Platform Constraints</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Detected Platform</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Platform</td><td>${e(platform)}</td></tr>
+        <tr><td>Platform Risk</td><td>${e(risk)}</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Platform Limitations Affecting Conversion</h3>
+    <ul class="small">
+      <li><strong>Metadata control:</strong> Verify page-level title, description, and canonical controls.</li>
+      <li><strong>Structured data:</strong> Confirm whether JSON-LD can be added globally and per service.</li>
+      <li><strong>Heading structure:</strong> Confirm whether semantic heading levels can be selected independently of visual styling.</li>
+      <li><strong>Page architecture:</strong> Confirm the platform or plan supports dedicated service, FAQ, case-study, and policy pages.</li>
+    </ul>
+    <h3>What This Means for Implementation</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fix</th><th>Likely Feasible</th><th>May Require Admin / Plan</th><th>May Require Migration</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${e(c)}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table></div>
+    <p class="muted small">Note: feasibility is based on captured platform signals. Admin access is required to verify exact controls.</p>
+  </section>`;
+}
+
+/** Only http/https URLs may become link targets — anything else renders inert. */
+function safeHref(u) {
+  try {
+    const parsed = new URL(String(u || ""), "https://placeholder.local");
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return e(u);
+  } catch { /* fall through */ }
+  return "#";
+}
+
+const LINK_REASON_LABEL = {
+  source_content_supports_related_service_page: "Content supports related service",
+  informational_content_progresses_to_commercial_page: "Info content → commercial",
+  consideration_content_progresses_to_conversion_page: "Consideration → conversion",
+  pages_belong_to_same_topic_hierarchy: "Same topic hierarchy",
+  source_content_references_target_service: "References target service",
+  source_content_clarifies_referenced_topic: "Clarifies referenced topic",
+  high_value_page_is_weakly_linked: "High-value page weakly linked",
+};
+
+function internalLinksSection(model) {
+  const site = model.evidence?.site || {};
+  const opp = model.evidence?.internalLinkOpportunities;
+  const brokenLinks = site.brokenInternalLinks || [];
+  const totalLinks = site.internalLinkCount || 0;
+
+  const opportunities = opp?.opportunities || [];
+  const orphans = opp?.orphans || [];
+  const limitations = opp?.limitations || [];
+
+  let body = "";
+  if (!opp) {
+    body = `<p>Not available: internal-link opportunities were not computed for this audit.${brokenLinks.length ? " Broken links from crawl evidence are shown below." : ""}</p>`;
+  } else if (opportunities.length === 0) {
+    body = `<p>No implementation-ready recommendations: no high- or medium-confidence opportunities were identified from crawl evidence.</p>`;
+  } else {
+    body = `<h3>Implementation-Ready Recommendations (${opportunities.length})</h3>
+<p class="muted small">High- and medium-confidence recommendations traceable to crawled source and target page content.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Source</th><th>Target</th><th>Anchor</th><th>Reason</th><th>Stage</th><th>Confidence</th></tr></thead>
+<tbody>${opportunities.slice(0, 25).map((o) => `
+  <tr>
+    <td class="small"><a href="${safeHref(o.sourceUrl)}">${e((o.sourceUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
+    <td class="small"><a href="${safeHref(o.targetUrl)}">${e((o.targetUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 40))}</a></td>
+    <td>${e(o.proposedAnchor || "")}</td>
+    <td class="small">${e(LINK_REASON_LABEL[o.reasonForLink] || o.reasonForLink || "")}</td>
+    <td>${e(o.funnelStage || "")}</td>
+    <td><span class="chip ${o.confidence === "high" ? "cap-ok" : "cap-partial"}">${e(o.confidence || "")}</span></td>
+  </tr>`).join("")}</tbody>
+</table></div>`;
+  }
+
+  const brokenBlock = brokenLinks.length
+    ? `<h3>Broken Internal Links (${brokenLinks.length})</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Source</th><th>Target</th></tr></thead>
+<tbody>${brokenLinks.slice(0, 10).map((b) => `<tr><td class="small">${e(b.source || "unknown")}</td><td class="small">${e(b.url || b.target || "unknown")}</td></tr>`).join("")}</tbody>
+</table></div>`
+    : "";
+
+  const orphanBlock = orphans.length && opp?.coverage?.crawlComplete !== false
+    ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>URL</th><th>Title</th></tr></thead>
+<tbody>${orphans.slice(0, 15).map((o) => `<tr><td class="small">${e((o.url || "").slice(0, 60))}</td><td class="small">${e(o.title || "—")}</td></tr>`).join("")}</tbody>
+</table></div>`
+    : opp?.coverage?.crawlComplete === false
+      ? `<p class="small">Orphan analysis: crawl coverage is incomplete — definitive orphan claims cannot be made.</p>`
+      : "";
+
+  return `
+  <section id="internal-links" class="card">
+    <h2>Internal-Link Opportunities</h2>
+    <p class="muted small">Summary: ${e(totalLinks)} total internal links, ${e(brokenLinks.length)} broken. ${e(opp?.coverage?.pagesEvaluated ?? 0)} pages evaluated. ${e(opportunities.length)} recommendation(s).</p>
+    ${body}
+    ${brokenBlock}
+    ${orphanBlock}
+    ${limitations.length ? `<h3>Limitations</h3><ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}
+  </section>`;
+}
+
 function deepEvidenceLayer(model) {
   const findings = (model.findings || [])
     .map(
@@ -268,6 +447,14 @@ function deepEvidenceLayer(model) {
     .map((r) => `<li>${e(r.ruleId)} suppressed: capability ${e(r.capability)} is ${e(r.capabilityStatus)}</li>`)
     .join("");
 
+  // PRYSM-V2-RENDER-01 — the deferred/unavailable analysis is ALWAYS an
+  // explicit state: suppressed items when they exist, otherwise an explicit
+  // statement that nothing was deferred.  Missing evidence is never silently
+  // omitted and never converted into a business failure.
+  const deferredBlock = suppressed.length
+    ? `<h3>Deferred &amp; unavailable analysis</h3><ul class="small">${suppressed}</ul>`
+    : `<h3>Deferred &amp; unavailable analysis</h3><p class="small">None deferred: all analyses with eligible evidence are rendered above; unavailable sources are shown in Source statuses.</p>`;
+
   return `
   <section id="evidence" class="card">
     <h2>Evidence detail</h2>
@@ -282,7 +469,7 @@ function deepEvidenceLayer(model) {
       <tbody>${capRows}</tbody>
     </table>
     </div>
-    ${suppressed ? `<h3>Suppressed findings</h3><ul class="small">${suppressed}</ul>` : ""}
+    ${deferredBlock}
   </section>`;
 }
 
@@ -354,13 +541,16 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
 </header>
 <main>
   <nav class="nav-jump no-print">
-    <a href="#executive">Executive</a><a href="#pillars">Pillars</a><a href="#blockers">Fix first</a><a href="#paths">Paths</a><a href="#competitors">Competitors</a><a href="#evidence">Evidence</a>
+    <a href="#executive">Executive</a><a href="#pillars">Pillars</a><a href="#blockers">Fix first</a><a href="#paths">Paths</a><a href="#competitors">Competitors</a><a href="#content-ideas">Content ideas</a><a href="#cms">CMS</a><a href="#internal-links">Internal links</a><a href="#evidence">Evidence</a>
   </nav>
   ${executiveScorecard(model, pillars)}
   ${pillarSection(pillars)}
   ${blockersSection(model)}
   ${conversionPathSection(model)}
   ${competitorSection(model)}
+  ${contentOpportunitiesSection(model)}
+  ${cmsPlatformSection(model)}
+  ${internalLinksSection(model)}
   ${deepEvidenceLayer(model)}
 </main>
 <footer>Generated by Prysm (Omnipressence) · Report design v${e(REPORT_DESIGN_V2)} · Evidence-grounded conversion-readiness assessment</footer>
