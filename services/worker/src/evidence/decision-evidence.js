@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 import { buildArtifactKey } from "../storage/artifact-key.js";
+import { generateInternalLinkOpportunities } from "./internal-link-opportunity.js";
 
 // ---------------------------------------------------------------------------
 // Source-to-evidence-key mapping (must match SOURCE_EVIDENCE_MAP)
@@ -226,6 +227,35 @@ function hydrateMidSource(sourceResult) {
   });
 }
 
+/**
+ * Derive internal-link opportunities only from viable, persisted site evidence.
+ *
+ * The legacy generator records wall-clock timestamps.  Canonical decision
+ * evidence is required to be deterministic, so those provenance timestamps
+ * are normalized to the persisted crawl completion time before the result is
+ * admitted to the governed evidence model.
+ */
+function deriveInternalLinkOpportunities(site) {
+  if (!site || !VIABLE_STATUSES.has(site.sourceStatus) || !site.targetUrl || !site.collectedAt) {
+    return null;
+  }
+
+  const derived = generateInternalLinkOpportunities(site, { targetUrl: site.targetUrl });
+  const canonicalTime = site.collectedAt;
+
+  return {
+    ...derived,
+    collectedAt: canonicalTime,
+    _sourceStatus: derived._sourceStatus
+      ? {
+          ...derived._sourceStatus,
+          startedAt: canonicalTime,
+          completedAt: canonicalTime,
+        }
+      : derived._sourceStatus,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -256,6 +286,7 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
     ga4: null,
     gsc: null,
     competitorOpportunities: null,
+    internalLinkOpportunities: null,
   };
 
   for (const entry of allSourceResults) {
@@ -312,6 +343,11 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
         errors.push(`No hydration handler for evidence key "${ek}"`);
     }
   }
+
+  // Internal-link opportunities are deterministic derived evidence.  They are
+  // admitted only after site SourceResult validation/hydration has succeeded.
+  // Missing or non-viable site evidence remains explicitly unavailable (null).
+  evidence.internalLinkOpportunities = deriveInternalLinkOpportunities(evidence.site);
 
   // Decision evidence is built from validated, persisted SourceResults only.
   // Missing keys are NOT fabricated — downstream code must null-check.
