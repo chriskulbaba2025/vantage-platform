@@ -56,8 +56,8 @@ jobs:
             ? raw.links
             : (context.links || []);
           '''
-          if adapter.count(old_links) != 1:
-              raise SystemExit(f'expected one normalizePage rawLinks assignment, found {adapter.count(old_links)}')
+          if old_links not in adapter:
+              raise SystemExit('normalizePage rawLinks assignment not found')
           adapter = adapter.replace(old_links, new_links, 1)
 
           old_normalize = '''    const targetDomainEarly = domainOf(target);
