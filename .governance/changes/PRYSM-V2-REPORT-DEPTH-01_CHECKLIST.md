@@ -533,6 +533,79 @@ detected by the round-3 harness.
 
 ---
 
+## 11. Correction round 4 — abandoning the blacklist for identity freeze
+
+The exact-head audit of `e2f803ef` returned **BLOCKED** with **10 distinct
+mutations** that reintroduced a false client-facing claim while the suite
+stayed green. Accepted in full.
+
+**The real finding is the pattern.** This was the third consecutive
+harness-side block on the same invariant (round 2: novel phrasing; round 3:
+synonyms, exempt regions, untested branches). Each round patched the blacklist
+that the previous audit had defeated. A blacklist can only ban phrasings
+someone anticipated, so it will lose this game indefinitely. The approach —
+not the individual patterns — was wrong.
+
+**Defeats accepted.** Claims could be smuggled into: the provider-limitation
+parenthetical (exempted by the guard); `requires` and `label` (client-rendered
+but unguarded); leads using synonyms outside the token list ("unreachable",
+"end users", "offline for customers"); the `UNKNOWN` clause and the robots
+NOT_RETURNED branch (both untested, the latter being the branch production
+actually hits); text appended to the ACTION_REQUIRED detail; and the content
+of `EVIDENCE_SCOPE_NOTE` / `ROBOTS_SCOPE_NOTE` themselves — the tests imported
+those constants, so `endsWith(note)` proved identity, never content.
+
+**Correction — enforce by identity, not by vocabulary.**
+
+1. **No interpolation in audit prose.** Every failure `detail` is a fully
+   composed frozen constant (`EVIDENCE_FAILURE_DETAIL`, `ROBOTS_DETAIL`).
+   There is no authored region left to smuggle a claim into.
+2. **Provider text is structurally quarantined.** A source limitation never
+   enters audit prose; it is carried in a new `evidenceNote` field, always
+   prefixed `Evidence source reported:` and rendered as an attributed quote.
+   A future adapter string making a visitor claim therefore cannot be read as
+   an audit finding. This closes the parenthetical exemption permanently.
+3. **Tests assert exact equality against literals declared in the test**, not
+   imported from the module — freezing content, not just identity — across
+   every failure branch and every client-rendered field (`label`, `detail`,
+   `requires`, `evidenceNote`).
+4. **Coverage extended to every branch**: `NOT_APPLICABLE`, absent status, and
+   all three robots branches including `NOT_RETURNED` (the production path).
+5. **CR-39 sweeps every item of every fixture** for site-behaviour claims in
+   any client-rendered field, permitting them only inside the two frozen
+   governed sentences.
+
+**Mutation challenge — all ten prior defeats re-run.**
+
+| # | Mutation that previously stayed green | Now |
+|---|---|---|
+| M-A2 | Claim inside the provider parenthetical | **3 fail** |
+| M-B | Claim in `requires` | **2 fail** |
+| M-C | Claim in `label` | **2 fail** |
+| M-D | BLOCKED lead, synonym tokens | **3 fail** |
+| M-D2 | FAILED lead, synonym tokens | **4 fail** |
+| M-G | `UNKNOWN` clause claim | **2 fail** |
+| M-H | robots production-default branch | **2 fail** |
+| M-J | Mutate `EVIDENCE_SCOPE_NOTE` content | **4 fail** |
+| M-K | Mutate `ROBOTS_SCOPE_NOTE` to affirmative | **2 fail** |
+| M-F | Append claim to ACTION_REQUIRED detail | **1 fail** |
+| — | Restore | **41 pass / 0 fail** |
+
+**Claim-accuracy correction (audit item 6).** The round-3 commit message
+stated the change was a pure composition refactor with "rendered strings
+unchanged for every existing state". That was false: `UNAVAILABLE`,
+`NOT_CONNECTED`, `NOT_APPLICABLE` and absent-status previously fell through to
+a generic "Site retrieval status was not recorded for this audit." and now
+receive dedicated evidence-scoped wording. Status semantics were unchanged
+(`NOT_ASSESSED` throughout) and the new wording is more accurate — for an
+`UNAVAILABLE` source the status *was* recorded — but the claim was overstated
+and is corrected here. The durable record never contained it; only the commit
+message did.
+
+**PROOF HARNESS RE-FREEZE (round 4): PASS**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |

@@ -33,7 +33,10 @@ import {
 import {
   FOUNDATION_STATUS,
   EVIDENCE_SCOPE_NOTE,
+  EVIDENCE_ATTRIBUTION_PREFIX,
+  EVIDENCE_FAILURE_DETAIL,
   ROBOTS_SCOPE_NOTE,
+  ROBOTS_DETAIL,
   buildFoundationChecklist,
 } from "./foundation-readiness.js";
 
@@ -604,14 +607,16 @@ test("CR-28: provider FAILED never becomes a website-availability defect", () =>
   }
 });
 
-test("CR-29: the evidence limitation is surfaced on a FAILED source", () => {
+test("CR-29: the evidence limitation is surfaced, attributed to the source", () => {
   for (const [, limitation] of PROVIDER_FAILURES) {
     const checklist = checklistForSite(failedSiteEvidence("FAILED", limitation));
     const availability = itemById(checklist, "site_availability");
-    assert.ok(
-      availability.detail.includes(limitation),
-      `the collected limitation must be surfaced, got: ${availability.detail}`,
-    );
+    // The limitation must reach the client, but ONLY as attributed provider
+    // text — never inlined into audit prose, where it could read as a finding.
+    assert.equal(availability.evidenceNote, `${EVIDENCE_ATTRIBUTION_PREFIX} ${limitation}`,
+      "limitation must be surfaced with source attribution");
+    assert.ok(!availability.detail.includes(limitation),
+      "provider text must not be inlined into the audit's own wording");
   }
 });
 
@@ -668,53 +673,139 @@ test("CR-34: existing PASS availability behaviour is intact", () => {
   assert.match(availability.detail, /responded/i);
 });
 
-/**
- * The authored portion of a detail string: everything except the
- * provider-supplied limitation (in parentheses) and the fixed governed note.
- * Only this authored text is under our control, so only it is constrained.
- */
-function authoredPortion(detail, note) {
-  return String(detail).replace(/\s*\([^)]*\)/g, " ").replace(note, "").trim();
-}
+// ---------------------------------------------------------------------------
+// CR-36..CR-39 — IDENTITY-frozen client wording.
+//
+// Two audits defeated blacklist-shaped guards (novel phrasing, then synonyms,
+// exempt regions and untested branches).  These tests therefore assert EXACT
+// equality against literals declared HERE — not imported from the module — for
+// every failure branch and every client-rendered field.  Any wording change,
+// anywhere, in any field, fails until it is deliberately re-frozen.
+// ---------------------------------------------------------------------------
 
-test("CR-36: evidence-failure wording is structurally evidence-scoped, not blacklisted", () => {
-  // An exact-head audit defeated the previous blacklist form with the novel
-  // phrasing "the site could not be reached for visitors". This asserts the
-  // SHAPE instead: every failure detail must end with the one governed
-  // sentence that may mention the website, and the authored clauses must name
-  // no site/visitor/page subject at all.
+/** The governed wording contract, restated independently of the implementation. */
+const FROZEN = {
+  scopeNote: "it does not describe how the website behaved for real visitors.",
+  attribution: "Evidence source reported:",
+  availabilityRequires:
+    "target-side availability evidence (observed HTTP responses from the site, or an uptime source)",
+  detail: {
+    BLOCKED: "Crawl access was restricted for the audit crawler. This is a crawl-access restriction affecting this audit only; it does not describe how the website behaved for real visitors.",
+    FAILED: "Evidence collection did not return a usable result. This is a limitation of the audit evidence; it does not describe how the website behaved for real visitors.",
+    UNAVAILABLE: "The evidence source was not reachable for this audit. This is a limitation of the audit evidence; it does not describe how the website behaved for real visitors.",
+    NOT_CONNECTED: "The evidence source was not connected for this audit. This is a limitation of the audit evidence; it does not describe how the website behaved for real visitors.",
+    UNKNOWN: "Crawl status was not recorded for this audit. This is a limitation of the audit evidence; it does not describe how the website behaved for real visitors.",
+  },
+  robots: {
+    REFUSED: "The audit crawler was refused by robots.txt. Because robots.txt rules apply per user agent, this does not establish that Google or Bing crawlers are blocked.",
+    RETRIEVED: "A robots.txt file was retrieved and did not refuse the audit crawl. Its per-user-agent directives were not parsed.",
+    NOT_RETURNED: "robots.txt content was not returned by the crawl provider, so its directives were not evaluated.",
+  },
+  robotsRequires: {
+    REFUSED: "collected robots.txt directives showing the rules that apply to search-engine user agents",
+    NOT_RETURNED: "a direct robots.txt fetch with directive parsing",
+  },
+  availabilityLabel: "Site availability",
+  robotsLabel: "robots.txt configuration",
+};
+
+test("CR-36: the exported wording constants match the frozen contract", () => {
+  // Importing a constant and asserting `endsWith(it)` proves identity, not
+  // content — a previous audit mutated the note's content and the suite stayed
+  // green.  These comparisons freeze the CONTENT.
+  assert.equal(EVIDENCE_SCOPE_NOTE, FROZEN.scopeNote);
+  assert.equal(EVIDENCE_ATTRIBUTION_PREFIX, FROZEN.attribution);
+  assert.equal(ROBOTS_SCOPE_NOTE, FROZEN.robots.REFUSED.slice(FROZEN.robots.REFUSED.indexOf("Because")));
+  assert.deepEqual({ ...EVIDENCE_FAILURE_DETAIL }, FROZEN.detail);
+  assert.deepEqual({ ...ROBOTS_DETAIL }, FROZEN.robots);
+});
+
+test("CR-37: every availability failure branch renders exactly the frozen wording", () => {
   const states = [
-    ...PROVIDER_FAILURES.map(([c, l]) => [`FAILED/${c}`, failedSiteEvidence("FAILED", l)]),
-    ["BLOCKED", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")],
-    ["UNAVAILABLE", failedSiteEvidence("UNAVAILABLE", "Source not reachable")],
-    ["NOT_CONNECTED", failedSiteEvidence("NOT_CONNECTED", "Source not configured")],
+    ...PROVIDER_FAILURES.map(([c, l]) => [`FAILED/${c}`, failedSiteEvidence("FAILED", l), "FAILED", l]),
+    ["BLOCKED", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt"), "BLOCKED", "Site blocked by robots.txt"],
+    ["UNAVAILABLE", failedSiteEvidence("UNAVAILABLE", "Source not reachable"), "UNAVAILABLE", "Source not reachable"],
+    ["NOT_CONNECTED", failedSiteEvidence("NOT_CONNECTED", "Source not configured"), "NOT_CONNECTED", "Source not configured"],
+    // Branches a previous audit reached that the harness did not cover.
+    // NOTE: scoreAudit's crawl-gate fallback defaults an absent status to
+    // UNAVAILABLE, so "undefined status" resolves there rather than to UNKNOWN.
+    ["NOT_APPLICABLE", failedSiteEvidence("NOT_APPLICABLE", "Not applicable"), "UNKNOWN", "Not applicable"],
+    ["undefined status", { limitations: ["No status recorded"] }, "UNAVAILABLE", "No status recorded"],
   ];
-  for (const [label, siteEvidence] of states) {
-    const detail = itemById(checklistForSite(siteEvidence), "site_availability").detail;
-    assert.ok(
-      detail.endsWith(EVIDENCE_SCOPE_NOTE),
-      `${label}: detail must end with the governed evidence-scope note, got: ${detail}`,
-    );
-    const authored = authoredPortion(detail, EVIDENCE_SCOPE_NOTE);
-    assert.ok(
-      !/\b(site|website|visitor|visitors|page|pages)\b/i.test(authored),
-      `${label}: authored wording must name no site/visitor subject, got: ${authored}`,
+  for (const [label, siteEvidence, expectedKey, limitation] of states) {
+    const i = itemById(checklistForSite(siteEvidence), "site_availability");
+    assert.equal(i.status, FOUNDATION_STATUS.NOT_ASSESSED, `${label}: status`);
+    // EVERY client-rendered field is frozen — detail, label and requires were
+    // each independently exploitable when only `detail` was guarded.
+    assert.equal(i.detail, FROZEN.detail[expectedKey], `${label}: detail`);
+    assert.equal(i.label, FROZEN.availabilityLabel, `${label}: label`);
+    assert.equal(i.requires, FROZEN.availabilityRequires, `${label}: requires`);
+    assert.equal(
+      i.evidenceNote,
+      limitation ? `${FROZEN.attribution} ${limitation}` : null,
+      `${label}: provider text must be attributed, never inlined`,
     );
   }
 });
 
-test("CR-37: robots refusal wording is structurally scoped to the audit crawler", () => {
-  const detail = itemById(
+test("CR-37b: with no provider limitation, no attributed note is fabricated", () => {
+  // Direct production entry point — scoreAudit's crawl gate always injects a
+  // limitation of its own, so the genuinely-empty case is exercised here.
+  const i = buildFoundationChecklist({
+    evidence: { site: { sourceStatus: "FAILED", limitations: [] } },
+    capabilityEvidence: { capabilities: {} },
+  }).find((x) => x.id === "site_availability");
+  assert.equal(i.detail, FROZEN.detail.FAILED);
+  assert.equal(i.evidenceNote, null, "no limitation => no attributed note invented");
+});
+
+test("CR-38: all three robots branches render exactly the frozen wording", () => {
+  // The production DataForSEO path returns robotsText: "", so the NOT_RETURNED
+  // branch is the one production actually hits — a previous harness tested
+  // only the refusal branch, leaving the production branch unguarded.
+  const cases = [
+    ["refused", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt"), "REFUSED", FROZEN.robotsRequires.REFUSED, FOUNDATION_STATUS.NOT_ASSESSED],
+    ["retrieved", assessedSite({ robotsText: "User-agent: *\nAllow: /" }), "RETRIEVED", null, FOUNDATION_STATUS.PASS],
+    ["not returned (production path)", assessedSite({ robotsText: "" }), "NOT_RETURNED", FROZEN.robotsRequires.NOT_RETURNED, FOUNDATION_STATUS.NOT_ASSESSED],
+  ];
+  for (const [label, siteEvidence, key, requires, status] of cases) {
+    const i = itemById(checklistForSite(siteEvidence), "robots_txt");
+    assert.equal(i.status, status, `${label}: status`);
+    assert.equal(i.detail, FROZEN.robots[key], `${label}: detail`);
+    assert.equal(i.label, FROZEN.robotsLabel, `${label}: label`);
+    assert.equal(i.requires, requires, `${label}: requires`);
+  }
+});
+
+test("CR-39: no client-rendered foundation field ever claims site behaviour outside the frozen note", () => {
+  // Sweep EVERY item of EVERY state — including the ACTION_REQUIRED branch and
+  // the assessed fixtures — across label, detail, requires and evidenceNote.
+  const models = [
+    checklistForSite(assessedSite()),
+    checklistForSite(unassessedSite()),
+    checklistForSite(failedSiteEvidence("FAILED", "Task submission failed: network error")),
     checklistForSite(failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")),
-    "robots_txt",
-  ).detail;
-  assert.ok(detail.endsWith(ROBOTS_SCOPE_NOTE), `must end with the governed note, got: ${detail}`);
-  const authored = authoredPortion(detail, ROBOTS_SCOPE_NOTE);
-  assert.ok(
-    !/\b(google|bing|googlebot|bingbot|search engines?)\b/i.test(authored),
-    `authored wording must not name a search engine, got: ${authored}`,
-  );
-  assert.match(authored, /audit crawler/i, "authored wording must scope the refusal to the audit crawler");
+    checklistForSite(assessedSite({ statusCounts: { 503: 2 }, pages: [{ crawledUrl: "https://x.com/", statusCode: 503, headings: {} }] })),
+  ];
+  // Words that assert something about how the website behaved for people.
+  // "user agent" is a protocol term, not an audience claim, so it is removed
+  // before the check rather than being allowed to weaken the pattern.
+  const CLAIM = /\b(unreachable|offline|down|inaccessible)\b|\b(visitors?|users?|customers?|audience|traffic)\b/i;
+  const scrub = (s) => String(s || "").replace(/user[- ]agents?/gi, "");
+  for (const checklist of models) {
+    for (const i of checklist) {
+      for (const [field, value] of [["label", i.label], ["requires", i.requires], ["evidenceNote", i.evidenceNote]]) {
+        if (!value) continue;
+        assert.ok(!CLAIM.test(scrub(value)), `${i.id}.${field} must make no site-behaviour claim, got: ${value}`);
+      }
+      // `detail` may contain such words ONLY inside the frozen scope note or
+      // the frozen target-side-outage sentence, both of which are governed.
+      const stripped = scrub(String(i.detail || "")
+        .replace(FROZEN.scopeNote, "")
+        .replace(/Visitors reaching these URLs cannot use the site\./, ""));
+      assert.ok(!CLAIM.test(stripped), `${i.id}.detail claim outside the frozen wording, got: ${stripped}`);
+    }
+  }
 });
 
 test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", () => {

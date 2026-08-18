@@ -63,10 +63,15 @@ export function foundationSection(checklist) {
       const requires = i.status === FOUNDATION_STATUS.NOT_ASSESSED && i.requires
         ? `<br><span class="small">NOT ASSESSED — requires ${e(i.requires)}</span>`
         : "";
+      // Provider-supplied text is rendered as an explicitly attributed quote,
+      // never as audit prose, so it can never read as a finding about the site.
+      const evidenceNote = i.evidenceNote
+        ? `<br><span class="small evidence-note">${e(i.evidenceNote)}</span>`
+        : "";
       return `<tr>
         <td><strong>${e(i.label)}</strong></td>
         <td>${statusChip(i.status)}</td>
-        <td class="small">${e(i.detail)}${requires}</td>
+        <td class="small">${e(i.detail)}${evidenceNote}${requires}</td>
       </tr>`;
     })
     .join("");

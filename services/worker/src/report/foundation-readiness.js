@@ -39,43 +39,80 @@ const AVAILABLE = new Set(["AVAILABLE", "PARTIAL"]);
 // Governed evidence-scoped wording.
 //
 // An evidence-side failure must never be described as website behaviour.
-// These constants make that structural: each `lead`/`scope` clause talks only
-// about the evidence or the crawl, and the ONLY sentence that mentions the
-// website is the fixed note appended to all of them.  Tests assert the shape
-// (detail ends with the note; the authored clauses name no site/visitor
-// subject), which holds for any future wording instead of only for the
-// phrases a blacklist happens to enumerate.
+//
+// Two successive audits defeated wording guards built as blacklists (banned
+// phrases) — first with novel phrasing, then with synonyms, exempt regions,
+// and untested branches.  A blacklist can only ban what someone anticipated,
+// so the invariant is now enforced by IDENTITY instead:
+//
+//   * every client-rendered failure string is a FROZEN CONSTANT with no
+//     interpolation, so there is no authored region to smuggle a claim into;
+//   * provider-supplied text never enters audit prose — it is carried in a
+//     separate `evidenceNote` field that is always explicitly attributed to
+//     the source, so it can never be read as an audit claim about the site;
+//   * the tests assert exact equality against literals they declare
+//     themselves, across every branch and every client-rendered field
+//     (label, detail, requires, evidenceNote).
 // ---------------------------------------------------------------------------
 
 export const EVIDENCE_SCOPE_NOTE =
   "it does not describe how the website behaved for real visitors.";
 
+/** Prefix that attributes quoted provider text, so it is never audit prose. */
+export const EVIDENCE_ATTRIBUTION_PREFIX = "Evidence source reported:";
+
 export const EVIDENCE_FAILURE_CLAUSE = Object.freeze({
   BLOCKED: {
-    lead: "Crawl access was restricted for the audit crawler",
+    lead: "Crawl access was restricted for the audit crawler.",
     scope: "This is a crawl-access restriction affecting this audit only;",
   },
   FAILED: {
-    lead: "Evidence collection did not return a usable result",
+    lead: "Evidence collection did not return a usable result.",
     scope: "This is a limitation of the audit evidence;",
   },
   UNAVAILABLE: {
-    lead: "The evidence source was not reachable for this audit",
+    lead: "The evidence source was not reachable for this audit.",
     scope: "This is a limitation of the audit evidence;",
   },
   NOT_CONNECTED: {
-    lead: "The evidence source was not connected for this audit",
+    lead: "The evidence source was not connected for this audit.",
     scope: "This is a limitation of the audit evidence;",
   },
   UNKNOWN: {
-    lead: "Crawl status was not recorded for this audit",
+    lead: "Crawl status was not recorded for this audit.",
     scope: "This is a limitation of the audit evidence;",
   },
 });
 
+/** Fully-composed, interpolation-free detail for each failure status. */
+export const EVIDENCE_FAILURE_DETAIL = Object.freeze(
+  Object.fromEntries(
+    Object.entries(EVIDENCE_FAILURE_CLAUSE).map(([status, c]) => [
+      status,
+      `${c.lead} ${c.scope} ${EVIDENCE_SCOPE_NOTE}`,
+    ]),
+  ),
+);
+
+export const AVAILABILITY_REQUIRES =
+  "target-side availability evidence (observed HTTP responses from the site, or an uptime source)";
+
 /** Governed epistemic note for an audit-crawler robots.txt refusal. */
 export const ROBOTS_SCOPE_NOTE =
   "Because robots.txt rules apply per user agent, this does not establish that Google or Bing crawlers are blocked.";
+
+export const ROBOTS_DETAIL = Object.freeze({
+  REFUSED: `The audit crawler was refused by robots.txt. ${ROBOTS_SCOPE_NOTE}`,
+  RETRIEVED:
+    "A robots.txt file was retrieved and did not refuse the audit crawl. Its per-user-agent directives were not parsed.",
+  NOT_RETURNED:
+    "robots.txt content was not returned by the crawl provider, so its directives were not evaluated.",
+});
+
+export const ROBOTS_REQUIRES = Object.freeze({
+  REFUSED: "collected robots.txt directives showing the rules that apply to search-engine user agents",
+  NOT_RETURNED: "a direct robots.txt fetch with directive parsing",
+});
 
 function capStatus(model, key) {
   return model?.capabilityEvidence?.capabilities?.[key]?.status ?? "NOT_ASSESSED";
@@ -92,6 +129,12 @@ function item(id, label, status, detail, extra = {}) {
     status,
     detail,
     requires: extra.requires || null,
+    // Provider-supplied text is carried here, ALWAYS attributed, and never
+    // interpolated into audit prose.  A limitation string that made a claim
+    // about the website could therefore never be read as an audit finding.
+    evidenceNote: extra.evidenceNote
+      ? `${EVIDENCE_ATTRIBUTION_PREFIX} ${extra.evidenceNote}`
+      : null,
     assessed: status === FOUNDATION_STATUS.PASS || status === FOUNDATION_STATUS.ACTION_REQUIRED,
     foundational: extra.foundational === true,
     linkedRuleIds: extra.linkedRuleIds || [],
@@ -181,18 +224,13 @@ function availability(model) {
   // Everything else — including FAILED and BLOCKED — is an evidence-side
   // limitation, reported as such and never as a website defect.
   const reason = site.errorCategory || (site.limitations || [])[0] || null;
-  // Wording is COMPOSED from governed constants rather than hand-written, so
-  // the "describe the evidence, never the website" rule is structural instead
-  // of a blacklist of banned phrases.  A blacklist is always incomplete: an
-  // exact-head audit defeated an earlier blacklist form with the novel
-  // phrasing "the site could not be reached for visitors".  Here, every
-  // authored clause is evidence-scoped by construction and the only text
-  // mentioning the website is the fixed EVIDENCE_SCOPE_NOTE suffix.
-  const clause = EVIDENCE_FAILURE_CLAUSE[status] || EVIDENCE_FAILURE_CLAUSE.UNKNOWN;
-  const detail = `${clause.lead}${reason ? ` (${reason})` : ""}. ${clause.scope} ${EVIDENCE_SCOPE_NOTE}`;
+  // The detail is a frozen constant with NO interpolation, so there is no
+  // authored region in which a website claim could be introduced.  The
+  // provider's own limitation text rides in `evidenceNote`, attributed.
+  const detail = EVIDENCE_FAILURE_DETAIL[status] || EVIDENCE_FAILURE_DETAIL.UNKNOWN;
 
   return item("site_availability", "Site availability", FOUNDATION_STATUS.NOT_ASSESSED, detail,
-    { requires: "target-side availability evidence (observed HTTP responses from the site, or an uptime source)", foundational: true });
+    { requires: AVAILABILITY_REQUIRES, foundational: true, evidenceNote: reason });
 }
 
 function indexability(model) {
@@ -258,21 +296,17 @@ function robots(model) {
   const site = model?.evidence?.site || {};
   const refusedAuditCrawler = site.sourceStatus === "BLOCKED"
     && (site.limitations || []).some((l) => /robots/i.test(String(l)));
+  // All three branches use frozen, interpolation-free constants.
   if (refusedAuditCrawler) {
-    // Composed the same way as the availability wording: the authored clause
-    // names only the audit crawler, and the sole sentence naming search
-    // engines is the fixed epistemic note.
     return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
-      `The audit crawler was refused by robots.txt. ${ROBOTS_SCOPE_NOTE}`,
-      { requires: "collected robots.txt directives showing the rules that apply to search-engine user agents" });
+      ROBOTS_DETAIL.REFUSED, { requires: ROBOTS_REQUIRES.REFUSED });
   }
   if (typeof site.robotsText === "string" && site.robotsText.trim().length > 0) {
     return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.PASS,
-      "A robots.txt file was retrieved and did not refuse the audit crawl. Its per-user-agent directives were not parsed.");
+      ROBOTS_DETAIL.RETRIEVED);
   }
   return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
-    "robots.txt content was not returned by the crawl provider, so its directives were not evaluated.",
-    { requires: "a direct robots.txt fetch with directive parsing" });
+    ROBOTS_DETAIL.NOT_RETURNED, { requires: ROBOTS_REQUIRES.NOT_RETURNED });
 }
 
 function conversionMechanism(model) {
