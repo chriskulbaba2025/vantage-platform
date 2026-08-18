@@ -32,6 +32,8 @@ import {
 } from "./action-priority.js";
 import {
   FOUNDATION_STATUS,
+  EVIDENCE_SCOPE_NOTE,
+  ROBOTS_SCOPE_NOTE,
   buildFoundationChecklist,
 } from "./foundation-readiness.js";
 
@@ -664,6 +666,55 @@ test("CR-34: existing PASS availability behaviour is intact", () => {
   assert.equal(availability.status, FOUNDATION_STATUS.PASS);
   assert.equal(availability.assessed, true);
   assert.match(availability.detail, /responded/i);
+});
+
+/**
+ * The authored portion of a detail string: everything except the
+ * provider-supplied limitation (in parentheses) and the fixed governed note.
+ * Only this authored text is under our control, so only it is constrained.
+ */
+function authoredPortion(detail, note) {
+  return String(detail).replace(/\s*\([^)]*\)/g, " ").replace(note, "").trim();
+}
+
+test("CR-36: evidence-failure wording is structurally evidence-scoped, not blacklisted", () => {
+  // An exact-head audit defeated the previous blacklist form with the novel
+  // phrasing "the site could not be reached for visitors". This asserts the
+  // SHAPE instead: every failure detail must end with the one governed
+  // sentence that may mention the website, and the authored clauses must name
+  // no site/visitor/page subject at all.
+  const states = [
+    ...PROVIDER_FAILURES.map(([c, l]) => [`FAILED/${c}`, failedSiteEvidence("FAILED", l)]),
+    ["BLOCKED", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")],
+    ["UNAVAILABLE", failedSiteEvidence("UNAVAILABLE", "Source not reachable")],
+    ["NOT_CONNECTED", failedSiteEvidence("NOT_CONNECTED", "Source not configured")],
+  ];
+  for (const [label, siteEvidence] of states) {
+    const detail = itemById(checklistForSite(siteEvidence), "site_availability").detail;
+    assert.ok(
+      detail.endsWith(EVIDENCE_SCOPE_NOTE),
+      `${label}: detail must end with the governed evidence-scope note, got: ${detail}`,
+    );
+    const authored = authoredPortion(detail, EVIDENCE_SCOPE_NOTE);
+    assert.ok(
+      !/\b(site|website|visitor|visitors|page|pages)\b/i.test(authored),
+      `${label}: authored wording must name no site/visitor subject, got: ${authored}`,
+    );
+  }
+});
+
+test("CR-37: robots refusal wording is structurally scoped to the audit crawler", () => {
+  const detail = itemById(
+    checklistForSite(failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")),
+    "robots_txt",
+  ).detail;
+  assert.ok(detail.endsWith(ROBOTS_SCOPE_NOTE), `must end with the governed note, got: ${detail}`);
+  const authored = authoredPortion(detail, ROBOTS_SCOPE_NOTE);
+  assert.ok(
+    !/\b(google|bing|googlebot|bingbot|search engines?)\b/i.test(authored),
+    `authored wording must not name a search engine, got: ${authored}`,
+  );
+  assert.match(authored, /audit crawler/i, "authored wording must scope the refusal to the audit crawler");
 });
 
 test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", () => {

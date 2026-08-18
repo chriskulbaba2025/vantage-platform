@@ -465,6 +465,74 @@ it — the regression is genuinely proven, not merely asserted.
 
 ---
 
+## 10. Correction round 3 — blacklist guard defeated by novel wording
+
+The exact-head audit of `df1e2dc7` returned **BLOCKED on the harness**, not on
+production behaviour. Accepted in full.
+
+**Defect.** Round 2 enforced "wording must describe the evidence, never the
+website" with two negative regexes (CR-28 line 599, CR-30 line 622). The
+auditor defeated them with a mutation that keeps `NOT_ASSESSED` but rewrites
+the detail to a site claim:
+
+> "The crawl could not retrieve the site (…). The site could not be reached for
+> visitors."
+
+That matches neither `/site (is |was )?(down|unavailable|offline)|visitors
+cannot/i` nor `/visitors cannot reach|site is unavailable|nothing downstream/i`
+— the suite passed 36/36. A blacklist can only ban the phrasings someone
+thought of; the invariant needs to hold for wording nobody has written yet.
+
+**Correction — make the invariant structural rather than enumerated.**
+
+Wording is now composed from governed constants exported by
+`foundation-readiness.js`:
+
+* `EVIDENCE_SCOPE_NOTE` — the single sentence that may mention the website.
+* `EVIDENCE_FAILURE_CLAUSE` — per-status `lead`/`scope` clauses that name only
+  the evidence or the crawl (`BLOCKED`, `FAILED`, `UNAVAILABLE`,
+  `NOT_CONNECTED`, `UNKNOWN`).
+* `ROBOTS_SCOPE_NOTE` — the single sentence that may name a search engine.
+
+CR-36 and CR-37 assert the SHAPE: each failure detail must end with the
+governed note, and the authored portion — the detail minus the
+provider-supplied limitation in parentheses and minus the note — must contain
+no `site|website|visitor|visitors|page|pages` (availability) and no
+`google|bing|googlebot|bingbot|search engine` (robots). Only
+provider-supplied limitation text is exempt, because it is not ours to author.
+
+This holds for any future wording, not only for phrasings enumerated in
+advance. The round-2 negative regexes are retained as defence in depth.
+
+**Mutation challenge.**
+
+| # | Mutation | Expected | Observed (38 tests) |
+|---|---|---|---|
+| M13 | **The auditor's exact defeating mutation** — site-claim wording, status still NOT_ASSESSED | fails | 37 pass / **1 fail — CR-36** |
+| M14 | Drop the governed evidence-scope note | fails | 37 pass / **1 fail — CR-36** |
+| M15 | Robots wording names Googlebot/Bingbot affirmatively | fails | 37 pass / **1 fail — CR-37** |
+| M16 | BLOCKED clause reworded to a visitor claim | fails | 37 pass / **1 fail — CR-36** |
+| — | Restore | all pass | **38 pass / 0 fail** |
+
+M13 is the decisive result: the mutation that defeated the round-2 harness is
+detected by the round-3 harness.
+
+**Accepted non-blocking observations (recorded, not corrected).**
+
+* `site.errorCategory` is read defensively but is unreachable in production —
+  the schema has no such `site` property and `hydrateSite` does not emit it.
+  The collected limitation string is what actually surfaces. Retained as a
+  forward-compatible read; no behaviour depends on it.
+* A site returning `429` to the crawler on every requested page resolves to
+  ACTION_REQUIRED under the frozen `>= 400` criterion. Arguably crawl-access
+  rather than outage. Within the frozen acceptance contract; recorded as a
+  known MINOR for a future package rather than changed under correction
+  discipline.
+
+**PROOF HARNESS RE-FREEZE (round 3): PASS**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |

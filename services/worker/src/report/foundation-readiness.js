@@ -35,6 +35,48 @@ export const FOUNDATION_STATUS_LABEL = Object.freeze({
 
 const AVAILABLE = new Set(["AVAILABLE", "PARTIAL"]);
 
+// ---------------------------------------------------------------------------
+// Governed evidence-scoped wording.
+//
+// An evidence-side failure must never be described as website behaviour.
+// These constants make that structural: each `lead`/`scope` clause talks only
+// about the evidence or the crawl, and the ONLY sentence that mentions the
+// website is the fixed note appended to all of them.  Tests assert the shape
+// (detail ends with the note; the authored clauses name no site/visitor
+// subject), which holds for any future wording instead of only for the
+// phrases a blacklist happens to enumerate.
+// ---------------------------------------------------------------------------
+
+export const EVIDENCE_SCOPE_NOTE =
+  "it does not describe how the website behaved for real visitors.";
+
+export const EVIDENCE_FAILURE_CLAUSE = Object.freeze({
+  BLOCKED: {
+    lead: "Crawl access was restricted for the audit crawler",
+    scope: "This is a crawl-access restriction affecting this audit only;",
+  },
+  FAILED: {
+    lead: "Evidence collection did not return a usable result",
+    scope: "This is a limitation of the audit evidence;",
+  },
+  UNAVAILABLE: {
+    lead: "The evidence source was not reachable for this audit",
+    scope: "This is a limitation of the audit evidence;",
+  },
+  NOT_CONNECTED: {
+    lead: "The evidence source was not connected for this audit",
+    scope: "This is a limitation of the audit evidence;",
+  },
+  UNKNOWN: {
+    lead: "Crawl status was not recorded for this audit",
+    scope: "This is a limitation of the audit evidence;",
+  },
+});
+
+/** Governed epistemic note for an audit-crawler robots.txt refusal. */
+export const ROBOTS_SCOPE_NOTE =
+  "Because robots.txt rules apply per user agent, this does not establish that Google or Bing crawlers are blocked.";
+
 function capStatus(model, key) {
   return model?.capabilityEvidence?.capabilities?.[key]?.status ?? "NOT_ASSESSED";
 }
@@ -139,14 +181,15 @@ function availability(model) {
   // Everything else — including FAILED and BLOCKED — is an evidence-side
   // limitation, reported as such and never as a website defect.
   const reason = site.errorCategory || (site.limitations || [])[0] || null;
-  // Wording note: these strings describe the EVIDENCE, never the website.
-  // They deliberately avoid asserting anything about how the site behaved for
-  // visitors — including in negated form, which reads as a claim on skim.
-  const detail = status === "BLOCKED"
-    ? `Crawl access was restricted for the audit crawler${reason ? ` (${reason})` : ""}. This is a crawl-access restriction affecting this audit only; it does not describe how the website behaved for real visitors.`
-    : status === "FAILED"
-      ? `Evidence collection did not return a usable result${reason ? ` (${reason})` : ""}. This is a limitation of the audit evidence; it does not describe how the website behaved for real visitors.`
-      : "Site retrieval status was not recorded for this audit.";
+  // Wording is COMPOSED from governed constants rather than hand-written, so
+  // the "describe the evidence, never the website" rule is structural instead
+  // of a blacklist of banned phrases.  A blacklist is always incomplete: an
+  // exact-head audit defeated an earlier blacklist form with the novel
+  // phrasing "the site could not be reached for visitors".  Here, every
+  // authored clause is evidence-scoped by construction and the only text
+  // mentioning the website is the fixed EVIDENCE_SCOPE_NOTE suffix.
+  const clause = EVIDENCE_FAILURE_CLAUSE[status] || EVIDENCE_FAILURE_CLAUSE.UNKNOWN;
+  const detail = `${clause.lead}${reason ? ` (${reason})` : ""}. ${clause.scope} ${EVIDENCE_SCOPE_NOTE}`;
 
   return item("site_availability", "Site availability", FOUNDATION_STATUS.NOT_ASSESSED, detail,
     { requires: "target-side availability evidence (observed HTTP responses from the site, or an uptime source)", foundational: true });
@@ -216,8 +259,11 @@ function robots(model) {
   const refusedAuditCrawler = site.sourceStatus === "BLOCKED"
     && (site.limitations || []).some((l) => /robots/i.test(String(l)));
   if (refusedAuditCrawler) {
+    // Composed the same way as the availability wording: the authored clause
+    // names only the audit crawler, and the sole sentence naming search
+    // engines is the fixed epistemic note.
     return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
-      "The audit crawler was refused by robots.txt. Because robots.txt rules apply per user agent, this does not establish that Google or Bing crawlers are blocked.",
+      `The audit crawler was refused by robots.txt. ${ROBOTS_SCOPE_NOTE}`,
       { requires: "collected robots.txt directives showing the rules that apply to search-engine user agents" });
   }
   if (typeof site.robotsText === "string" && site.robotsText.trim().length > 0) {
