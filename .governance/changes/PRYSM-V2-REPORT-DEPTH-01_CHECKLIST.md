@@ -396,6 +396,75 @@ M9 additionally proves the render/model consistency arm.
 
 ---
 
+## 9. Correction round 2 — merge-audit: provider failure rendered as site outage
+
+The independent merge audit of `75e13edb` found ONE material governance defect.
+Accepted in full.
+
+**Defect.** `foundation-readiness.js` `availability()` converted
+`site.sourceStatus === "FAILED"` or `"BLOCKED"` into a client-facing
+ACTION_REQUIRED site-availability defect reading *"The crawl could not retrieve
+the site … Nothing downstream of availability can convert."*
+
+Canonical `SOURCE_STATUS.FAILED` means evidence collection was attempted and
+returned no usable records. The production DataForSEO adapter emits it for
+`rate_limit`, `auth`, `network`, `timeout`, `internal` and `schema_validation`.
+A provider failure is therefore **not** evidence that the website was
+unavailable to visitors. `BLOCKED` proves the audit crawler was refused —
+a crawl-access restriction, not a visitor-facing outage.
+
+`robots()` carried the same class of overclaim: *"A robots.txt that blocks
+crawlers also blocks search engines."* robots.txt rules are per-user-agent, so
+a site refusing a third-party auditing crawler does not establish that
+Googlebot or Bingbot are blocked.
+
+**Decisive constraint found during correction.** `hydrateSite()`
+(`evidence/decision-evidence.js:71-77`) returns only
+`{sourceStatus, collectedAt, limitations}` for a non-viable status — no
+`errorCategory`, no `statusCounts`, no pages — and the decision-evidence schema
+has no `errorCategory` property on `site`. A failed source therefore carries
+**zero** target-side observation, so it can only ever resolve to NOT_ASSESSED.
+
+**Correction.**
+
+1. `availability()` now emits ACTION_REQUIRED only on **target-side** evidence:
+   the crawl observed HTTP responses from the site (`statusCounts` /
+   `pages[].statusCode`) and **every one** was an error (≥ 400). The observed
+   codes are cited in the finding.
+2. FAILED / BLOCKED / UNAVAILABLE / NOT_CONNECTED all render NOT_ASSESSED,
+   surfacing the collected limitation (and `errorCategory` when a model carries
+   one), with `requires: target-side availability evidence`.
+3. BLOCKED is described as a crawl-access restriction affecting this audit only.
+4. `robots()` never claims search engines are blocked. An audit-crawler refusal
+   is NOT_ASSESSED naming the directive evidence required. `robots_txt` has no
+   ACTION_REQUIRED path, because no production source returns directives.
+5. Detail wording avoids describing the website even in **negated** form —
+   "does not establish that the site was unavailable" reads as a claim on skim.
+   Strings describe the evidence, not the site.
+
+**New focused regressions.** CR-28 (six provider failure categories →
+NOT_ASSESSED), CR-29 (limitation surfaced), CR-30 (BLOCKED ≠ visitor outage),
+CR-31 (robots refusal ≠ search engines blocked), CR-32 (proven target-side
+outage IS still ACTION_REQUIRED), CR-33 (partial outage → PASS), CR-34
+(existing PASS intact), CR-35 (no source-failure state yields any
+ACTION_REQUIRED foundation — extends CR-20 beyond unavailable capabilities).
+
+**Mutation challenge.**
+
+| # | Mutation | Expected | Observed (36 tests) |
+|---|---|---|---|
+| M10 | Restore the reported defect (FAILED/BLOCKED → ACTION_REQUIRED) | fails | 32 pass / **4 fail — CR-28, CR-29, CR-30, CR-35** |
+| M11 | Restore "also blocks search engines" | CR-31 fails | 35 pass / **1 fail — CR-31** |
+| M12 | Remove the target-side proof path | CR-32 fails | 35 pass / **1 fail — CR-32** |
+| — | Restore | all pass | **36 pass / 0 fail** |
+
+M10 restores the exact defect the merge audit reported and the harness detects
+it — the regression is genuinely proven, not merely asserted.
+
+**PROOF HARNESS RE-FREEZE (round 2): PASS**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |

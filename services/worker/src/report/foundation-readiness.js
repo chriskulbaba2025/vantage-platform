@@ -80,23 +80,76 @@ function https(model) {
   );
 }
 
+/**
+ * Every HTTP status the crawl actually observed FROM THE TARGET SITE.
+ * These are target-side observations — unlike a provider/source status,
+ * they are evidence about the website itself.
+ */
+function observedHttpStatuses(site) {
+  const codes = [];
+  for (const [code, count] of Object.entries(site.statusCounts || {})) {
+    const n = Number(code);
+    if (Number.isFinite(n) && (count ?? 0) > 0) codes.push(n);
+  }
+  for (const page of Array.isArray(site.pages) ? site.pages : []) {
+    if (Number.isFinite(page?.statusCode)) codes.push(page.statusCode);
+  }
+  return codes;
+}
+
+/**
+ * Site availability.
+ *
+ * GOVERNANCE (merge-audit correction, round 2): a provider/evidence failure
+ * is NOT proof that the website was unavailable to visitors.
+ *
+ * Canonical `SOURCE_STATUS.FAILED` means evidence collection was attempted and
+ * returned no usable records — the production DataForSEO adapter emits it for
+ * rate_limit, auth, network, timeout, internal and schema_validation failures.
+ * `BLOCKED` proves the audit crawler was refused, which is a crawl-access
+ * restriction, not a visitor-facing outage.  Neither may be rendered as a
+ * client-facing site-availability defect.
+ *
+ * ACTION_REQUIRED therefore requires TARGET-SIDE evidence: the crawl observed
+ * HTTP responses from the site and every one of them was an error.  Note that
+ * `hydrateSite` returns only {sourceStatus, collectedAt, limitations} for a
+ * non-viable status, so a failed source carries no target-side observation at
+ * all and can only ever resolve to NOT_ASSESSED here.
+ */
 function availability(model) {
   const site = model?.evidence?.site || {};
   const status = site.sourceStatus;
-  if (status === "AVAILABLE" || status === "PARTIAL") {
-    const pages = site.pageCount ?? 0;
-    return item("site_availability", "Site availability", FOUNDATION_STATUS.PASS,
-      `The site responded and ${pages} page(s) were retrieved during the crawl.`,
-      { foundational: true });
-  }
-  if (status === "FAILED" || status === "BLOCKED") {
+  const codes = observedHttpStatuses(site);
+  const served = codes.filter((c) => c < 400);
+
+  // Target-side proof of an outage: responses were observed, all were errors.
+  if (codes.length > 0 && served.length === 0) {
+    const unique = [...new Set(codes)].sort((a, b) => a - b);
     return item("site_availability", "Site availability", FOUNDATION_STATUS.ACTION_REQUIRED,
-      `The crawl could not retrieve the site (source status: ${status}). Nothing downstream of availability can convert.`,
+      `Every page the crawl requested returned an error response (HTTP ${unique.join(", ")}). Visitors reaching these URLs cannot use the site.`,
       { foundational: true });
   }
-  return item("site_availability", "Site availability", FOUNDATION_STATUS.NOT_ASSESSED,
-    "Site retrieval status was not recorded for this audit.",
-    { requires: "a completed crawl attempt", foundational: true });
+
+  if ((status === "AVAILABLE" || status === "PARTIAL") && (served.length > 0 || (site.pageCount ?? 0) > 0)) {
+    return item("site_availability", "Site availability", FOUNDATION_STATUS.PASS,
+      `The site responded and ${site.pageCount ?? served.length} page(s) were retrieved during the crawl.`,
+      { foundational: true });
+  }
+
+  // Everything else — including FAILED and BLOCKED — is an evidence-side
+  // limitation, reported as such and never as a website defect.
+  const reason = site.errorCategory || (site.limitations || [])[0] || null;
+  // Wording note: these strings describe the EVIDENCE, never the website.
+  // They deliberately avoid asserting anything about how the site behaved for
+  // visitors — including in negated form, which reads as a claim on skim.
+  const detail = status === "BLOCKED"
+    ? `Crawl access was restricted for the audit crawler${reason ? ` (${reason})` : ""}. This is a crawl-access restriction affecting this audit only; it does not describe how the website behaved for real visitors.`
+    : status === "FAILED"
+      ? `Evidence collection did not return a usable result${reason ? ` (${reason})` : ""}. This is a limitation of the audit evidence; it does not describe how the website behaved for real visitors.`
+      : "Site retrieval status was not recorded for this audit.";
+
+  return item("site_availability", "Site availability", FOUNDATION_STATUS.NOT_ASSESSED, detail,
+    { requires: "target-side availability evidence (observed HTTP responses from the site, or an uptime source)", foundational: true });
 }
 
 function indexability(model) {
@@ -146,18 +199,30 @@ function sitemap(model) {
     { requires: "a direct fetch of /sitemap.xml or the sitemap declared in robots.txt" });
 }
 
+/**
+ * robots.txt.
+ *
+ * GOVERNANCE (merge-audit correction, round 2): the audit crawler being
+ * refused by robots.txt does NOT prove that Googlebot or Bingbot are blocked —
+ * robots.txt rules are per-user-agent, and a site may legitimately disallow a
+ * third-party auditing crawler while permitting search engines.  The
+ * production DataForSEO path returns `robotsText: ""`, so no directive is
+ * available to evaluate that claim.  This check therefore never asserts that
+ * search engines are blocked; a refusal is reported as crawl-access
+ * restriction and stays NOT_ASSESSED.
+ */
 function robots(model) {
   const site = model?.evidence?.site || {};
-  const blockedByRobots = site.sourceStatus === "BLOCKED"
+  const refusedAuditCrawler = site.sourceStatus === "BLOCKED"
     && (site.limitations || []).some((l) => /robots/i.test(String(l)));
-  if (blockedByRobots) {
-    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.ACTION_REQUIRED,
-      "The crawl was refused by robots.txt. A robots.txt that blocks crawlers also blocks search engines.",
-      { foundational: true });
+  if (refusedAuditCrawler) {
+    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
+      "The audit crawler was refused by robots.txt. Because robots.txt rules apply per user agent, this does not establish that Google or Bing crawlers are blocked.",
+      { requires: "collected robots.txt directives showing the rules that apply to search-engine user agents" });
   }
   if (typeof site.robotsText === "string" && site.robotsText.trim().length > 0) {
     return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.PASS,
-      "A robots.txt file was retrieved and did not block the audit crawl.");
+      "A robots.txt file was retrieved and did not refuse the audit crawl. Its per-user-agent directives were not parsed.");
   }
   return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
     "robots.txt content was not returned by the crawl provider, so its directives were not evaluated.",

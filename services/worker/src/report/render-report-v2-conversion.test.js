@@ -551,6 +551,140 @@ test("CR-19: a not-applicable candidate renders NOT APPLICABLE", () => {
   assert.equal(item.status, FOUNDATION_STATUS.NOT_APPLICABLE);
 });
 
+// ---------------------------------------------------------------------------
+// CR-28..CR-35 — source-failure boundary (merge-audit correction, round 2).
+//
+// A provider/evidence failure is not evidence about the WEBSITE.  These cases
+// prove that no evidence-side failure is ever rendered as a client-facing
+// site-availability or search-engine-blocking defect, while a genuinely
+// target-side outage still can be.
+// ---------------------------------------------------------------------------
+
+/** Governed shape hydrateSite() produces for a non-viable source status. */
+function failedSiteEvidence(status, limitation) {
+  return { sourceStatus: status, collectedAt: FIXED_TS, limitations: limitation ? [limitation] : [] };
+}
+
+function checklistForSite(siteEvidence) {
+  const evidence = evidenceWith(siteEvidence);
+  const capabilityEvidence = buildCapabilityEvidence({
+    decisionEvidence: evidence, auditId: INPUT.auditId, generatedAt: FIXED_TS, pathValidationEvidence: null,
+  });
+  return buildFoundationChecklist(
+    scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS }),
+  );
+}
+
+const PROVIDER_FAILURES = [
+  ["rate_limit", "DataForSEO quota exceeded: rate_limit"],
+  ["network", "Task submission failed: network error"],
+  ["timeout", "Task polling failed: timeout after 300s"],
+  ["internal", "Result retrieval failed: internal provider error"],
+  ["auth", "Authentication failed for the evidence provider"],
+  ["schema_validation", "Provider response failed schema validation"],
+];
+
+test("CR-28: provider FAILED never becomes a website-availability defect", () => {
+  for (const [category, limitation] of PROVIDER_FAILURES) {
+    const checklist = checklistForSite(failedSiteEvidence("FAILED", limitation));
+    const availability = itemById(checklist, "site_availability");
+    assert.equal(
+      availability.status, FOUNDATION_STATUS.NOT_ASSESSED,
+      `FAILED/${category} must render NOT_ASSESSED for site availability`,
+    );
+    assert.equal(availability.assessed, false, `FAILED/${category} must not claim to be assessed`);
+    assert.ok(availability.requires, `FAILED/${category} must name the evidence it needs`);
+    // The wording must not assert anything about the website itself.
+    assert.ok(
+      !/site (is |was )?(down|unavailable|offline)|visitors cannot/i.test(availability.detail),
+      `FAILED/${category} must not describe the website as unavailable: ${availability.detail}`,
+    );
+  }
+});
+
+test("CR-29: the evidence limitation is surfaced on a FAILED source", () => {
+  for (const [, limitation] of PROVIDER_FAILURES) {
+    const checklist = checklistForSite(failedSiteEvidence("FAILED", limitation));
+    const availability = itemById(checklist, "site_availability");
+    assert.ok(
+      availability.detail.includes(limitation),
+      `the collected limitation must be surfaced, got: ${availability.detail}`,
+    );
+  }
+});
+
+test("CR-30: BLOCKED crawl access is not visitor-facing site unavailability", () => {
+  const checklist = checklistForSite(failedSiteEvidence("BLOCKED", "Site blocked by robots.txt"));
+  const availability = itemById(checklist, "site_availability");
+  assert.equal(availability.status, FOUNDATION_STATUS.NOT_ASSESSED);
+  assert.match(availability.detail, /crawl[- ]access/i, "must be framed as crawl access");
+  assert.ok(
+    !/visitors cannot reach|site is unavailable|nothing downstream/i.test(availability.detail),
+    `BLOCKED must not be framed as a visitor-facing outage: ${availability.detail}`,
+  );
+});
+
+test("CR-31: audit-crawler robots refusal never claims search engines are blocked", () => {
+  const checklist = checklistForSite(failedSiteEvidence("BLOCKED", "Site blocked by robots.txt"));
+  const robots = itemById(checklist, "robots_txt");
+  assert.equal(robots.status, FOUNDATION_STATUS.NOT_ASSESSED, "no directive evidence => NOT_ASSESSED");
+  assert.ok(robots.requires, "must name the directive evidence required");
+  assert.ok(
+    !/also blocks search engines|search engines are blocked|blocks google|blocks bing/i.test(robots.detail),
+    `must not claim search engines are blocked: ${robots.detail}`,
+  );
+  assert.match(robots.detail, /per user agent|does not establish/i, "must state the limitation explicitly");
+});
+
+test("CR-32: a proven target-side outage IS still ACTION REQUIRED", () => {
+  // Target-side evidence: the crawl observed HTTP responses and every one
+  // was an error. This is evidence about the website, not the provider.
+  const checklist = checklistForSite(assessedSite({
+    statusCounts: { 503: 3 },
+    pages: [{ crawledUrl: "https://x.com/", title: "", statusCode: 503, headings: {} }],
+  }));
+  const availability = itemById(checklist, "site_availability");
+  assert.equal(availability.status, FOUNDATION_STATUS.ACTION_REQUIRED);
+  assert.equal(availability.assessed, true);
+  assert.match(availability.detail, /503/, "must cite the observed status code");
+});
+
+test("CR-33: a partial outage does not become a site-availability defect", () => {
+  // Some pages error, some serve — the site is reachable.
+  const checklist = checklistForSite(assessedSite({
+    statusCounts: { 200: 2, 404: 1 },
+    pages: [{ crawledUrl: "https://x.com/", title: "Home", statusCode: 200, headings: { h1: ["Home"] } }],
+  }));
+  assert.equal(itemById(checklist, "site_availability").status, FOUNDATION_STATUS.PASS);
+});
+
+test("CR-34: existing PASS availability behaviour is intact", () => {
+  const checklist = checklistForSite(assessedSite());
+  const availability = itemById(checklist, "site_availability");
+  assert.equal(availability.status, FOUNDATION_STATUS.PASS);
+  assert.equal(availability.assessed, true);
+  assert.match(availability.detail, /responded/i);
+});
+
+test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", () => {
+  const states = [
+    ...PROVIDER_FAILURES.map(([c, l]) => [`FAILED/${c}`, failedSiteEvidence("FAILED", l)]),
+    ["BLOCKED", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt")],
+    ["UNAVAILABLE", failedSiteEvidence("UNAVAILABLE", "Source not reachable")],
+    ["NOT_CONNECTED", failedSiteEvidence("NOT_CONNECTED", "Source not configured")],
+  ];
+  for (const [label, siteEvidence] of states) {
+    const checklist = checklistForSite(siteEvidence);
+    const required = checklist
+      .filter((i) => i.status === FOUNDATION_STATUS.ACTION_REQUIRED)
+      .map((i) => i.id);
+    assert.deepEqual(
+      required, [],
+      `${label} must produce no ACTION REQUIRED foundation (got: ${required.join(", ")})`,
+    );
+  }
+});
+
 test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
   const model = scoreWith(unassessedSite());
   const checklist = buildFoundationChecklist(model);
