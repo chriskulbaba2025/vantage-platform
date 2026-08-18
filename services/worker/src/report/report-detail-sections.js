@@ -203,9 +203,16 @@ export function technicalDetailSection(model) {
       contentOk ? "" : "Image evidence was not extracted."),
   ].join("");
 
+  // Link counts are meaningful only when the crawl actually returned link
+  // data.  On a failed/blocked crawl `0 detected` would be an unmeasured
+  // value rendered as a fact — unknown must not become GOOD either.
+  const linkEvidence =
+    AVAILABLE.has(site.sourceStatus) && typeof site.internalLinkCount === "number";
   const links = [
-    techRow("Internal links", true, `${site.internalLinkCount ?? 0} detected`, ""),
-    techRow("Broken internal links", true, `${(site.brokenInternalLinks || []).length} detected`, ""),
+    techRow("Internal links", linkEvidence, `${site.internalLinkCount} detected`,
+      linkEvidence ? "" : "Link evidence was not collected."),
+    techRow("Broken internal links", linkEvidence, `${(site.brokenInternalLinks || []).length} detected`,
+      linkEvidence ? "" : "Link evidence was not collected."),
   ].join("");
 
   // v1 rendered each absent header as "Missing" even when headers were never

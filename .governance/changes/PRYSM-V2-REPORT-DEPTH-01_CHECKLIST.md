@@ -299,7 +299,7 @@ and `src/scoring/vantage-score.test.js`.
 | Is authoritative state directly manipulated? | No — every render assertion runs `scoreAudit(INPUT, evidence)` → `renderReportV2(model)` |
 | Is a mock replacing the proven behaviour? | No mocks. Fixtures supply evidence; all scoring/classification/rendering is production code |
 | Is a counter disconnected from the dependency? | N/A — no call-count assertions in this package |
-| Is structural presence accepted where behaviour is required? | No — CR-03/04 assert rank order, CR-20 asserts a computed count of zero |
+| Is structural presence accepted where behaviour is required? | No — CR-03/04 assert rank order, CR-20 asserts a computed count of zero **(see §8: the first form of CR-20 failed this question and was corrected)** |
 | Does the negative path inject at the real boundary? | Yes — capability status and `_*Available` markers are the real production gates |
 | Are concrete observable outcomes asserted? | Yes — rendered strings, ranks, statuses, counts, numeric equality |
 | Would breaking production behaviour fail the test? | Verified by mutation challenge (§6) |
@@ -333,6 +333,66 @@ No deliberate breakage is committed. `git status` after the challenge showed
 only the intended package files.
 
 **PROOF HARNESS FREEZE: PASS**
+
+---
+
+## 8. Correction round 1 — exact-head audit item 26 (CR-20 false-PASS)
+
+The independent exact-head audit of `6ce58e0d` returned **BLOCKED on item 26**.
+All production-behaviour items passed; the defect was in the proof harness.
+
+**Defect.** CR-20 asserted:
+
+```js
+checklist.filter((i) => i.status === ACTION_REQUIRED && i.assessed !== true)
+```
+
+`assessed` is *derived* from `status` in `foundation-readiness.js` `item()`
+(`assessed: status === PASS || status === ACTION_REQUIRED`), so the predicate
+is structurally unsatisfiable. The filter could never match, the assertion
+could never fail, and the frozen CR-20 PASS condition — "for a fully-unassessed
+fixture, zero ACTION REQUIRED rows are produced" — was never actually asserted.
+Only the GA4 branch was behaviourally covered, which is why mutation M6 passed:
+M6 mutated the GA4 branch, which a *different* assertion in the same test
+caught. A regression in any non-GA4 branch would have shipped green.
+
+This is precisely the "assertion disconnected from the production dependency"
+false-PASS mechanism the standard prohibits. The audit finding is accepted in
+full.
+
+**Correction (test-strengthening + two production gates).**
+
+1. CR-20 now asserts the frozen condition directly: the production checklist
+   must yield an empty list of `ACTION_REQUIRED` ids for the unassessed
+   fixture, every `NOT_ASSESSED` item must report `assessed === false` and
+   name its required source, and the count of rendered ACTION-REQUIRED status
+   chips must equal the model's count — with a **positive control** on an
+   assessed fixture (`required > 0`) so the assertion cannot pass by simply
+   never rendering anything.
+2. `technicalDetailSection` link rows are now gated on crawl availability, so
+   a failed/blocked crawl no longer renders `0 detected` as a measured fact.
+3. `securityHeaders` returns `NOT_ASSESSED` when the capability reports
+   available but no header keys were actually observed, closing a false-PASS
+   path where an empty object would have rendered as "headers present".
+
+Items 2 and 3 were raised by the audit as non-blocking minor observations.
+They are corrected here because they are the same unknown-as-fact invariant
+this package exists to enforce — in the opposite direction (unknown becoming
+GOOD rather than BAD).
+
+**Re-run mutation challenge (corrected harness).**
+
+| # | Mutation | Expected | Observed |
+|---|---|---|---|
+| M7 | `securityHeaders` (non-GA4) emits ACTION_REQUIRED from unavailable evidence | CR-20 fails | 27 pass / **1 fail — CR-20** |
+| M8 | `primaryContact` (non-GA4) emits ACTION_REQUIRED from unavailable evidence | CR-20 fails | 27 pass / **1 fail — CR-20** |
+| M9 | Renderer stops emitting ACTION-REQUIRED chips (render/model divergence) | CR-20 fails | 27 pass / **1 fail — CR-20** |
+| — | Restore | all pass | **28 pass / 0 fail** |
+
+M7 and M8 are the exact regression class the original CR-20 could not detect.
+M9 additionally proves the render/model consistency arm.
+
+**PROOF HARNESS RE-FREEZE: PASS**
 
 ---
 

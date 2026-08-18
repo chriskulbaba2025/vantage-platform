@@ -554,10 +554,53 @@ test("CR-19: a not-applicable candidate renders NOT APPLICABLE", () => {
 test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
   const model = scoreWith(unassessedSite());
   const checklist = buildFoundationChecklist(model);
-  const wrongly = checklist.filter(
-    (i) => i.status === FOUNDATION_STATUS.ACTION_REQUIRED && i.assessed !== true,
+
+  // NOTE (proof-harness correction, exact-head audit item 26): the original
+  // form of this assertion filtered on `status === ACTION_REQUIRED &&
+  // assessed !== true`.  Because `assessed` is DERIVED from `status` in
+  // foundation-readiness.js `item()`, that predicate is structurally
+  // unsatisfiable — it could never fail and therefore proved nothing.  The
+  // assertion below is the frozen CR-20 PASS condition as written: for a
+  // fixture whose content, header, and interactive evidence were all absent,
+  // the production checklist must emit ZERO ACTION REQUIRED rows.
+  const actionRequired = checklist
+    .filter((i) => i.status === FOUNDATION_STATUS.ACTION_REQUIRED)
+    .map((i) => i.id);
+  assert.deepEqual(
+    actionRequired, [],
+    `no ACTION REQUIRED may be produced from unassessed evidence (got: ${actionRequired.join(", ")})`,
   );
-  assert.deepEqual(wrongly.map((i) => i.id), [], "no unassessed item may be ACTION REQUIRED");
+
+  // Every item must be justified: an item is `assessed` only if the governed
+  // capability/availability marker for it actually proves the check ran.
+  for (const i of checklist) {
+    if (i.status === FOUNDATION_STATUS.NOT_ASSESSED) {
+      assert.equal(i.assessed, false, `${i.id}: NOT_ASSESSED must not claim to be assessed`);
+      assert.ok(i.requires, `${i.id}: NOT_ASSESSED must name the evidence it needs`);
+    }
+  }
+
+  // Render/model consistency: the number of ACTION-REQUIRED status chips
+  // actually rendered must equal the number of ACTION_REQUIRED items the
+  // production checklist produced — zero here, non-zero for an assessed
+  // fixture.  Matching the chip markup (not loose text) avoids counting the
+  // section's own "N action required" summary line.
+  const chipCount = (m) =>
+    (renderReportV2(m).match(/<span class="chip cap-missing">ACTION REQUIRED<\/span>/g) || []).length;
+  const required = (m) =>
+    buildFoundationChecklist(m).filter((i) => i.status === FOUNDATION_STATUS.ACTION_REQUIRED).length;
+
+  assert.equal(chipCount(model), 0, "unassessed fixture must render zero ACTION REQUIRED chips");
+  assert.equal(chipCount(model), required(model), "render must match the model for the unassessed fixture");
+
+  // Positive control — the same relationship must hold when deficiencies ARE
+  // proven, so the assertion above cannot pass by simply never rendering.
+  const proven = scoreWith(assessedSite({
+    targetUrl: "http://x.com/",
+    nonIndexablePages: [{ url: "https://x.com/", reason: "noindex" }],
+  }));
+  assert.ok(required(proven) > 0, "control fixture must produce proven deficiencies");
+  assert.equal(chipCount(proven), required(proven), "render must match the model for the assessed fixture");
 
   // GA4 not connected must never read as "missing".
   const ga4Item = itemById(checklist, "conversion_measurement");
