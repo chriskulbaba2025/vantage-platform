@@ -98,7 +98,9 @@ function normalizePage(raw, context = {}) {
   // meta.external_links_count), not arrays.  When a link array is supplied
   // (fixture tests or the separate /on_page/links endpoint), normalise it.
   // Otherwise leave the array empty — real link data comes via the links endpoint.
-  const rawLinks = raw.links || [];
+  const rawLinks = (Array.isArray(raw.links) && raw.links.length > 0)
+  ? raw.links
+  : (context.links || []);
   const links = rawLinks.map((link) => ({
     url: link.url || link.href || link.link_to || "",
     text: link.text || link.anchor || "",
@@ -1426,9 +1428,28 @@ export async function crawlWithDataforseo(target, options = {}) {
     // scope deep sub-acquisitions (content parsing, redirect chains,
     // resources) to decision-bearing pages only (PRYSM-NEXT-01 WP-B-08).
     const targetDomainEarly = domainOf(target);
-    normalizedPages = rawPages.map((raw) =>
-      normalizePage(raw, { targetDomain: targetDomainEarly }),
-    );
+    // Production /on_page/links records carry source/destination edges as
+    // link_from/link_to, while /on_page/pages normally carries counts only.
+    // Attach those already-fetched edges to their normalized source pages so
+    // downstream internal-link analysis can prove a link is actually missing.
+    const linksBySource = new Map();
+    for (const link of rawLinks) {
+      const sourceUrl = link.link_from || "";
+      const destinationUrl = link.link_to || link.url || link.href || "";
+      if (!sourceUrl || !destinationUrl) continue;
+      const sourceKey = normalizeUrl(sourceUrl);
+      if (!sourceKey) continue;
+      const sourceLinks = linksBySource.get(sourceKey) || [];
+      sourceLinks.push(link);
+      linksBySource.set(sourceKey, sourceLinks);
+    }
+    normalizedPages = rawPages.map((raw) => {
+      const pageUrl = raw.url || raw.location || "";
+      return normalizePage(raw, {
+        targetDomain: targetDomainEarly,
+        links: linksBySource.get(normalizeUrl(pageUrl)) || [],
+      });
+    });
 
     // 3d. Retrieve duplicate tags (with required `type` fields, polls through 20100)
     try {
