@@ -28,8 +28,25 @@ function domainKey(value) {
 function normalizeSuppliedCompetitor(result) {
   if (result?.status !== "AVAILABLE" || !result.evidence) return null;
   const site = result.evidence;
+  if (site.sourceStatus && site.sourceStatus !== "AVAILABLE" && site.sourceStatus !== "PARTIAL") return null;
+
+  const pages = Array.isArray(site.pages) ? site.pages : [];
+  const viablePages = pages.filter((page) => {
+    const status = Number(page?.status);
+    return Number.isFinite(status) && status >= 200 && status < 400;
+  });
+  if (viablePages.length === 0) return null;
+
   const domain = site.domain || domainKey(result.url);
-  const firstPage = Array.isArray(site.pages) ? site.pages[0] : null;
+  const firstPage = viablePages[0];
+  const services = [...new Set(viablePages.flatMap((page) =>
+    Array.isArray(page?.serviceCandidates) ? page.serviceCandidates : []))];
+  const ctas = viablePages.flatMap((page) => Array.isArray(page?.ctas) ? page.ctas : []);
+  const forms = viablePages.flatMap((page) => Array.isArray(page?.forms) ? page.forms : []);
+  const socialLinks = viablePages.flatMap((page) => Array.isArray(page?.socialLinks) ? page.socialLinks : []);
+  const schemaTypes = [...new Set(viablePages.flatMap((page) =>
+    Array.isArray(page?.schemaTypes) ? page.schemaTypes : []))];
+  const signals = viablePages.map((page) => page?.signals || {});
 
   return {
     candidateUrl: result.url,
@@ -42,20 +59,26 @@ function normalizeSuppliedCompetitor(result) {
     discoverySource: "user-supplied",
     source: "prysm-direct-crawl",
     directCrawlCollectedAt: site.collectedAt || null,
-    pageCount: site.pageCount,
-    pages: Array.isArray(site.pages)
-      ? site.pages.slice(0, 8).map((page) => ({
-          url: page.url || "",
-          title: page.title || "",
-        }))
-      : [],
-    services: Array.isArray(site.services) ? site.services : [],
+    pageCount: viablePages.length,
+    pages: viablePages.slice(0, 8).map((page) => ({
+      url: page.url || "",
+      title: page.title || "",
+    })),
+    services,
     topicKeywords: Array.isArray(site.topicKeywords) ? site.topicKeywords : [],
-    ctas: Array.isArray(site.ctas) ? site.ctas : [],
-    forms: Array.isArray(site.forms) ? site.forms : [],
-    trust: site.trust || {},
-    socialLinks: Array.isArray(site.socialLinks) ? site.socialLinks : [],
-    schemaTypes: Array.isArray(site.schemaTypes) ? site.schemaTypes : [],
+    ctas,
+    forms,
+    trust: {
+      testimonials: signals.some((signal) => signal.testimonials === true),
+      credentials: signals.some((signal) => signal.credentials === true),
+      caseStudies: signals.some((signal) => signal.caseStudies === true),
+      faq: signals.some((signal) => signal.faq === true),
+      pricing: signals.some((signal) => signal.pricing === true),
+      policies: signals.some((signal) => signal.policies === true),
+      contact: signals.some((signal) => signal.contact === true),
+    },
+    socialLinks,
+    schemaTypes,
     limitations: Array.isArray(site.limitations) ? site.limitations : [],
   };
 }
@@ -128,10 +151,22 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       })
     : [];
 
-  const suppliedItems = suppliedResults
-    .map(normalizeSuppliedCompetitor)
-    .filter(Boolean);
-  const suppliedFailed = suppliedResults.filter((item) => item?.status !== "AVAILABLE");
+  const suppliedEntries = suppliedResults.map((result) => ({
+    result,
+    item: normalizeSuppliedCompetitor(result),
+  }));
+  const suppliedItems = suppliedEntries.map((entry) => entry.item).filter(Boolean);
+  const suppliedFailed = suppliedEntries
+    .filter((entry) => !entry.item)
+    .map((entry) => ({
+      ...entry.result,
+      error: entry.result?.error || "no usable 2xx/3xx HTML evidence returned",
+    }));
+  const suppliedResultSummaries = suppliedEntries.map((entry) => ({
+    status: entry.item ? "AVAILABLE" : (entry.result?.status === "AVAILABLE" ? "FAILED" : entry.result?.status || "FAILED"),
+    url: entry.result?.url || null,
+    error: entry.item ? null : (entry.result?.error || "no usable 2xx/3xx HTML evidence returned"),
+  }));
   const suppliedDomains = new Set(suppliedItems.map((item) => domainKey(item.domain || item.candidateUrl)).filter(Boolean));
   const suppliedLimitations = suppliedFailed.map(
     (item) => `Supplied competitor crawl failed for ${item.url}: ${item.error || "no usable evidence returned"}`,
@@ -151,7 +186,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       keywords: [],
       items: suppliedItems,
       suppliedCompetitors,
-      suppliedResults: suppliedResults.map((item) => ({ status: item.status, url: item.url, error: item.error || null })),
+      suppliedResults: suppliedResultSummaries,
       errors: suppliedLimitations,
     };
     const rawBytes = suppliedCompetitors.length > 0
@@ -215,7 +250,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       keywords,
       items: suppliedItems,
       suppliedCompetitors,
-      suppliedResults: suppliedResults.map((item) => ({ status: item.status, url: item.url, error: item.error || null })),
+      suppliedResults: suppliedResultSummaries,
       errors: limitations,
     };
     const rawBytes = suppliedCompetitors.length > 0
@@ -307,7 +342,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       keywords,
       items: combinedItems,
       suppliedCompetitors,
-      suppliedResults: suppliedResults.map((item) => ({ status: item.status, url: item.url, error: item.error || null })),
+      suppliedResults: suppliedResultSummaries,
       serpStatus,
       errors: limitations,
     };
@@ -366,7 +401,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       keywords,
       items: suppliedItems,
       suppliedCompetitors,
-      suppliedResults: suppliedResults.map((item) => ({ status: item.status, url: item.url, error: item.error || null })),
+      suppliedResults: suppliedResultSummaries,
       serpStatus: "FAILED",
       errors: limitations,
     };
