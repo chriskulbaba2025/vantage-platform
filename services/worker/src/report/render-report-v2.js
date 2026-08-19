@@ -22,6 +22,20 @@
 
 import { REPORT_DESIGN_V2 } from "./report-design.js";
 import { computePillars } from "./v2-pillars.js";
+import { ACTION_CLASS, buildActionPlan } from "./action-priority.js";
+import { buildFoundationChecklist } from "./foundation-readiness.js";
+import {
+  foundationSection,
+  eeatSection,
+  technicalDetailSection,
+  headingSection,
+  schemaSection,
+  performanceDetailSection,
+  machineReadinessSection,
+  strengthsSection,
+  actionPlanSection,
+  phase2Section,
+} from "./report-detail-sections.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,19 +153,35 @@ function pillarSection(pillars) {
   return `<section id="pillars"><h2>D. Where are the problems?</h2><div class="pillar-grid">${cards}</div></section>`;
 }
 
-function blockersSection(model) {
-  const scoreBearing = (model.findings || [])
-    .filter((f) => f.scoreBearing === true)
-    .slice(0, 5);
-  if (scoreBearing.length === 0) {
+const ACTION_CLASS_LABEL = {
+  [ACTION_CLASS.FOUNDATION_BLOCKER]: "Foundation blocker",
+  [ACTION_CLASS.HIGH_CONVERSION]: "High conversion impact",
+  [ACTION_CLASS.OPTIMIZATION]: "Optimization",
+};
+
+/**
+ * E. What should be fixed first?
+ *
+ * PRYSM-V2-REPORT-DEPTH-01 — ordered by the conversion-first action plan
+ * rather than raw score, so a verified foundation blocker leads even when an
+ * ordinary optimization carries a higher weighted priority.
+ */
+function blockersSection(model, plan) {
+  if (plan.actions.length === 0) {
     return `<section id="blockers" class="card"><h2>E. What should be fixed first?</h2><p>No score-bearing findings — no prioritized blockers available from the assessed evidence.</p></section>`;
   }
-  const rows = scoreBearing
-    .map(
-      (f, i) => `
+  const rows = plan.actions
+    .slice(0, 8)
+    .map((a) => {
+      const f = a.finding;
+      const classChip = a.actionClass === ACTION_CLASS.FOUNDATION_BLOCKER
+        ? `<span class="chip cap-missing">${e(ACTION_CLASS_LABEL[a.actionClass])}</span>`
+        : `<span class="chip cap-neutral">${e(ACTION_CLASS_LABEL[a.actionClass] || a.actionClass)}</span>`;
+      return `
       <tr>
-        <td>${i + 1}</td>
+        <td>${e(a.rank)}</td>
         <td class="mono">${e(f.finalPriority)}</td>
+        <td>${classChip}<br><span class="small">${e(a.group)}</span></td>
         <td><strong>${e(f.title)}</strong><br><span class="small">${e(f.ruleId)} · ${e(f.dimension)}</span></td>
         <td>${e(f.businessImpact || "")}</td>
         <td class="small">${(f.evidence || [])
@@ -164,16 +194,18 @@ function blockersSection(model) {
         <td>${e(impactCategory(f))}</td>
         <td>${e(EFFORT_LABEL[f.implementationEffort] || f.implementationEffort || "")}</td>
         <td>${e(f.confidence || "")}</td>
-      </tr>`,
-    )
+      </tr>`;
+    })
     .join("");
   return `
   <section id="blockers" class="card">
     <h2>E. What should be fixed first?</h2>
+    <p class="muted small">Ranked conversion-first: verified foundation blockers lead, then the highest
+      conversion-impact work adjusted for evidence confidence.</p>
     <div class="table-wrap">
     <table class="blockers">
       <thead><tr>
-        <th>#</th><th>Priority</th><th>Problem</th><th>Business consequence</th>
+        <th>#</th><th>Priority</th><th>Class</th><th>Problem</th><th>Business consequence</th>
         <th>Evidence / provenance</th><th>Recommended action</th><th>Impact</th>
         <th>Effort</th><th>Confidence</th>
       </tr></thead>
@@ -203,33 +235,82 @@ function conversionPathSection(model) {
   return `<section id="paths" class="card"><h2>Conversion path architecture</h2>${rows}</section>`;
 }
 
+/**
+ * Competitive context.
+ *
+ * PRYSM-V2-REPORT-DEPTH-01 — renders a side-by-side signal comparison so the
+ * section answers where this site is stronger and where competitor evidence
+ * is stronger.  Uses only already-collected competitor evidence: no provider
+ * scope is added, and when evidence is unavailable the exact limitation is
+ * stated instead of generic market commentary.
+ */
 function competitorSection(model) {
   const comparisons = model.competitors?.comparisons || [];
+  const limitations = model.competitors?.opportunities?.limitations || [];
   if (comparisons.length === 0) {
-    return `<section id="competitors" class="card"><h2>Competitive context</h2><p>No competitor evidence supplied for this assessment.</p></section>`;
+    return `<section id="competitors" class="card"><h2>Competitive context</h2>
+      <p>No competitor evidence was supplied or collected for this assessment, so no comparison is made.
+      No market-wide or industry-average claim is inferred.</p>
+      ${limitations.length ? `<ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}
+    </section>`;
   }
-  const rows = comparisons
-    .map(
-      (c) => `
-      <tr>
-        <td>${e(c.name || c.url || "")}</td>
-        <td class="small">${e(c.url || "")}</td>
-        <td>${e(c.status || "")}</td>
-        <td>${e(c.offerClarity || c.topic || "")}</td>
-        <td>${e(c.trustProof || "")}</td>
-        <td>${e(c.ctaClarity || "")}</td>
-      </tr>`,
-    )
+
+  const site = model.evidence?.site || {};
+  const trustBand = model.bands?.trust;
+  // Own-site values come from the same governed model that produced the
+  // competitor values — never a placeholder, never an absence-derived label.
+  const ownSite = {
+    offerClarity: (site.services || []).length
+      ? `${(site.services || []).length} service topic(s)`
+      : "Not Assessed",
+    trustProof: trustBand && trustBand !== "Not Assessed" ? trustBand : "Not Assessed",
+    ctaClarity: (site.ctas || []).length ? `${(site.ctas || []).length} CTA(s)` : "Not Assessed",
+    contentDepth: site.pageCount ? `${site.pageCount} page(s)` : "Not Assessed",
+    pathClarity: (site.forms || []).length || (site.ctas || []).length ? "Detected" : "Not Assessed",
+  };
+
+  const SIGNALS = [
+    ["Offer clarity", "offerClarity"],
+    ["Trust proof", "trustProof"],
+    ["CTA clarity", "ctaClarity"],
+    ["Content coverage", "contentDepth"],
+    ["Conversion path", "pathClarity"],
+  ];
+
+  const header = comparisons
+    .map((c) => `<th>${e(c.name || c.url || "Competitor")}</th>`)
     .join("");
+  const signalRows = SIGNALS
+    .map(([label, key]) => `<tr>
+        <td><strong>${e(label)}</strong></td>
+        <td>${e(ownSite[key])}</td>
+        ${comparisons.map((c) => `<td>${e(c[key] || "Not Assessed")}</td>`).join("")}
+      </tr>`)
+    .join("");
+
+  const sourceRows = comparisons
+    .map((c) => `<tr><td class="small">${e(c.name || c.url || "")}</td><td class="small">${e(c.url || "")}</td><td class="small">${e(c.status || "AVAILABLE")}</td><td class="small">${e(c.topic || c.note || "Not Assessed")}</td></tr>`)
+    .join("");
+
   return `
   <section id="competitors" class="card">
     <h2>Competitive context</h2>
+    <p class="muted small">Signal-by-signal comparison against the competitor evidence that was actually collected.
+      No traffic, ranking, backlink, market-share, or domain-authority claim is made.</p>
     <div class="table-wrap">
     <table>
-      <thead><tr><th>Competitor</th><th>URL</th><th>Status</th><th>Offer/topic</th><th>Trust proof</th><th>CTA clarity</th></tr></thead>
-      <tbody>${rows}</tbody>
+      <thead><tr><th>Signal</th><th>This site</th>${header}</tr></thead>
+      <tbody>${signalRows}</tbody>
     </table>
     </div>
+    <h3>Competitor sources</h3>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Competitor</th><th>URL</th><th>Status</th><th>Observed topic</th></tr></thead>
+      <tbody>${sourceRows}</tbody>
+    </table>
+    </div>
+    ${limitations.length ? `<h3>Limitations</h3><ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
 
@@ -286,49 +367,58 @@ function contentOpportunitiesSection(model) {
   </section>`;
 }
 
+/**
+ * CMS & platform.
+ *
+ * PRYSM-V2-REPORT-DEPTH-01 — v1 rendered a fixed nine-row feasibility matrix
+ * ("Likely" / "Uncertain" / "Hosting-dependent") for every site, which reads
+ * as a verified assessment of THIS client's platform.  Detected facts and
+ * generic guidance are now strictly separated: the observed block carries
+ * only what the crawl returned, and the checklist below is explicitly
+ * labelled as unverified questions to confirm with admin access.
+ */
 function cmsPlatformSection(model) {
   const site = model.evidence?.site || {};
-  const platform = site.platform || "Unknown";
-  const proprietary = /GoDaddy|Wix|Squarespace|Shopify/i.test(platform);
-  const risk = proprietary
-    ? "Medium — proprietary platform constraints may limit implementation"
-    : platform === "Unknown"
-      ? "Uncertain — platform could not be verified from the assessed evidence"
-      : "Low to Medium — implementation depends on hosting and theme controls";
-  const rows = [
-    ["Add meta descriptions", "Likely", "CMS or page settings", "—"],
-    ["Add canonical URLs", proprietary ? "Uncertain" : "Likely", proprietary ? "May require code injection or platform setting" : "Framework or SEO configuration", "If platform blocks control"],
-    ["Add schema markup", proprietary ? "Uncertain" : "Likely", "Custom code or template access", "If custom code is blocked"],
-    ["Fix heading hierarchy", "Likely", "Template or page editor", "—"],
-    ["Add security headers", "Hosting-dependent", "Server, CDN, or platform settings", "May require hosting change"],
-    ["Create dedicated service pages", "Likely", "Page creation and navigation", "If current plan limits pages"],
-    ["Add testimonials and FAQ", "Likely", "Content blocks", "—"],
-    ["Add inline lead capture", "Likely", "Native form or embedded form", "If forms are restricted"],
-    ["Optimize images", "Likely", "Optimized asset upload", "—"],
+  const detected = typeof site.platform === "string" && site.platform.trim() && site.platform !== "Unknown"
+    ? site.platform
+    : null;
+  const server = site.pages?.[0]?.responseHeaders?.server;
+  const headersAvailable = site._responseHeadersAvailable === true;
+
+  const proprietary = detected ? /GoDaddy|Wix|Squarespace|Shopify/i.test(detected) : false;
+  const migrationRisk = detected
+    ? proprietary
+      ? "Medium — proprietary platform constraints may limit deeper implementation"
+      : "Low to Medium — implementation depends on hosting and theme controls"
+    : null;
+
+  const observedRows = [
+    `<tr><td>Platform</td><td>${detected ? e(detected) : `<span class="chip cap-neutral">Not verified</span> The crawl did not return a platform signal.`}</td></tr>`,
+    `<tr><td>Server / delivery</td><td>${headersAvailable && server ? e(server) : `<span class="chip cap-neutral">Not assessed</span> Response headers were not returned by the crawl provider.`}</td></tr>`,
+    `<tr><td>Migration risk</td><td>${migrationRisk ? e(migrationRisk) : `<span class="chip cap-neutral">Not assessed</span> Migration risk is not stated because the platform was not verified.`}</td></tr>`,
+  ].join("");
+
+  const questions = [
+    "Can page-level titles, descriptions, and canonical URLs be edited?",
+    "Can JSON-LD structured data be added globally and per service page?",
+    "Can semantic heading levels be chosen independently of visual styling?",
+    "Does the current plan allow dedicated service, FAQ, and policy pages?",
+    "Can response headers be configured at the host, CDN, or platform layer?",
+    "Can a lead-capture form be embedded on the pages that need it?",
   ];
+
   return `
   <section id="cms" class="card">
     <h2>CMS &amp; Platform Constraints</h2>
+    <h3>Observed from the crawl</h3>
     <div class="table-wrap"><table>
-      <thead><tr><th>Detected Platform</th><th>Value</th></tr></thead>
-      <tbody>
-        <tr><td>Platform</td><td>${e(platform)}</td></tr>
-        <tr><td>Platform Risk</td><td>${e(risk)}</td></tr>
-      </tbody>
+      <thead><tr><th>Signal</th><th>Value</th></tr></thead>
+      <tbody>${observedRows}</tbody>
     </table></div>
-    <h3>Platform Limitations Affecting Conversion</h3>
-    <ul class="small">
-      <li><strong>Metadata control:</strong> Verify page-level title, description, and canonical controls.</li>
-      <li><strong>Structured data:</strong> Confirm whether JSON-LD can be added globally and per service.</li>
-      <li><strong>Heading structure:</strong> Confirm whether semantic heading levels can be selected independently of visual styling.</li>
-      <li><strong>Page architecture:</strong> Confirm the platform or plan supports dedicated service, FAQ, case-study, and policy pages.</li>
-    </ul>
-    <h3>What This Means for Implementation</h3>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Fix</th><th>Likely Feasible</th><th>May Require Admin / Plan</th><th>May Require Migration</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${e(c)}</td>`).join("")}</tr>`).join("")}</tbody>
-    </table></div>
-    <p class="muted small">Note: feasibility is based on captured platform signals. Admin access is required to verify exact controls.</p>
+    <h3>Implementation questions — generic verification checklist</h3>
+    <p class="muted small">The questions below are a generic checklist, not findings about this site. None of them
+      has been verified: platform administration access is required to confirm the answers.</p>
+    <ul class="small">${questions.map((q) => `<li>${e(q)}</li>`).join("")}</ul>
   </section>`;
 }
 
@@ -486,7 +576,7 @@ function deepEvidenceLayer(model) {
   </section>`;
 }
 
-function pageShell(model, date, pillars) {
+function pageShell(model, date, pillars, checklist, plan) {
   const business = model.input?.businessName || "Business";
   const domain = model.evidence?.site?.domain || model.input?.targetUrl || "";
   const scoringVersion = model.scoringVersion || "";
@@ -554,16 +644,26 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
 </header>
 <main>
   <nav class="nav-jump no-print">
-    <a href="#executive">Executive</a><a href="#pillars">Pillars</a><a href="#blockers">Fix first</a><a href="#paths">Paths</a><a href="#competitors">Competitors</a><a href="#content-ideas">Content ideas</a><a href="#cms">CMS</a><a href="#internal-links">Internal links</a><a href="#evidence">Evidence</a>
+    <a href="#executive">Executive</a><a href="#pillars">Pillars</a><a href="#blockers">Fix first</a><a href="#foundations">Foundations</a><a href="#action-plan">Plan</a><a href="#paths">Paths</a><a href="#competitors">Competitors</a><a href="#content-ideas">Content ideas</a><a href="#eeat">Trust proof</a><a href="#technical">Technical</a><a href="#headings">Headings</a><a href="#schema">Entities</a><a href="#performance">Speed</a><a href="#cms">Platform</a><a href="#internal-links">Internal links</a><a href="#strengths">Strengths</a><a href="#evidence">Evidence</a>
   </nav>
   ${executiveScorecard(model, pillars)}
   ${pillarSection(pillars)}
-  ${blockersSection(model)}
+  ${blockersSection(model, plan)}
+  ${foundationSection(checklist)}
   ${conversionPathSection(model)}
   ${competitorSection(model)}
   ${contentOpportunitiesSection(model)}
+  ${eeatSection(model)}
+  ${technicalDetailSection(model)}
+  ${headingSection(model)}
+  ${schemaSection(model)}
+  ${performanceDetailSection(model)}
+  ${machineReadinessSection(model)}
   ${cmsPlatformSection(model)}
   ${internalLinksSection(model)}
+  ${strengthsSection(model, checklist)}
+  ${actionPlanSection(plan, checklist)}
+  ${phase2Section()}
   ${deepEvidenceLayer(model)}
 </main>
 <footer>Generated by Prysm (Omnipressence) · Report design v${e(REPORT_DESIGN_V2)} · Evidence-grounded conversion-readiness assessment</footer>
@@ -591,7 +691,10 @@ export function renderReportV2(model, options = {}) {
       ? "Unknown date"
       : generated.toISOString().slice(0, 10));
   const pillars = computePillars(model);
-  return pageShell(model, date, pillars);
+  // Derived display models — no governed artifact or schema is modified.
+  const checklist = buildFoundationChecklist(model);
+  const plan = buildActionPlan(model, checklist);
+  return pageShell(model, date, pillars, checklist, plan);
 }
 
 export { computePillars };
