@@ -165,6 +165,38 @@ test("PC-03/07: persisted SourceResult hydration preserves usable supplied row a
   assert.equal(row.pathClarity, "Moderate");
 });
 
+test("PC-03b: mixed supplied crawl stays PARTIAL and preserves the usable competitor row", async () => {
+  const { fetchImpl: baseFetch } = directCrawlFetch();
+  const missingUrl = "https://missing.example/";
+  const mixedFetch = async (url, ...args) => {
+    const value = String(url);
+    const metadataPath = value.endsWith("/robots.txt") || value.endsWith("/sitemap.xml") || value.endsWith("/sitemap_index.xml");
+    if (value.startsWith("https://missing.example") && !metadataPath) {
+      throw new Error("controlled missing competitor failure");
+    }
+    return baseFetch(url, ...args);
+  };
+
+  const result = await withDfsCredentials(null, null, () => executeControlled(auditRequest(mixedFetch, {
+    competitors: [SUPPLIED_URL, missingUrl],
+  })));
+  const sr = result.sourceResult;
+
+  assert.equal(sr.status, "PARTIAL");
+  assert.deepEqual(sr.evidence.suppliedCompetitorCoverage, { requested: 2, completed: 1, failed: 1 });
+  assert.equal(sr.evidence.competitors.length, 1);
+  assert.equal(sr.evidence.competitors[0].candidateUrl, SUPPLIED_URL);
+  assert.ok(sr.limitations.some((item) => item.includes(missingUrl)));
+
+  const hydrated = buildDecisionEvidence({
+    allSourceResults: [{ source: "dataforseo-serp", sourceResult: sr }],
+    suppliedCompetitors: [SUPPLIED_URL, missingUrl],
+    validateContract: createProductionContractValidator(),
+  });
+  assert.equal(hydrated.evidence.competitors.length, 1);
+  assert.equal(hydrated.evidence.competitors[0].status, "AVAILABLE");
+});
+
 test("PC-05: failed supplied crawl creates no fabricated competitor comparison", async () => {
   const { fetchImpl } = directCrawlFetch({ fail: true });
   const result = await withDfsCredentials(null, null, () => executeControlled(auditRequest(fetchImpl)));
@@ -225,6 +257,8 @@ test("PC-04: direct supplied benchmark wins same-domain de-duplication over SERP
 
   assert.equal(calls.filter((url) => url.includes("api.dataforseo.com")).length, 1,
     "controlled test must execute the real production SERP client exactly once");
+  assert.equal(calls.some((url) => url.startsWith("https://other-competitor.example")), false,
+    "SERP-discovered competitors must not be direct-crawled unless explicitly supplied");
   assert.equal(result.sourceResult.status, "AVAILABLE");
   assert.equal(items.filter((item) => item.domain === "competitor.example").length, 1);
   assert.equal(items.find((item) => item.domain === "competitor.example").discoverySource, "user-supplied");
