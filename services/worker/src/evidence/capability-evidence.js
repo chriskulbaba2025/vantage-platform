@@ -169,27 +169,24 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
   }
 
   // ── offer.clarity / trust.proof — body-content evidence ──────────────
-  // These capabilities depend on the governed content.body result, not only
-  // the legacy _contentEvidenceAvailable marker. The acquisition ledger can
-  // independently prove complete or partial content parsing.
-  const bodyContent = caps["content.body"];
-  const bodyContentAssessed =
-    bodyContent.status === CAPABILITY_STATUS.AVAILABLE ||
-    bodyContent.status === CAPABILITY_STATUS.PARTIAL;
   const contentDependent = [
     ["offer.clarity", "Offer clarity requires body-content evidence (services, CTAs, forms, descriptions)"],
     ["trust.proof", "Trust proof requires body-content evidence (credentials, testimonials, policies)"],
   ];
   for (const [name, limitation] of contentDependent) {
-    const status = bodyContentAssessed
-      ? bodyContent.status
-      : CAPABILITY_STATUS.UNAVAILABLE;
-    const limitations = bodyContentAssessed ? [] : [limitation];
+    let status;
+    const limitations = [];
+    if (contentState === "available") {
+      status = CAPABILITY_STATUS.AVAILABLE;
+    } else {
+      status = CAPABILITY_STATUS.UNAVAILABLE;
+      limitations.push(limitation);
+    }
     caps[name] = capability({
       capability: name, status,
       coverage: { requested: null, completed: null, failed: null },
       provenance: siteProv, limitations,
-      requiredFieldsPresent: bodyContentAssessed,
+      requiredFieldsPresent: contentState === "available",
     });
   }
 
