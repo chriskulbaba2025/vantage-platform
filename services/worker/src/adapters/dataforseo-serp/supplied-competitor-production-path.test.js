@@ -28,7 +28,7 @@ const COMPETITOR_HTML = `<!doctype html>
 </body>
 </html>`;
 
-function directCrawlFetch({ fail = false, dataforseoResponse = null } = {}) {
+function directCrawlFetch({ fail = false, pageStatus = 200, dataforseoResponse = null } = {}) {
   const calls = [];
   const fetchImpl = async (url) => {
     const value = String(url);
@@ -55,7 +55,7 @@ function directCrawlFetch({ fail = false, dataforseoResponse = null } = {}) {
 
     if (value.startsWith("https://competitor.example")) {
       return new Response(COMPETITOR_HTML, {
-        status: 200,
+        status: pageStatus,
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     }
@@ -183,6 +183,18 @@ test("PC-05: failed supplied crawl creates no fabricated competitor comparison",
   });
   assert.equal(hydrated.evidence.competitors.length, 0);
   assert.equal(competitorComparison(hydrated.evidence.competitors, null).comparisons.length, 0);
+});
+
+test("PC-05b: HTTP error page is not promoted into supplied competitor evidence", async () => {
+  const { fetchImpl } = directCrawlFetch({ pageStatus: 404 });
+  const result = await withDfsCredentials(null, null, () => executeControlled(auditRequest(fetchImpl)));
+  const sr = result.sourceResult;
+
+  assert.equal(sr.evidence.competitors.length, 0,
+    "an error-only HTML capture must not become benchmark evidence");
+  assert.deepEqual(sr.evidence.suppliedCompetitorCoverage, { requested: 1, completed: 0, failed: 1 });
+  assert.ok(sr.limitations.some((item) => item.includes("no usable 2xx/3xx HTML evidence returned")));
+  assert.notEqual(sr.status, "AVAILABLE");
 });
 
 test("PC-04: direct supplied benchmark wins same-domain de-duplication over SERP snippet", async () => {
