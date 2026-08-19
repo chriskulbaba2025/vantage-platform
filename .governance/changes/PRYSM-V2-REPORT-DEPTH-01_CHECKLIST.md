@@ -798,6 +798,64 @@ residual limitation — the branch declaration is review-maintained.
 
 ---
 
+## 15. Correction round 8 — in-scope fixes, and a governed scope boundary
+
+The exact-head audit of `42d67d68` confirmed all 7 round-7 defeats were caught,
+then defeated the guard with **10 new mutations**, all production-reachable.
+
+**Provenance was checked before acting**, by testing each flagged string
+against this package's own diff (`git diff 9e0006ac..HEAD`):
+
+| Finding | Location | Authored by this package? |
+|---|---|---|
+| NEW-5 CrUX field-data note | `report-detail-sections.js` | **YES** |
+| NEW-6 multi-page tested-pages block | `report-detail-sections.js` | **YES** |
+| NEW-9 competitor limitations block | `render-report-v2.js` | **YES** |
+| NEW-1 internal-link opportunities note | `render-report-v2.js` | no — pre-existing |
+| NEW-2 orphan heading | `render-report-v2.js` | no — pre-existing |
+| NEW-3 crawl-incomplete note | `render-report-v2.js` | no — pre-existing |
+| NEW-4 traced broken-links block | `render-report-v2.js` | no — pre-existing (PR #57) |
+| NEW-7 GSC source-status line | `render-report-v2.js` | no — pre-existing |
+| NEW-8 AUTH_WALL diagnostic text | `diagnostic-contracts.js` | no — file untouched |
+| NEW-10 VAN-GSC-001 businessImpact | `score-components.js` | no — this package's only change to that file is `calculateFindingPriority` |
+
+**Corrected (in scope, 3 of 10).** Two fixtures added — CrUX field data with
+multi-page results, and competitor evidence carrying an opportunity-layer
+limitation — plus three new `RENDERER_BRANCH_MARKERS` entries. Matrix is now
+27 fixtures; all frozen by CR-40 and CR-43.
+
+| # | Mutation | Round-7 | Round-8 |
+|---|---|---|---|
+| NEW-5 | CrUX note asserts a competitor comparison | green | **1 fail** |
+| NEW-6 | Multi-page block invents a threshold failure | green | **1 fail** |
+| NEW-9 | Competitor limitations block asserts superiority | green | **1 fail** |
+| — | Restore | — | **46 pass / 0 fail** |
+
+**NOT corrected — governed stop (7 of 10).** The remaining findings are in code
+this package did not author: the internal-links section, the GSC source-status
+line, the diagnostic-contract client explanations (~22 codes), and finding
+`businessImpact` strings. Closing them means freezing prose across the whole
+report surface and the diagnostic/finding catalogues — a materially larger
+work package touching modules outside this change.
+
+Governed Build Standard §3.2 (expansion beyond the authorized work-package
+boundary) and §3.8 (audit remains BLOCKED after governed correction attempts)
+both apply. Continuing autonomously would silently convert a report-improvement
+package into a whole-product wording-freeze programme. **Escalated for
+authorization instead.**
+
+**What the audits established about this package's own scope.** The originally
+reported defect — provider/evidence failure rendered as a website outage — was
+corrected in round 2 and has survived six subsequent adversarial audits
+unchanged. Every audit from round 2 onward reported the production behaviour
+correct; every block since has been harness coverage, and the last two found
+defeats only in prose reachable through increasingly specific evidence shapes.
+
+**PROOF HARNESS FREEZE (round 8, in-scope): PASS**
+**OUT-OF-SCOPE FINDINGS: ESCALATED, NOT MERGED**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |

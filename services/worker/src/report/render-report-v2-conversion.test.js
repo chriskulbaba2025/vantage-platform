@@ -807,6 +807,36 @@ function foundationMatrix() {
       h1Multiple: 1,
       pages: [{ ...assessedSite().pages[0], headings: { h1: ["One", "Two"], h2: [], h3: [], h4: [] } }],
     }), {}],
+    // Performance shapes this package's own section renders but no earlier
+    // fixture produced: CrUX field data present, and multi-page results.
+    ["perf-field-and-multipage", assessedSite(), {
+      performance: {
+        ...evidenceWith(assessedSite()).performance,
+        fieldData: { phone: { status: "AVAILABLE", formFactor: "PHONE", dataType: "field", metrics: { lcpMs: 2600 } } },
+        pageResults: [
+          { url: "https://x.com/", source: "pagespeed-insights", sourceStatus: "AVAILABLE", fallbackUsed: false },
+          { url: "https://x.com/book", source: "pagespeed-insights", sourceStatus: "PARTIAL", fallbackUsed: true },
+        ],
+      },
+    }],
+    // Competitor evidence WITH an opportunity-layer limitation — this
+    // package's competitor section renders a Limitations block there.
+    ["competitor-with-limitations", assessedSite(), {
+      competitors: [{
+        url: "https://rival.com", domain: "rival.com", status: "AVAILABLE", collectedAt: FIXED_TS,
+        evidence: {
+          domain: "rival.com", pageCount: 8, pages: [{ title: "Rival Coaching" }],
+          services: ["Coaching", "Mentoring"], topicKeywords: ["coaching"],
+          ctas: [{ text: "Book", url: "https://rival.com/book" }], forms: [{ action: "/c" }],
+          socialLinks: [], schemaTypes: ["Organization"],
+          trust: { testimonials: true, credentials: false, caseStudies: false, faq: false, pricing: false, policies: true, contact: true },
+        },
+      }],
+      competitorOpportunities: {
+        topics: [], candidates: { qualified: [], excluded: [] }, gaps: [], allGaps: [],
+        sources: {}, limitations: ["SERP coverage limited to one locale"],
+      },
+    }],
     ["device-profile-failed", assessedSite(), {
       performance: {
         ...evidenceWith(assessedSite()).performance,
@@ -1011,6 +1041,10 @@ const CHECKLIST_GOLDEN = {
   "headings-absent-h1": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
   "headings-multiple-h1": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
   "device-profile-failed": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "competitor-with-limitations": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "perf-field-and-multipage": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "unassessed": "1ab14008b83d55af0d91ac2cb54b7fc187ece111f877c4f87154c2e9fe395693",
+  "assessed": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
 };
 
 test("CR-40: the complete foundation checklist is frozen for every branch", () => {
@@ -1057,8 +1091,8 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
  * evidence must not be re-frozen.
  */
 const RENDER_GOLDEN = {
-  assessed: "95debf70ea7c3ceb5f3fb4e76d796f33ed6054baae82916f55f5813fcfba3b47",
-  unassessed: "cd0e0376965cb9021485e2dbaa7a2d6e59422225a1b688b5ffb1b218f728cf49",
+  "assessed": "95debf70ea7c3ceb5f3fb4e76d796f33ed6054baae82916f55f5813fcfba3b47",
+  "unassessed": "cd0e0376965cb9021485e2dbaa7a2d6e59422225a1b688b5ffb1b218f728cf49",
   "provider-failed": "a6345dfdcc305dac5c61241f5efd077264ec3073c22d6eb3a8ccf64395999fd2",
   "crawl-blocked": "67b0a4f293a715c3a7ffc83addcc62b5500ee400f957be97260d8c9f94612567",
   "target-outage": "a23a82cb88c9ae940150714b1051ab4fe1137f2b37dea0551555b6d5b2a4cc7b",
@@ -1081,6 +1115,8 @@ const RENDER_GOLDEN = {
   "schema-confirmed-absent": "5d7672dfa22e6d441c734a06b70ba3b6bf3cee49b58c7bbccc41bb9d12de0ad8",
   "headings-absent-h1": "5e26517032b4a9198101d5cba36e648621e2ef97604965c40ea10911536c8a1a",
   "headings-multiple-h1": "bf306669561c4ed32299dccf6d00d63956459ec77e3bbe73c6b4bc74682e2aaf",
+  "perf-field-and-multipage": "827a57fe15db76a0a3bce74c627517a0de4a56911f9631f0c6dbbb3b97edda48",
+  "competitor-with-limitations": "4c1ff7cbc84357b203942b8bac74b295e888b2455ef3082eadc2c53a04e7d2d4",
   "device-profile-failed": "68bd739b1eca42c1870c982cf3173fb67e6843b7fa8586b5c966647d736f95d6",
 };
 
@@ -1117,6 +1153,9 @@ const RENDERER_BRANCH_MARKERS = [
   ["heading absent-H1 branch", "No H1 on this page"],
   ["heading multiple-H1 branch", "H1 headings on this page"],
   ["device profile FAILED branch", "Result: Unavailable"],
+  ["CrUX field-data note", "CrUX field data available for"],
+  ["multi-page tested-pages block", "Tested pages ("],
+  ["competitor limitations block", "SERP coverage limited"],
 ];
 
 test("CR-44: the render matrix exercises every claim-bearing renderer branch", () => {
