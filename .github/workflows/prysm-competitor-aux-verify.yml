@@ -1,0 +1,31 @@
+name: Prysm Competitor Auxiliary Verify
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-competitor-closure:
+    runs-on: [self-hosted, Linux, X64, prysm]
+    defaults:
+      run:
+        working-directory: services/worker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Focused supplied-competitor production path
+        run: node --test src/adapters/dataforseo-serp/supplied-competitor-production-path.test.js
+      - run: npm run check:template
+      - run: npm test
+      - run: npm run test:schemas
+      - run: npm run test:orchestrator
+      - run: npm run acceptance:wp6
+      - run: npm run acceptance:wp12
+      - run: npm run acceptance:prysm
