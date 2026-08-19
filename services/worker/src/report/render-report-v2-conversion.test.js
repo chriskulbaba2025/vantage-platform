@@ -575,10 +575,10 @@ function failedSiteEvidence(status, limitation) {
   return { sourceStatus: status, collectedAt: FIXED_TS, limitations: limitation ? [limitation] : [] };
 }
 
-function modelForSite(siteEvidence, evidenceOverrides = {}) {
+function modelForSite(siteEvidence, evidenceOverrides = {}, pathValidationEvidence = null) {
   const evidence = evidenceWith(siteEvidence, evidenceOverrides);
   const capabilityEvidence = buildCapabilityEvidence({
-    decisionEvidence: evidence, auditId: INPUT.auditId, generatedAt: FIXED_TS, pathValidationEvidence: null,
+    decisionEvidence: evidence, auditId: INPUT.auditId, generatedAt: FIXED_TS, pathValidationEvidence,
   });
   return scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS });
 }
@@ -773,6 +773,48 @@ function foundationMatrix() {
       },
     }],
     ["no-performance", assessedSite(), NO_PERF],
+
+    // ── Non-foundation section shapes ───────────────────────────────────
+    // The freeze is only as wide as the evidence shapes the matrix carries.
+    // A prior audit reached these renderer branches — Section E's blocker
+    // row, the competitor note, proprietary-platform text, untraced broken
+    // links, confirmed-absent schema, heading variants and a failed device
+    // profile — because no fixture produced them. Each is production-reachable.
+    ["path-validated-blocker", assessedSite(), {}, OBSTRUCTED_PATH_EVIDENCE],
+    ["competitor-present", assessedSite(), {
+      competitors: [{
+        url: "https://rival.com", domain: "rival.com", status: "AVAILABLE", collectedAt: FIXED_TS,
+        evidence: {
+          domain: "rival.com", pageCount: 8, pages: [{ title: "Rival Coaching" }],
+          services: ["Coaching", "Mentoring", "Workshops"], topicKeywords: ["coaching"],
+          ctas: [{ text: "Book", url: "https://rival.com/book" }], forms: [{ action: "/c" }],
+          socialLinks: [{ url: "https://linkedin.com/company/rival", text: "LinkedIn" }],
+          trust: { testimonials: true, credentials: true, caseStudies: true, faq: true, pricing: true, policies: true, contact: true },
+          schemaTypes: ["Organization"],
+        },
+      }],
+    }],
+    ["proprietary-platform", assessedSite({ platform: "Wix" }), {}],
+    ["untraced-broken-links", assessedSite({
+      brokenInternalLinks: ["https://x.com/missing", "https://x.com/gone"],
+    }), {}],
+    ["schema-confirmed-absent", assessedSite({ schemaTypes: [], microdataTypes: [] }), {}],
+    ["headings-absent-h1", assessedSite({
+      h1Missing: 1,
+      pages: [{ ...assessedSite().pages[0], headings: { h1: [], h2: ["Only H2"], h3: [], h4: [] } }],
+    }), {}],
+    ["headings-multiple-h1", assessedSite({
+      h1Multiple: 1,
+      pages: [{ ...assessedSite().pages[0], headings: { h1: ["One", "Two"], h2: [], h3: [], h4: [] } }],
+    }), {}],
+    ["device-profile-failed", assessedSite(), {
+      performance: {
+        ...evidenceWith(assessedSite()).performance,
+        sourceStatus: "PARTIAL",
+        desktop: { status: "FAILED", source: "pagespeed-insights" },
+        limitations: ["Desktop run failed"],
+      },
+    }],
   ];
 }
 
@@ -872,7 +914,8 @@ test("CR-39: no client-rendered foundation field ever claims site behaviour outs
   // Sweep EVERY item of EVERY state — including the ACTION_REQUIRED branch and
   // the assessed fixtures — across label, detail, requires and evidenceNote.
   // Sweeps the whole branch-complete matrix, not a hand-picked subset.
-  const models = foundationMatrix().map(([, site, over]) => checklistForSite(site, over));
+  const models = foundationMatrix().map(([, site, over, pathEv]) =>
+    buildFoundationChecklist(modelForSite(site, over, pathEv)));
   // Words that assert something about how the website behaved for people.
   // "user agent" is a protocol term, not an audience claim, so it is removed
   // before the check rather than being allowed to weaken the pattern.
@@ -960,6 +1003,14 @@ const CHECKLIST_GOLDEN = {
   "ga4-not-applicable": "0da4905e864c5efaf77e9c6a93508dad458e9841d0967577c321467f3ceb10c9",
   "slow-mobile": "0c821d9be502fbeead3496dbe1e42fa7388d8b25cad88a77301f978184b06b0b",
   "no-performance": "7e9ea2ca973838201bb61fd27c71084f228ec5e1cb56c1cecdd61f9c3cb7a31e",
+  "path-validated-blocker": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "competitor-present": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "proprietary-platform": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "untraced-broken-links": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "schema-confirmed-absent": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "headings-absent-h1": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "headings-multiple-h1": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "device-profile-failed": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
 };
 
 test("CR-40: the complete foundation checklist is frozen for every branch", () => {
@@ -967,8 +1018,8 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
   // that a past defect happened to touch. Any wording, status, or requires
   // change anywhere fails until it is deliberately reviewed and re-frozen.
   const actual = {};
-  for (const [name, siteEvidence, overrides] of foundationMatrix()) {
-    const checklist = checklistForSite(siteEvidence, overrides).map((i) => ({
+  for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+    const checklist = buildFoundationChecklist(modelForSite(siteEvidence, overrides, pathEv)).map((i) => ({
       id: i.id, label: i.label, status: i.status,
       detail: i.detail, requires: i.requires, evidenceNote: i.evidenceNote,
       assessed: i.assessed, foundational: i.foundational,
@@ -988,8 +1039,8 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
   // uncovered branch.  Adding a branch to the implementation without adding a
   // fixture now fails here instead of shipping unguarded.
   const reached = new Set();
-  for (const [, siteEvidence, overrides] of foundationMatrix()) {
-    for (const i of checklistForSite(siteEvidence, overrides)) reached.add(`${i.id}:${i.status}`);
+  for (const [, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+    for (const i of buildFoundationChecklist(modelForSite(siteEvidence, overrides, pathEv))) reached.add(`${i.id}:${i.status}`);
   }
   assert.deepEqual(
     [...reached].sort(), REACHABLE_BRANCHES,
@@ -1023,6 +1074,14 @@ const RENDER_GOLDEN = {
   "ga4-not-applicable": "43ea5671d4fdbe44ee2b35dad35a85bb6e489b9464e4127cf5fae1221866cc2d",
   "slow-mobile": "a8ead5bc421533a2e4bb1e513db1f89f866ebaa3c59da3b9b8597f9d0018bc36",
   "no-performance": "81f76f0b1419360d3d8b7e6e93a18f25dfe42d237930b6fce4b5ff8c63eea5b7",
+  "path-validated-blocker": "a693bfccd5e0489ec4ee6b14b1ed4ae1cbfe8f00240cb5692bf20aaed4008769",
+  "competitor-present": "03bbc610a4f3d106b9621d63d1fc1861e5c75e2a807434dbe65d3d9b12d1db34",
+  "proprietary-platform": "ac8bfbad49a053daccb54ad0c3bdcaec8816ebaf41d2319c202523781d44fe3a",
+  "untraced-broken-links": "c1488f2d903d9aac067860fd3e243ced5aeb9c526e6f48fbfa04fd4b2dfdd8c0",
+  "schema-confirmed-absent": "5d7672dfa22e6d441c734a06b70ba3b6bf3cee49b58c7bbccc41bb9d12de0ad8",
+  "headings-absent-h1": "5e26517032b4a9198101d5cba36e648621e2ef97604965c40ea10911536c8a1a",
+  "headings-multiple-h1": "bf306669561c4ed32299dccf6d00d63956459ec77e3bbe73c6b4bc74682e2aaf",
+  "device-profile-failed": "68bd739b1eca42c1870c982cf3173fb67e6843b7fa8586b5c966647d736f95d6",
 };
 
 test("CR-43: the full rendered report is frozen for every branch", () => {
@@ -1033,8 +1092,8 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
   // template, summary line, action plan, strengths — fails, whatever the
   // phrasing.  It is not a blacklist and has nothing to enumerate.
   const actual = {};
-  for (const [name, siteEvidence, overrides] of foundationMatrix()) {
-    const html = renderReportV2(modelForSite(siteEvidence, overrides));
+  for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+    const html = renderReportV2(modelForSite(siteEvidence, overrides, pathEv));
     actual[name] = createHash("sha256").update(html).digest("hex");
   }
   assert.deepEqual(
@@ -1043,11 +1102,42 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
   );
 });
 
+/**
+ * Renderer branches that carry client-facing prose OUTSIDE the foundation
+ * checklist.  An audit reached every one of these because no fixture produced
+ * the evidence shape that triggers it, so the full-render freeze never covered
+ * them.  Each entry is [label, marker string that only appears on that branch].
+ */
+const RENDERER_BRANCH_MARKERS = [
+  ["Section E foundation-blocker row", "Foundation blocker"],
+  ["competitor comparison note", "No traffic, ranking"],
+  ["proprietary-platform migration risk", "proprietary platform constraints"],
+  ["untraced broken-links note", "could not be traced"],
+  ["schema confirmed-absent branch", "No structured-data types were found"],
+  ["heading absent-H1 branch", "No H1 on this page"],
+  ["heading multiple-H1 branch", "H1 headings on this page"],
+  ["device profile FAILED branch", "Result: Unavailable"],
+];
+
+test("CR-44: the render matrix exercises every claim-bearing renderer branch", () => {
+  // A full-render hash only protects the branches some fixture reaches.
+  // This proves the matrix reaches the prose-bearing branches an audit used
+  // as free space, so adding a claim to any of them changes a frozen hash.
+  const rendered = foundationMatrix().map(([, site, over, pathEv]) =>
+    renderReportV2(modelForSite(site, over, pathEv)));
+  for (const [label, marker] of RENDERER_BRANCH_MARKERS) {
+    assert.ok(
+      rendered.some((html) => html.includes(marker)),
+      `no fixture reaches the ${label} — add one, or its wording is unfrozen`,
+    );
+  }
+});
+
 test("CR-41: rendered foundation cells reproduce the model verbatim", () => {
   // Every prior assertion was model-level, so a claim appended at RENDER time,
   // or a dropped attribution prefix, was undetectable. This closes that layer.
-  for (const [name, siteEvidence, overrides] of foundationMatrix()) {
-    const model = modelForSite(siteEvidence, overrides);
+  for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+    const model = modelForSite(siteEvidence, overrides, pathEv);
     const checklist = buildFoundationChecklist(model);
     const html = renderReportV2(model);
     const start = html.indexOf('<section id="foundations"');

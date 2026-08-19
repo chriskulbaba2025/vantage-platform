@@ -740,6 +740,64 @@ changes rendered output for an existing fixture still fails.
 
 ---
 
+## 14. Correction round 7 — widening the freeze to every claim-bearing section
+
+The exact-head audit of `7f0c650e` confirmed all 10 round-6 defeats were
+caught, the branch declaration was empirically complete, and all 34
+fingerprints regenerated — then defeated the guard with **7 new mutations**,
+each green across the full 854-test suite and each production-reachable.
+
+**Provenance matters here.** Six of the seven live in code this package added
+(Section E's foundation-blocker row, the competitor note, the CMS
+migration-risk line, the confirmed-absent schema branch, the heading branches,
+the failed-device branch); one is pre-existing (untraced broken links, PR #57).
+They are in scope: this package introduced client-facing prose that the
+no-fabrication proof did not cover.
+
+**Diagnosis.** CR-43 hashes the full render, but only for the evidence shapes
+the matrix carries — and the round-6 matrix carried only *foundation* shapes.
+Measured directly: of eight prose-bearing renderer branches outside the
+checklist, **zero** were reached by any of the 17 fixtures. The freeze was
+total in depth and narrow in breadth.
+
+**Correction.**
+
+1. **Matrix widened from 17 to 25 fixtures**, adding the evidence shapes that
+   trigger every claim-bearing renderer branch: browser path-validation
+   evidence (Section E blocker row), SERP competitor evidence, a proprietary
+   platform, untraced broken links, confirmed-absent schema, absent-H1 and
+   multiple-H1 heading variants, and a FAILED device profile.
+2. **CR-44 — renderer-branch coverage, proven.** Asserts that some fixture
+   reaches each claim-bearing branch, identified by a marker string unique to
+   it. A branch that no fixture reaches now fails here rather than sitting
+   unfrozen. This is the render-layer analogue of CR-42.
+3. All 25 fixtures are frozen by both CR-40 (checklist) and CR-43 (full render).
+
+**Mutation challenge — all 7 new defeats.**
+
+| # | Mutation | Round-6 | Round-7 |
+|---|---|---|---|
+| N-D | Section E blocker row: "visitors cannot complete any purchase" | green | **1 fail** |
+| N-E | Untraced broken links: invented abandonment consequence | green | **1 fail** |
+| N-F | Competitor note replaced with a fabricated traffic claim | green | **2 fail** |
+| N-K | CMS migration risk: invented abandonment statistic | green | **1 fail** |
+| N-M | Heading branch: "visitors cannot navigate the site" | green | **1 fail** |
+| N-G | Schema branch: "The site is invisible to AI search" | green | **1 fail** |
+| N-H | Device FAILED branch: asserts a positive site fact from failed evidence | green | **1 fail** |
+| — | Restore | — | **46 pass / 0 fail** |
+
+**Accepted non-blocking observations from the round-6 audit.** Three green
+mutations were confirmed *not* production-reachable and are recorded rather
+than fixed: the `security_headers` empty-object branch (both adapters always
+emit the four keys), the GA4 issue-count fallback (all six issue types carry
+`detail`), and a hand-added `mobile_experience:NOT_APPLICABLE` branch (the
+PageSpeed client never emits that status). The last is the recorded CR-42
+residual limitation — the branch declaration is review-maintained.
+
+**PROOF HARNESS RE-FREEZE (round 7): PASS**
+
+---
+
 ## 7. Verification record
 
 | Check | Result |
