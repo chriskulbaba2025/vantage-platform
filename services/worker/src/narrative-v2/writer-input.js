@@ -170,6 +170,39 @@ function assertFindingIntegrity(scoreSet, findings) {
   }
 }
 
+function addReference(index, id, kind, path) {
+  if (Object.hasOwn(index, id)) throw new Error(`Duplicate Writer reference id: ${id}`);
+  index[id] = Object.freeze({ kind, path });
+}
+
+function buildReferenceIndex({ business, score, findings, capabilityContext, scoreGovernance, deterministicAnalysis }) {
+  const index = {};
+
+  for (const field of Object.keys(business)) {
+    addReference(index, `business:${field}`, "business", `business.${field}`);
+  }
+  for (const field of Object.keys(score.scores || {})) {
+    addReference(index, `score:${field}`, "score", `score.scores.${field}`);
+  }
+  for (const field of ["assessedWeight", "readinessStatus", "readinessStatusDetail", "showNumericScore", "evidenceConfidenceScore", "rootCause"]) {
+    if (Object.hasOwn(score, field)) addReference(index, `score:${field}`, "score", `score.${field}`);
+  }
+  for (const finding of findings) {
+    addReference(index, `finding:${finding.findingId}`, "finding", `findings.${finding.findingId}`);
+  }
+  for (const key of Object.keys(capabilityContext.capabilities || {})) {
+    addReference(index, `capability:${key}`, "capability", `capabilityContext.capabilities.${key}`);
+  }
+  for (const key of Object.keys(scoreGovernance?.sourceDependencies || {})) {
+    addReference(index, `source:${key}`, "source-status", `scoreGovernance.sourceDependencies.${key}`);
+  }
+  for (const field of Object.keys(deterministicAnalysis || {})) {
+    addReference(index, `analysis:${field}`, "deterministic-analysis", `deterministicAnalysis.${field}`);
+  }
+
+  return Object.freeze(index);
+}
+
 /**
  * Build the fail-closed packet for Writer v2.
  *
@@ -185,6 +218,8 @@ export function buildWriterInput({ auditId, auditRequest, scoreSet, findings, ca
   const projectedFindings = buildWriterFindings(findings);
   assertFindingIntegrity(scoreSet, projectedFindings);
   const capabilityContext = projectCapabilities(capabilityEvidence, auditId);
+  const scoreGovernance = copyOwn(scoreSet, SCORE_GOVERNANCE_FIELDS);
+  const deterministicAnalysis = copyOwn(scoreSet, DETERMINISTIC_ANALYSIS_FIELDS);
 
   const packet = {
     contractVersion: "1.0.0",
@@ -196,13 +231,19 @@ export function buildWriterInput({ auditId, auditRequest, scoreSet, findings, ca
     capabilityContext,
   };
 
-  const scoreGovernance = copyOwn(scoreSet, SCORE_GOVERNANCE_FIELDS);
   if (Object.keys(scoreGovernance).length > 0) packet.scoreGovernance = Object.freeze(scoreGovernance);
-
-  const deterministicAnalysis = copyOwn(scoreSet, DETERMINISTIC_ANALYSIS_FIELDS);
   if (Object.keys(deterministicAnalysis).length > 0) {
     packet.deterministicAnalysis = Object.freeze(deterministicAnalysis);
   }
+
+  packet.referenceIndex = buildReferenceIndex({
+    business,
+    score,
+    findings: projectedFindings,
+    capabilityContext,
+    scoreGovernance: packet.scoreGovernance,
+    deterministicAnalysis: packet.deterministicAnalysis,
+  });
 
   return Object.freeze(packet);
 }
