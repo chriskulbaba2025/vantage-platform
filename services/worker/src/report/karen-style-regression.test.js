@@ -3,11 +3,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { scoreAudit } from "../scoring/vantage-score.js";
+import {
+  validateWriterOutput,
+  WRITER_OUTPUT_VERSION,
+  WRITER_PROMPT_VERSION,
+} from "../narrative-v2/writer-output.js";
 import { renderReportV2 } from "./render-report-v2.js";
 import { renderWriterNarrativeLayer } from "./render-narrative-v2.js";
 
+const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 const FIXED_TS = "2026-08-20T04:00:00.000Z";
 const REF = "finding:F-001";
+const SOURCE_REF = "source:backlinks";
 
 const KAREN_NAV_LABELS = Object.freeze([
   "Scorecard",
@@ -123,8 +130,25 @@ function model() {
   return scoreAudit(input, evidence);
 }
 
-function atom(text, statementClass = "INTERPRETATION") {
-  return { text, statementClass, evidenceRefs: [REF] };
+function writerInput() {
+  return {
+    contractVersion: "1.0.0",
+    writerInputVersion: "1.0.0",
+    auditId: AUDIT_ID,
+    scoreGovernance: {
+      sourceDependencies: {
+        backlinks: "UNAVAILABLE",
+      },
+    },
+    referenceIndex: {
+      [REF]: { kind: "finding", path: "findings.F-001" },
+      [SOURCE_REF]: { kind: "source-status", path: "scoreGovernance.sourceDependencies.backlinks" },
+    },
+  };
+}
+
+function atom(text, statementClass = "INTERPRETATION", evidenceRefs = [REF]) {
+  return { text, statementClass, evidenceRefs };
 }
 
 function opportunity(text) {
@@ -133,8 +157,19 @@ function opportunity(text) {
 
 function writerOutput() {
   const interpretation = (label) => atom(`${label} is grounded in the verified report evidence.`);
+  const statusInterpretation = (label) => atom(
+    `${label} is grounded in the governed source status.`,
+    "INTERPRETATION",
+    [SOURCE_REF],
+  );
   return {
+    contractVersion: "1.0.0",
+    writerOutputVersion: WRITER_OUTPUT_VERSION,
+    auditId: AUDIT_ID,
     passNumber: 1,
+    modelId: "writer-regression",
+    promptVersion: WRITER_PROMPT_VERSION,
+    generatedAt: FIXED_TS,
     executiveConclusion: {
       headline: "The site has a useful base with one material constraint",
       narrative: interpretation("The executive conclusion"),
@@ -220,9 +255,9 @@ function writerOutput() {
       itemId: "LIM-01",
       area: "Off-site evidence",
       status: "UNAVAILABLE",
-      clientExplanation: interpretation("The limitation"),
-      whatThisMeans: interpretation("What the limitation means"),
-      whatThisDoesNotMean: interpretation("What the limitation does not mean"),
+      clientExplanation: statusInterpretation("The limitation"),
+      whatThisMeans: statusInterpretation("What the limitation means"),
+      whatThisDoesNotMean: statusInterpretation("What the limitation does not mean"),
       impactOnReport: interpretation("The limitation impact"),
     }],
     actionPlan: [{
@@ -245,7 +280,13 @@ function writerOutput() {
 
 function reportSurfaces() {
   const deterministic = renderReportV2(model(), { date: "2026-08-20" });
-  const narrative = renderWriterNarrativeLayer(writerOutput(), { totalScore: 100, decision: "PASS" });
+  const output = writerOutput();
+  const validation = validateWriterOutput(output, {
+    writerInput: writerInput(),
+    expectedPassNumber: 1,
+  });
+  assert.deepEqual(validation, { valid: true, errors: [] }, "regression fixture must satisfy the real Writer v2 contract");
+  const narrative = renderWriterNarrativeLayer(output, { totalScore: 100, decision: "PASS" });
   return { deterministic, narrative, combined: `${narrative}\n${deterministic}` };
 }
 
@@ -314,9 +355,13 @@ test("KAREN-REG-04: Narrative v2 adds decision usefulness instead of replacing d
 test("KAREN-REG-05: every rendered narrative atom retains exact evidence lineage metadata", () => {
   const { narrative } = reportSurfaces();
   const refs = [...narrative.matchAll(/data-evidence-refs="([^"]*)"/g)].map((match) => match[1]);
+  const governedRefs = new Set([REF, SOURCE_REF]);
   assert.ok(refs.length >= 40, "substantive narrative atoms expose evidence metadata");
-  assert.ok(refs.every((value) => value === REF), "every narrative atom remains tied to the exact governed evidence ID");
-  assert.doesNotMatch(narrative, />finding:F-001</, "internal evidence IDs are not rendered as client prose");
+  assert.ok(refs.every((value) => governedRefs.has(value)), "every narrative atom remains tied to an exact governed evidence ID");
+  assert.ok(refs.includes(REF), "finding evidence lineage remains present");
+  assert.ok(refs.includes(SOURCE_REF), "source-status evidence lineage remains present");
+  assert.doesNotMatch(narrative, />finding:F-001</, "internal finding IDs are not rendered as client prose");
+  assert.doesNotMatch(narrative, />source:backlinks</, "internal source IDs are not rendered as client prose");
 });
 
 test("KAREN-REG-06: regression gate requires both client narrative and deterministic evidence surfaces", () => {

@@ -19,6 +19,7 @@ import { renderGovernedNarrativeReportV2 } from "./render-narrative-v2.js";
 
 const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 const REF = "finding:F-001";
+const STATUS_REF = "source:offsite";
 const FIXED_TS = "2026-08-20T04:00:00.000Z";
 
 function writerInput() {
@@ -26,14 +27,24 @@ function writerInput() {
     contractVersion: "1.0.0",
     writerInputVersion: "1.0.0",
     auditId: AUDIT_ID,
+    scoreGovernance: {
+      sourceDependencies: {
+        offsite: "UNAVAILABLE",
+      },
+    },
     referenceIndex: {
       [REF]: { kind: "finding", path: "findings.F-001" },
+      [STATUS_REF]: { kind: "source-status", path: "scoreGovernance.sourceDependencies.offsite" },
     },
   };
 }
 
 function atom(text, statementClass = "INTERPRETATION") {
   return { text, statementClass, evidenceRefs: [REF] };
+}
+
+function statusAtom(text) {
+  return { text, statementClass: "INTERPRETATION", evidenceRefs: [STATUS_REF] };
 }
 
 function opportunity(text) {
@@ -131,10 +142,10 @@ function validWriterOutput(passNumber = 1) {
       itemId: "LIM-01",
       area: "Off-site evidence",
       status: "UNAVAILABLE",
-      clientExplanation: interpret("The limitation"),
-      whatThisMeans: interpret("What the limitation means"),
-      whatThisDoesNotMean: interpret("What the limitation does not mean"),
-      impactOnReport: interpret("The limitation impact"),
+      clientExplanation: statusAtom("The limitation is grounded in the unavailable off-site evidence source."),
+      whatThisMeans: statusAtom("What the limitation means is bounded by the unavailable off-site evidence source."),
+      whatThisDoesNotMean: statusAtom("The unavailable source does not establish that off-site performance is weak."),
+      impactOnReport: statusAtom("The report preserves the unavailable off-site evidence boundary."),
     }],
     actionPlan: [{
       actionId: "ACT-01",
@@ -320,7 +331,9 @@ test("NARRATIVE-RENDER-03: evidence lineage is audit metadata, not visible citat
   });
 
   assert.match(html, /data-evidence-refs="finding:F-001"/);
+  assert.match(html, /data-evidence-refs="source:offsite"/);
   assert.doesNotMatch(html, />finding:F-001</);
+  assert.doesNotMatch(html, />source:offsite</);
   assert.match(html, /data-judge-score="100"/);
   assert.match(html, /data-writer-pass="1"/);
 });

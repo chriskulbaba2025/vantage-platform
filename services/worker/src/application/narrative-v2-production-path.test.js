@@ -19,7 +19,10 @@ import {
   WRITER_OUTPUT_VERSION,
   WRITER_PROMPT_VERSION,
 } from "../narrative-v2/writer-output.js";
-import { buildV2Model } from "../narrative-v2/production-path.js";
+import {
+  buildV2Model,
+  createNarrativeV2ProductionPath,
+} from "../narrative-v2/production-path.js";
 
 const T = LIFECYCLE_STATE;
 const tenantId = "narrative-v2-prod-tenant";
@@ -169,10 +172,32 @@ function atom(text, ref, statementClass = "INTERPRETATION") {
   return { text, statementClass, evidenceRefs: [ref] };
 }
 
+function valueAtPath(object, path) {
+  return String(path || "").split(".").reduce((value, key) => value?.[key], object);
+}
+
+function governedStatusReference(writerInput) {
+  for (const [ref, record] of Object.entries(writerInput.referenceIndex || {})) {
+    if (record?.kind === "source-status") {
+      const status = valueAtPath(writerInput, record.path);
+      if (typeof status === "string" && status.length > 0) return { ref, status };
+    }
+    if (record?.kind === "capability") {
+      const capability = valueAtPath(writerInput, record.path);
+      if (typeof capability?.status === "string" && capability.status.length > 0) {
+        return { ref, status: capability.status };
+      }
+    }
+  }
+  throw new Error("WriterInput must expose a governed source-status or capability reference");
+}
+
 function buildPassingWriterOutput({ writerInput, passNumber }) {
   const ref = Object.keys(writerInput.referenceIndex)[0];
   assert.ok(ref, "WriterInput must expose at least one governed reference");
+  const governedStatus = governedStatusReference(writerInput);
   const interpret = (label) => atom(`${label} is tied to the governed audit evidence.`, ref);
+  const limitationInterpret = (label) => atom(`${label} is tied to the governed source status.`, governedStatus.ref);
   const opportunity = (label) => atom(`${label} is a governed opportunity.`, ref, "OPPORTUNITY");
   const standard = (headline, fields) => ({ headline, ...fields });
 
@@ -238,11 +263,11 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
     limitations: [{
       itemId: "LIM-01",
       area: "Evidence boundary",
-      status: "UNAVAILABLE",
-      clientExplanation: interpret("Limitation explanation"),
-      whatThisMeans: interpret("Limitation meaning"),
-      whatThisDoesNotMean: interpret("Limitation non-meaning"),
-      impactOnReport: interpret("Limitation impact"),
+      status: governedStatus.status,
+      clientExplanation: limitationInterpret("Limitation explanation"),
+      whatThisMeans: limitationInterpret("Limitation meaning"),
+      whatThisDoesNotMean: limitationInterpret("Limitation non-meaning"),
+      impactOnReport: limitationInterpret("Limitation impact"),
     }],
     actionPlan: [{
       actionId: "ACT-01",
@@ -322,6 +347,14 @@ async function waitForState(runtime, auditId, states, timeoutMs = 30000) {
 async function readJson(store, key) {
   const bytes = await store.get(key);
   return JSON.parse(Buffer.from(bytes).toString("utf8"));
+}
+
+async function putJson(store, scope, value) {
+  return store.put({
+    bytes: Buffer.from(JSON.stringify(value), "utf8"),
+    contentType: "application/json",
+    scope,
+  });
 }
 
 test("NV2-PROD-01: disabled runtime rejects an explicit Narrative v2 request instead of silently falling back", async () => {
@@ -440,4 +473,70 @@ test("NV2-PROD-05: production v2 model preserves readiness detail and rendering 
 
   assert.equal(model.readinessStatusDetail, "SENTINEL readiness detail retained from persisted scores");
   assert.deepEqual(model.renderingDiagnostics, [{ diagnosticCode: "SENTINEL-DIAGNOSTIC", diagnosticCategory: "SITE_RENDERING" }]);
+});
+
+test("NV2-PROD-06: invalid persisted terminal orchestration fails closed without another Writer/Judge spend", async () => {
+  let writerCalls = 0;
+  let judgeCalls = 0;
+  const auditRequest = {
+    contractVersion: "1.0.0",
+    auditId: "77777777-7777-4777-8777-777777777777",
+    tenantId,
+    clientId: "narrative-recovery-client",
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  };
+  const artifactStore = createMemoryArtifactStore();
+  const lifecycleState = { state: T.NARRATIVE_PENDING };
+  const lifecycleService = {
+    currentState: async () => lifecycleState,
+    transition: async ({ toState }) => {
+      lifecycleState.state = toState;
+      return { state: toState };
+    },
+  };
+
+  await putJson(artifactStore, {
+    tenantId,
+    clientId: auditRequest.clientId,
+    auditId: auditRequest.auditId,
+    category: "report-v2",
+    artifactName: "narrative-v2/writer-input.json",
+  }, {
+    contractVersion: "1.0.0",
+    writerInputVersion: "1.0.0",
+    auditId: auditRequest.auditId,
+    referenceIndex: {},
+  });
+  await putJson(artifactStore, {
+    tenantId,
+    clientId: auditRequest.clientId,
+    auditId: auditRequest.auditId,
+    category: "report-v2",
+    artifactName: "narrative-v2/orchestration.json",
+  }, {
+    contractVersion: "1.0.0",
+    auditId: auditRequest.auditId,
+    status: "RELEASE_CANDIDATE",
+    passCount: 1,
+    finalWriterOutput: {},
+    finalJudgeResponse: { decision: "REVISE" },
+  });
+
+  const orchestrator = createNarrativeV2ProductionPath({
+    baseOrchestrator: { execute: async () => { throw new Error("base orchestrator must not run"); } },
+    lifecycleService,
+    artifactStore,
+    validateContract: () => ({ valid: true, errors: [] }),
+    enabled: true,
+    writerExecutor: async () => { writerCalls += 1; return {}; },
+    judgeExecutor: async () => { judgeCalls += 1; return {}; },
+    clock: { now: () => FIXED_TS },
+  });
+
+  const result = await orchestrator.execute(auditRequest, { executionId: "recovery-proof" });
+  assert.equal(result.finalState, T.NARRATIVE_FAILED);
+  assert.equal(lifecycleState.state, T.NARRATIVE_FAILED);
+  assert.equal(writerCalls, 0, "invalid terminal artifact must not trigger a replacement Writer call");
+  assert.equal(judgeCalls, 0, "invalid terminal artifact must not trigger a replacement Judge call");
+  assert.match(result.narrativeV2Error, /failed validation/i);
 });

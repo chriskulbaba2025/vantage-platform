@@ -227,12 +227,18 @@ test("WRITER-OUT-01: complete governed Writer output validates", () => {
   assert.deepEqual(result, { valid: true, errors: [] });
 });
 
-test("WRITER-OUT-02: unknown evidence reference fails closed", () => {
-  const output = validOutput();
-  output.executiveConclusion.narrative.evidenceRefs = ["finding:DOES-NOT-EXIST"];
-  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
-  assert.equal(result.valid, false);
-  assert.match(result.errors.join("\n"), /unknown Writer reference/);
+test("WRITER-OUT-02: unknown evidence references and source-status mutations fail closed", () => {
+  const unknownReference = validOutput();
+  unknownReference.executiveConclusion.narrative.evidenceRefs = ["finding:DOES-NOT-EXIST"];
+  const unknownResult = validateWriterOutput(unknownReference, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.equal(unknownResult.valid, false);
+  assert.match(unknownResult.errors.join("\n"), /unknown Writer reference/);
+
+  const mutatedStatus = validOutput();
+  mutatedStatus.limitations[0].status = "AVAILABLE";
+  const statusResult = validateWriterOutput(mutatedStatus, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.equal(statusResult.valid, false);
+  assert.match(statusResult.errors.join("\n"), /status must equal governed status FAILED/);
 });
 
 test("WRITER-OUT-03: Writer cannot emit OBSERVED statements", () => {
