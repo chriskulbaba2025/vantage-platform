@@ -104,6 +104,7 @@ export function createProductionRuntime({
   lifecycleRepo,
   reportStore,
   narrative,
+  narrativeV2,
 }) {
   if (!lifecycleRepo) {
     throw new Error("PRODUCTION STARTUP FAILED: lifecycleRepo is required (DATABASE_URL not configured?)");
@@ -140,6 +141,20 @@ export function createProductionRuntime({
     );
   }
 
+  // PRYSM-NARRATIVE-V2-PROD-01 — explicit disabled-by-default activation.
+  // A runtime may advertise Narrative v2 only when BOTH governed execution
+  // seams are present. The audit request must separately select 2.0.0.
+  const narrativeV2Deps = narrativeV2 || {};
+  const narrativeV2Enabled = narrativeV2Deps.enabled === true;
+  if (narrativeV2Enabled && (
+    typeof narrativeV2Deps.writerExecutor !== "function" ||
+    typeof narrativeV2Deps.judgeExecutor !== "function"
+  )) {
+    throw new Error(
+      "PRODUCTION STARTUP FAILED: Narrative v2 requires writerExecutor and judgeExecutor when enabled",
+    );
+  }
+
   const orchestrator = createAuditOrchestrator({
     lifecycleService,
     artifactStore,
@@ -158,6 +173,9 @@ export function createProductionRuntime({
       priceTable: narrativeDeps.priceTable,
       modelConfig: narrativeDeps.modelConfig,
     },
+    narrativeV2Enabled,
+    narrativeV2WriterExecutor: narrativeV2Deps.writerExecutor,
+    narrativeV2JudgeExecutor: narrativeV2Deps.judgeExecutor,
     retryPolicyResolver: (source) => {
       // PRYSM-CLOSE-12: source-specific governed timeouts, each configurable.
       //   on-page crawls can take minutes (polling DataForSEO)
@@ -266,10 +284,15 @@ export function createProductionRuntime({
     // service (PRYSM-NEXT-ACTIVATION defect A): the report design selection
     // must survive the production request boundary.  Strict allowlist; v1
     // remains the default when the field is absent.
+    // PRYSM-NARRATIVE-V2-PROD-01 — narrative v2 is a second, independent
+    // allowlist. A request cannot select it unless this runtime was explicitly
+    // constructed with the governed Writer and Judge seams enabled.
     if (input.report && typeof input.report === "object") {
       auditRequest.report = {
         designVersion:
           input.report.designVersion === "2.0.0" ? "2.0.0" : "1.0.0",
+        narrativeVersion:
+          narrativeV2Enabled && input.report.narrativeVersion === "2.0.0" ? "2.0.0" : "1.0.0",
       };
     }
 
@@ -706,6 +729,7 @@ export function createProductionRuntime({
     reportStore,
     adapters: runtimeAdapters,
     validateContract: runtimeValidateContract,
+    narrativeV2Enabled,
     recoverStrandedAudits,
   });
 }
