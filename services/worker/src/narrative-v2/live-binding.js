@@ -13,12 +13,18 @@
  * - deterministic token/cost preflight before every call;
  * - immutable reservation is persisted BEFORE a paid call so restart/recovery
  *   cannot silently repeat an uncertain paid attempt;
- * - each reservation has a unique claim ID so concurrent duplicate attempts
- *   cannot both pass an idempotent immutable write;
+ * - same-runtime duplicate reservations are blocked synchronously before the
+ *   first asynchronous artifact read; durable reservations then block
+ *   sequential/restart duplicates;
+ * - each reservation has a unique claim ID so a conflicting durable claim is
+ *   distinguishable from an idempotent same-byte write;
  * - usage/result ledger is persisted after every returned response;
  * - missing/invalid provider usage fails closed rather than recording $0 cost;
  * - Writer/Judge outputs are validated at the executor boundary and again by
  *   the governed Narrative v2 orchestrator.
+ *
+ * The governed object store is not a cross-process atomic lock. This binding
+ * therefore does not authorize concurrent multi-worker live execution.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -233,6 +239,7 @@ export function createNarrativeV2LiveBinding({
   if (!artifactStore) throw new Error("Narrative v2 live binding requires artifactStore");
 
   const scopes = new Map();
+  const inFlightReservationClaims = new Set();
   const processDaily = { date: clock.now().slice(0, 10), reservedUsd: config.dailySpendUsd };
 
   function registerAuditScope({ tenantId, clientId, auditId, executionId }) {
@@ -256,73 +263,82 @@ export function createNarrativeV2LiveBinding({
   }
 
   async function reserveCall({ scope, role, modelId, prompt, maxOutputTokens, passNumber }) {
-    const existing = await existingReservations(scope);
-    if (existing.length >= NARRATIVE_V2_LIVE_MAX_CALLS) {
-      throw new Error(`Narrative v2 live call cap reached (${NARRATIVE_V2_LIVE_MAX_CALLS})`);
+    const inFlightKey = `${scope.auditId}:${role}:${passNumber}`;
+    if (inFlightReservationClaims.has(inFlightKey)) {
+      throw new Error(`Narrative v2 paid ${role} pass ${passNumber} is already being reserved in this runtime; refusing concurrent duplicate call`);
     }
-    if (existing.some((entry) => entry.role === role && entry.passNumber === passNumber)) {
-      throw new Error(`Narrative v2 paid ${role} pass ${passNumber} already reserved; refusing duplicate call`);
-    }
-    if (role === "writer") {
-      if (passNumber !== 1 || existing.length !== 0) {
-        throw new Error("Narrative v2 live sequence requires Writer pass 1 as call 1");
+    inFlightReservationClaims.add(inFlightKey);
+    try {
+      const existing = await existingReservations(scope);
+      if (existing.length >= NARRATIVE_V2_LIVE_MAX_CALLS) {
+        throw new Error(`Narrative v2 live call cap reached (${NARRATIVE_V2_LIVE_MAX_CALLS})`);
       }
-    } else if (role === "judge") {
-      if (passNumber !== 1 || existing.length !== 1 || existing[0].role !== "writer" || existing[0].passNumber !== 1) {
-        throw new Error("Narrative v2 live sequence requires Judge pass 1 as call 2 after Writer pass 1");
+      if (existing.some((entry) => entry.role === role && entry.passNumber === passNumber)) {
+        throw new Error(`Narrative v2 paid ${role} pass ${passNumber} already reserved; refusing duplicate call`);
       }
-      const writerResult = await readJsonByName(artifactStore, scope, resultName(existing[0].callNumber));
-      if (!writerResult || writerResult.validationResult !== "PASS") {
-        throw new Error("Narrative v2 live Judge call requires a validated Writer result ledger");
+      if (role === "writer") {
+        if (passNumber !== 1 || existing.length !== 0) {
+          throw new Error("Narrative v2 live sequence requires Writer pass 1 as call 1");
+        }
+      } else if (role === "judge") {
+        if (passNumber !== 1 || existing.length !== 1 || existing[0].role !== "writer" || existing[0].passNumber !== 1) {
+          throw new Error("Narrative v2 live sequence requires Judge pass 1 as call 2 after Writer pass 1");
+        }
+        const writerResult = await readJsonByName(artifactStore, scope, resultName(existing[0].callNumber));
+        if (!writerResult || writerResult.validationResult !== "PASS") {
+          throw new Error("Narrative v2 live Judge call requires a validated Writer result ledger");
+        }
+      } else {
+        throw new Error(`Unsupported Narrative v2 live role: ${String(role)}`);
       }
-    } else {
-      throw new Error(`Unsupported Narrative v2 live role: ${String(role)}`);
+
+      const modelPrice = config.priceTable[modelId];
+      const alreadyReserved = existing.reduce((sum, entry) => sum + Number(entry.estimatedCost || 0), 0);
+      const remainingAuditBudget = Math.max(0, config.hardBudgetUsd - alreadyReserved);
+      const now = clock.now();
+      const day = now.slice(0, 10);
+      if (processDaily.date !== day) {
+        processDaily.date = day;
+        processDaily.reservedUsd = config.dailySpendUsd;
+      }
+
+      const preflight = runCostPreflight({
+        reportPackage: { prompt },
+        priceTable: modelPrice,
+        budget: {
+          softBudgetUsd: config.softBudgetUsd,
+          hardBudgetUsd: remainingAuditBudget,
+          dailyHardBudgetUsd: config.dailyHardBudgetUsd,
+          dailySpendUsd: processDaily.reservedUsd,
+        },
+        modelConfig: { maxInputTokens: config.maxInputTokens, maxOutputTokens },
+      });
+      if (!preflight.allowed) throw new Error(`Narrative v2 cost preflight rejected ${role}: ${preflight.reason}`);
+
+      const callNumber = existing.length + 1;
+      const reservation = Object.freeze({
+        contractVersion: "1.0.0",
+        bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+        reservationId: randomUUID(),
+        auditId: scope.auditId,
+        executionId: scope.executionId,
+        callNumber,
+        role,
+        passNumber,
+        modelId,
+        promptSha256: sha256(prompt),
+        estimatedInputTokens: preflight.estimate.inputTokens,
+        maxOutputTokens,
+        estimatedCost: preflight.estimate.maxCostUsd,
+        reservedAt: now,
+        status: "RESERVED_BEFORE_CALL",
+      });
+      await persistJson(artifactStore, scope, reservationName(callNumber), reservation);
+      processDaily.reservedUsd += reservation.estimatedCost;
+      return { callNumber, reservation, modelPrice };
+    } finally {
+      inFlightReservationClaims.delete(inFlightKey);
     }
-
-    const modelPrice = config.priceTable[modelId];
-    const alreadyReserved = existing.reduce((sum, entry) => sum + Number(entry.estimatedCost || 0), 0);
-    const remainingAuditBudget = Math.max(0, config.hardBudgetUsd - alreadyReserved);
-    const now = clock.now();
-    const day = now.slice(0, 10);
-    if (processDaily.date !== day) {
-      processDaily.date = day;
-      processDaily.reservedUsd = config.dailySpendUsd;
-    }
-
-    const preflight = runCostPreflight({
-      reportPackage: { prompt },
-      priceTable: modelPrice,
-      budget: {
-        softBudgetUsd: config.softBudgetUsd,
-        hardBudgetUsd: remainingAuditBudget,
-        dailyHardBudgetUsd: config.dailyHardBudgetUsd,
-        dailySpendUsd: processDaily.reservedUsd,
-      },
-      modelConfig: { maxInputTokens: config.maxInputTokens, maxOutputTokens },
-    });
-    if (!preflight.allowed) throw new Error(`Narrative v2 cost preflight rejected ${role}: ${preflight.reason}`);
-
-    const callNumber = existing.length + 1;
-    const reservation = Object.freeze({
-      contractVersion: "1.0.0",
-      bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
-      reservationId: randomUUID(),
-      auditId: scope.auditId,
-      executionId: scope.executionId,
-      callNumber,
-      role,
-      passNumber,
-      modelId,
-      promptSha256: sha256(prompt),
-      estimatedInputTokens: preflight.estimate.inputTokens,
-      maxOutputTokens,
-      estimatedCost: preflight.estimate.maxCostUsd,
-      reservedAt: now,
-      status: "RESERVED_BEFORE_CALL",
-    });
-    await persistJson(artifactStore, scope, reservationName(callNumber), reservation);
-    processDaily.reservedUsd += reservation.estimatedCost;
-    return { callNumber, reservation, modelPrice };
   }
 
   async function persistReturnedFailure({ scope, callNumber, reservation, role, passNumber, modelId, errorCode, responseStatus = null, responseSha256 = null }) {
