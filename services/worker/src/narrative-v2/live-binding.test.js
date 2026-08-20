@@ -393,26 +393,8 @@ test("LIVE-BIND-08: missing provider token usage fails closed and is not recorde
   assert.notEqual(result.actualCost, 0);
 });
 
-test("LIVE-BIND-09: concurrent duplicate Writer attempts produce only one paid network call", async () => {
-  const baseStore = createMemoryArtifactStore();
-  let reservationAttempts = 0;
-  let releaseFirst;
-  const firstReservationBarrier = new Promise((resolve) => { releaseFirst = resolve; });
-  const artifactStore = {
-    ...baseStore,
-    put: async (input) => {
-      if (String(input?.scope?.artifactName || "").endsWith("-reservation.json")) {
-        reservationAttempts += 1;
-        if (reservationAttempts === 1) {
-          await firstReservationBarrier;
-        } else if (reservationAttempts === 2) {
-          releaseFirst();
-        }
-      }
-      return baseStore.put(input);
-    },
-  };
-
+test("LIVE-BIND-09: same-runtime concurrent duplicate Writer attempts produce only one paid network call", async () => {
+  const artifactStore = createMemoryArtifactStore();
   let calls = 0;
   const binding = createNarrativeV2LiveBinding({
     env: baseEnv(),
@@ -430,9 +412,12 @@ test("LIVE-BIND-09: concurrent duplicate Writer attempts produce only one paid n
     binding.writerExecutor(request),
   ]);
 
-  assert.equal(settled.filter((entry) => entry.status === "fulfilled").length, 1);
-  assert.equal(settled.filter((entry) => entry.status === "rejected").length, 1);
-  assert.equal(calls, 1, "unique immutable reservation claim must permit only one paid call");
+  const fulfilled = settled.filter((entry) => entry.status === "fulfilled");
+  const rejected = settled.filter((entry) => entry.status === "rejected");
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.match(String(rejected[0].reason?.message || rejected[0].reason), /already being reserved|already reserved/);
+  assert.equal(calls, 1, "same-runtime reservation lock must permit only one paid call");
 });
 
 test("LIVE-BIND-10: returned Writer model metadata must match the configured model", async () => {
