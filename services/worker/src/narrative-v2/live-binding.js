@@ -13,12 +13,15 @@
  * - deterministic token/cost preflight before every call;
  * - immutable reservation is persisted BEFORE a paid call so restart/recovery
  *   cannot silently repeat an uncertain paid attempt;
+ * - each reservation has a unique claim ID so concurrent duplicate attempts
+ *   cannot both pass an idempotent immutable write;
  * - usage/result ledger is persisted after every returned response;
+ * - missing/invalid provider usage fails closed rather than recording $0 cost;
  * - Writer/Judge outputs are validated at the executor boundary and again by
  *   the governed Narrative v2 orchestrator.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { runCostPreflight } from "../narrative/cost-preflight.js";
 import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
@@ -161,18 +164,30 @@ async function persistJson(artifactStore, scope, artifactName, value) {
 }
 
 function estimateActualCost(usage, price) {
-  const input = Number(usage?.inputTokens || 0);
-  const output = Number(usage?.outputTokens || 0);
-  return Math.round((((input / 1000) * price.inputPricePer1K) + ((output / 1000) * price.outputPricePer1K)) * 1e8) / 1e8;
+  return Math.round((((usage.inputTokens / 1000) * price.inputPricePer1K) + ((usage.outputTokens / 1000) * price.outputPricePer1K)) * 1e8) / 1e8;
 }
 
 function extractUsage(body) {
-  const usage = body?.usage || {};
-  return {
-    inputTokens: Number(usage.prompt_tokens || usage.input_tokens || 0),
-    outputTokens: Number(usage.completion_tokens || usage.output_tokens || 0),
-    cachedInputTokens: Number(usage.prompt_tokens_details?.cached_tokens || usage.cached_input_tokens || 0),
-  };
+  const usage = body?.usage;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+    throw new Error("Narrative v2 provider response missing governed token usage");
+  }
+  const inputRaw = usage.prompt_tokens ?? usage.input_tokens;
+  const outputRaw = usage.completion_tokens ?? usage.output_tokens;
+  const cachedRaw = usage.prompt_tokens_details?.cached_tokens ?? usage.cached_input_tokens ?? 0;
+  const inputTokens = Number(inputRaw);
+  const outputTokens = Number(outputRaw);
+  const cachedInputTokens = Number(cachedRaw);
+  if (!Number.isFinite(inputTokens) || inputTokens <= 0 || !Number.isInteger(inputTokens)) {
+    throw new Error("Narrative v2 provider response has invalid input token usage");
+  }
+  if (!Number.isFinite(outputTokens) || outputTokens < 0 || !Number.isInteger(outputTokens)) {
+    throw new Error("Narrative v2 provider response has invalid output token usage");
+  }
+  if (!Number.isFinite(cachedInputTokens) || cachedInputTokens < 0 || !Number.isInteger(cachedInputTokens) || cachedInputTokens > inputTokens) {
+    throw new Error("Narrative v2 provider response has invalid cached-input token usage");
+  }
+  return { inputTokens, outputTokens, cachedInputTokens };
 }
 
 function extractContent(body) {
@@ -248,6 +263,21 @@ export function createNarrativeV2LiveBinding({
     if (existing.some((entry) => entry.role === role && entry.passNumber === passNumber)) {
       throw new Error(`Narrative v2 paid ${role} pass ${passNumber} already reserved; refusing duplicate call`);
     }
+    if (role === "writer") {
+      if (passNumber !== 1 || existing.length !== 0) {
+        throw new Error("Narrative v2 live sequence requires Writer pass 1 as call 1");
+      }
+    } else if (role === "judge") {
+      if (passNumber !== 1 || existing.length !== 1 || existing[0].role !== "writer" || existing[0].passNumber !== 1) {
+        throw new Error("Narrative v2 live sequence requires Judge pass 1 as call 2 after Writer pass 1");
+      }
+      const writerResult = await readJsonByName(artifactStore, scope, resultName(existing[0].callNumber));
+      if (!writerResult || writerResult.validationResult !== "PASS") {
+        throw new Error("Narrative v2 live Judge call requires a validated Writer result ledger");
+      }
+    } else {
+      throw new Error(`Unsupported Narrative v2 live role: ${String(role)}`);
+    }
 
     const modelPrice = config.priceTable[modelId];
     const alreadyReserved = existing.reduce((sum, entry) => sum + Number(entry.estimatedCost || 0), 0);
@@ -276,6 +306,7 @@ export function createNarrativeV2LiveBinding({
     const reservation = Object.freeze({
       contractVersion: "1.0.0",
       bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      reservationId: randomUUID(),
       auditId: scope.auditId,
       executionId: scope.executionId,
       callNumber,
@@ -292,6 +323,28 @@ export function createNarrativeV2LiveBinding({
     await persistJson(artifactStore, scope, reservationName(callNumber), reservation);
     processDaily.reservedUsd += reservation.estimatedCost;
     return { callNumber, reservation, modelPrice };
+  }
+
+  async function persistReturnedFailure({ scope, callNumber, reservation, role, passNumber, modelId, errorCode, responseStatus = null, responseSha256 = null }) {
+    const record = Object.freeze({
+      contractVersion: "1.0.0",
+      bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      auditId: scope.auditId,
+      executionId: scope.executionId,
+      callNumber,
+      role,
+      passNumber,
+      modelId,
+      estimatedCost: reservation.estimatedCost,
+      actualCost: null,
+      validationResult: "FAIL",
+      status: "RETURNED_RESPONSE_FAILED_CLOSED",
+      errorCode,
+      responseStatus,
+      responseSha256,
+      timestamp: clock.now(),
+    });
+    await persistJson(artifactStore, scope, resultName(callNumber), record);
   }
 
   async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate }) {
@@ -311,7 +364,10 @@ export function createNarrativeV2LiveBinding({
           temperature: 0,
           max_tokens: maxOutputTokens,
           messages: [
-            { role: "system", content: "Return only valid JSON. Do not use markdown code fences." },
+            {
+              role: "system",
+              content: `Return only valid JSON. Do not use markdown code fences. Use exactly ${JSON.stringify(modelId)} as ${role === "writer" ? "modelId" : "judgeModelId"}.`,
+            },
             { role: "user", content: prompt },
           ],
         }),
@@ -323,15 +379,74 @@ export function createNarrativeV2LiveBinding({
       clearTimeout(timeout);
     }
 
-    if (!response?.ok) throw safeProviderError(response?.status || 0);
+    if (!response?.ok) {
+      await persistReturnedFailure({
+        scope, callNumber, reservation, role, passNumber, modelId,
+        errorCode: "PROVIDER_HTTP_ERROR",
+        responseStatus: response?.status || 0,
+      });
+      throw safeProviderError(response?.status || 0);
+    }
+
     let body;
-    try { body = await response.json(); } catch { throw new Error(`Narrative v2 ${role} response was not JSON`); }
-    const content = extractContent(body);
+    try {
+      body = await response.json();
+    } catch {
+      await persistReturnedFailure({
+        scope, callNumber, reservation, role, passNumber, modelId,
+        errorCode: "PROVIDER_RESPONSE_NOT_JSON",
+        responseStatus: response.status || 200,
+      });
+      throw new Error(`Narrative v2 ${role} response was not JSON`);
+    }
+
+    let content;
+    try {
+      content = extractContent(body);
+    } catch (err) {
+      await persistReturnedFailure({
+        scope, callNumber, reservation, role, passNumber, modelId,
+        errorCode: "PROVIDER_CONTENT_MISSING",
+        responseStatus: response.status || 200,
+      });
+      throw err;
+    }
+
     let parsed;
-    try { parsed = JSON.parse(content); } catch { throw new Error(`Narrative v2 ${role} content was not a JSON object`); }
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      await persistReturnedFailure({
+        scope, callNumber, reservation, role, passNumber, modelId,
+        errorCode: "PROVIDER_CONTENT_NOT_JSON",
+        responseStatus: response.status || 200,
+        responseSha256: sha256(content),
+      });
+      throw new Error(`Narrative v2 ${role} content was not a JSON object`);
+    }
+
+    let usage;
+    try {
+      usage = extractUsage(body);
+    } catch (err) {
+      await persistReturnedFailure({
+        scope, callNumber, reservation, role, passNumber, modelId,
+        errorCode: "PROVIDER_USAGE_INVALID",
+        responseStatus: response.status || 200,
+        responseSha256: sha256(content),
+      });
+      throw err;
+    }
 
     const validation = validate(parsed);
-    const usage = extractUsage(body);
+    const metadataErrors = [];
+    if (role === "writer" && parsed?.modelId !== modelId) metadataErrors.push(`modelId must equal configured Writer model ${modelId}`);
+    if (role === "judge" && parsed?.judgeModelId !== modelId) metadataErrors.push(`judgeModelId must equal configured Judge model ${modelId}`);
+    const combinedValidation = {
+      valid: validation.valid && metadataErrors.length === 0,
+      errors: [...(validation.errors || []), ...metadataErrors],
+    };
+
     const actualCost = estimateActualCost(usage, modelPrice);
     const ledger = createUsageLedgerEntry({
       auditId: scope.auditId,
@@ -348,7 +463,7 @@ export function createNarrativeV2LiveBinding({
       actualCost,
       retryNumber: 0,
       cacheHit: false,
-      validationResult: validation.valid ? "PASS" : "FAIL",
+      validationResult: combinedValidation.valid ? "PASS" : "FAIL",
       timestamp: clock.now(),
     });
     const resultRecord = Object.freeze({
@@ -358,12 +473,12 @@ export function createNarrativeV2LiveBinding({
       role,
       passNumber,
       responseSha256: sha256(content),
-      validationErrors: validation.valid ? [] : validation.errors,
+      validationErrors: combinedValidation.valid ? [] : combinedValidation.errors,
     });
     await persistJson(artifactStore, scope, resultName(callNumber), resultRecord);
 
-    if (!validation.valid) {
-      throw new Error(`Narrative v2 ${role} validation failed: ${validation.errors.join("; ")}`);
+    if (!combinedValidation.valid) {
+      throw new Error(`Narrative v2 ${role} validation failed: ${combinedValidation.errors.join("; ")}`);
     }
     return parsed;
   }
