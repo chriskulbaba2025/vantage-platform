@@ -304,6 +304,11 @@ test("LIVE-BIND-04: a reserved failed provider call is never silently retried", 
   await assert.rejects(() => binding.writerExecutor(request), /HTTP 503/);
   await assert.rejects(() => binding.writerExecutor(request), /already reserved/);
   assert.equal(calls, 1, "same paid attempt must not execute twice");
+
+  const resultKey = `tenants/${SCOPE.tenantId}/clients/${SCOPE.clientId}/audits/${SCOPE.auditId}/report-v2/narrative-v2/live-usage/call-01-result.json`;
+  const result = JSON.parse(Buffer.from(await artifactStore.get(resultKey)).toString("utf8"));
+  assert.equal(result.errorCode, "PROVIDER_HTTP_ERROR");
+  assert.equal(result.actualCost, null);
 });
 
 test("LIVE-BIND-05: token ceiling rejects before reservation and before network", async () => {
@@ -331,5 +336,117 @@ test("LIVE-BIND-06: price table and hard budgets are mandatory when enabled", ()
   assert.throws(
     () => loadNarrativeV2LiveConfig(baseEnv({ PRYSM_LLM_HARD_BUDGET_USD: "" })),
     /PRYSM_LLM_HARD_BUDGET_USD must be a positive number/,
+  );
+});
+
+test("LIVE-BIND-07: Judge cannot execute before a validated Writer result", async () => {
+  const artifactStore = createMemoryArtifactStore();
+  let calls = 0;
+  const binding = createNarrativeV2LiveBinding({
+    env: baseEnv(),
+    artifactStore,
+    clock,
+    fetchImpl: async () => { calls += 1; return responseFor(passingJudgeResponse(1)); },
+  });
+  binding.registerAuditScope(SCOPE);
+  await assert.rejects(
+    () => binding.judgeExecutor({
+      passNumber: 1,
+      writerInput: writerInput(),
+      writerOutput: validWriterOutput(1),
+      judgeContract: { contractVersion: "1.0.0", rubric: RUBRIC },
+    }),
+    /requires Judge pass 1 as call 2 after Writer pass 1/,
+  );
+  assert.equal(calls, 0, "out-of-order Judge request must be rejected before network");
+});
+
+test("LIVE-BIND-08: missing provider token usage fails closed and is not recorded as zero actual cost", async () => {
+  const artifactStore = createMemoryArtifactStore();
+  let calls = 0;
+  const binding = createNarrativeV2LiveBinding({
+    env: baseEnv(),
+    artifactStore,
+    clock,
+    fetchImpl: async () => {
+      calls += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validWriterOutput(1)) } }],
+        }),
+      };
+    },
+  });
+  binding.registerAuditScope(SCOPE);
+  await assert.rejects(
+    () => binding.writerExecutor({ prompt: "writer governed prompt", passNumber: 1, writerInput: writerInput() }),
+    /missing governed token usage/,
+  );
+  assert.equal(calls, 1);
+
+  const resultKey = `tenants/${SCOPE.tenantId}/clients/${SCOPE.clientId}/audits/${SCOPE.auditId}/report-v2/narrative-v2/live-usage/call-01-result.json`;
+  const result = JSON.parse(Buffer.from(await artifactStore.get(resultKey)).toString("utf8"));
+  assert.equal(result.errorCode, "PROVIDER_USAGE_INVALID");
+  assert.equal(result.actualCost, null);
+  assert.notEqual(result.actualCost, 0);
+});
+
+test("LIVE-BIND-09: concurrent duplicate Writer attempts produce only one paid network call", async () => {
+  const baseStore = createMemoryArtifactStore();
+  let reservationAttempts = 0;
+  let releaseFirst;
+  const firstReservationBarrier = new Promise((resolve) => { releaseFirst = resolve; });
+  const artifactStore = {
+    ...baseStore,
+    put: async (input) => {
+      if (String(input?.scope?.artifactName || "").endsWith("-reservation.json")) {
+        reservationAttempts += 1;
+        if (reservationAttempts === 1) {
+          await firstReservationBarrier;
+        } else if (reservationAttempts === 2) {
+          releaseFirst();
+        }
+      }
+      return baseStore.put(input);
+    },
+  };
+
+  let calls = 0;
+  const binding = createNarrativeV2LiveBinding({
+    env: baseEnv(),
+    artifactStore,
+    clock,
+    fetchImpl: async () => {
+      calls += 1;
+      return responseFor(validWriterOutput(1));
+    },
+  });
+  binding.registerAuditScope(SCOPE);
+  const request = { prompt: "writer governed prompt", passNumber: 1, writerInput: writerInput() };
+  const settled = await Promise.allSettled([
+    binding.writerExecutor(request),
+    binding.writerExecutor(request),
+  ]);
+
+  assert.equal(settled.filter((entry) => entry.status === "fulfilled").length, 1);
+  assert.equal(settled.filter((entry) => entry.status === "rejected").length, 1);
+  assert.equal(calls, 1, "unique immutable reservation claim must permit only one paid call");
+});
+
+test("LIVE-BIND-10: returned Writer model metadata must match the configured model", async () => {
+  const artifactStore = createMemoryArtifactStore();
+  const wrongModelOutput = { ...validWriterOutput(1), modelId: "unexpected-model" };
+  const binding = createNarrativeV2LiveBinding({
+    env: baseEnv(),
+    artifactStore,
+    clock,
+    fetchImpl: async () => responseFor(wrongModelOutput),
+  });
+  binding.registerAuditScope(SCOPE);
+  await assert.rejects(
+    () => binding.writerExecutor({ prompt: "writer governed prompt", passNumber: 1, writerInput: writerInput() }),
+    /modelId must equal configured Writer model writer-cheap-structured/,
   );
 });
