@@ -80,6 +80,10 @@ Narrative v2 must add, not replace, the diagnostic layer. The client-facing narr
 
 Every rendered substantive narrative atom must retain the exact governed evidence reference as HTML metadata. Internal IDs must not be exposed as visible client prose.
 
+The regression fixture itself must first pass the real `validateWriterOutput()` contract against a governed `WriterInput`. A low-level render of hand-built or contract-invalid narrative data is not acceptable proof.
+
+Source/capability status statements in the fixture must be grounded by exact governed status references, so unavailable evidence can never be represented by an unvalidated narrative shortcut.
+
 ## Protected boundaries
 
 This change is proof-only and MUST NOT:
@@ -99,7 +103,7 @@ This change is proof-only and MUST NOT:
 2. every historical area has semantic coverage in the modern report surfaces;
 3. additional deterministic diagnostic depth is retained;
 4. Narrative v2 adds executive decision usefulness rather than replacing evidence detail;
-5. narrative atoms retain exact evidence-lineage metadata;
+5. the regression narrative fixture passes the real Writer v2 contract and narrative atoms retain exact evidence-lineage metadata, including governed source-status lineage where required;
 6. a passing client narrative and deterministic evidence surface are both required.
 
 ## Frozen scope
