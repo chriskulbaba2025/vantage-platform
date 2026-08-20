@@ -231,6 +231,39 @@ function validateFunnelStage(stageName, items, writerInput, errors) {
   });
 }
 
+function governedStatusForReference(writerInput, ref) {
+  const record = writerInput?.referenceIndex?.[ref];
+  if (!isObject(record) || !nonEmptyString(record.path)) return undefined;
+  const value = record.path.split(".").reduce((current, key) => current?.[key], writerInput);
+  if (record.kind === "source-status") return nonEmptyString(value) ? value : undefined;
+  if (record.kind === "capability" && isObject(value) && nonEmptyString(value.status)) return value.status;
+  return undefined;
+}
+
+function validateLimitationStatus(item, writerInput, label, errors) {
+  const governedStatuses = new Set();
+  for (const field of ["clientExplanation", "whatThisMeans", "whatThisDoesNotMean"]) {
+    for (const ref of item?.[field]?.evidenceRefs || []) {
+      const status = governedStatusForReference(writerInput, ref);
+      if (status !== undefined) governedStatuses.add(status);
+    }
+  }
+
+  if (governedStatuses.size === 0) {
+    errors.push(`${label}.status must be grounded in a governed source-status or capability reference`);
+    return;
+  }
+  if (governedStatuses.size > 1) {
+    errors.push(`${label}.status evidence resolves to conflicting governed statuses: ${[...governedStatuses].sort().join(", ")}`);
+    return;
+  }
+
+  const [expectedStatus] = governedStatuses;
+  if (item.status !== expectedStatus) {
+    errors.push(`${label}.status must equal governed status ${expectedStatus}, got ${String(item.status)}`);
+  }
+}
+
 function validateLimitations(items, writerInput, errors) {
   if (!Array.isArray(items) || items.length > 10) {
     errors.push("limitations must contain 0 to 10 items");
@@ -248,6 +281,7 @@ function validateLimitations(items, writerInput, errors) {
         maxWords: 100,
       });
     }
+    validateLimitationStatus(item, writerInput, label, errors);
   });
 }
 
