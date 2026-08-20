@@ -261,3 +261,36 @@ test("WRITER-V2-07: unavailable and failed states remain explicit and are never 
   assert.deepEqual(trust.limitations, ["Three key pages did not return usable parsed content"]);
   assert.equal(packet.scoreGovernance.sourceDependencies.backlinks, "FAILED");
 });
+
+test("WRITER-V2-08: incomplete canonical ScoreSet fails closed instead of accepting aliases", () => {
+  const broken = scoreSet();
+  delete broken.scores.trust;
+  broken.scores.trustScore = 74;
+
+  assert.throws(
+    () => buildWriterInput({
+      auditId: AUDIT_ID,
+      auditRequest: request(),
+      scoreSet: broken,
+      findings: [finding()],
+      capabilityEvidence: capabilityEvidence(),
+    }),
+    /scoreSet\.scores missing canonical field: trust/,
+  );
+});
+
+test("WRITER-V2-09: capability evidence without canonical audit identity fails closed", () => {
+  const broken = capabilityEvidence();
+  delete broken.auditId;
+
+  assert.throws(
+    () => buildWriterInput({
+      auditId: AUDIT_ID,
+      auditRequest: request(),
+      scoreSet: scoreSet(),
+      findings: [finding()],
+      capabilityEvidence: broken,
+    }),
+    /capabilityEvidence\.auditId is required/,
+  );
+});
