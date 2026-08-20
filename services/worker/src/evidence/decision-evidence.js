@@ -186,16 +186,16 @@ function hydrateCompetitors(sourceResult, suppliedCompetitors) {
   const status = sourceResult.status || "NOT_APPLICABLE";
   const rawCompetitors = ev.competitors || [];
 
-  // Map raw SERP items into competitor comparison objects.
-  // The SERP adapter normalizes items to { candidateUrl, domain, title,
-  // position, ... } — the candidateUrl field must survive into the
-  // competitor evidence (lossless adapter boundary).
+  // Map raw competitor items into comparison objects. Composite competitor
+  // collection can be PARTIAL while a specific returned item is fully usable;
+  // an explicit item-level evidence status therefore takes precedence over
+  // the source-level coverage status.
   return rawCompetitors.map((item, i) => {
     const competitorUrl = item.url || item.candidateUrl || item.link || "";
     return {
       url: competitorUrl || `serp-result-${i}`,
       domain: item.domain || (() => { try { return new URL(competitorUrl).hostname; } catch { return ""; } })(),
-      status,
+      status: item._evidenceStatus || status,
       collectedAt: sourceResult.completedAt || undefined,
       evidence: {
         source: "dataforseo-serp",

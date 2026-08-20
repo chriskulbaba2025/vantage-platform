@@ -96,16 +96,16 @@ export function createAuditApplicationService({
     // crawl overrides, performance configuration, SERP/backlinks config,
     // and controlled-dependency seams (oauthService/fetchImpl) that sit
     // BELOW the production adapter layer.
-    if (input.crawl && typeof input.crawl === "object") {
-      auditRequest.crawl = { ...(auditRequest.crawl || {}), ...input.crawl };
-      // PRYSM-NEXT-01 WP-E — production default: live browser validation ON
-      // unless the intake explicitly disables it or the env kill-switch is
-      // set.  Controlled requests (tests) bypass this service — zero live
-      // browsers in governed suites.
-      if (auditRequest.crawl.pathValidationLiveBrowser === undefined) {
-        auditRequest.crawl.pathValidationLiveBrowser =
-          process.env.PRYSM_DISABLE_LIVE_BROWSER ? false : true;
-      }
+    auditRequest.crawl =
+      input.crawl && typeof input.crawl === "object" ? { ...input.crawl } : {};
+    // PRYSM-NEXT-01 WP-E — production default: live browser validation ON
+    // unless the intake explicitly disables it or the env kill-switch is
+    // set. Controlled requests mock the orchestrator — zero live browsers in
+    // governed suites.
+    if (process.env.PRYSM_DISABLE_LIVE_BROWSER) {
+      auditRequest.crawl.pathValidationLiveBrowser = false;
+    } else if (auditRequest.crawl.pathValidationLiveBrowser === undefined) {
+      auditRequest.crawl.pathValidationLiveBrowser = true;
     }
     if (input.performance && typeof input.performance === "object") {
       auditRequest.performance = input.performance;
