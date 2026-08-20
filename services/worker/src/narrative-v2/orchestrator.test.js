@@ -264,6 +264,31 @@ async function expectOrchestrationError(promise, code) {
   });
 }
 
+test("input boundary rejects a WriterInput packet with the wrong contract version", async () => {
+  const invalid = writerInput();
+  invalid.writerInputVersion = "0.9.0";
+  let writerCalls = 0;
+  let judgeCalls = 0;
+
+  await expectOrchestrationError(
+    runNarrativeV2Orchestration({
+      writerInput: invalid,
+      writerExecutor: async () => {
+        writerCalls += 1;
+        return validWriterOutput(1);
+      },
+      judgeExecutor: async () => {
+        judgeCalls += 1;
+        return passingJudgeResponse(1);
+      },
+    }),
+    NARRATIVE_V2_ERROR.INVALID_INPUT,
+  );
+
+  assert.equal(writerCalls, 0);
+  assert.equal(judgeCalls, 0);
+});
+
 test("ORCH-01/02/05: Pass 1 uses governed prompt, Judge consumes the same validated object, PASS releases", async () => {
   const input = writerInput();
   const produced = validWriterOutput(1);
