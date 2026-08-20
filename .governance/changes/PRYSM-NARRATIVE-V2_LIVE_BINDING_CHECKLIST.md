@@ -28,12 +28,13 @@ Live Narrative v2 therefore enforces:
 - configured input/output token ceilings;
 - configured audit hard budget;
 - configured daily hard budget plus starting daily-spend value;
-- immutable paid-call reservation before network execution;
-- a unique reservation claim ID so concurrent duplicate attempts cannot both pass an idempotent immutable write;
+- same-runtime duplicate paid attempts are blocked by an in-flight reservation lock acquired before the first asynchronous artifact read;
+- an immutable paid-call reservation is written before network execution;
+- each durable reservation has a unique claim ID, distinguishing a conflicting claim from an idempotent same-byte write;
 - immutable usage/result record after every returned provider response, including returned failures;
 - provider token usage is mandatory for a returned successful response; missing/invalid usage fails closed and is never represented as `$0` actual cost;
 - returned Writer/Judge model metadata must equal the configured model IDs;
-- any existing reservation blocks silent re-execution after interruption.
+- any existing durable reservation blocks silent sequential/restart re-execution after interruption.
 
 The deterministic three-pass Narrative v2 controller remains unchanged. The live binding is intentionally narrower because the repository cost contract permits only two paid calls. If the first Judge returns `REVISE`, any attempted Pass 2 Writer call is refused before network execution and the narrative fails closed rather than exceeding the two-call ceiling.
 
@@ -88,11 +89,13 @@ Invalid output or invalid/missing provider usage fails closed.
 
 ## Spend/restart/concurrency safety
 
-Before every paid request, the binding writes an immutable reservation under:
+Before every paid request, the binding acquires an in-process reservation lock keyed to the audit/role/pass **before its first asynchronous artifact read**. A concurrent duplicate request in the same runtime is rejected before reservation or network execution.
+
+The winning same-runtime attempt writes an immutable reservation under:
 
 `report-v2/narrative-v2/live-usage/call-XX-reservation.json`
 
-Each reservation includes a unique claim ID. If two processes or concurrent executions race for the same call slot, their reservation bytes differ; the governed immutable store permits only one claim and the loser fails before network execution. An idempotent same-byte write therefore cannot become a duplicate paid call.
+Each reservation includes a unique claim ID. This keeps conflicting durable claims distinguishable from an idempotent same-byte write, while the persisted reservation protects sequential retries and process restarts from silently repeating an uncertain paid attempt.
 
 After every returned provider response the binding writes:
 
@@ -100,7 +103,13 @@ After every returned provider response the binding writes:
 
 A successful validated response records provider-reported token usage and calculated actual cost. A returned HTTP/error/content/usage failure records a fail-closed result with `actualCost: null`; it is never misrepresented as zero spend.
 
-If a reservation already exists for the same audit call sequence, the binding refuses to make that paid request again. This means an interrupted call with uncertain spend cannot be silently duplicated on resume/restart.
+If a reservation already exists for the same audit call sequence, the binding refuses to make that paid request again.
+
+### Cross-process limitation
+
+The current governed production object store enforces immutability through existence/read/write verification, but its interface does **not** expose an atomic conditional-create or transactional compare-and-set primitive. Therefore this PR does not claim or authorize simultaneous live execution of the same audit across multiple worker processes/replicas.
+
+The next controlled live audit must run with **one worker process/replica**. Before unattended or multi-worker live rollout, Prysm requires a durable cross-process execution claim/lock (or atomic conditional reservation) in addition to the existing durable reservation artifacts.
 
 ## Live sequence
 
@@ -126,7 +135,12 @@ The binding enforces `PRYSM_LLM_DAILY_HARD_BUDGET_USD` against:
 - `PRYSM_LLM_DAILY_SPEND_USD` supplied at process start; and
 - reservations made by the current process thereafter.
 
-The repository does not currently expose a durable cross-audit aggregate cost index through the governed ArtifactStore interface. Therefore this gate is sufficient for the next **single controlled live acceptance/production audit**, but it does not authorize unattended multi-audit live rollout. A durable cross-process daily aggregate must be added or externally supplied before broad live automation.
+The repository does not currently expose a durable cross-audit aggregate cost index through the governed ArtifactStore interface. Therefore this gate is sufficient for the next **single controlled live acceptance/production audit on one worker process/replica**, but it does not authorize unattended multi-audit or multi-worker live rollout.
+
+Before broad live automation, add both:
+
+1. durable cross-process execution claiming/atomic reservation; and
+2. a durable cross-process daily aggregate cost index, or an externally supplied equivalent.
 
 ## Deterministic proof
 
@@ -141,7 +155,7 @@ The repository does not currently expose a durable cross-audit aggregate cost in
 7. price table and hard budgets are mandatory;
 8. Judge cannot execute before a validated Writer result;
 9. missing provider token usage fails closed and is not recorded as zero actual cost;
-10. concurrent duplicate Writer attempts result in only one paid network call;
+10. same-runtime concurrent duplicate Writer attempts result in only one paid network call;
 11. returned Writer model metadata must match the configured Writer model ID.
 
 All tests inject fake `fetch`. Live provider/LLM calls in CI: **0**.
