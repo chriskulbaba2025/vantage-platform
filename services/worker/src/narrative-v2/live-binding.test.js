@@ -19,6 +19,7 @@ import {
 
 const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 const REF = "finding:F-001";
+const LIMITATION_STATUS_REF = "source:offsite";
 const FIXED_TS = "2026-08-20T04:00:00.000Z";
 const SCOPE = {
   tenantId: "tenant-live-binding",
@@ -56,8 +57,12 @@ function writerInput() {
     contractVersion: "1.0.0",
     writerInputVersion: "1.0.0",
     auditId: AUDIT_ID,
+    scoreGovernance: {
+      sourceDependencies: { offsite: "UNAVAILABLE" },
+    },
     referenceIndex: {
       [REF]: { kind: "finding", path: "findings.F-001" },
+      [LIMITATION_STATUS_REF]: { kind: "source-status", path: "scoreGovernance.sourceDependencies.offsite" },
     },
   };
 }
@@ -67,6 +72,9 @@ function atom(text, statementClass = "INTERPRETATION") {
 }
 function opportunity(text) {
   return atom(text, "OPPORTUNITY");
+}
+function limitationStatusAtom(text) {
+  return { text, statementClass: "INTERPRETATION", evidenceRefs: [LIMITATION_STATUS_REF] };
 }
 function standard(headline, fields) {
   return { headline, ...fields };
@@ -159,9 +167,9 @@ function validWriterOutput(passNumber = 1) {
       itemId: "LIM-01",
       area: "Off-site evidence",
       status: "UNAVAILABLE",
-      clientExplanation: interpret("The limitation"),
-      whatThisMeans: interpret("What the limitation means"),
-      whatThisDoesNotMean: interpret("What the limitation does not mean"),
+      clientExplanation: limitationStatusAtom("The limitation"),
+      whatThisMeans: limitationStatusAtom("What the limitation means"),
+      whatThisDoesNotMean: limitationStatusAtom("What the limitation does not mean"),
       impactOnReport: interpret("The limitation impact"),
     }],
     actionPlan: [{
