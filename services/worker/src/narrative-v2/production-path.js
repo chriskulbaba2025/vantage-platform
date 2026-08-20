@@ -191,6 +191,12 @@ function validatePersistedReleaseCandidate(writerInput, orchestrationResult) {
     errors.push(`orchestration status must be ${NARRATIVE_V2_STATUS.RELEASE_CANDIDATE}`);
   }
   if (orchestrationResult?.auditId !== writerInput?.auditId) errors.push("orchestration auditId mismatch");
+  if (!Number.isInteger(orchestrationResult?.passCount) || orchestrationResult.passCount < 1 || orchestrationResult.passCount > 3) {
+    errors.push("orchestration passCount must be an integer from 1 to 3");
+  }
+  if (orchestrationResult?.finalJudgeResponse?.decision !== "PASS") {
+    errors.push("final Judge decision must be PASS for a persisted release candidate");
+  }
   if (errors.length) return { valid: false, errors };
 
   const passNumber = orchestrationResult.passCount;
@@ -374,20 +380,80 @@ async function runNarrativeV2FromScored({
 }
 
 async function recoverNarrativeV2Pending({ auditRequest, executionId, startedAt, lifecycleService, artifactStore, clock }) {
-  const writerInput = await loadJsonArtifact({
-    artifactStore,
-    auditRequest,
-    artifactName: "narrative-v2/writer-input.json",
-  });
-  const orchestrationResult = await loadJsonArtifact({
-    artifactStore,
-    auditRequest,
-    artifactName: "narrative-v2/orchestration.json",
-  });
+  let writerInput;
+  let orchestrationResult;
+  try {
+    writerInput = await loadJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName: "narrative-v2/writer-input.json",
+    });
+    orchestrationResult = await loadJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName: "narrative-v2/orchestration.json",
+    });
+  } catch (err) {
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_FAILED,
+      reason: `narrative-v2-recovery-artifact-invalid:${String(err.message || "").slice(0, 120)}`,
+    });
+    return resultSummary({
+      auditRequest,
+      executionId,
+      startedAt,
+      completedAt: clock.now(),
+      finalState: T.NARRATIVE_FAILED,
+      extra: { narrativeV2Error: `Persisted Narrative v2 recovery artifact is unreadable: ${err.message}` },
+    });
+  }
 
-  if (!writerInput || !orchestrationResult) return null;
+  // Re-execution is allowed only when no terminal orchestration artifact exists.
+  // A present terminal artifact that cannot be verified is a governed failure,
+  // not permission to spend another Writer/Judge execution set.
+  if (!orchestrationResult) return null;
+  if (!writerInput) {
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_FAILED,
+      reason: "narrative-v2-recovery-writer-input-missing",
+    });
+    return resultSummary({
+      auditRequest,
+      executionId,
+      startedAt,
+      completedAt: clock.now(),
+      finalState: T.NARRATIVE_FAILED,
+      extra: { narrativeV2Error: "Persisted terminal orchestration exists but WriterInput is missing" },
+    });
+  }
+
   const validation = validatePersistedReleaseCandidate(writerInput, orchestrationResult);
-  if (!validation.valid) return null;
+  if (!validation.valid) {
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_FAILED,
+      reason: `narrative-v2-recovery-invalid:${validation.errors.join("; ").slice(0, 120)}`,
+    });
+    return resultSummary({
+      auditRequest,
+      executionId,
+      startedAt,
+      completedAt: clock.now(),
+      finalState: T.NARRATIVE_FAILED,
+      extra: {
+        narrativeV2Status: orchestrationResult.status || "INVALID",
+        narrativeV2Error: `Persisted terminal orchestration failed validation: ${validation.errors.join("; ")}`,
+      },
+    });
+  }
 
   const orchestrationKey = buildArtifactKey({
     ...scopeFor(auditRequest),
