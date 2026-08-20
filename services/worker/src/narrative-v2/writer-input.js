@@ -22,6 +22,30 @@ const CAPABILITY_REQUIRED_FIELDS = Object.freeze([
   "requiredFieldsPresent",
 ]);
 
+const REQUIRED_SCORESET_FIELDS = Object.freeze([
+  "scoringVersion",
+  "scores",
+  "bands",
+  "assessedWeight",
+  "readinessStatus",
+  "showNumericScore",
+  "evidenceConfidenceScore",
+  "dimensionEligibility",
+  "moduleEligibility",
+  "suppressedModules",
+  "rootCause",
+  "findingIds",
+]);
+
+const REQUIRED_CORE_SCORE_FIELDS = Object.freeze([
+  "trust",
+  "contentDepth",
+  "conversionPathways",
+  "technical",
+  "performance",
+  "conversionReadiness",
+]);
+
 const SCORE_GOVERNANCE_FIELDS = Object.freeze([
   "scoringVersion",
   "dimensionEligibility",
@@ -59,12 +83,39 @@ function copyOwn(source, fields) {
   return out;
 }
 
+function assertCanonicalScoreSet(scoreSet) {
+  if (!scoreSet || typeof scoreSet !== "object" || Array.isArray(scoreSet)) {
+    throw new Error("scoreSet is required");
+  }
+
+  for (const field of REQUIRED_SCORESET_FIELDS) {
+    if (!Object.hasOwn(scoreSet, field) || scoreSet[field] === undefined) {
+      throw new Error(`scoreSet missing canonical field: ${field}`);
+    }
+  }
+
+  if (!scoreSet.scores || typeof scoreSet.scores !== "object" || Array.isArray(scoreSet.scores)) {
+    throw new Error("scoreSet.scores is required");
+  }
+  for (const field of REQUIRED_CORE_SCORE_FIELDS) {
+    if (!Object.hasOwn(scoreSet.scores, field) || scoreSet.scores[field] === undefined) {
+      throw new Error(`scoreSet.scores missing canonical field: ${field}`);
+    }
+  }
+}
+
 function projectCapabilities(capabilityEvidence, auditId) {
   if (!capabilityEvidence || typeof capabilityEvidence !== "object" || Array.isArray(capabilityEvidence)) {
     throw new Error("capabilityEvidence is required");
   }
-  if (Object.hasOwn(capabilityEvidence, "auditId") && capabilityEvidence.auditId !== auditId) {
+  if (!Object.hasOwn(capabilityEvidence, "auditId") || typeof capabilityEvidence.auditId !== "string" || capabilityEvidence.auditId.length === 0) {
+    throw new Error("capabilityEvidence.auditId is required");
+  }
+  if (capabilityEvidence.auditId !== auditId) {
     throw new Error(`capabilityEvidence.auditId mismatch: ${capabilityEvidence.auditId} vs ${auditId}`);
+  }
+  if (!Object.hasOwn(capabilityEvidence, "capabilityEvidenceVersion") || typeof capabilityEvidence.capabilityEvidenceVersion !== "string") {
+    throw new Error("capabilityEvidence.capabilityEvidenceVersion is required");
   }
   if (!capabilityEvidence.capabilities || typeof capabilityEvidence.capabilities !== "object" || Array.isArray(capabilityEvidence.capabilities)) {
     throw new Error("capabilityEvidence.capabilities is required");
@@ -103,7 +154,6 @@ function projectCapabilities(capabilityEvidence, auditId) {
 }
 
 function assertFindingIntegrity(scoreSet, findings) {
-  if (!Object.hasOwn(scoreSet, "findingIds") || scoreSet.findingIds === undefined) return;
   if (!Array.isArray(scoreSet.findingIds)) throw new Error("scoreSet.findingIds must be an array");
 
   const scoreIds = scoreSet.findingIds;
@@ -128,7 +178,7 @@ function assertFindingIntegrity(scoreSet, findings) {
  */
 export function buildWriterInput({ auditId, auditRequest, scoreSet, findings, capabilityEvidence }) {
   if (typeof auditId !== "string" || auditId.length === 0) throw new Error("auditId is required");
-  if (!scoreSet || typeof scoreSet !== "object" || Array.isArray(scoreSet)) throw new Error("scoreSet is required");
+  assertCanonicalScoreSet(scoreSet);
 
   const business = buildWriterBusinessContext(auditRequest);
   const score = buildWriterScoreContext(scoreSet);
