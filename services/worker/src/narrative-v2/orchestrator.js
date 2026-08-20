@@ -18,6 +18,7 @@ import {
   nextActionForJudge,
   validateJudgeResponse,
 } from "./judge-contract.js";
+import { WRITER_INPUT_VERSION } from "./writer-input.js";
 import { validateWriterOutput } from "./writer-output.js";
 import { buildWriterPrompt } from "./writer-prompt.js";
 
@@ -78,6 +79,12 @@ export class NarrativeV2OrchestrationError extends Error {
 function assertControllerInputs({ writerInput, writerExecutor, judgeExecutor }) {
   const errors = [];
   if (!isObject(writerInput)) errors.push("writerInput must be an object");
+  if (isObject(writerInput) && writerInput.contractVersion !== "1.0.0") {
+    errors.push("writerInput.contractVersion must equal 1.0.0");
+  }
+  if (isObject(writerInput) && writerInput.writerInputVersion !== WRITER_INPUT_VERSION) {
+    errors.push(`writerInput.writerInputVersion must equal ${WRITER_INPUT_VERSION}`);
+  }
   if (isObject(writerInput) && !nonEmptyString(writerInput.auditId)) errors.push("writerInput.auditId is required");
   if (isObject(writerInput) && !isObject(writerInput.referenceIndex)) errors.push("writerInput.referenceIndex is required");
   if (typeof writerExecutor !== "function") errors.push("writerExecutor must be a function");
