@@ -4,13 +4,13 @@ Change ID: `PRYSM-NARRATIVE-V2-LIVE-01`
 Version: `1.0.0`
 Release intent: `CHANGE_ONLY`
 Production activation: **disabled by default**
-Base exact head: `8e141e2cac8d48cec92d63ca943b83599cb1e890`
+Base exact main SHA: `f86fd42e1575712d38e8d97d5c39fc2a85307c2d`
 
 ## Objective
 
 Bind the already-governed Narrative v2 Writer/Judge executor seams to a bounded, model-agnostic live HTTP client without changing evidence collection, scoring, Writer/Judge contracts, renderer logic, provider adapters, or the legacy report path.
 
-This gate does not deploy, merge, configure production secrets, or make a live LLM/provider call.
+This gate does not deploy, merge, configure production secrets, run a production audit, or make a live LLM/provider call.
 
 ## Mandatory cost-contract alignment
 
@@ -21,20 +21,21 @@ Live Narrative v2 therefore enforces:
 - explicit `PRYSM_NARRATIVE_V2_ENABLED=true`;
 - explicit `PRYSM_LLM_MODE=live`;
 - maximum total paid calls per audit: **2**;
-- one Writer call followed by one Judge call;
-- no network retry;
-- no automatic repair call;
-- no model escalation;
-- no hidden fallback;
+- exactly Writer Pass 1 followed by Judge Pass 1;
+- Judge execution requires the persisted Writer result ledger to have `validationResult: PASS`;
+- no Writer Pass 2, third paid call, network retry, automatic repair call, model escalation, or hidden fallback;
 - deterministic token/cost preflight before reservation;
 - configured input/output token ceilings;
 - configured audit hard budget;
 - configured daily hard budget plus starting daily-spend value;
 - immutable paid-call reservation before network execution;
-- immutable usage/result record after a response;
-- duplicate reservation blocks re-execution after interruption.
+- a unique reservation claim ID so concurrent duplicate attempts cannot both pass an idempotent immutable write;
+- immutable usage/result record after every returned provider response, including returned failures;
+- provider token usage is mandatory for a returned successful response; missing/invalid usage fails closed and is never represented as `$0` actual cost;
+- returned Writer/Judge model metadata must equal the configured model IDs;
+- any existing reservation blocks silent re-execution after interruption.
 
-The deterministic three-pass Narrative v2 controller is unchanged. In live mode, if the first Judge returns `REVISE`, the third paid call is refused by the cost gate and the narrative fails closed rather than exceeding the mandatory two-call ceiling.
+The deterministic three-pass Narrative v2 controller remains unchanged. The live binding is intentionally narrower because the repository cost contract permits only two paid calls. If the first Judge returns `REVISE`, any attempted Pass 2 Writer call is refused before network execution and the narrative fails closed rather than exceeding the two-call ceiling.
 
 ## Model selection
 
@@ -47,6 +48,8 @@ Production configuration supplies:
 - exact HTTPS chat-completions endpoint;
 - price table keyed by model ID;
 - token ceilings and budgets.
+
+The response metadata is bound back to those configured model IDs so the audit ledger cannot claim a different Writer or Judge model than the configured paid call.
 
 This preserves the policy that Prysm should use the least expensive structured-output-capable model that passes the benchmark.
 
@@ -76,21 +79,39 @@ Returned message content must be a JSON object. No markdown/code-fence repair is
 
 - Writer result is validated with `validateWriterOutput` before return.
 - Judge result is validated with `validateJudgeResponse` before return.
-- The Narrative v2 orchestrator validates both again at its canonical boundary.
+- Writer `modelId` must equal the configured Writer model ID.
+- Judge `judgeModelId` must equal the configured Judge model ID.
+- A returned successful provider response must contain valid integer token usage sufficient to calculate governed actual cost.
+- The Narrative v2 orchestrator validates Writer and Judge output again at its canonical boundary.
 
-Invalid output fails closed.
+Invalid output or invalid/missing provider usage fails closed.
 
-## Spend/restart safety
+## Spend/restart/concurrency safety
 
 Before every paid request, the binding writes an immutable reservation under:
 
 `report-v2/narrative-v2/live-usage/call-XX-reservation.json`
 
-After a returned response it writes:
+Each reservation includes a unique claim ID. If two processes or concurrent executions race for the same call slot, their reservation bytes differ; the governed immutable store permits only one claim and the loser fails before network execution. An idempotent same-byte write therefore cannot become a duplicate paid call.
+
+After every returned provider response the binding writes:
 
 `report-v2/narrative-v2/live-usage/call-XX-result.json`
 
-If a reservation already exists for the same role/pass, the binding refuses to make the network call again. This means an interrupted call with uncertain spend cannot be silently duplicated on resume/restart.
+A successful validated response records provider-reported token usage and calculated actual cost. A returned HTTP/error/content/usage failure records a fail-closed result with `actualCost: null`; it is never misrepresented as zero spend.
+
+If a reservation already exists for the same audit call sequence, the binding refuses to make that paid request again. This means an interrupted call with uncertain spend cannot be silently duplicated on resume/restart.
+
+## Live sequence
+
+The paid sequence is structurally fixed:
+
+1. Call 1 = Writer Pass 1.
+2. Writer response must validate and produce a persisted PASS result ledger.
+3. Call 2 = Judge Pass 1.
+4. No third paid call is permitted.
+
+A Judge call made before a validated Writer result is rejected before network execution.
 
 ## Legacy-path isolation
 
@@ -113,11 +134,15 @@ The repository does not currently expose a durable cross-audit aggregate cost in
 
 1. disabled by default;
 2. enabled mode requires explicit live mode;
-3. one Writer + one Judge call are validated and ledgered;
+3. one Writer + one Judge call are validated, usage/cost ledgered, and capped at two;
 4. a third paid call is blocked;
-5. a reserved failed provider attempt cannot be silently retried;
-6. input-token ceiling rejects before network execution;
-7. price table and hard budgets are mandatory.
+5. a reserved failed provider attempt cannot be silently retried and its returned failure is durably recorded;
+6. input-token ceiling rejects before reservation/network execution;
+7. price table and hard budgets are mandatory;
+8. Judge cannot execute before a validated Writer result;
+9. missing provider token usage fails closed and is not recorded as zero actual cost;
+10. concurrent duplicate Writer attempts result in only one paid network call;
+11. returned Writer model metadata must match the configured Writer model ID.
 
 All tests inject fake `fetch`. Live provider/LLM calls in CI: **0**.
 
