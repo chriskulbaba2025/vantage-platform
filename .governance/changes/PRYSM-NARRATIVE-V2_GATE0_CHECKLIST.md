@@ -209,11 +209,11 @@ Requirement: Gate 0 must be additive only.
 
 Production boundary: repository diff.
 
-Positive proof: changed production-code paths are confined to new `services/worker/src/narrative-v2/*` files; active orchestrator, adapters, scoring, narrative service, and renderer are unchanged.
+Positive proof: exact PR #60 changed-file audit at head before CI found 11 files, all confined to `.governance/changes/PRYSM-NARRATIVE-V2_*` and new `services/worker/src/narrative-v2/*` paths. No active orchestrator, adapter, scoring, narrative-service, renderer, storage, web, or runtime file is changed.
 
-Negative proof: no import from the active production spine to `narrative-v2` is introduced in Gate 0.
+Negative proof: no active production file imports `narrative-v2` because no active production file is modified by the PR.
 
-Acceptance proof: exact PR diff audit + full worker CI.
+Acceptance proof: `list_pr_changed_filenames(PR #60)` returned only the 11 permitted files.
 
 Fault injection: any edit to a prohibited file or active runtime import.
 
@@ -223,7 +223,7 @@ Protected invariant: deployed output identical to current production main.
 
 Failure result: BLOCK Gate 0.
 
-Status: [ ] pending exact diff + CI
+Status: [x] exact diff scope PASS; final exact-head CI still required by G0-09
 
 ## G0-09 — Full regression
 
