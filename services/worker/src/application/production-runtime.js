@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { createAuditOrchestrator } from "../orchestration/audit-orchestrator.js";
 import { createNarrativeV2ProductionPath } from "../narrative-v2/production-path.js";
+import { createNarrativeV2LiveBinding } from "../narrative-v2/live-binding.js";
 import { validateNarrativeConfiguration } from "../narrative/narrative-configuration.js";
 import { persistAuditRequest, loadAuditRequest } from "../orchestration/audit-request-persistence.js";
 import { createAuditApplicationService } from "./audit-service.js";
@@ -121,12 +122,36 @@ export function createProductionRuntime({
   const runtimeAdapters = injectedAdaptersAreValid(adapters) ? adapters : createProductionAdapters();
   const runtimeValidateContract = resolveValidator(validateContract);
 
-  // Resolve narrative mode from environment/config.
-  // MOCK = development/CI, REPLAY = staging/deterministic replay, LIVE = production.
-  const narrativeMode = config.narrativeMode || (process.env.PRYSM_LLM_MODE === "live" ? "live" : process.env.PRYSM_LLM_MODE === "replay" ? "replay" : "mock");
+  // PRYSM-NARRATIVE-V2-LIVE-01 — when no test/controlled Narrative v2
+  // executors are injected, compose the explicit env-driven live binding.
+  // It is disabled by default and performs no network action at startup.
+  const automaticNarrativeV2 = narrativeV2 === undefined
+    ? createNarrativeV2LiveBinding({ artifactStore })
+    : null;
+  const narrativeV2Deps = narrativeV2 ?? automaticNarrativeV2 ?? {};
+  const narrativeV2Enabled = narrativeV2Deps.enabled === true;
 
-  // PRYSM-CLOSE-08: validate narrative mode dependencies at configuration
-  // time.  A missing dependency fails startup BEFORE any audit executes.
+  if (narrativeV2Enabled && (
+    typeof narrativeV2Deps.writerExecutor !== "function" ||
+    typeof narrativeV2Deps.judgeExecutor !== "function"
+  )) {
+    throw new Error(
+      "PRODUCTION STARTUP FAILED: Narrative v2 requires writerExecutor and judgeExecutor when enabled",
+    );
+  }
+
+  // Resolve the legacy WP9 narrative mode. When the automatic Narrative v2
+  // live binding is explicitly enabled and no legacy narrative client is
+  // supplied, keep WP9 in MOCK mode. This prevents the v2 live switch from
+  // accidentally activating legacy narrative calls. A deliberately injected
+  // legacy narrative client still follows PRYSM_LLM_MODE as before.
+  const configuredNarrativeMode = config.narrativeMode || (process.env.PRYSM_LLM_MODE === "live" ? "live" : process.env.PRYSM_LLM_MODE === "replay" ? "replay" : "mock");
+  const narrativeMode = automaticNarrativeV2?.enabled === true && !narrative
+    ? "mock"
+    : configuredNarrativeMode;
+
+  // PRYSM-CLOSE-08: validate legacy narrative mode dependencies at
+  // configuration time. Missing dependencies fail startup before an audit.
   const narrativeDeps = narrative || {};
   const narrativeValidation = validateNarrativeConfiguration({
     mode: narrativeMode,
@@ -139,20 +164,6 @@ export function createProductionRuntime({
   if (!narrativeValidation.valid) {
     throw new Error(
       "PRODUCTION STARTUP FAILED: " + narrativeValidation.errors.join(" "),
-    );
-  }
-
-  // PRYSM-NARRATIVE-V2-PROD-01 — explicit disabled-by-default activation.
-  // A runtime may advertise Narrative v2 only when BOTH governed execution
-  // seams are present. The AuditRequest must separately select 2.0.0.
-  const narrativeV2Deps = narrativeV2 || {};
-  const narrativeV2Enabled = narrativeV2Deps.enabled === true;
-  if (narrativeV2Enabled && (
-    typeof narrativeV2Deps.writerExecutor !== "function" ||
-    typeof narrativeV2Deps.judgeExecutor !== "function"
-  )) {
-    throw new Error(
-      "PRODUCTION STARTUP FAILED: Narrative v2 requires writerExecutor and judgeExecutor when enabled",
     );
   }
 
@@ -196,7 +207,6 @@ export function createProductionRuntime({
         timeoutMs: sourceTimeouts[source] || 60_000,
         maxAttempts: 3,
         retryable: (err) => {
-          // Must match the hard-timeout category from executeWithRetry
           if (err?.category === "timeout") return true;
           if (err?.category === "network" && err?.statusCode >= 500) return true;
           if (err?.code === "ECONNRESET" || err?.code === "ETIMEDOUT" || err?.code === "ECONNREFUSED" || err?.code === "ENOTFOUND") return true;
@@ -239,10 +249,6 @@ export function createProductionRuntime({
       result = await orchestrator.execute(auditRequest, { executionId });
     }
 
-    // WP10 stores the immutable client pages in the governed Artifact Store.
-    // The report store owns only the human-review lifecycle, so initialise its
-    // draft record once the governed draft exists. This does not alter the
-    // governed report-page bytes.
     if (result.finalState === T.DRAFT_RENDERED && typeof reportStore.writeReport === "function") {
       const indexHtml = result.renderedPages instanceof Map
         ? (result.renderedPages.get("index.html") || "")
@@ -264,11 +270,6 @@ export function createProductionRuntime({
     return result;
   }
 
-  /**
-   * Start one real audit without holding a Vercel request open for provider,
-   * narrative, and render work. Railway continues the governed job while the
-   * browser polls canonical lifecycle status.
-   */
   async function createAudit(input, tenantId) {
     const targetUrl = normalizeUrl(input.targetUrl);
     const businessName = deriveBusinessName(targetUrl, input.businessName);
@@ -308,12 +309,6 @@ export function createProductionRuntime({
     };
     if (input.ga4?.propertyId) auditRequest.ga4 = { propertyId: String(input.ga4.propertyId).replace(/\D/g, "") };
     if (input.gsc?.siteUrl) auditRequest.gsc = { siteUrl: String(input.gsc.siteUrl).trim() };
-    // PRYSM-V2-PROD-01 — production boundary parity with the base application
-    // service (PRYSM-NEXT-ACTIVATION defect A): the report design selection
-    // must survive the production request boundary. Strict allowlist; v1
-    // remains the default when the field is absent.
-    // PRYSM-NARRATIVE-V2-PROD-01 — an explicit 2.0.0 request is preserved
-    // exactly or rejected above. It is never silently rewritten to v1.
     if (input.report && typeof input.report === "object") {
       auditRequest.report = {
         designVersion:
@@ -322,9 +317,6 @@ export function createProductionRuntime({
       };
     }
 
-    // Governed optional configuration pass-through (schema-validated):
-    // crawl overrides, performance configuration, SERP/backlinks config,
-    // and controlled-dependency seams below the production adapter layer.
     if (input.crawl && typeof input.crawl === "object") {
       auditRequest.crawl = { ...(auditRequest.crawl || {}), ...input.crawl };
     }
@@ -361,15 +353,18 @@ export function createProductionRuntime({
       throw err;
     }
 
-    // Persist the audit identity before returning the HTTP response. The
-    // orchestrator reuses the same idempotency identity when background work
-    // starts, so this is safe and restart-observable.
+    // Register audit scope before any background narrative execution. This
+    // scope is used only for immutable usage/cost records; it is never added
+    // to the Writer/Judge model payload.
+    if (typeof narrativeV2Deps.registerAuditScope === "function") {
+      narrativeV2Deps.registerAuditScope({ tenantId, clientId, auditId, executionId });
+    }
+
     await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey });
     if (typeof lifecycleRepo.updateAuditMetadata === "function") {
       await lifecycleRepo.updateAuditMetadata(auditId, tenantId, { businessName, targetUrl });
     }
 
-    // PRYSM-CLOSE-09: persist the complete normalized AuditRequest durably.
     await persistAuditRequest({
       store: artifactStore,
       auditRequest,
@@ -405,9 +400,6 @@ export function createProductionRuntime({
     const clientId = meta.client_id || meta.clientId || current.clientId || "";
     const executionId = randomUUID();
 
-    // PRYSM-CLOSE-09: load the complete persisted AuditRequest. Recovery
-    // never reconstructs missing values with defaults — the persisted record
-    // is the only source for the resumed execution.
     const auditRequest = await loadAuditRequest({
       store: artifactStore,
       scope: { tenantId, clientId, auditId },
@@ -419,6 +411,10 @@ export function createProductionRuntime({
       );
     }
 
+    if (typeof narrativeV2Deps.registerAuditScope === "function") {
+      narrativeV2Deps.registerAuditScope({ tenantId, clientId, auditId, executionId });
+    }
+
     let result = await orchestrator.execute(auditRequest, { executionId });
     let previousState = null;
     for (let step = 0; step < 4; step++) {
@@ -428,10 +424,8 @@ export function createProductionRuntime({
       result = await orchestrator.execute(auditRequest, { executionId: randomUUID() });
     }
 
-    // Surface WP8/narrative errors in the resume response
     const error = result.wp8Error || result.narrativeV2Error || null;
 
-    // If draft rendered, ensure report store is initialized
     if (result.finalState === T.DRAFT_RENDERED && typeof reportStore.writeReport === "function") {
       const slug = slugify(businessName);
       try {
@@ -452,14 +446,6 @@ export function createProductionRuntime({
     return { finalState: result.finalState, error };
   }
 
-  /**
-   * PRYSM-CLOSE-10: reclaim audits stranded by process interruption.
-   *
-   * The durable work record is the persisted lifecycle state (PostgreSQL),
-   * the persisted complete AuditRequest (C9), and the governed artifacts
-   * (S3). An audit left in an active state after a process restart is
-   * reclaimed here and driven forward from its exact persisted state.
-   */
   const STRANDED_ACTIVE_STATES = new Set([
     T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED,
     T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED,
@@ -487,13 +473,17 @@ export function createProductionRuntime({
       }).catch(() => null);
 
       if (!auditRequest) {
-        // Cannot reclaim without the durable request record — fail closed.
         console.error(`[recoverStrandedAudits] audit ${auditId} stranded at ${current.state} but persisted AuditRequest missing`);
         recovered.push(Object.freeze({ auditId, finalState: current.state, recovered: false }));
         continue;
       }
 
-      let result = await orchestrator.execute(auditRequest, { executionId: randomUUID() });
+      const recoveryExecutionId = randomUUID();
+      if (typeof narrativeV2Deps.registerAuditScope === "function") {
+        narrativeV2Deps.registerAuditScope({ tenantId, clientId, auditId, executionId: recoveryExecutionId });
+      }
+
+      let result = await orchestrator.execute(auditRequest, { executionId: recoveryExecutionId });
       let previousState = null;
       for (let step = 0; step < 8; step++) {
         if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;
@@ -544,8 +534,6 @@ export function createProductionRuntime({
         reason: "human review checklist completed",
       });
     }
-    // Preserve the report-store compatibility status (`reviewed`) while the
-    // canonical PostgreSQL lifecycle is `in_review`.
     return result;
   }
 
@@ -558,11 +546,6 @@ export function createProductionRuntime({
 
     let governedPages = pages;
     if (!(governedPages instanceof Map)) {
-      // PRYSM-NEXT-ACTIVATION defect C — report-design v2 audits have a v2
-      // artifact contract (report-v2/), NOT the locked v1 16-page set.
-      // Detect the design version first; the base approval branch then
-      // validates the correct artifact contract. Historical v1 approval
-      // behaviour (16-page preload + 422 on missing pages) is unchanged.
       const v2ManifestKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/manifest.json`;
       let v2ManifestBytes = null;
       try {
@@ -580,7 +563,7 @@ export function createProductionRuntime({
           try {
             bytes = await artifactStore.get(key);
           } catch {
-            bytes = null; // store implementations differ on missing-key semantics
+            bytes = null;
           }
           if (!bytes) throw Object.assign(new Error(`Draft report page missing: ${filename}`), { statusCode: 422 });
           governedPages.set(filename, Buffer.from(bytes).toString("utf8"));
@@ -604,18 +587,11 @@ export function createProductionRuntime({
     return { ...result, status: T.APPROVED };
   }
 
-  /**
-   * PRYSM-CLOSE-14: publish an approved report through the real production
-   * publication path: APPROVED → report-store publication (verified
-   * artifacts) → PUBLISHED. On any failure the canonical lifecycle goes
-   * to PUBLISH_FAILED — no partial publication.
-   */
   async function publishAudit(auditId, tenantId, slug) {
     const current = await lifecycleService.currentState(auditId, tenantId);
     if (!current) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
 
     if (current.state === T.PUBLISHED) {
-      // Idempotent — publication already completed
       const lifecycle = await reportStore.getStatus(slug, auditId).catch(() => null);
       return {
         auditId,
@@ -668,11 +644,6 @@ export function createProductionRuntime({
     };
   }
 
-  /**
-   * PRYSM-CLOSE-14: client-facing published report retrieval.
-   * ONLY the PUBLISHED lifecycle state is served — draft/review/approved
-   * states are never exposed through this path.
-   */
   async function getPublishedReportPage(auditId, tenantId, slug, filename) {
     const current = await lifecycleService.currentState(auditId, tenantId);
     if (!current) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
@@ -683,15 +654,12 @@ export function createProductionRuntime({
       );
     }
 
-    // Validate filename against published artifacts
     if (!REQUIRED_APPROVED_PAGE_FILENAMES.includes(filename)) {
       const err = new Error("Page not found in published report");
       err.statusCode = 404;
       throw err;
     }
 
-    // Publication record must exist with status published. Read the raw
-    // lifecycle (which carries publishedAt) when the store exposes it.
     let publishedAt = null;
     if (typeof reportStore._readLifecycle === "function") {
       const raw = await reportStore._readLifecycle(slug, auditId).catch(() => null);
@@ -749,6 +717,7 @@ export function createProductionRuntime({
     adapters: runtimeAdapters,
     validateContract: runtimeValidateContract,
     narrativeV2Enabled,
+    narrativeV2Config: narrativeV2Deps.config || null,
     recoverStrandedAudits,
   });
 }
