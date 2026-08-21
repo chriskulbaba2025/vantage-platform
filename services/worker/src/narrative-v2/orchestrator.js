@@ -4,8 +4,8 @@
 // deterministic sequencing boundary between the governed Writer and Judge:
 // Writer -> Writer validation -> Judge -> Judge validation -> targeted rewrite
 // -> final gate. The global contract supports up to MAX_NARRATIVE_PASSES, while
-// a caller may impose a lower automatic-pass ceiling and route further revision
-// work to governed human review.
+// a caller or executor may impose a lower automatic-pass ceiling and route
+// further revision work to governed human review.
 
 import {
   HARD_GATE_CODES,
@@ -135,9 +135,17 @@ export async function runNarrativeV2Orchestration({
   writerInput,
   writerExecutor,
   judgeExecutor,
-  maxAutomaticPasses = MAX_NARRATIVE_PASSES,
+  maxAutomaticPasses,
 }) {
-  assertControllerInputs({ writerInput, writerExecutor, judgeExecutor, maxAutomaticPasses });
+  const effectiveMaxAutomaticPasses = maxAutomaticPasses
+    ?? writerExecutor?.maxAutomaticPasses
+    ?? MAX_NARRATIVE_PASSES;
+  assertControllerInputs({
+    writerInput,
+    writerExecutor,
+    judgeExecutor,
+    maxAutomaticPasses: effectiveMaxAutomaticPasses,
+  });
 
   // Freeze the exact governed input once. Every pass consumes this same object.
   const governedWriterInput = deepFreeze(writerInput);
@@ -285,11 +293,11 @@ export async function runNarrativeV2Orchestration({
       );
     }
 
-    // A caller may deliberately authorize fewer automatic rewrites than the
-    // global Judge contract. Once that caller-specific ceiling is reached,
+    // A caller or live executor may deliberately authorize fewer automatic
+    // rewrites than the global Judge contract. Once that ceiling is reached,
     // preserve the valid Judge REVISE decision and route further work to human
     // review rather than attempting an unauthorized paid Writer call.
-    if (passNumber >= maxAutomaticPasses) {
+    if (passNumber >= effectiveMaxAutomaticPasses) {
       return buildTerminalResult({
         writerInput: governedWriterInput,
         status: NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
