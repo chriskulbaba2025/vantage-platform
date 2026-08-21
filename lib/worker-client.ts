@@ -36,17 +36,6 @@ class WorkerClient {
 
   /** Bind this client to an authenticated principal (server-side only). */
   as(principal: { sub: string; email: string; displayName?: string }, tenant?: string): WorkerClient {
-    // Temporary PR #77 visual-review account: on Vercel preview only, route
-    // the signed preview session through the existing server-side internal
-    // boundary so no production Cognito user or tenant membership is needed.
-    // Removed before merge.
-    if (process.env.VERCEL_ENV === "preview" && principal.sub === "preview-pr-77") {
-      return new WorkerClient({
-        baseUrl: this.baseUrl,
-        secret: this.secret,
-        tenant: tenant || this.tenant || undefined,
-      });
-    }
     return new WorkerClient({
       baseUrl: this.baseUrl,
       secret: this.secret,
@@ -111,7 +100,7 @@ class WorkerClient {
       body: JSON.stringify({ slug, reviewer, checklist }),
     });
     const data = await res.json();
-    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Review failed", data.errors);
+    if (!res.ok) throw new WorkerApiError(res.status, data.error || "Review failed");
     return data;
   }
 
