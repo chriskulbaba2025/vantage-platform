@@ -32,8 +32,30 @@ function titledAtom(label, atom) {
   return `<div class="narrative-field"><h4>${e(label)}</h4>${atomHtml(atom)}</div>`;
 }
 
+// Presentation-only mapping. These existing Writer sections remain unchanged;
+// the map only tells the section viewer which governed report page displays
+// each narrative card.
+const NARRATIVE_VIEWER_PAGE = Object.freeze({
+  "narrative-executive": "executive-scorecard",
+  "narrative-strengths": "executive-scorecard",
+  "narrative-root-cause": "executive-scorecard",
+  "narrative-decision": "executive-scorecard",
+  "narrative-action-plan": "priority-fixes",
+  "narrative-conversion": "conversion-paths",
+  "narrative-content": "content-ideas",
+  "narrative-funnel": "content-ideas",
+  "narrative-competitors": "competitor-benchmark",
+  "narrative-eeat": "trust-eeat",
+  "narrative-seo": "technical-seo",
+  "narrative-technical": "technical-seo",
+  "narrative-ai-search": "schema",
+  "narrative-performance": "performance",
+  "narrative-limitations": "deferred",
+});
+
 function sectionCard(id, eyebrow, headline, body) {
-  return `<section id="${e(id)}" class="card narrative-card">
+  const viewerPage = NARRATIVE_VIEWER_PAGE[id] || "";
+  return `<section id="${e(id)}" class="card narrative-card" data-viewer-page="${e(viewerPage)}">
     <div class="narrative-eyebrow">${e(eyebrow)}</div>
     <h2>${e(headline)}</h2>
     ${body}
@@ -229,8 +251,6 @@ const NARRATIVE_CSS = `
 @media print { .narrative-card, .narrative-opportunity, .narrative-limitation { page-break-inside:avoid; } }
 `;
 
-const NARRATIVE_NAV = `<a href="#narrative-executive">Conclusion</a><a href="#narrative-root-cause">Root cause</a><a href="#narrative-conversion">Conversion</a><a href="#narrative-content">Content</a><a href="#narrative-funnel">Funnel</a><a href="#narrative-seo">SEO</a><a href="#narrative-ai-search">AI search</a><a href="#narrative-eeat">E-E-A-T</a><a href="#narrative-action-plan">Action plan</a><a href="#narrative-decision">Decision</a>`;
-
 function assertGovernedRenderInput({ model, writerInput, orchestrationResult }) {
   const errors = [];
   if (!isObject(model)) errors.push("model is required");
@@ -284,7 +304,8 @@ export function renderGovernedNarrativeReportV2({ model, writerInput, orchestrat
   Object.freeze(orchestrationResult.finalJudgeResponse);
 
   const baseHtml = renderReportV2(model, { date });
-  const requiredAnchors = ["</style>", '<nav class="nav-jump no-print">', "</nav>"];
+  const mainAnchor = '<main id="reportContent" tabindex="-1">';
+  const requiredAnchors = ["</style>", mainAnchor];
   for (const anchor of requiredAnchors) {
     if (!baseHtml.includes(anchor)) throw new Error(`Narrative v2 render anchor missing: ${anchor}`);
   }
@@ -296,8 +317,7 @@ export function renderGovernedNarrativeReportV2({ model, writerInput, orchestrat
 
   return baseHtml
     .replace("</style>", `${NARRATIVE_CSS}\n</style>`)
-    .replace('<nav class="nav-jump no-print">', `<nav class="nav-jump no-print">${NARRATIVE_NAV}`)
-    .replace("</nav>", `</nav>\n${narrativeHtml}`);
+    .replace(mainAnchor, `${mainAnchor}\n${narrativeHtml}`);
 }
 
 export default { renderGovernedNarrativeReportV2, renderWriterNarrativeLayer };
