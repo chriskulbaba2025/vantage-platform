@@ -5,6 +5,8 @@
 // Every substantive narrative field carries exact references into
 // WriterInput.referenceIndex so the Judge can verify lineage.
 
+import { governedStatusForWriterReference } from "./writer-reference.js";
+
 export const WRITER_OUTPUT_VERSION = "1.0.0";
 export const WRITER_PROMPT_VERSION = "2.0.0";
 export const WRITER_STATEMENT_CLASS = Object.freeze({
@@ -232,12 +234,7 @@ function validateFunnelStage(stageName, items, writerInput, errors) {
 }
 
 function governedStatusForReference(writerInput, ref) {
-  const record = writerInput?.referenceIndex?.[ref];
-  if (!isObject(record) || !nonEmptyString(record.path)) return undefined;
-  const value = record.path.split(".").reduce((current, key) => current?.[key], writerInput);
-  if (record.kind === "source-status") return nonEmptyString(value) ? value : undefined;
-  if (record.kind === "capability" && isObject(value) && nonEmptyString(value.status)) return value.status;
-  return undefined;
+  return governedStatusForWriterReference(writerInput, ref);
 }
 
 function validateLimitationStatus(item, writerInput, label, errors) {
