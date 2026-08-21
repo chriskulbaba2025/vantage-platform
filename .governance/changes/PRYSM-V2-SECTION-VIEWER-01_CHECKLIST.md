@@ -16,6 +16,7 @@ The current v2 `index.html` remains the single governed artifact. The viewer pre
 - `.governance/changes/PRYSM-V2-SECTION-VIEWER-01_CHECKLIST.md`
 - `services/worker/src/report/render-report-v2.js`
 - `services/worker/src/report/render-report-v2.test.js`
+- `services/worker/src/report/render-report-v2-section-viewer.test.js`
 - project-context checkpoint files produced outside the runtime repository for user re-upload
 
 ## Prohibited files / scope
