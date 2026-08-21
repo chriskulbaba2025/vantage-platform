@@ -33,6 +33,7 @@ import { runCostPreflight } from "../narrative/cost-preflight.js";
 import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
 import { validateWriterOutput } from "./writer-output.js";
 import { validateJudgeResponse } from "./judge-contract.js";
+import { buildWriterStructuredResponseFormat } from "./writer-structured-output.js";
 
 export const NARRATIVE_V2_LIVE_BINDING_VERSION = "1.0.0";
 export const NARRATIVE_V2_LIVE_MAX_CALLS = 2;
@@ -363,7 +364,7 @@ export function createNarrativeV2LiveBinding({
     await persistJson(artifactStore, scope, resultName(callNumber), record);
   }
 
-  async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate }) {
+  async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate, responseFormat }) {
     const { callNumber, reservation, modelPrice } = await reserveCall({ scope, role, modelId, prompt, maxOutputTokens, passNumber });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -379,6 +380,7 @@ export function createNarrativeV2LiveBinding({
           model: modelId,
           reasoning_effort: "medium",
           max_completion_tokens: maxOutputTokens,
+          ...(responseFormat ? { response_format: responseFormat } : {}),
           messages: [
             {
               role: "system",
@@ -508,6 +510,11 @@ export function createNarrativeV2LiveBinding({
       prompt: request.prompt,
       maxOutputTokens: config.writerMaxOutputTokens,
       passNumber: request.passNumber,
+      responseFormat: buildWriterStructuredResponseFormat({
+        writerInput: request.writerInput,
+        passNumber: request.passNumber,
+        modelId: config.writerModel,
+      }),
       validate: (output) => validateWriterOutput(output, {
         writerInput: request.writerInput,
         expectedPassNumber: request.passNumber,
