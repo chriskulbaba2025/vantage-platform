@@ -12,9 +12,20 @@
 // Token estimation
 // ---------------------------------------------------------------------------
 
+/**
+ * Conservative tokenizer-independent estimate for governed natural-language
+ * JSON. The prior implementation multiplied character count by 1.3, which
+ * treated ordinary ASCII characters as more than one token each and produced
+ * multi-x false positives on large Narrative v2 revision prompts.
+ *
+ * UTF-8 bytes / 1.5 intentionally remains more conservative than the usual
+ * natural-language token density while avoiding the pathological overcount.
+ * Provider-reported usage remains authoritative after a paid response returns.
+ */
 function estimateInputTokens(reportPackage) {
   const jsonStr = JSON.stringify(reportPackage);
-  return Math.ceil(jsonStr.length * 1.3);
+  const utf8Bytes = Buffer.byteLength(jsonStr, "utf8");
+  return Math.ceil(utf8Bytes / 1.5);
 }
 
 function estimateOutputTokens(modelConfig) {
