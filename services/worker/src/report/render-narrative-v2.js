@@ -4,10 +4,6 @@
 // path. It accepts the exact governed orchestration result, re-validates the
 // final WriterOutput, and composes that narrative into the existing report-v2
 // HTML while preserving the deterministic evidence/detail layer underneath.
-//
-// Narrative sections are assigned to the existing 15-page viewer via
-// data-viewer-page attributes, making them searchable and printable within
-// the viewer's page structure.
 
 import { NARRATIVE_V2_STATUS } from "../narrative-v2/orchestrator.js";
 import { validateWriterOutput } from "../narrative-v2/writer-output.js";
@@ -28,27 +24,16 @@ function isObject(value) {
 }
 
 function atomHtml(atom, { tag = "p", className = "narrative-copy" } = {}) {
-  const refs = Array.isArray(atom?.evidenceRefs)
-    ? atom.evidenceRefs.join(" ")
-    : "";
-
-  return `<${tag} class="${e(className)}" data-statement-class="${e(
-    atom?.statementClass || "",
-  )}" data-evidence-refs="${e(refs)}">${e(atom?.text || "")}</${tag}>`;
+  const refs = Array.isArray(atom?.evidenceRefs) ? atom.evidenceRefs.join(" ") : "";
+  return `<${tag} class="${e(className)}" data-statement-class="${e(atom?.statementClass || "")}" data-evidence-refs="${e(refs)}">${e(atom?.text || "")}</${tag}>`;
 }
 
 function titledAtom(label, atom) {
-  return `<div class="narrative-field"><h4>${e(label)}</h4>${atomHtml(
-    atom,
-  )}</div>`;
+  return `<div class="narrative-field"><h4>${e(label)}</h4>${atomHtml(atom)}</div>`;
 }
 
-function sectionCard(id, eyebrow, headline, body, viewerPage) {
-  const viewerAttr = viewerPage
-    ? ` data-viewer-page="${e(viewerPage)}"`
-    : "";
-
-  return `<section id="${e(id)}" class="card narrative-card"${viewerAttr}>
+function sectionCard(id, eyebrow, headline, body) {
+  return `<section id="${e(id)}" class="card narrative-card">
     <div class="narrative-eyebrow">${e(eyebrow)}</div>
     <h2>${e(headline)}</h2>
     ${body}
@@ -109,18 +94,11 @@ const STANDARD_FIELDS = Object.freeze({
   ],
 });
 
-function standardSection(id, eyebrow, value, fieldKey, viewerPage) {
+function standardSection(id, eyebrow, value, fieldKey) {
   const fields = STANDARD_FIELDS[fieldKey]
     .map(([key, label]) => titledAtom(label, value[key]))
     .join("");
-
-  return sectionCard(
-    id,
-    eyebrow,
-    value.headline,
-    `<div class="narrative-grid">${fields}</div>`,
-    viewerPage,
-  );
+  return sectionCard(id, eyebrow, value.headline, `<div class="narrative-grid">${fields}</div>`);
 }
 
 function executiveConclusionSection(output) {
@@ -128,52 +106,24 @@ function executiveConclusionSection(output) {
     "narrative-executive",
     "Executive conclusion",
     output.executiveConclusion.headline,
-    atomHtml(output.executiveConclusion.narrative, {
-      className: "narrative-lead",
-    }),
-    "executive-scorecard",
+    atomHtml(output.executiveConclusion.narrative, { className: "narrative-lead" }),
   );
 }
 
 function strengthsNarrativeSection(output) {
-  const items = output.strengths
-    .map(
-      (item) =>
-        `<li data-item-id="${e(item.itemId)}"><strong>${e(
-          item.title,
-        )}</strong>${atomHtml(item.narrative)}</li>`,
-    )
-    .join("");
-
-  return sectionCard(
-    "narrative-strengths",
-    "What should be preserved",
-    "Verified strengths",
-    `<ul class="narrative-list">${items}</ul>`,
-    "executive-scorecard",
-  );
+  const items = output.strengths.map((item) => `<li data-item-id="${e(item.itemId)}"><strong>${e(item.title)}</strong>${atomHtml(item.narrative)}</li>`).join("");
+  return sectionCard("narrative-strengths", "What should be preserved", "Verified strengths", `<ul class="narrative-list">${items}</ul>`);
 }
 
 function rootCauseNarrativeSection(output) {
   const consequences = output.rootCause.businessConsequences.length
-    ? `<h3>Business consequences</h3><div class="narrative-grid">${output.rootCause.businessConsequences
-        .map(
-          (item) =>
-            `<div class="narrative-field"><h4>${e(
-              item.area,
-            )}</h4>${atomHtml(item.narrative)}</div>`,
-        )
-        .join("")}</div>`
+    ? `<h3>Business consequences</h3><div class="narrative-grid">${output.rootCause.businessConsequences.map((item) => `<div class="narrative-field"><h4>${e(item.area)}</h4>${atomHtml(item.narrative)}</div>`).join("")}</div>`
     : "";
-
   return sectionCard(
     "narrative-root-cause",
     "Root cause",
     output.rootCause.headline,
-    `${atomHtml(output.rootCause.narrative, {
-      className: "narrative-lead",
-    })}${consequences}`,
-    "priority-fixes",
+    `${atomHtml(output.rootCause.narrative, { className: "narrative-lead" })}${consequences}`,
   );
 }
 
@@ -184,82 +134,40 @@ const FUNNEL_STAGE_LABEL = Object.freeze({
 });
 
 function funnelNarrativeSection(output) {
-  const stages = ["awareness", "consideration", "decision"]
-    .map((stage) => {
-      const items = output.funnelOpportunities[stage] || [];
-
-      const content = items.length
-        ? items
-            .map(
-              (item) => `<article class="narrative-opportunity" data-item-id="${e(
-                item.itemId,
-              )}">
+  const stages = ["awareness", "consideration", "decision"].map((stage) => {
+    const items = output.funnelOpportunities[stage] || [];
+    const content = items.length
+      ? items.map((item) => `<article class="narrative-opportunity" data-item-id="${e(item.itemId)}">
           ${titledAtom("Concept", item.concept)}
           ${titledAtom("User need", item.userNeed)}
           ${titledAtom("Rationale", item.rationale)}
           ${titledAtom("Business objective", item.businessObjective)}
           ${titledAtom("Next action", item.nextAction)}
-        </article>`,
-            )
-            .join("")
-        : `<p class="muted small">No governed opportunity was returned for this funnel stage.</p>`;
-
-      return `<div class="narrative-stage"><h3>${e(
-        FUNNEL_STAGE_LABEL[stage],
-      )}</h3>${content}</div>`;
-    })
-    .join("");
-
-  return sectionCard(
-    "narrative-funnel",
-    "Content funnel",
-    "Funnel opportunities",
-    stages,
-    "content-ideas",
-  );
+        </article>`).join("")
+      : `<p class="muted small">No governed opportunity was returned for this funnel stage.</p>`;
+    return `<div class="narrative-stage"><h3>${e(FUNNEL_STAGE_LABEL[stage])}</h3>${content}</div>`;
+  }).join("");
+  return sectionCard("narrative-funnel", "Content funnel", "Funnel opportunities", stages);
 }
 
 function limitationsNarrativeSection(output) {
   if (output.limitations.length === 0) {
-    return sectionCard(
-      "narrative-limitations",
-      "Evidence boundaries",
-      "Limitations",
-      `<p>No narrative limitations were returned beyond the governed evidence states shown in the evidence layer.</p>`,
-      "evidence-appendix",
-    );
+    return sectionCard("narrative-limitations", "Evidence boundaries", "Limitations", `<p>No narrative limitations were returned beyond the governed evidence states shown in the evidence layer.</p>`);
   }
-
-  const items = output.limitations
-    .map(
-      (item) => `<article class="narrative-limitation" data-item-id="${e(
-        item.itemId,
-      )}">
-      <h3>${e(item.area)} <span class="chip cap-neutral">${e(
-        item.status,
-      )}</span></h3>
+  const items = output.limitations.map((item) => `<article class="narrative-limitation" data-item-id="${e(item.itemId)}">
+      <h3>${e(item.area)} <span class="chip cap-neutral">${e(item.status)}</span></h3>
       ${titledAtom("Client explanation", item.clientExplanation)}
       ${titledAtom("What this means", item.whatThisMeans)}
       ${titledAtom("What this does not mean", item.whatThisDoesNotMean)}
       ${titledAtom("Impact on this report", item.impactOnReport)}
-    </article>`,
-    )
-    .join("");
-
-  return sectionCard(
-    "narrative-limitations",
-    "Evidence boundaries",
-    "Limitations",
-    items,
-    "evidence-appendix",
-  );
+    </article>`).join("");
+  return sectionCard("narrative-limitations", "Evidence boundaries", "Limitations", items);
 }
 
 function actionPlanNarrativeSection(output) {
   const rows = [...output.actionPlan]
     .sort((a, b) => a.priority - b.priority)
-    .map(
-      (item) => `<tr data-action-id="${e(item.actionId)}">
+    .map((item) => `<tr data-action-id="${e(item.actionId)}">
       <td>${e(item.priority)}</td>
       <td><strong>${e(item.title)}</strong></td>
       <td>${atomHtml(item.action, { tag: "div" })}</td>
@@ -267,104 +175,35 @@ function actionPlanNarrativeSection(output) {
       <td>${atomHtml(item.expectedBusinessEffect, { tag: "div" })}</td>
       <td>${e(item.effort)}</td>
       <td>${atomHtml(item.verification, { tag: "div" })}</td>
-    </tr>`,
-    )
-    .join("");
-
-  return sectionCard(
-    "narrative-action-plan",
-    "Prioritized action",
-    "Action plan",
-    `<div class="table-wrap"><table class="narrative-actions">
+    </tr>`).join("");
+  return sectionCard("narrative-action-plan", "Prioritized action", "Action plan", `<div class="table-wrap"><table class="narrative-actions">
       <thead><tr><th>#</th><th>Action</th><th>What to do</th><th>Why now</th><th>Expected effect</th><th>Effort</th><th>Verification</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`,
-    "priority-fixes",
-  );
+    </table></div>`);
 }
 
 function executiveDecisionSection(output) {
-  return sectionCard(
-    "narrative-decision",
-    "Executive decision",
-    "Preserve, change, do next",
-    `<div class="narrative-decision-grid">
+  return sectionCard("narrative-decision", "Executive decision", "Preserve, change, do next", `<div class="narrative-decision-grid">
       ${titledAtom("Preserve", output.executiveDecision.preserve)}
       ${titledAtom("Change", output.executiveDecision.change)}
       ${titledAtom("Do next", output.executiveDecision.doNext)}
-    </div>`,
-    "executive-scorecard",
-  );
+    </div>`);
 }
 
 export function renderWriterNarrativeLayer(writerOutput, judgeResponse) {
-  return `<div id="narrative-layer" class="narrative-layer" data-writer-pass="${e(
-    writerOutput.passNumber,
-  )}" data-judge-score="${e(
-    judgeResponse.totalScore,
-  )}" data-judge-decision="${e(
-    judgeResponse.decision,
-  )}" data-render-version="${e(NARRATIVE_RENDER_VERSION)}">
+  return `<div id="narrative-layer" class="narrative-layer" data-writer-pass="${e(writerOutput.passNumber)}" data-judge-score="${e(judgeResponse.totalScore)}" data-judge-decision="${e(judgeResponse.decision)}" data-render-version="${e(NARRATIVE_RENDER_VERSION)}">
     ${executiveConclusionSection(writerOutput)}
     ${strengthsNarrativeSection(writerOutput)}
     ${rootCauseNarrativeSection(writerOutput)}
-    ${standardSection(
-      "narrative-conversion",
-      "Conversion",
-      writerOutput.conversion,
-      "conversion",
-      "priority-fixes",
-    )}
-    ${standardSection(
-      "narrative-content",
-      "Content and topical architecture",
-      writerOutput.content,
-      "content",
-      "content-ideas",
-    )}
+    ${standardSection("narrative-conversion", "Conversion", writerOutput.conversion, "conversion")}
+    ${standardSection("narrative-content", "Content and topical architecture", writerOutput.content, "content")}
     ${funnelNarrativeSection(writerOutput)}
-    ${standardSection(
-      "narrative-seo",
-      "SEO and SERP",
-      writerOutput.seoSerp,
-      "seoSerp",
-      "content-ideas",
-    )}
-    ${standardSection(
-      "narrative-ai-search",
-      "AI search readiness",
-      writerOutput.aiSearch,
-      "aiSearch",
-      "content-ideas",
-    )}
-    ${standardSection(
-      "narrative-eeat",
-      "E-E-A-T and trust",
-      writerOutput.eeatTrust,
-      "eeatTrust",
-      "trust-eeat",
-    )}
-    ${standardSection(
-      "narrative-technical",
-      "Technical foundations",
-      writerOutput.technical,
-      "technical",
-      "technical-seo",
-    )}
-    ${standardSection(
-      "narrative-performance",
-      "Performance and UX",
-      writerOutput.performanceUx,
-      "performanceUx",
-      "performance",
-    )}
-    ${standardSection(
-      "narrative-competitors",
-      "Competitive position",
-      writerOutput.competitors,
-      "competitors",
-      "competitor-benchmark",
-    )}
+    ${standardSection("narrative-seo", "SEO and SERP", writerOutput.seoSerp, "seoSerp")}
+    ${standardSection("narrative-ai-search", "AI search readiness", writerOutput.aiSearch, "aiSearch")}
+    ${standardSection("narrative-eeat", "E-E-A-T and trust", writerOutput.eeatTrust, "eeatTrust")}
+    ${standardSection("narrative-technical", "Technical foundations", writerOutput.technical, "technical")}
+    ${standardSection("narrative-performance", "Performance and UX", writerOutput.performanceUx, "performanceUx")}
+    ${standardSection("narrative-competitors", "Competitive position", writerOutput.competitors, "competitors")}
     ${limitationsNarrativeSection(writerOutput)}
     ${actionPlanNarrativeSection(writerOutput)}
     ${executiveDecisionSection(writerOutput)}
@@ -390,80 +229,41 @@ const NARRATIVE_CSS = `
 @media print { .narrative-card, .narrative-opportunity, .narrative-limitation { page-break-inside:avoid; } }
 `;
 
-function assertGovernedRenderInput({
-  model,
-  writerInput,
-  orchestrationResult,
-}) {
-  const errors = [];
+const NARRATIVE_NAV = `<a href="#narrative-executive">Conclusion</a><a href="#narrative-root-cause">Root cause</a><a href="#narrative-conversion">Conversion</a><a href="#narrative-content">Content</a><a href="#narrative-funnel">Funnel</a><a href="#narrative-seo">SEO</a><a href="#narrative-ai-search">AI search</a><a href="#narrative-eeat">E-E-A-T</a><a href="#narrative-action-plan">Action plan</a><a href="#narrative-decision">Decision</a>`;
 
+function assertGovernedRenderInput({ model, writerInput, orchestrationResult }) {
+  const errors = [];
   if (!isObject(model)) errors.push("model is required");
   if (!isObject(writerInput)) errors.push("writerInput is required");
-  if (!isObject(orchestrationResult))
-    errors.push("orchestrationResult is required");
-
-  if (
-    isObject(orchestrationResult) &&
-    orchestrationResult.status !== NARRATIVE_V2_STATUS.RELEASE_CANDIDATE
-  ) {
+  if (!isObject(orchestrationResult)) errors.push("orchestrationResult is required");
+  if (isObject(orchestrationResult) && orchestrationResult.status !== NARRATIVE_V2_STATUS.RELEASE_CANDIDATE) {
     errors.push("orchestrationResult must be RELEASE_CANDIDATE");
   }
-
   const output = orchestrationResult?.finalWriterOutput;
   const judge = orchestrationResult?.finalJudgeResponse;
-
   if (!isObject(output)) errors.push("finalWriterOutput is required");
   if (!isObject(judge)) errors.push("finalJudgeResponse is required");
-
-  if (
-    writerInput?.auditId &&
-    orchestrationResult?.auditId &&
-    writerInput.auditId !== orchestrationResult.auditId
-  ) {
+  if (writerInput?.auditId && orchestrationResult?.auditId && writerInput.auditId !== orchestrationResult.auditId) {
     errors.push("writerInput auditId does not match orchestrationResult");
   }
-
-  if (
-    output?.auditId &&
-    writerInput?.auditId &&
-    output.auditId !== writerInput.auditId
-  ) {
+  if (output?.auditId && writerInput?.auditId && output.auditId !== writerInput.auditId) {
     errors.push("finalWriterOutput auditId does not match writerInput");
   }
-
   if (output?.passNumber !== orchestrationResult?.passCount) {
-    errors.push(
-      "finalWriterOutput passNumber does not match orchestrationResult.passCount",
-    );
+    errors.push("finalWriterOutput passNumber does not match orchestrationResult.passCount");
   }
-
   if (judge?.passNumber !== orchestrationResult?.passCount) {
-    errors.push(
-      "finalJudgeResponse passNumber does not match orchestrationResult.passCount",
-    );
+    errors.push("finalJudgeResponse passNumber does not match orchestrationResult.passCount");
   }
-
-  if (judge?.decision !== "PASS") {
-    errors.push("finalJudgeResponse must be PASS");
-  }
-
-  if (errors.length) {
-    throw new Error(
-      `Narrative v2 render input rejected: ${errors.join("; ")}`,
-    );
-  }
+  if (judge?.decision !== "PASS") errors.push("finalJudgeResponse must be PASS");
+  if (errors.length) throw new Error(`Narrative v2 render input rejected: ${errors.join("; ")}`);
 
   const validation = validateWriterOutput(output, {
     writerInput,
     expectedPassNumber: orchestrationResult.passCount,
   });
-
   if (!validation.valid) {
-    throw new Error(
-      `Narrative v2 WriterOutput revalidation failed: ${validation.errors.join(
-        "; ",
-      )}`,
-    );
+    throw new Error(`Narrative v2 WriterOutput revalidation failed: ${validation.errors.join("; ")}`);
   }
 }
 
@@ -473,22 +273,9 @@ function assertGovernedRenderInput({
  * The Writer prose is visible. Evidence IDs and Judge metadata remain present
  * only as non-visible HTML data attributes for audit traceability. The existing
  * deterministic report-v2 evidence/detail sections are preserved unchanged.
- *
- * Narrative sections are inserted into <main id="reportContent"> with
- * data-viewer-page assignments compatible with the 15-page viewer. Narrative
- * CSS is injected into the existing head style block.
  */
-export function renderGovernedNarrativeReportV2({
-  model,
-  writerInput,
-  orchestrationResult,
-  date,
-}) {
-  assertGovernedRenderInput({
-    model,
-    writerInput,
-    orchestrationResult,
-  });
+export function renderGovernedNarrativeReportV2({ model, writerInput, orchestrationResult, date }) {
+  assertGovernedRenderInput({ model, writerInput, orchestrationResult });
 
   // Freeze the exact validated objects before the rendering boundary. No clone,
   // alias, or reconstruction is introduced between validation and rendering.
@@ -497,15 +284,9 @@ export function renderGovernedNarrativeReportV2({
   Object.freeze(orchestrationResult.finalJudgeResponse);
 
   const baseHtml = renderReportV2(model, { date });
-
-  if (!baseHtml.includes("</style>")) {
-    throw new Error("Narrative v2 render anchor missing: </style>");
-  }
-
-  if (!baseHtml.includes('<main id="reportContent" tabindex="-1">')) {
-    throw new Error(
-      'Narrative v2 render anchor missing: <main id="reportContent" tabindex="-1">',
-    );
+  const requiredAnchors = ["</style>", '<nav class="nav-jump no-print">', "</nav>"];
+  for (const anchor of requiredAnchors) {
+    if (!baseHtml.includes(anchor)) throw new Error(`Narrative v2 render anchor missing: ${anchor}`);
   }
 
   const narrativeHtml = renderWriterNarrativeLayer(
@@ -515,10 +296,8 @@ export function renderGovernedNarrativeReportV2({
 
   return baseHtml
     .replace("</style>", `${NARRATIVE_CSS}\n</style>`)
-    .replace("</main>", `\n  ${narrativeHtml}\n  </main>`);
+    .replace('<nav class="nav-jump no-print">', `<nav class="nav-jump no-print">${NARRATIVE_NAV}`)
+    .replace("</nav>", `</nav>\n${narrativeHtml}`);
 }
 
-export default {
-  renderGovernedNarrativeReportV2,
-  renderWriterNarrativeLayer,
-};
+export default { renderGovernedNarrativeReportV2, renderWriterNarrativeLayer };
