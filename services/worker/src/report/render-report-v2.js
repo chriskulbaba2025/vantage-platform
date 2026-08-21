@@ -498,22 +498,24 @@ body { margin:0; font-family: Georgia, 'Times New Roman', serif; color:var(--ink
 header.brand { background:var(--ink); color:#fff; padding:1.2rem 1.5rem; }
 header.brand h1 { margin:0; font-size:1.4rem; }
 header.brand .sub { color:#b9c4d4; font-size:.85rem; }
-.report-layout { display:grid; grid-template-columns:260px minmax(0,1fr); gap:1.35rem; max-width:1360px; margin:0 auto; padding:1.2rem; align-items:start; }
-.viewer-sidebar { position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow-y:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.8rem; box-shadow:0 1px 3px rgba(15,35,55,.06); }
+.report-layout { display:grid; grid-template-columns:260px minmax(0,1fr); grid-template-areas:"sidebar content"; gap:1.35rem; max-width:1360px; margin:0 auto; padding:1.2rem; align-items:start; }
+.viewer-sidebar { grid-area:sidebar; position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow-y:auto; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.8rem; box-shadow:0 1px 3px rgba(15,35,55,.06); }
 .viewer-sidebar-title { margin:.15rem .45rem .55rem; font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
 .viewer-nav { display:flex; flex-direction:column; gap:.22rem; }
 .viewer-nav-link { display:grid; grid-template-columns:2.25rem 1fr; gap:.3rem; align-items:start; padding:.55rem .5rem; border-radius:7px; color:var(--ink); text-decoration:none; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:.82rem; line-height:1.28; }
 .viewer-nav-link:hover { background:var(--accent-soft); color:var(--accent); }
 .viewer-nav-link[aria-current="page"] { background:var(--accent); color:#fff; font-weight:700; }
 .viewer-nav-num { font-family:'Courier New',ui-monospace,monospace; font-size:.72rem; opacity:.72; padding-top:.08rem; }
-.viewer-content { min-width:0; }
+.viewer-content { grid-area:content; min-width:0; }
 .viewer-toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.72rem .9rem; margin:0 0 1rem; }
 .viewer-toolbar h2 { margin:0; font-size:1rem; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
 .print-page-btn { border:0; border-radius:7px; padding:.62rem .85rem; background:var(--accent); color:#fff; font-weight:700; cursor:pointer; white-space:nowrap; }
 .print-page-btn:hover { filter:brightness(.94); }
 main { min-width:0; }
-body.viewer-ready main > section { display:none; }
+body.viewer-ready main > section:not(.viewer-active) { display:none; }
 body.viewer-ready main > section.viewer-active { display:block; }
+body.viewer-ready .narrative-layer > section:not(.viewer-active) { display:none; }
+body.viewer-ready .narrative-layer > section.viewer-active { display:block; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1.1rem 1.2rem; margin:0 0 1rem; }
 main > section:not(.card) { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1.1rem 1.2rem; margin:0 0 1rem; }
 section > h2 { margin-top:.2rem; font-size:1.15rem; border-bottom:1px solid var(--line); padding-bottom:.4rem; }
@@ -544,7 +546,7 @@ ul.findings { padding-left:1.1rem; }
 ul.findings > li { margin:.5rem 0; }
 footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem; }
 @media (max-width: 900px) {
-  .report-layout { grid-template-columns:1fr; padding:.8rem; }
+  .report-layout { grid-template-columns:1fr; grid-template-areas:"sidebar" "content"; padding:.8rem; }
   .viewer-sidebar { position:static; max-height:none; overflow:visible; padding:.55rem; }
   .viewer-nav { flex-direction:row; overflow-x:auto; gap:.35rem; padding-bottom:.15rem; }
   .viewer-nav-link { min-width:200px; border:1px solid var(--line); background:var(--card); }
@@ -561,8 +563,10 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
   body { background:#fff; }
   .report-layout { display:block; max-width:100%; margin:0; padding:0; }
   .viewer-content, main { max-width:100%; padding:0; }
-  body.viewer-ready main > section { display:none !important; }
+  body.viewer-ready main > section:not(.viewer-active) { display:none !important; }
   body.viewer-ready main > section.viewer-active { display:block !important; }
+  body.viewer-ready .narrative-layer > section:not(.viewer-active) { display:none !important; }
+  body.viewer-ready .narrative-layer > section.viewer-active { display:block !important; }
   .card, .pillar, main > section:not(.card) { box-shadow:none; page-break-inside:avoid; }
 }
 </style>
@@ -573,10 +577,6 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
   <p class="sub">${e(domain)} · ${e(date)} · Report design v${e(REPORT_DESIGN_V2)} · Viewer v${e(REPORT_V2_VIEWER_VERSION)} · Scoring version ${e(scoringVersion)}</p>
 </header>
 <div class="report-layout">
-  <aside class="viewer-sidebar no-print" aria-label="Report sections">
-    <p class="viewer-sidebar-title">Report sections</p>
-    <nav class="viewer-nav">${renderViewerNav()}</nav>
-  </aside>
   <div class="viewer-content">
     <div class="viewer-toolbar no-print">
       <h2 id="viewerPageTitle">Executive Scorecard</h2>
@@ -604,6 +604,10 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
       ${deepEvidenceLayer(model)}
     </main>
   </div>
+  <aside class="viewer-sidebar no-print" aria-label="Report sections">
+    <p class="viewer-sidebar-title">Report sections</p>
+    <nav class="viewer-nav">${renderViewerNav()}</nav>
+  </aside>
 </div>
 <footer>Generated by Prysm (Omnipressence) · Report design v${e(REPORT_DESIGN_V2)} · Viewer v${e(REPORT_V2_VIEWER_VERSION)} · Evidence-grounded conversion-readiness assessment</footer>
 <script>
@@ -616,11 +620,13 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
   const title = document.getElementById("viewerPageTitle");
   const content = document.getElementById("reportContent");
   const links = Array.from(document.querySelectorAll("[data-viewer-page]"));
+  const narrativeSections = Array.from(document.querySelectorAll("#narrative-layer > section[data-viewer-page]"));
 
   for (const id of allSectionIds) {
     const section = document.getElementById(id);
     if (section) section.classList.add("viewer-section");
   }
+  for (const section of narrativeSections) section.classList.add("viewer-section");
 
   function resolvePage() {
     const requested = decodeURIComponent((window.location.hash || "").replace(/^#/, ""));
@@ -634,6 +640,9 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
     for (const id of allSectionIds) {
       const section = document.getElementById(id);
       if (section) section.classList.toggle("viewer-active", activeIds.has(id));
+    }
+    for (const section of narrativeSections) {
+      section.classList.toggle("viewer-active", section.dataset.viewerPage === page.pageId);
     }
     for (const link of links) {
       if (link.dataset.viewerPage === page.pageId) link.setAttribute("aria-current", "page");
