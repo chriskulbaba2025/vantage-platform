@@ -109,11 +109,15 @@ export function buildAuditPayload(input: AuditFormInput): Record<string, unknown
     payload.gsc = { siteUrl: input.gscSiteUrl.trim() };
   }
 
-  // PRYSM-NEXT-ACTIVATION defect A — the report design version is part of
-  // the governed request contract.  Explicit v1 default; only "2.0.0" is a
-  // valid upgrade selection.
+  // Report v2 is the complete governed v2 product path in the web UI:
+  // design v2 + Narrative v2. Keep v1 explicitly paired with Narrative v1.
+  // The worker contract still supports independent version selection for
+  // controlled compatibility/testing paths; the browser does not expose an
+  // ambiguous mixed-version combination.
+  const isV2 = input.reportDesignVersion === "2.0.0";
   payload.report = {
-    designVersion: input.reportDesignVersion === "2.0.0" ? "2.0.0" : "1.0.0",
+    designVersion: isV2 ? "2.0.0" : "1.0.0",
+    narrativeVersion: isV2 ? "2.0.0" : "1.0.0",
   };
 
   return payload;
