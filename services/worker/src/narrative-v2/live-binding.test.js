@@ -282,6 +282,20 @@ test("LIVE-BIND-03: one Writer + one Judge call are validated, cost-ledgered, an
   assert.equal(calls[0].url, "https://llm.example.test/v1/chat/completions");
   assert.equal(calls[0].options.headers.authorization, "Bearer test-secret-never-log");
 
+  const writerRequest = JSON.parse(calls[0].options.body);
+  const judgeRequest = JSON.parse(calls[1].options.body);
+
+  assert.equal(writerRequest.reasoning_effort, "medium");
+  assert.equal(writerRequest.max_completion_tokens, 10000);
+  assert.equal("temperature" in writerRequest, false);
+  assert.equal("max_tokens" in writerRequest, false);
+
+  assert.equal(judgeRequest.reasoning_effort, "medium");
+  assert.equal(judgeRequest.max_completion_tokens, 10000);
+  assert.equal("temperature" in judgeRequest, false);
+  assert.equal("max_tokens" in judgeRequest, false);
+
+
   await assert.rejects(
     () => binding.writerExecutor({ prompt: "pass two", passNumber: 2, writerInput: input, previousOutput: writer, judgeResponse: judge }),
     new RegExp(`call cap reached \\(${NARRATIVE_V2_LIVE_MAX_CALLS}\\)`),

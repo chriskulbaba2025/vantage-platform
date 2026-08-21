@@ -377,8 +377,8 @@ export function createNarrativeV2LiveBinding({
         },
         body: JSON.stringify({
           model: modelId,
-          temperature: 0,
-          max_tokens: maxOutputTokens,
+          reasoning_effort: "medium",
+          max_completion_tokens: maxOutputTokens,
           messages: [
             {
               role: "system",
