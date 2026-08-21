@@ -11,6 +11,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createIdentityProvider } from "@/lib/identity/identity-provider";
 import { SESSION_COOKIE, signSession, verifySession } from "@/lib/identity/session";
 
+// Temporary PR #77 visual-review credential. This path is available only
+// on Vercel preview deployments and will be removed before merge.
+const PREVIEW_REVIEW_EMAIL = "reviewer@prysm.test";
+const PREVIEW_REVIEW_PASSWORD = "PrysmPreview77!";
+const PREVIEW_REVIEW_SUB = "preview-pr-77";
+
 // Minimal in-memory login throttle — counts FAILED attempts per
 // (ip, email) in a sliding window.  Per-process state (resets on Vercel
 // cold starts); Cognito adaptive throttling is the durable backstop.
@@ -51,6 +57,26 @@ export async function POST(request: NextRequest) {
   const email = String(body.email || "").trim();
   const password = String(body.password || "");
   const newPassword = String(body.newPassword || "");
+
+  if (
+    process.env.VERCEL_ENV === "preview" &&
+    email.toLowerCase() === PREVIEW_REVIEW_EMAIL &&
+    password === PREVIEW_REVIEW_PASSWORD
+  ) {
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(
+      SESSION_COOKIE,
+      signSession({ sub: PREVIEW_REVIEW_SUB, email: PREVIEW_REVIEW_EMAIL, displayName: "PR #77 Reviewer" }),
+      {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: true,
+        path: "/",
+        maxAge: 12 * 60 * 60,
+      },
+    );
+    return response;
+  }
 
   const provider = createIdentityProvider();
   const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() || "unknown";
