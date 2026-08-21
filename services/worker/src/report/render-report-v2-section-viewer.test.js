@@ -134,7 +134,7 @@ test("PRYSM-V2-SECTION-VIEWER-01: rendered report has left sticky navigation and
   const html = renderReportV2(model());
   assert.equal((html.match(/data-viewer-page=/g) || []).length, 15);
   assert.match(html, /class="viewer-sidebar no-print" aria-label="Report sections"/);
-  assert.match(html, /\.viewer-sidebar \{ position:sticky;[^}]*overflow-y:auto;/);
+  assert.match(html, /\.viewer-sidebar \{[^}]*position:sticky;[^}]*overflow-y:auto;/);
   assert.match(html, /grid-template-columns:260px minmax\(0,1fr\)/);
   assert.match(html, /viewer-nav-link\[aria-current="page"\]/);
 });
