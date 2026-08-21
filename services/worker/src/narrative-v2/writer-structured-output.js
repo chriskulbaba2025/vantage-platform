@@ -24,11 +24,12 @@ function enumString(...values) {
   return { type: "string", enum: values };
 }
 
-function nonEmptyString(maxLength = null) {
+function nonEmptyString(maxChars = null) {
   return {
     type: "string",
-    minLength: 1,
-    ...(Number.isInteger(maxLength) ? { maxLength } : {}),
+    pattern: Number.isInteger(maxChars)
+      ? `^[\\s\\S]{1,${maxChars}}$`
+      : "\\S",
   };
 }
 
@@ -36,7 +37,6 @@ function boundedWords(maxWords) {
   // Same whitespace-delimited word model used by validateWriterOutput().
   return {
     type: "string",
-    minLength: 1,
     pattern: `^\\s*\\S+(?:\\s+\\S+){0,${maxWords - 1}}\\s*$`,
   };
 }
