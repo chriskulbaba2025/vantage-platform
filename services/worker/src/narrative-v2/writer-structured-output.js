@@ -23,27 +23,27 @@ function enumString(...values) {
   return { type: "string", enum: values };
 }
 
-function evidenceRefArray(refs) {
+function evidenceRefArray(allowedRefs = null) {
   return {
     type: "array",
-    items: refs.length > 0
-      ? { type: "string", enum: refs }
+    items: Array.isArray(allowedRefs) && allowedRefs.length > 0
+      ? { type: "string", enum: allowedRefs }
       : { type: "string" },
   };
 }
 
-function atomSchema(statementClass, refs) {
+function atomSchema(statementClass, allowedRefs = null) {
   return objectSchema({
     text: { type: "string" },
     statementClass: enumString(statementClass),
-    evidenceRefs: evidenceRefArray(refs),
+    evidenceRefs: evidenceRefArray(allowedRefs),
   });
 }
 
-function standardSectionSchema(fields, refs, opportunityFields = new Set()) {
+function standardSectionSchema(fields, opportunityFields = new Set()) {
   const properties = { headline: { type: "string" } };
   for (const field of fields) {
-    properties[field] = atomSchema(opportunityFields.has(field) ? OPPORTUNITY : INTERPRETATION, refs);
+    properties[field] = atomSchema(opportunityFields.has(field) ? OPPORTUNITY : INTERPRETATION);
   }
   return objectSchema(properties);
 }
@@ -70,7 +70,7 @@ function governedStatusRefs(writerInput) {
   return groups;
 }
 
-function limitationItemForStatus(status, statusRefs, allRefs) {
+function limitationItemForStatus(status, statusRefs) {
   return objectSchema({
     itemId: { type: "string" },
     area: { type: "string" },
@@ -78,13 +78,13 @@ function limitationItemForStatus(status, statusRefs, allRefs) {
     clientExplanation: atomSchema(INTERPRETATION, statusRefs),
     whatThisMeans: atomSchema(INTERPRETATION, statusRefs),
     whatThisDoesNotMean: atomSchema(INTERPRETATION, statusRefs),
-    impactOnReport: atomSchema(INTERPRETATION, allRefs),
+    impactOnReport: atomSchema(INTERPRETATION),
   });
 }
 
-function limitationItemSchema(writerInput, allRefs) {
+function limitationItemSchema(writerInput) {
   const groups = governedStatusRefs(writerInput);
-  const branches = [...groups.entries()].map(([status, refs]) => limitationItemForStatus(status, refs, allRefs));
+  const branches = [...groups.entries()].map(([status, refs]) => limitationItemForStatus(status, refs));
   if (branches.length === 1) return branches[0];
   if (branches.length > 1) return { anyOf: branches };
 
@@ -96,34 +96,34 @@ function limitationItemSchema(writerInput, allRefs) {
     itemId: { type: "string" },
     area: { type: "string" },
     status: { type: "string" },
-    clientExplanation: atomSchema(INTERPRETATION, allRefs),
-    whatThisMeans: atomSchema(INTERPRETATION, allRefs),
-    whatThisDoesNotMean: atomSchema(INTERPRETATION, allRefs),
-    impactOnReport: atomSchema(INTERPRETATION, allRefs),
+    clientExplanation: atomSchema(INTERPRETATION),
+    whatThisMeans: atomSchema(INTERPRETATION),
+    whatThisDoesNotMean: atomSchema(INTERPRETATION),
+    impactOnReport: atomSchema(INTERPRETATION),
   });
 }
 
-function funnelItemSchema(refs) {
+function funnelItemSchema() {
   return objectSchema({
     itemId: { type: "string" },
-    concept: atomSchema(OPPORTUNITY, refs),
-    userNeed: atomSchema(OPPORTUNITY, refs),
-    rationale: atomSchema(OPPORTUNITY, refs),
-    businessObjective: atomSchema(OPPORTUNITY, refs),
-    nextAction: atomSchema(OPPORTUNITY, refs),
+    concept: atomSchema(OPPORTUNITY),
+    userNeed: atomSchema(OPPORTUNITY),
+    rationale: atomSchema(OPPORTUNITY),
+    businessObjective: atomSchema(OPPORTUNITY),
+    nextAction: atomSchema(OPPORTUNITY),
   });
 }
 
-function actionPlanItemSchema(refs) {
+function actionPlanItemSchema() {
   return objectSchema({
     actionId: { type: "string" },
     priority: { type: "integer", enum: [1, 2, 3, 4, 5] },
     title: { type: "string" },
-    action: atomSchema(OPPORTUNITY, refs),
-    whyNow: atomSchema(OPPORTUNITY, refs),
-    expectedBusinessEffect: atomSchema(OPPORTUNITY, refs),
+    action: atomSchema(OPPORTUNITY),
+    whyNow: atomSchema(OPPORTUNITY),
+    expectedBusinessEffect: atomSchema(OPPORTUNITY),
     effort: enumString("L", "M", "H"),
-    verification: atomSchema(OPPORTUNITY, refs),
+    verification: atomSchema(OPPORTUNITY),
   });
 }
 
@@ -132,8 +132,7 @@ export function buildWriterStructuredOutputSchema({ writerInput, passNumber, mod
   if (!Number.isInteger(passNumber) || passNumber < 1 || passNumber > 3) throw new Error("passNumber must be 1, 2, or 3 for Writer structured output schema");
   if (typeof modelId !== "string" || !modelId.trim()) throw new Error("modelId is required for Writer structured output schema");
 
-  const refs = Object.keys(writerInput.referenceIndex || {});
-  const funnelItem = funnelItemSchema(refs);
+  const funnelItem = funnelItemSchema();
 
   return objectSchema({
     contractVersion: enumString("1.0.0"),
@@ -145,52 +144,52 @@ export function buildWriterStructuredOutputSchema({ writerInput, passNumber, mod
     generatedAt: { type: "string" },
     executiveConclusion: objectSchema({
       headline: { type: "string" },
-      narrative: atomSchema(INTERPRETATION, refs),
+      narrative: atomSchema(INTERPRETATION),
     }),
     strengths: {
       type: "array",
       items: objectSchema({
         itemId: { type: "string" },
         title: { type: "string" },
-        narrative: atomSchema(INTERPRETATION, refs),
+        narrative: atomSchema(INTERPRETATION),
       }),
     },
     rootCause: objectSchema({
       headline: { type: "string" },
-      narrative: atomSchema(INTERPRETATION, refs),
+      narrative: atomSchema(INTERPRETATION),
       businessConsequences: {
         type: "array",
         items: objectSchema({
           area: { type: "string" },
-          narrative: atomSchema(INTERPRETATION, refs),
+          narrative: atomSchema(INTERPRETATION),
         }),
       },
     }),
-    conversion: standardSectionSchema(["whatWorks", "constraints", "businessMeaning", "priority"], refs),
-    content: standardSectionSchema(["currentStrength", "coverageAssessment", "qualityAssessment", "topicalArchitecture", "importantGaps", "businessMeaning"], refs),
+    conversion: standardSectionSchema(["whatWorks", "constraints", "businessMeaning", "priority"]),
+    content: standardSectionSchema(["currentStrength", "coverageAssessment", "qualityAssessment", "topicalArchitecture", "importantGaps", "businessMeaning"]),
     funnelOpportunities: objectSchema({
       awareness: { type: "array", items: funnelItem },
       consideration: { type: "array", items: funnelItem },
       decision: { type: "array", items: funnelItem },
     }),
-    seoSerp: standardSectionSchema(["whatWorks", "constraints", "searchImplication", "priority"], refs),
-    aiSearch: standardSectionSchema(["answerability", "entityStrength", "citationReadiness", "constraints", "opportunity"], refs, new Set(["opportunity"])),
-    eeatTrust: standardSectionSchema(["experience", "expertise", "authority", "trust", "proofGaps", "businessMeaning"], refs),
-    technical: standardSectionSchema(["assessment", "materialIssues", "businessMeaning"], refs),
-    performanceUx: standardSectionSchema(["assessment", "userImpact", "conversionImpact"], refs),
-    competitors: standardSectionSchema(["advantages", "disadvantages", "marketInterpretation", "differentiatorToProtect"], refs),
+    seoSerp: standardSectionSchema(["whatWorks", "constraints", "searchImplication", "priority"]),
+    aiSearch: standardSectionSchema(["answerability", "entityStrength", "citationReadiness", "constraints", "opportunity"], new Set(["opportunity"])),
+    eeatTrust: standardSectionSchema(["experience", "expertise", "authority", "trust", "proofGaps", "businessMeaning"]),
+    technical: standardSectionSchema(["assessment", "materialIssues", "businessMeaning"]),
+    performanceUx: standardSectionSchema(["assessment", "userImpact", "conversionImpact"]),
+    competitors: standardSectionSchema(["advantages", "disadvantages", "marketInterpretation", "differentiatorToProtect"]),
     limitations: {
       type: "array",
-      items: limitationItemSchema(writerInput, refs),
+      items: limitationItemSchema(writerInput),
     },
     actionPlan: {
       type: "array",
-      items: actionPlanItemSchema(refs),
+      items: actionPlanItemSchema(),
     },
     executiveDecision: objectSchema({
-      preserve: atomSchema(INTERPRETATION, refs),
-      change: atomSchema(INTERPRETATION, refs),
-      doNext: atomSchema(OPPORTUNITY, refs),
+      preserve: atomSchema(INTERPRETATION),
+      change: atomSchema(INTERPRETATION),
+      doNext: atomSchema(OPPORTUNITY),
     }),
   });
 }
