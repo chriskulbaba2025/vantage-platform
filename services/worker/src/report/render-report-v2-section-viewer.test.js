@@ -161,7 +161,7 @@ test("PRYSM-V2-SECTION-VIEWER-01: viewer remains accessible and keeps navigation
   const html = renderReportV2(model());
   assert.match(html, /<main id="reportContent" tabindex="-1">/);
   assert.match(html, /aria-label="Print or save this page as PDF"/);
-  assert.match(html, /@media \(max-width:900px\)/);
+  assert.match(html, /@media \(max-width:\s*900px\)/);
   assert.match(html, /grid-template-columns:220px minmax\(0,1fr\)/);
   assert.match(html, /\.viewer-nav \{ flex-direction:column; overflow:visible;/);
 });
