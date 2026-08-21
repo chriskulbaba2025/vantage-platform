@@ -135,8 +135,8 @@ test("PRYSM-V2-SECTION-VIEWER-01: rendered report has left sticky navigation and
   assert.equal((html.match(/data-viewer-page=/g) || []).length, 15);
   assert.match(html, /class="viewer-sidebar no-print" aria-label="Report sections"/);
   assert.match(html, /\.viewer-sidebar \{[^}]*position:sticky;[^}]*overflow-y:auto;/);
-  assert.match(html, /grid-template-columns:260px minmax\(0,1fr\)/);
-  assert.match(html, /viewer-nav-link\[aria-current="page"\]/);
+  assert.match(html, /grid-template-columns:280px minmax\(0,1fr\)/);
+  assert.match(html, /viewer-nav-link\[aria-current='page'\]/);
 });
 
 test("PRYSM-V2-SECTION-VIEWER-01: hash navigation is deterministic and invalid hashes fall back safely", () => {
@@ -157,12 +157,13 @@ test("PRYSM-V2-SECTION-VIEWER-01: current page has browser print/PDF control and
   assert.match(html, /\.nav-jump, \.no-print \{ display:none !important; \}/);
 });
 
-test("PRYSM-V2-SECTION-VIEWER-01: viewer remains accessible and responsive", () => {
+test("PRYSM-V2-SECTION-VIEWER-01: viewer remains accessible and keeps navigation on the left", () => {
   const html = renderReportV2(model());
   assert.match(html, /<main id="reportContent" tabindex="-1">/);
   assert.match(html, /aria-label="Print or save this page as PDF"/);
-  assert.match(html, /@media \(max-width: 900px\)/);
-  assert.match(html, /\.viewer-nav \{ flex-direction:row; overflow-x:auto;/);
+  assert.match(html, /@media \(max-width:900px\)/);
+  assert.match(html, /grid-template-columns:220px minmax\(0,1fr\)/);
+  assert.match(html, /\.viewer-nav \{ flex-direction:column; overflow:visible;/);
 });
 
 test("PRYSM-V2-SECTION-VIEWER-01: all governed section content remains in the single artifact", () => {
