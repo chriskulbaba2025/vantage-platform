@@ -6,6 +6,7 @@
 // all other governed checks after the model response returns.
 
 import { WRITER_OUTPUT_VERSION, WRITER_PROMPT_VERSION } from "./writer-output.js";
+import { governedStatusForWriterReference } from "./writer-reference.js";
 
 const INTERPRETATION = "INTERPRETATION";
 const OPPORTUNITY = "OPPORTUNITY";
@@ -48,21 +49,10 @@ function standardSectionSchema(fields, opportunityFields = new Set()) {
   return objectSchema(properties);
 }
 
-function getPathValue(object, path) {
-  return String(path || "").split(".").reduce((value, key) => value?.[key], object);
-}
-
 function governedStatusRefs(writerInput) {
   const groups = new Map();
-  for (const [ref, record] of Object.entries(writerInput?.referenceIndex || {})) {
-    if (!record || typeof record !== "object" || typeof record.path !== "string") continue;
-    const value = getPathValue(writerInput, record.path);
-    let status;
-    if (record.kind === "source-status" && typeof value === "string" && value) {
-      status = value;
-    } else if (record.kind === "capability" && value && typeof value === "object" && typeof value.status === "string" && value.status) {
-      status = value.status;
-    }
+  for (const ref of Object.keys(writerInput?.referenceIndex || {})) {
+    const status = governedStatusForWriterReference(writerInput, ref);
     if (!status) continue;
     if (!groups.has(status)) groups.set(status, []);
     groups.get(status).push(ref);
