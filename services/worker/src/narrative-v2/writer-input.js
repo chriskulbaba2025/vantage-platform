@@ -184,6 +184,9 @@ function buildReferenceIndex({ business, score, findings, capabilityContext, sco
   for (const field of Object.keys(score.scores || {})) {
     addReference(index, `score:${field}`, "score", `score.scores.${field}`);
   }
+  for (const field of Object.keys(score.bands || {})) {
+    addReference(index, `band:${field}`, "score-band", `score.bands.${field}`);
+  }
   for (const field of ["assessedWeight", "readinessStatus", "readinessStatusDetail", "showNumericScore", "evidenceConfidenceScore", "rootCause"]) {
     if (Object.hasOwn(score, field)) addReference(index, `score:${field}`, "score", `score.${field}`);
   }
@@ -192,6 +195,15 @@ function buildReferenceIndex({ business, score, findings, capabilityContext, sco
   }
   for (const key of Object.keys(capabilityContext.capabilities || {})) {
     addReference(index, `capability:${key}`, "capability", `capabilityContext.capabilities.${key}`);
+  }
+  for (const field of ["capabilityEvidenceVersion", "summary"]) {
+    if (Object.hasOwn(capabilityContext, field)) {
+      addReference(index, `capabilityContext:${field}`, "capability-context", `capabilityContext.${field}`);
+    }
+  }
+  for (const field of Object.keys(scoreGovernance || {})) {
+    if (field === "sourceDependencies") continue;
+    addReference(index, `scoreGovernance:${field}`, "score-governance", `scoreGovernance.${field}`);
   }
   for (const key of Object.keys(scoreGovernance?.sourceDependencies || {})) {
     addReference(index, `source:${key}`, "source-status", `scoreGovernance.sourceDependencies.${key}`);
