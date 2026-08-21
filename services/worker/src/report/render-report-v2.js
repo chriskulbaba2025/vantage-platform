@@ -482,6 +482,7 @@ function pageShell(model, date, pillars, checklist, plan) {
     title: page.title,
     sectionIds: [...page.sectionIds],
   })));
+  const browserTitleBusiness = JSON.stringify(String(business));
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -556,7 +557,7 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
   .print-page-btn { width:100%; }
 }
 @media print {
-  .viewer-sidebar, .viewer-toolbar, .no-print { display:none !important; }
+  .nav-jump, .no-print { display:none !important; }
   body { background:#fff; }
   .report-layout { display:block; max-width:100%; margin:0; padding:0; }
   .viewer-content, main { max-width:100%; padding:0; }
@@ -609,6 +610,7 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
 (() => {
   const pages = ${viewerConfig};
   const fallback = pages[0];
+  const businessName = ${browserTitleBusiness};
   const byId = new Map(pages.map((page) => [page.pageId, page]));
   const allSectionIds = new Set(pages.flatMap((page) => page.sectionIds));
   const title = document.getElementById("viewerPageTitle");
@@ -625,7 +627,8 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
     return byId.get(requested) || fallback;
   }
 
-  function activate(page, { focus = false } = {}) {
+  function activate(page, options = {}) {
+    const focus = options.focus === true;
     document.body.classList.add("viewer-ready");
     const activeIds = new Set(page.sectionIds);
     for (const id of allSectionIds) {
@@ -637,16 +640,16 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
       else link.removeAttribute("aria-current");
     }
     if (title) title.textContent = page.title;
-    document.title = `${page.title} — ${${JSON.stringify(business)}}`;
+    document.title = page.title + " — " + businessName;
     if (focus && content) content.focus({ preventScroll: true });
   }
 
-  function syncFromHash({ focus = false } = {}) {
+  function syncFromHash(options = {}) {
     const page = resolvePage();
-    if (window.location.hash !== `#${page.pageId}`) {
-      history.replaceState(null, "", `#${page.pageId}`);
+    if (window.location.hash !== "#" + page.pageId) {
+      history.replaceState(null, "", "#" + page.pageId);
     }
-    activate(page, { focus });
+    activate(page, options);
   }
 
   for (const link of links) {
@@ -654,7 +657,7 @@ footer { text-align:center; color:var(--muted); font-size:.8rem; padding:1.2rem;
       const page = byId.get(link.dataset.viewerPage);
       if (!page) return;
       event.preventDefault();
-      history.pushState(null, "", `#${page.pageId}`);
+      history.pushState(null, "", "#" + page.pageId);
       activate(page, { focus: true });
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
