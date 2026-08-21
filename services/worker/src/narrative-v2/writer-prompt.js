@@ -92,6 +92,7 @@ function commonRules() {
     "13. Avoid repetition. A fact may support multiple sections, but do not restate the same conclusion in substantially the same language.",
     "14. Do not include HTML, Markdown, or URLs in narrative text.",
     "15. Return JSON only and match the governed output shape exactly.",
+    "16. For every limitations[] item, status MUST exactly equal one governed source or capability status. In each of clientExplanation, whatThisMeans, and whatThisDoesNotMean, include at least one evidenceRefs ID whose WriterInput.referenceIndex record has kind source-status or capability and resolves to that same status. Finding-only references do not ground limitation status.",
   ].join("\n");
 }
 
