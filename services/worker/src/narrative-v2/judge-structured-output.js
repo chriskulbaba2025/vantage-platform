@@ -30,11 +30,12 @@ function enumString(...values) {
   return { type: "string", enum: values };
 }
 
-function nonEmptyString(maxLength = null) {
+function nonEmptyString(maxChars = null) {
   return {
     type: "string",
-    minLength: 1,
-    ...(Number.isInteger(maxLength) ? { maxLength } : {}),
+    pattern: Number.isInteger(maxChars)
+      ? `^[\\s\\S]{1,${maxChars}}$`
+      : "\\S",
   };
 }
 
