@@ -8,8 +8,10 @@
  * Governance:
  * - disabled by default;
  * - live mode must be explicit;
- * - exactly two model calls maximum per audit (Writer then Judge);
- * - no network retry, repair loop, model escalation, or hidden fallback;
+ * - exactly four model calls maximum per audit:
+ *   Writer 1 -> Judge 1 -> Writer 2 -> Judge 2;
+ * - Pass 2 Writer is authorized only by a validated Judge 1 REVISE decision;
+ * - no network retry, third Writer pass, repair loop, model escalation, or hidden fallback;
  * - deterministic token/cost preflight before every call;
  * - immutable reservation is persisted BEFORE a paid call so restart/recovery
  *   cannot silently repeat an uncertain paid attempt;
@@ -20,6 +22,8 @@
  *   distinguishable from an idempotent same-byte write;
  * - usage/result ledger is persisted after every returned response;
  * - exact parsed provider JSON is persisted before normalization/validation;
+ * - completed-call budget accounting reconciles reservation estimates to
+ *   returned actual cost before another paid call may be reserved;
  * - missing/invalid provider usage fails closed rather than recording $0 cost;
  * - Writer/Judge outputs are normalized only for deterministic structural
  *   metadata, then validated at the executor boundary and again by the
@@ -34,13 +38,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { runCostPreflight } from "../narrative/cost-preflight.js";
 import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
 import { validateWriterOutput } from "./writer-output.js";
-import { validateJudgeResponse } from "./judge-contract.js";
+import { JUDGE_DECISION, validateJudgeResponse } from "./judge-contract.js";
 import { buildWriterStructuredResponseFormat } from "./writer-structured-output.js";
 import { buildJudgeStructuredResponseFormat } from "./judge-structured-output.js";
 import { normalizeWriterModelOutput, normalizeJudgeModelOutput } from "./model-output-normalization.js";
 
 export const NARRATIVE_V2_LIVE_BINDING_VERSION = "1.0.0";
-export const NARRATIVE_V2_LIVE_MAX_CALLS = 2;
+export const NARRATIVE_V2_LIVE_MAX_CALLS = 4;
+export const NARRATIVE_V2_LIVE_MAX_AUTOMATIC_PASSES = 2;
 export const NARRATIVE_V2_LIVE_MODE = "live";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -270,7 +275,28 @@ export function createNarrativeV2LiveBinding({
     return rows;
   }
 
-  async function reserveCall({ scope, role, modelId, prompt, maxOutputTokens, passNumber }) {
+  async function completedAuditSpend(scope, existing) {
+    let total = 0;
+    for (const reservation of existing) {
+      const result = await readJsonByName(artifactStore, scope, resultName(reservation.callNumber));
+      const actualCost = Number(result?.actualCost);
+      if (Number.isFinite(actualCost) && actualCost >= 0) {
+        total += actualCost;
+      } else {
+        total += Number(reservation.estimatedCost || 0);
+      }
+    }
+    return total;
+  }
+
+  async function requireValidatedResult(scope, reservation, label) {
+    const result = await readJsonByName(artifactStore, scope, resultName(reservation.callNumber));
+    if (!result || result.validationResult !== "PASS") {
+      throw new Error(`Narrative v2 live ${label} requires a validated prior result ledger`);
+    }
+  }
+
+  async function reserveCall({ scope, role, modelId, prompt, maxOutputTokens, passNumber, previousJudgeResponse = null }) {
     const inFlightKey = `${scope.auditId}:${role}:${passNumber}`;
     if (inFlightReservationClaims.has(inFlightKey)) {
       throw new Error(`Narrative v2 paid ${role} pass ${passNumber} is already being reserved in this runtime; refusing concurrent duplicate call`);
@@ -284,25 +310,45 @@ export function createNarrativeV2LiveBinding({
       if (existing.some((entry) => entry.role === role && entry.passNumber === passNumber)) {
         throw new Error(`Narrative v2 paid ${role} pass ${passNumber} already reserved; refusing duplicate call`);
       }
-      if (role === "writer") {
-        if (passNumber !== 1 || existing.length !== 0) {
+
+      if (role === "writer" && passNumber === 1) {
+        if (existing.length !== 0) {
           throw new Error("Narrative v2 live sequence requires Writer pass 1 as call 1");
         }
-      } else if (role === "judge") {
-        if (passNumber !== 1 || existing.length !== 1 || existing[0].role !== "writer" || existing[0].passNumber !== 1) {
+      } else if (role === "judge" && passNumber === 1) {
+        if (existing.length !== 1 || existing[0].role !== "writer" || existing[0].passNumber !== 1) {
           throw new Error("Narrative v2 live sequence requires Judge pass 1 as call 2 after Writer pass 1");
         }
-        const writerResult = await readJsonByName(artifactStore, scope, resultName(existing[0].callNumber));
-        if (!writerResult || writerResult.validationResult !== "PASS") {
-          throw new Error("Narrative v2 live Judge call requires a validated Writer result ledger");
+        await requireValidatedResult(scope, existing[0], "Judge pass 1");
+      } else if (role === "writer" && passNumber === 2) {
+        const ordered = existing.length === 2
+          && existing[0].role === "writer" && existing[0].passNumber === 1
+          && existing[1].role === "judge" && existing[1].passNumber === 1;
+        if (!ordered) {
+          throw new Error("Narrative v2 live sequence requires Writer pass 2 as call 3 after Writer 1 and Judge 1");
         }
+        await requireValidatedResult(scope, existing[1], "Writer pass 2");
+        if (previousJudgeResponse?.decision !== JUDGE_DECISION.REVISE
+          || previousJudgeResponse?.revisionDirective?.required !== true
+          || previousJudgeResponse?.revisionDirective?.mode !== "TARGETED") {
+          throw new Error(`Narrative v2 live call cap reached (${NARRATIVE_V2_LIVE_MAX_CALLS}); Judge pass 1 did not authorize Writer pass 2`);
+        }
+      } else if (role === "judge" && passNumber === 2) {
+        const ordered = existing.length === 3
+          && existing[0].role === "writer" && existing[0].passNumber === 1
+          && existing[1].role === "judge" && existing[1].passNumber === 1
+          && existing[2].role === "writer" && existing[2].passNumber === 2;
+        if (!ordered) {
+          throw new Error("Narrative v2 live sequence requires Judge pass 2 as call 4 after Writer 2");
+        }
+        await requireValidatedResult(scope, existing[2], "Judge pass 2");
       } else {
-        throw new Error(`Unsupported Narrative v2 live role: ${String(role)}`);
+        throw new Error(`Narrative v2 live sequence permits only Writer/Judge passes 1 and 2; refusing ${role} pass ${passNumber}`);
       }
 
       const modelPrice = config.priceTable[modelId];
-      const alreadyReserved = existing.reduce((sum, entry) => sum + Number(entry.estimatedCost || 0), 0);
-      const remainingAuditBudget = Math.max(0, config.hardBudgetUsd - alreadyReserved);
+      const committedSpend = await completedAuditSpend(scope, existing);
+      const remainingAuditBudget = Math.max(0, config.hardBudgetUsd - committedSpend);
       const now = clock.now();
       const day = now.slice(0, 10);
       if (processDaily.date !== day) {
@@ -371,8 +417,16 @@ export function createNarrativeV2LiveBinding({
     await persistJson(artifactStore, scope, resultName(callNumber), record);
   }
 
-  async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate, responseFormat, normalize = (value) => value }) {
-    const { callNumber, reservation, modelPrice } = await reserveCall({ scope, role, modelId, prompt, maxOutputTokens, passNumber });
+  async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate, responseFormat, normalize = (value) => value, previousJudgeResponse = null }) {
+    const { callNumber, reservation, modelPrice } = await reserveCall({
+      scope,
+      role,
+      modelId,
+      prompt,
+      maxOutputTokens,
+      passNumber,
+      previousJudgeResponse,
+    });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
     let response;
@@ -478,6 +532,7 @@ export function createNarrativeV2LiveBinding({
     };
 
     const actualCost = estimateActualCost(usage, modelPrice);
+    processDaily.reservedUsd = Math.max(0, processDaily.reservedUsd - reservation.estimatedCost + actualCost);
     const ledger = createUsageLedgerEntry({
       auditId: scope.auditId,
       executionId: scope.executionId,
@@ -522,6 +577,7 @@ export function createNarrativeV2LiveBinding({
       prompt: request.prompt,
       maxOutputTokens: config.writerMaxOutputTokens,
       passNumber: request.passNumber,
+      previousJudgeResponse: request.judgeResponse || null,
       responseFormat: buildWriterStructuredResponseFormat({
         writerInput: request.writerInput,
         passNumber: request.passNumber,
@@ -576,6 +632,7 @@ export function createNarrativeV2LiveBinding({
       hardBudgetUsd: config.hardBudgetUsd,
       dailyHardBudgetUsd: config.dailyHardBudgetUsd,
       maxCallsPerAudit: NARRATIVE_V2_LIVE_MAX_CALLS,
+      maxAutomaticPasses: NARRATIVE_V2_LIVE_MAX_AUTOMATIC_PASSES,
     }),
   });
 }
