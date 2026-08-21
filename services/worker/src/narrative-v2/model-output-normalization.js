@@ -1,8 +1,9 @@
 // PRYSM Narrative v2 — lossless deterministic normalization at model boundaries.
 //
 // This module never creates evidence or prose. It only canonicalizes structural
-// metadata that is already implied by array order or the governed contracts,
-// and removes repeated identical evidence references while preserving order.
+// metadata already implied by array order or governed contracts, derives fields
+// that are deterministic from Judge scoring/defects, and removes repeated
+// identical evidence references while preserving order.
 
 import {
   RUBRIC,
@@ -40,24 +41,32 @@ export function normalizeWriterModelOutput(output) {
   normalizeEvidenceRefs(normalized);
 
   if (Array.isArray(normalized.strengths)) {
-    normalized.strengths.forEach((item, index) => { if (item && typeof item === "object") item.itemId = `STR-${pad2(index)}`; });
+    normalized.strengths.forEach((item, index) => {
+      if (item && typeof item === "object") item.itemId = `STR-${pad2(index)}`;
+    });
   }
 
   const funnelPrefixes = { awareness: "A", consideration: "C", decision: "D" };
   for (const [stage, prefix] of Object.entries(funnelPrefixes)) {
     const items = normalized?.funnelOpportunities?.[stage];
     if (!Array.isArray(items)) continue;
-    items.forEach((item, index) => { if (item && typeof item === "object") item.itemId = `FUN-${prefix}-${pad2(index)}`; });
+    items.forEach((item, index) => {
+      if (item && typeof item === "object") item.itemId = `FUN-${prefix}-${pad2(index)}`;
+    });
   }
 
   if (Array.isArray(normalized.limitations)) {
-    normalized.limitations.forEach((item, index) => { if (item && typeof item === "object") item.itemId = `LIM-${pad2(index)}`; });
+    normalized.limitations.forEach((item, index) => {
+      if (item && typeof item === "object") item.itemId = `LIM-${pad2(index)}`;
+    });
   }
 
   if (Array.isArray(normalized.actionPlan)) {
     normalized.actionPlan.forEach((item, index) => {
       if (!item || typeof item !== "object") return;
       item.actionId = `ACT-${pad2(index)}`;
+      // Prompt contract already requires business-importance order; array order
+      // is therefore the deterministic priority authority.
       item.priority = index + 1;
     });
   }
@@ -65,15 +74,11 @@ export function normalizeWriterModelOutput(output) {
   return normalized;
 }
 
-function canonicalizeJudgeIds(normalized) {
-  const defectIdMap = new Map();
+function canonicalizeJudgeStructure(normalized) {
   if (Array.isArray(normalized.defects)) {
     normalized.defects.forEach((defect, index) => {
       if (!defect || typeof defect !== "object") return;
-      const previous = defect.defectId;
-      const next = `D-${pad2(index)}`;
-      if (typeof previous === "string" && previous) defectIdMap.set(previous, next);
-      defect.defectId = next;
+      defect.defectId = `D-${pad2(index)}`;
       defect.evidenceRefs = dedupe(defect.evidenceRefs);
       defect.allowedFields = dedupe(defect.allowedFields);
       defect.mustPreserve = dedupe(defect.mustPreserve);
@@ -86,9 +91,14 @@ function canonicalizeJudgeIds(normalized) {
       if (!record || typeof record !== "object") continue;
       record.maxScore = maxScore;
       record.evidenceRefs = dedupe(record.evidenceRefs);
-      record.defectIds = dedupe(record.defectIds)
-        .map((id) => defectIdMap.get(id))
-        .filter(Boolean);
+      record.status = typeof record.score === "number" && Number.isFinite(record.score) && record.score / maxScore >= 0.70
+        ? "PASS"
+        : "FAIL";
+      // Criterion membership is authoritative for rubric-to-defect linkage;
+      // model-supplied synthetic IDs are not evidence and need not be trusted.
+      record.defectIds = (normalized.defects || [])
+        .filter((defect) => defect?.criterion === key)
+        .map((defect) => defect.defectId);
     }
   }
 
@@ -101,8 +111,6 @@ function canonicalizeJudgeIds(normalized) {
     });
     normalized.hardGate.status = normalized.hardGate.violations.length ? "FAIL" : "PASS";
   }
-
-  return defectIdMap;
 }
 
 function deterministicJudgeTotals(normalized) {
@@ -160,7 +168,7 @@ function deterministicRevisionDirective(normalized) {
 export function normalizeJudgeModelOutput(output) {
   const normalized = clone(output);
   normalizeEvidenceRefs(normalized);
-  canonicalizeJudgeIds(normalized);
+  canonicalizeJudgeStructure(normalized);
   deterministicJudgeTotals(normalized);
   deterministicRevisionDirective(normalized);
   return normalized;
