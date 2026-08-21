@@ -618,6 +618,13 @@ export function createNarrativeV2LiveBinding({
     });
   }
 
+  Object.defineProperty(writerExecutor, "maxAutomaticPasses", {
+    value: NARRATIVE_V2_LIVE_MAX_AUTOMATIC_PASSES,
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+
   return Object.freeze({
     enabled: true,
     writerExecutor,
