@@ -1,10 +1,11 @@
-// PRYSM Narrative v2 — governed three-pass orchestration controller.
+// PRYSM Narrative v2 — governed orchestration controller.
 //
 // This controller is intentionally model/provider agnostic. It owns only the
 // deterministic sequencing boundary between the governed Writer and Judge:
 // Writer -> Writer validation -> Judge -> Judge validation -> targeted rewrite
-// -> final gate. Production lifecycle, persistence, renderer and model wiring
-// remain outside this module until separately authorized.
+// -> final gate. The global contract supports up to MAX_NARRATIVE_PASSES, while
+// a caller may impose a lower automatic-pass ceiling and route further revision
+// work to governed human review.
 
 import {
   HARD_GATE_CODES,
@@ -76,7 +77,7 @@ export class NarrativeV2OrchestrationError extends Error {
   }
 }
 
-function assertControllerInputs({ writerInput, writerExecutor, judgeExecutor }) {
+function assertControllerInputs({ writerInput, writerExecutor, judgeExecutor, maxAutomaticPasses }) {
   const errors = [];
   if (!isObject(writerInput)) errors.push("writerInput must be an object");
   if (isObject(writerInput) && writerInput.contractVersion !== "1.0.0") {
@@ -89,6 +90,9 @@ function assertControllerInputs({ writerInput, writerExecutor, judgeExecutor }) 
   if (isObject(writerInput) && !isObject(writerInput.referenceIndex)) errors.push("writerInput.referenceIndex is required");
   if (typeof writerExecutor !== "function") errors.push("writerExecutor must be a function");
   if (typeof judgeExecutor !== "function") errors.push("judgeExecutor must be a function");
+  if (!Number.isInteger(maxAutomaticPasses) || maxAutomaticPasses < 1 || maxAutomaticPasses > MAX_NARRATIVE_PASSES) {
+    errors.push(`maxAutomaticPasses must be an integer from 1 to ${MAX_NARRATIVE_PASSES}`);
+  }
 
   if (errors.length) {
     throw new NarrativeV2OrchestrationError(
@@ -117,21 +121,23 @@ function buildTerminalResult({ writerInput, status, passNumber, writerOutput, ju
  *
  * The controller does not call a provider or model directly. `writerExecutor`
  * and `judgeExecutor` are injected execution seams. Tests use deterministic
- * controlled executors; future production wiring may place a governed model
- * client below those seams without changing the orchestration contract.
+ * controlled executors; production may impose a lower automatic-pass ceiling
+ * without weakening the frozen Judge contract.
  *
  * @param {object} options
  * @param {object} options.writerInput governed WriterInput packet
  * @param {function} options.writerExecutor async ({ prompt, passNumber, writerInput, previousOutput?, judgeResponse? }) => WriterOutput
  * @param {function} options.judgeExecutor async ({ passNumber, writerInput, writerOutput, judgeContract }) => JudgeResponse
+ * @param {number} [options.maxAutomaticPasses] maximum Writer/Judge passes before routing another REVISE to human review
  * @returns {Promise<object>} terminal governed orchestration result
  */
 export async function runNarrativeV2Orchestration({
   writerInput,
   writerExecutor,
   judgeExecutor,
+  maxAutomaticPasses = MAX_NARRATIVE_PASSES,
 }) {
-  assertControllerInputs({ writerInput, writerExecutor, judgeExecutor });
+  assertControllerInputs({ writerInput, writerExecutor, judgeExecutor, maxAutomaticPasses });
 
   // Freeze the exact governed input once. Every pass consumes this same object.
   const governedWriterInput = deepFreeze(writerInput);
@@ -279,12 +285,27 @@ export async function runNarrativeV2Orchestration({
       );
     }
 
-    // A valid Pass 3 Judge response can never authorize another write because
-    // deriveJudgeDecision() converts every non-passing Pass 3 into human review.
+    // A caller may deliberately authorize fewer automatic rewrites than the
+    // global Judge contract. Once that caller-specific ceiling is reached,
+    // preserve the valid Judge REVISE decision and route further work to human
+    // review rather than attempting an unauthorized paid Writer call.
+    if (passNumber >= maxAutomaticPasses) {
+      return buildTerminalResult({
+        writerInput: governedWriterInput,
+        status: NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
+        passNumber,
+        writerOutput,
+        judgeResponse,
+        history,
+      });
+    }
+
+    // A valid final-contract-pass Judge response can never authorize another
+    // write because deriveJudgeDecision() converts a non-pass there to review.
     if (passNumber >= MAX_NARRATIVE_PASSES) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.INVALID_NEXT_ACTION,
-        "Pass 3 cannot authorize an automatic Pass 4",
+        `Pass ${MAX_NARRATIVE_PASSES} cannot authorize another automatic pass`,
         { passNumber, stage: "NEXT_ACTION" },
       );
     }
