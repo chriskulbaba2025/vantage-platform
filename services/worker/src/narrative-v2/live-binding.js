@@ -19,9 +19,11 @@
  * - each reservation has a unique claim ID so a conflicting durable claim is
  *   distinguishable from an idempotent same-byte write;
  * - usage/result ledger is persisted after every returned response;
+ * - exact parsed provider JSON is persisted before normalization/validation;
  * - missing/invalid provider usage fails closed rather than recording $0 cost;
- * - Writer/Judge outputs are validated at the executor boundary and again by
- *   the governed Narrative v2 orchestrator.
+ * - Writer/Judge outputs are normalized only for deterministic structural
+ *   metadata, then validated at the executor boundary and again by the
+ *   governed Narrative v2 orchestrator.
  *
  * The governed object store is not a cross-process atomic lock. This binding
  * therefore does not authorize concurrent multi-worker live execution.
@@ -34,6 +36,8 @@ import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
 import { validateWriterOutput } from "./writer-output.js";
 import { validateJudgeResponse } from "./judge-contract.js";
 import { buildWriterStructuredResponseFormat } from "./writer-structured-output.js";
+import { buildJudgeStructuredResponseFormat } from "./judge-structured-output.js";
+import { normalizeWriterModelOutput, normalizeJudgeModelOutput } from "./model-output-normalization.js";
 
 export const NARRATIVE_V2_LIVE_BINDING_VERSION = "1.0.0";
 export const NARRATIVE_V2_LIVE_MAX_CALLS = 2;
@@ -130,6 +134,9 @@ export function loadNarrativeV2LiveConfig(env = process.env) {
 
 function reservationName(callNumber) {
   return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-reservation.json`;
+}
+function responseName(callNumber) {
+  return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-response.json`;
 }
 function resultName(callNumber) {
   return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-result.json`;
@@ -364,7 +371,7 @@ export function createNarrativeV2LiveBinding({
     await persistJson(artifactStore, scope, resultName(callNumber), record);
   }
 
-  async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate, responseFormat }) {
+  async function invoke({ scope, role, modelId, prompt, maxOutputTokens, passNumber, validate, responseFormat, normalize = (value) => value }) {
     const { callNumber, reservation, modelPrice } = await reserveCall({ scope, role, modelId, prompt, maxOutputTokens, passNumber });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -430,9 +437,9 @@ export function createNarrativeV2LiveBinding({
       throw err;
     }
 
-    let parsed;
+    let rawParsed;
     try {
-      parsed = JSON.parse(content);
+      rawParsed = JSON.parse(content);
     } catch {
       await persistReturnedFailure({
         scope, callNumber, reservation, role, passNumber, modelId,
@@ -442,6 +449,11 @@ export function createNarrativeV2LiveBinding({
       });
       throw new Error(`Narrative v2 ${role} content was not a JSON object`);
     }
+
+    // Preserve the exact parsed provider response before any deterministic
+    // structural normalization. This closes the prior forensic blind spot.
+    await persistJson(artifactStore, scope, responseName(callNumber), rawParsed);
+    const parsed = normalize(rawParsed);
 
     let usage;
     try {
@@ -515,6 +527,7 @@ export function createNarrativeV2LiveBinding({
         passNumber: request.passNumber,
         modelId: config.writerModel,
       }),
+      normalize: normalizeWriterModelOutput,
       validate: (output) => validateWriterOutput(output, {
         writerInput: request.writerInput,
         expectedPassNumber: request.passNumber,
@@ -536,6 +549,12 @@ export function createNarrativeV2LiveBinding({
       prompt,
       maxOutputTokens: config.judgeMaxOutputTokens,
       passNumber: request.passNumber,
+      responseFormat: buildJudgeStructuredResponseFormat({
+        writerInput: request.writerInput,
+        passNumber: request.passNumber,
+        modelId: config.judgeModel,
+      }),
+      normalize: normalizeJudgeModelOutput,
       validate: (output) => validateJudgeResponse(output, {
         writerInput: request.writerInput,
         expectedPassNumber: request.passNumber,
