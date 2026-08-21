@@ -1,5 +1,5 @@
 /**
- * PRYSM-V2-REPORT-DEPTH-01 — conversion-first Section E + governed report depth.
+ * PRYSM-V2-REPORT-DEPTH-01 â€” conversion-first Section E + governed report depth.
  *
  * Proof-first suite (frozen checklist CR-01..CR-27, see
  * .governance/changes/PRYSM-V2-REPORT-DEPTH-01_CHECKLIST.md).
@@ -9,7 +9,7 @@
  * or the exported production helper whose behaviour is being accepted
  * (calculateFindingPriority / classifyFinding / buildFoundationChecklist /
  * buildActionPlan).  No mock replaces the behaviour under test, and no
- * expected value is copied from the implementation — expectations are
+ * expected value is copied from the implementation â€” expectations are
  * computed from the fixture's own inputs or from the requirement statement.
  */
 
@@ -53,7 +53,7 @@ const INPUT = {
 };
 
 // ---------------------------------------------------------------------------
-// Fixtures — governed evidence shapes only.  No provider call.
+// Fixtures â€” governed evidence shapes only.  No provider call.
 // ---------------------------------------------------------------------------
 
 /** Fully assessed site: content, headers, and interactive evidence all ran. */
@@ -199,7 +199,7 @@ const findingByRule = (model, ruleId) =>
   (model.findings || []).find((f) => f.ruleId === ruleId);
 
 // ===========================================================================
-// SECTION E — CR-01 .. CR-06
+// SECTION E â€” CR-01 .. CR-06
 // ===========================================================================
 
 test("CR-01: action priority uses the authorized 40/20/15/15/10 weighting", () => {
@@ -356,7 +356,7 @@ test("CR-06: readiness dimension weights and the readiness score are unchanged",
 });
 
 // ===========================================================================
-// REPORT RESTORATION — CR-07 .. CR-15
+// REPORT RESTORATION â€” CR-07 .. CR-15
 // ===========================================================================
 
 test("CR-07: E-E-A-T renders four governed dimensions, and Not Assessed when unavailable", () => {
@@ -505,7 +505,7 @@ test("CR-15: strengths require assessed evidence", () => {
 });
 
 // ===========================================================================
-// FIRST THINGS FIRST — CR-16 .. CR-20
+// FIRST THINGS FIRST â€” CR-16 .. CR-20
 // ===========================================================================
 
 const itemById = (list, id) => list.find((i) => i.id === id);
@@ -548,12 +548,12 @@ test("CR-18: unassessable candidates render NOT ASSESSED with the required sourc
     assert.ok(item.requires && item.requires.length > 5, `${id} must name the required evidence source`);
   }
   const html = renderReportV2(scoreWith(assessedSite()));
-  assert.match(html, /NOT ASSESSED\s*(—|-)\s*requires/i, "rendered as NOT ASSESSED — requires <source>");
+  assert.match(html, /NOT ASSESSED\s*(â€”|-)\s*requires/i, "rendered as NOT ASSESSED â€” requires <source>");
 });
 
 test("CR-19: a not-applicable candidate renders NOT APPLICABLE", () => {
   // GA4 measurement is not applicable when the audit did not request it AND
-  // no analytics evidence exists — proven via the governed source status.
+  // no analytics evidence exists â€” proven via the governed source status.
   const checklist = buildFoundationChecklist(
     scoreWith(assessedSite(), { evidenceOverrides: { ga4: { sourceStatus: "NOT_APPLICABLE", limitations: [] } } }),
   );
@@ -562,7 +562,7 @@ test("CR-19: a not-applicable candidate renders NOT APPLICABLE", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CR-28..CR-35 — source-failure boundary (merge-audit correction, round 2).
+// CR-28..CR-35 â€” source-failure boundary (merge-audit correction, round 2).
 //
 // A provider/evidence failure is not evidence about the WEBSITE.  These cases
 // prove that no evidence-side failure is ever rendered as a client-facing
@@ -619,7 +619,7 @@ test("CR-29: the evidence limitation is surfaced, attributed to the source", () 
     const checklist = checklistForSite(failedSiteEvidence("FAILED", limitation));
     const availability = itemById(checklist, "site_availability");
     // The limitation must reach the client, but ONLY as attributed provider
-    // text — never inlined into audit prose, where it could read as a finding.
+    // text â€” never inlined into audit prose, where it could read as a finding.
     assert.equal(availability.evidenceNote, `${EVIDENCE_ATTRIBUTION_PREFIX} ${limitation}`,
       "limitation must be surfaced with source attribution");
     assert.ok(!availability.detail.includes(limitation),
@@ -664,7 +664,7 @@ test("CR-32: a proven target-side outage IS still ACTION REQUIRED", () => {
 });
 
 test("CR-33: a partial outage does not become a site-availability defect", () => {
-  // Some pages error, some serve — the site is reachable.
+  // Some pages error, some serve â€” the site is reachable.
   const checklist = checklistForSite(assessedSite({
     statusCounts: { 200: 2, 404: 1 },
     pages: [{ crawledUrl: "https://x.com/", title: "Home", statusCode: 200, headings: { h1: ["Home"] } }],
@@ -681,11 +681,11 @@ test("CR-34: existing PASS availability behaviour is intact", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CR-36..CR-39 — IDENTITY-frozen client wording.
+// CR-36..CR-39 â€” IDENTITY-frozen client wording.
 //
 // Two audits defeated blacklist-shaped guards (novel phrasing, then synonyms,
 // exempt regions and untested branches).  These tests therefore assert EXACT
-// equality against literals declared HERE — not imported from the module — for
+// equality against literals declared HERE â€” not imported from the module â€” for
 // every failure branch and every client-rendered field.  Any wording change,
 // anywhere, in any field, fails until it is deliberately re-frozen.
 // ---------------------------------------------------------------------------
@@ -722,7 +722,7 @@ const NO_PERF = { performance: null };
 /**
  * BRANCH-COMPLETE fixture matrix.
  *
- * Rounds 2–5 each froze only the branches a prior audit had attacked, and the
+ * Rounds 2â€“5 each froze only the branches a prior audit had attacked, and the
  * next audit simply moved to an uncovered one.  This matrix is built to reach
  * EVERY (item, status) pair the checklist can produce; CR-42 proves that
  * completeness mechanically, so an uncovered branch cannot exist silently.
@@ -740,7 +740,7 @@ function foundationMatrix() {
       statusCounts: { 503: 2 },
       pages: [{ crawledUrl: "https://x.com/", statusCode: 503, headings: {} }],
     }), {}],
-    // Outage WITH provider limitations — proves no limitation text leaks into
+    // Outage WITH provider limitations â€” proves no limitation text leaks into
     // the outage sentence even when both are present simultaneously.
     ["outage-with-limitations", assessedSite({
       statusCounts: { 500: 1 },
@@ -774,12 +774,12 @@ function foundationMatrix() {
     }],
     ["no-performance", assessedSite(), NO_PERF],
 
-    // ── Non-foundation section shapes ───────────────────────────────────
+    // â”€â”€ Non-foundation section shapes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // The freeze is only as wide as the evidence shapes the matrix carries.
-    // A prior audit reached these renderer branches — Section E's blocker
+    // A prior audit reached these renderer branches â€” Section E's blocker
     // row, the competitor note, proprietary-platform text, untraced broken
     // links, confirmed-absent schema, heading variants and a failed device
-    // profile — because no fixture produced them. Each is production-reachable.
+    // profile â€” because no fixture produced them. Each is production-reachable.
     ["path-validated-blocker", assessedSite(), {}, OBSTRUCTED_PATH_EVIDENCE],
     ["competitor-present", assessedSite(), {
       competitors: [{
@@ -819,7 +819,7 @@ function foundationMatrix() {
         ],
       },
     }],
-    // Competitor evidence WITH an opportunity-layer limitation — this
+    // Competitor evidence WITH an opportunity-layer limitation â€” this
     // package's competitor section renders a Limitations block there.
     ["competitor-with-limitations", assessedSite(), {
       competitors: [{
@@ -874,7 +874,7 @@ const REACHABLE_BRANCHES = [
 
 test("CR-36: the exported wording constants match the frozen contract", () => {
   // Importing a constant and asserting `endsWith(it)` proves identity, not
-  // content — a previous audit mutated the note's content and the suite stayed
+  // content â€” a previous audit mutated the note's content and the suite stayed
   // green.  These comparisons freeze the CONTENT.
   assert.equal(EVIDENCE_SCOPE_NOTE, FROZEN.scopeNote);
   assert.equal(EVIDENCE_ATTRIBUTION_PREFIX, FROZEN.attribution);
@@ -898,7 +898,7 @@ test("CR-37: every availability failure branch renders exactly the frozen wordin
   for (const [label, siteEvidence, expectedKey, limitation] of states) {
     const i = itemById(checklistForSite(siteEvidence), "site_availability");
     assert.equal(i.status, FOUNDATION_STATUS.NOT_ASSESSED, `${label}: status`);
-    // EVERY client-rendered field is frozen — detail, label and requires were
+    // EVERY client-rendered field is frozen â€” detail, label and requires were
     // each independently exploitable when only `detail` was guarded.
     assert.equal(i.detail, FROZEN.detail[expectedKey], `${label}: detail`);
     assert.equal(i.label, FROZEN.availabilityLabel, `${label}: label`);
@@ -912,7 +912,7 @@ test("CR-37: every availability failure branch renders exactly the frozen wordin
 });
 
 test("CR-37b: with no provider limitation, no attributed note is fabricated", () => {
-  // Direct production entry point — scoreAudit's crawl gate always injects a
+  // Direct production entry point â€” scoreAudit's crawl gate always injects a
   // limitation of its own, so the genuinely-empty case is exercised here.
   const i = buildFoundationChecklist({
     evidence: { site: { sourceStatus: "FAILED", limitations: [] } },
@@ -924,7 +924,7 @@ test("CR-37b: with no provider limitation, no attributed note is fabricated", ()
 
 test("CR-38: all three robots branches render exactly the frozen wording", () => {
   // The production DataForSEO path returns robotsText: "", so the NOT_RETURNED
-  // branch is the one production actually hits — a previous harness tested
+  // branch is the one production actually hits â€” a previous harness tested
   // only the refusal branch, leaving the production branch unguarded.
   const cases = [
     ["refused", failedSiteEvidence("BLOCKED", "Site blocked by robots.txt"), "REFUSED", FROZEN.robotsRequires.REFUSED, FOUNDATION_STATUS.NOT_ASSESSED],
@@ -941,8 +941,8 @@ test("CR-38: all three robots branches render exactly the frozen wording", () =>
 });
 
 test("CR-39: no client-rendered foundation field ever claims site behaviour outside the frozen note", () => {
-  // Sweep EVERY item of EVERY state — including the ACTION_REQUIRED branch and
-  // the assessed fixtures — across label, detail, requires and evidenceNote.
+  // Sweep EVERY item of EVERY state â€” including the ACTION_REQUIRED branch and
+  // the assessed fixtures â€” across label, detail, requires and evidenceNote.
   // Sweeps the whole branch-complete matrix, not a hand-picked subset.
   const models = foundationMatrix().map(([, site, over, pathEv]) =>
     buildFoundationChecklist(modelForSite(site, over, pathEv)));
@@ -958,7 +958,7 @@ test("CR-39: no client-rendered foundation field ever claims site behaviour outs
         assert.ok(!CLAIM.test(scrub(value)), `${i.id}.${field} must make no site-behaviour claim, got: ${value}`);
       }
       // An UNASSESSED item may make no claim about the site at all. An
-      // ASSESSED item may, because evidence was actually collected — that is
+      // ASSESSED item may, because evidence was actually collected â€” that is
       // the whole distinction this package exists to enforce.
       if (i.assessed !== true) {
         const unassessed = scrub(String(i.detail || "").replace(FROZEN.scopeNote, ""));
@@ -971,7 +971,7 @@ test("CR-39: no client-rendered foundation field ever claims site behaviour outs
       // An ASSESSED item's detail MAY describe site behaviour, because
       // evidence was collected to support it (e.g. an observed HTTP-only URL,
       // or a crawl that found no CTA).  Its exact wording is not left to a
-      // pattern check — it is frozen byte-for-byte by CR-40 and CR-43.
+      // pattern check â€” it is frozen byte-for-byte by CR-40 and CR-43.
     }
   }
 });
@@ -996,9 +996,9 @@ test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", (
 });
 
 // ---------------------------------------------------------------------------
-// CR-40 / CR-41 — GLOBAL freeze.
+// CR-40 / CR-41 â€” GLOBAL freeze.
 //
-// Rounds 2–4 each froze only the wording the previous audit had attacked, so
+// Rounds 2â€“4 each froze only the wording the previous audit had attacked, so
 // the next audit simply attacked a different item or a different layer. The
 // governed invariant is global: NO checklist item, and no rendered cell, may
 // describe website behaviour except where target-side evidence proves it.
@@ -1063,13 +1063,13 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
   // Compared as a whole so one run reports every drift, not just the first.
   assert.deepEqual(
     actual, CHECKLIST_GOLDEN,
-    "foundation checklist wording/status changed — review each change, then re-freeze",
+    "foundation checklist wording/status changed â€” review each change, then re-freeze",
   );
 });
 
 test("CR-42: the fixture matrix reaches every branch the checklist can produce", () => {
   // Without this, a freeze is only as good as the branches it happens to
-  // touch — the exact gap that let five successive audits hide a claim in an
+  // touch â€” the exact gap that let five successive audits hide a claim in an
   // uncovered branch.  Adding a branch to the implementation without adding a
   // fixture now fails here instead of shipping unguarded.
   const reached = new Set();
@@ -1078,7 +1078,7 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
   }
   assert.deepEqual(
     [...reached].sort(), REACHABLE_BRANCHES,
-    "fixture matrix must reach exactly the reachable (item, status) pairs — add a fixture for any new branch",
+    "fixture matrix must reach exactly the reachable (item, status) pairs â€” add a fixture for any new branch",
   );
 });
 
@@ -1091,41 +1091,41 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
  * evidence must not be re-frozen.
  */
 const RENDER_GOLDEN = {
-  "assessed": "95debf70ea7c3ceb5f3fb4e76d796f33ed6054baae82916f55f5813fcfba3b47",
-  "unassessed": "cd0e0376965cb9021485e2dbaa7a2d6e59422225a1b688b5ffb1b218f728cf49",
-  "provider-failed": "a6345dfdcc305dac5c61241f5efd077264ec3073c22d6eb3a8ccf64395999fd2",
-  "crawl-blocked": "67b0a4f293a715c3a7ffc83addcc62b5500ee400f957be97260d8c9f94612567",
-  "target-outage": "a23a82cb88c9ae940150714b1051ab4fe1137f2b37dea0551555b6d5b2a4cc7b",
-  "outage-with-limitations": "a739d706e612fdfeabda042acfc8b362dd39a5094b993fd335b5d59538b2256e",
-  "http-and-noindex": "bff3339f0da1eb7fb6758f74af3fe04b1621013a8f2c3ecda0c7559e5bb66dee",
-  "robots-retrieved": "9350139c5e2016075913ada97d57fc4a4e07c6976e2e1e71d4df4deb85343a24",
-  "canonical-missing": "a1c8c00ffa9e8bc9389c9d2dfaf199026c7a5e510bc809363badabee8fdabcbe",
-  "no-conversion-mechanism": "84f495d3dce073f26647c90f4de6863e92492769bc4a1226206845224a7184cd",
-  "no-contact": "e4c4712ede6c796100c011c12869cb3d47c15dc1d41eac1201c182e87bdbde5f",
-  "headers-all-present": "bced62eba79708c81d641e59bcfc9074483ba6dba6a31fc57003d17eb441dd02",
-  "ga4-ready": "ab635a858558f98c78518df44ce09dec93d29b5399ff6f14f9314b3006457a9c",
-  "ga4-issues": "17067aadb83a2eadd76d9cf290eda69c4c78c12b4c0bed80121e2298b65f94a5",
-  "ga4-not-applicable": "43ea5671d4fdbe44ee2b35dad35a85bb6e489b9464e4127cf5fae1221866cc2d",
-  "slow-mobile": "a8ead5bc421533a2e4bb1e513db1f89f866ebaa3c59da3b9b8597f9d0018bc36",
-  "no-performance": "81f76f0b1419360d3d8b7e6e93a18f25dfe42d237930b6fce4b5ff8c63eea5b7",
-  "path-validated-blocker": "a693bfccd5e0489ec4ee6b14b1ed4ae1cbfe8f00240cb5692bf20aaed4008769",
-  "competitor-present": "03bbc610a4f3d106b9621d63d1fc1861e5c75e2a807434dbe65d3d9b12d1db34",
-  "proprietary-platform": "ac8bfbad49a053daccb54ad0c3bdcaec8816ebaf41d2319c202523781d44fe3a",
-  "untraced-broken-links": "c1488f2d903d9aac067860fd3e243ced5aeb9c526e6f48fbfa04fd4b2dfdd8c0",
-  "schema-confirmed-absent": "5d7672dfa22e6d441c734a06b70ba3b6bf3cee49b58c7bbccc41bb9d12de0ad8",
-  "headings-absent-h1": "5e26517032b4a9198101d5cba36e648621e2ef97604965c40ea10911536c8a1a",
-  "headings-multiple-h1": "bf306669561c4ed32299dccf6d00d63956459ec77e3bbe73c6b4bc74682e2aaf",
-  "perf-field-and-multipage": "827a57fe15db76a0a3bce74c627517a0de4a56911f9631f0c6dbbb3b97edda48",
-  "competitor-with-limitations": "4c1ff7cbc84357b203942b8bac74b295e888b2455ef3082eadc2c53a04e7d2d4",
-  "device-profile-failed": "68bd739b1eca42c1870c982cf3173fb67e6843b7fa8586b5c966647d736f95d6",
+  "assessed": "95cb698a4e47b42eb2d4f2ade0e3107a443a71bf48ac49a21c310f70dc832324",
+  "unassessed": "61dfd78597b33dde368d8b4b2d8f3cfa8946c05fb4b0f68f7185b6c782069281",
+  "provider-failed": "ee00454f2762ae9616689f585a191179345afee81156115f655de8332f7435d1",
+  "crawl-blocked": "a59c45d14e458bf03f62eca7090524f2829b434dbb070f7e76c865565c2c9938",
+  "target-outage": "147956de8c00a7a8433419edf35f91367719a9acc879bbf890cf9fd6da17914e",
+  "outage-with-limitations": "4c079db0dd52a18d545f54f5132f35541e59cbe09d68b9d693ed0c21e2a88268",
+  "http-and-noindex": "85c347bf59ba0ba5f0d20f12994a74429599001f413e3dbd62e71fc7d3e0d92b",
+  "robots-retrieved": "4ba48b4cadfeda88fdaa1a2f2ae5b05d99ddafdd5e1fb4e5547d46296d12a27a",
+  "canonical-missing": "e340b1eaef19edd2d15c9988c47714df450fffca165aa427b55b97464ecf280f",
+  "no-conversion-mechanism": "5f4d4bbddacaf7ba31beb207767713cb40dbe9c85379bda36f37d42cfd920ded",
+  "no-contact": "cf5883a907c2b562c64c97552e64de62fcd52af2a25a801bace65dae83bf1fe6",
+  "headers-all-present": "e960c99d4144a3eee61038e52292db570bb82b849fbb6d7bbb635c64db01954e",
+  "ga4-ready": "39da35bd1903a083ce22b84e9843206fb5906290c89b7664c0f83a3f7f1d6929",
+  "ga4-issues": "8bd4306ab298d5020b729dd18fcd318656119bbb67c011c5d86dfabf0939690c",
+  "ga4-not-applicable": "7f1ceb0d26f6029b518f33c6088d0cf4bacd8282b0e9ed1846b9bb6920f6038d",
+  "slow-mobile": "11b6ed606b2dd3d4f1f3d900bb66469c1476c144d277166bb4d0dc7daa4e158d",
+  "no-performance": "f92a2fe07bcd6eafa8c0ce5b2cb8aca5ef8f3b0283a37c379e609e899a578d45",
+  "path-validated-blocker": "cedc60eb8f07eaec98043976918613a36005894b0e550510c68e006322e6cdb2",
+  "competitor-present": "fadc6b1073be1806ab3e84bfb3d35985cfc35bd6855c10237ad143b09d7180dd",
+  "proprietary-platform": "5552bc53dc7e9e3eaeb7316bb7d2964f5d4553f6931bcc37e47a987bf2fa1a31",
+  "untraced-broken-links": "5cbd723652daf4371e4e08d4c13b5b87b13e64eac423a7f73d6d79c57aa732c7",
+  "schema-confirmed-absent": "cdc6d21832050a9dd26e149fef71243c7f6310cbdce24b91af7e071908e3896c",
+  "headings-absent-h1": "03dabd59de4d004d13eba5f1c3956043a48ad6cda945a484531a23264ed9e9bd",
+  "headings-multiple-h1": "f7da001f397334caac5db1ada05492c1053ec4728535737b15a6009f47be5ce4",
+  "perf-field-and-multipage": "acfa917bbd4e44c5f84739335d86b864f119dfb4f2821ebf0841131acf48d3fb",
+  "competitor-with-limitations": "0421e733717e42dc5724f65ab97319bfbb0ad9b6ce6e03a7ca6d6752ee5d7977",
+  "device-profile-failed": "27b3729581f6d7fdbeb6af71867892741868734effdddc47cfee3b7eff0a6cc0",
 };
 
 test("CR-43: the full rendered report is frozen for every branch", () => {
   // The terminal guard.  Every previous round asserted selected fields or
   // banned selected phrases, so each audit simply moved to a field, branch or
   // layer that was not enumerated.  Hashing the whole rendered document means
-  // ANY change to ANY rendered byte — model wording, status chip, renderer
-  // template, summary line, action plan, strengths — fails, whatever the
+  // ANY change to ANY rendered byte â€” model wording, status chip, renderer
+  // template, summary line, action plan, strengths â€” fails, whatever the
   // phrasing.  It is not a blacklist and has nothing to enumerate.
   const actual = {};
   for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
@@ -1134,7 +1134,7 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
   }
   assert.deepEqual(
     actual, RENDER_GOLDEN,
-    "rendered report changed — review every diff against the no-fabrication invariant, then re-freeze",
+    "rendered report changed â€” review every diff against the no-fabrication invariant, then re-freeze",
   );
 });
 
@@ -1167,7 +1167,7 @@ test("CR-44: the render matrix exercises every claim-bearing renderer branch", (
   for (const [label, marker] of RENDERER_BRANCH_MARKERS) {
     assert.ok(
       rendered.some((html) => html.includes(marker)),
-      `no fixture reaches the ${label} — add one, or its wording is unfrozen`,
+      `no fixture reaches the ${label} â€” add one, or its wording is unfrozen`,
     );
   }
 });
@@ -1216,7 +1216,7 @@ test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
   // form of this assertion filtered on `status === ACTION_REQUIRED &&
   // assessed !== true`.  Because `assessed` is DERIVED from `status` in
   // foundation-readiness.js `item()`, that predicate is structurally
-  // unsatisfiable — it could never fail and therefore proved nothing.  The
+  // unsatisfiable â€” it could never fail and therefore proved nothing.  The
   // assertion below is the frozen CR-20 PASS condition as written: for a
   // fixture whose content, header, and interactive evidence were all absent,
   // the production checklist must emit ZERO ACTION REQUIRED rows.
@@ -1239,7 +1239,7 @@ test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
 
   // Render/model consistency: the number of ACTION-REQUIRED status chips
   // actually rendered must equal the number of ACTION_REQUIRED items the
-  // production checklist produced — zero here, non-zero for an assessed
+  // production checklist produced â€” zero here, non-zero for an assessed
   // fixture.  Matching the chip markup (not loose text) avoids counting the
   // section's own "N action required" summary line.
   const chipCount = (m) =>
@@ -1250,7 +1250,7 @@ test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
   assert.equal(chipCount(model), 0, "unassessed fixture must render zero ACTION REQUIRED chips");
   assert.equal(chipCount(model), required(model), "render must match the model for the unassessed fixture");
 
-  // Positive control — the same relationship must hold when deficiencies ARE
+  // Positive control â€” the same relationship must hold when deficiencies ARE
   // proven, so the assertion above cannot pass by simply never rendering.
   const proven = scoreWith(assessedSite({
     targetUrl: "http://x.com/",
@@ -1266,7 +1266,7 @@ test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
 });
 
 // ===========================================================================
-// ACTION PLAN — CR-21 .. CR-23
+// ACTION PLAN â€” CR-21 .. CR-23
 // ===========================================================================
 
 test("CR-21: Do Now / Do Next / Later grouping is deterministic", () => {
@@ -1330,7 +1330,7 @@ test("CR-23: the action plan invents no business result or ROI claim", () => {
 });
 
 // ===========================================================================
-// LANGUAGE QUALITY — CR-24 .. CR-25
+// LANGUAGE QUALITY â€” CR-24 .. CR-25
 // ===========================================================================
 
 const GOAL_PHRASES = [
@@ -1382,7 +1382,7 @@ test("CR-25: no malformed concatenated recommendation headings", () => {
 });
 
 // ===========================================================================
-// COMPETITOR — CR-26 .. CR-27
+// COMPETITOR â€” CR-26 .. CR-27
 // ===========================================================================
 
 test("CR-26: available competitor evidence renders signal comparisons", () => {
