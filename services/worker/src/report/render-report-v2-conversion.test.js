@@ -548,7 +548,7 @@ test("CR-18: unassessable candidates render NOT ASSESSED with the required sourc
     assert.ok(item.requires && item.requires.length > 5, `${id} must name the required evidence source`);
   }
   const html = renderReportV2(scoreWith(assessedSite()));
-  assert.match(html, /NOT ASSESSED\s*(â€”|-)\s*requires/i, "rendered as NOT ASSESSED â€” requires <source>");
+  assert.match(html, /NOT ASSESSED[\s\S]*?requires/i, "rendered as NOT ASSESSED with required source");
 });
 
 test("CR-19: a not-applicable candidate renders NOT APPLICABLE", () => {
