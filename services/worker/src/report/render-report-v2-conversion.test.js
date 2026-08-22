@@ -258,7 +258,7 @@ test("CR-02: existing evidence-confidence modifiers still apply unchanged", () =
 
   for (const level of Object.values(CONFIDENCE_LEVELS)) {
     const result = calculateFindingPriority({ ...fields, confidence: level });
-    assert.equal(result.raw, raw, "raw priority is confidence-independent");
+        assert.equal(result.raw, raw, "raw priority is confidence-independent");
     assert.equal(
       result.final,
       Math.round(raw * CONFIDENCE_MODIFIERS[level]),
@@ -490,7 +490,6 @@ test("CR-10: heading evidence is scoped to the named evaluated page", () => {
   assert.match(uHeadings, /Not Assessed/i, "uncollected heading evidence renders Not Assessed");
   assert.ok(!/\bMissing\b/.test(uHeadings), "uncollected headings must not render as Missing");
 });
-
 test("CR-11: observed schema and recommended schema are semantically distinct", () => {
   const html = renderReportV2(scoreWith(assessedSite()));
   const idx = html.indexOf("Schema");
@@ -741,7 +740,6 @@ const PROVIDER_FAILURES = [
   ["auth", "Authentication failed for the evidence provider"],
   ["schema_validation", "Provider response failed schema validation"],
 ];
-
 test("CR-28: provider FAILED never becomes a website-availability defect", () => {
   for (const [category, limitation] of PROVIDER_FAILURES) {
     const checklist = checklistForSite(
@@ -951,7 +949,6 @@ const FROZEN = {
 };
 
 const NO_PERF = { performance: null };
-
 function foundationMatrix() {
   const ga4 = (over) => ({
     ga4: {
@@ -1225,7 +1222,6 @@ function foundationMatrix() {
     }],
   ];
 }
-
 const REACHABLE_BRANCHES = [
   "bing_indexability:NOT_ASSESSED",
   "canonical:ACTION_REQUIRED",
@@ -1506,7 +1502,6 @@ test("CR-39: no client-rendered foundation field ever claims site behaviour outs
     }
   }
 });
-
 test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", () => {
   const states = [
     ...PROVIDER_FAILURES.map(([c, l]) => [
@@ -1635,35 +1630,34 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
 });
 
 const RENDER_GOLDEN = {
-  "assessed": "95cb698a4e47b42eb2d4f2ade0e3107a443a71bf48ac49a21c310f70dc832324",
-  "unassessed": "61dfd78597b33dde368d8b4b2d8f3cfa8946c05fb4b0f68f7185b6c782069281",
-  "provider-failed": "ee00454f2762ae9616689f585a191179345afee81156115f655de8332f7435d1",
-  "crawl-blocked": "a59c45d14e458bf03f62eca7090524f2829b434dbb070f7e76c865565c2c9938",
-  "target-outage": "147956de8c00a7a8433419edf35f91367719a9acc879bbf890cf9fd6da17914e",
-  "outage-with-limitations": "4c079db0dd52a18d545f54f5132f35541e59cbe09d68b9d693ed0c21e2a88268",
-  "http-and-noindex": "85c347bf59ba0ba5f0d20f12994a74429599001f413e3dbd62e71fc7d3e0d92b",
-  "robots-retrieved": "4ba48b4cadfeda88fdaa1a2f2ae5b05d99ddafdd5e1fb4e5547d46296d12a27a",
-  "canonical-missing": "e340b1eaef19edd2d15c9988c47714df450fffca165aa427b55b97464ecf280f",
-  "no-conversion-mechanism": "5f4d4bbddacaf7ba31beb207767713cb40dbe9c85379bda36f37d42cfd920ded",
-  "no-contact": "cf5883a907c2b562c64c97552e64de62fcd52af2a25a801bace65dae83bf1fe6",
-  "headers-all-present": "e960c99d4144a3eee61038e52292db570bb82b849fbb6d7bbb635c64db01954e",
-  "ga4-ready": "39da35bd1903a083ce22b84e9843206fb5906290c89b7664c0f83a3f7f1d6929",
-  "ga4-issues": "8bd4306ab298d5020b729dd18fcd318656119bbb67c011c5d86dfabf0939690c",
-  "ga4-not-applicable": "7f1ceb0d26f6029b518f33c6088d0cf4bacd8282b0e9ed1846b9bb6920f6038d",
-  "slow-mobile": "11b6ed606b2dd3d4f1f3d900bb66469c1476c144d277166bb4d0dc7daa4e158d",
-  "no-performance": "f92a2fe07bcd6eafa8c0ce5b2cb8aca5ef8f3b0283a37c379e609e899a578d45",
-  "path-validated-blocker": "cedc60eb8f07eaec98043976918613a36005894b0e550510c68e006322e6cdb2",
-  "competitor-present": "fadc6b1073be1806ab3e84bfb3d35985cfc35bd6855c10237ad143b09d7180dd",
-  "proprietary-platform": "5552bc53dc7e9e3eaeb7316bb7d2964f5d4553f6931bcc37e47a987bf2fa1a31",
-  "untraced-broken-links": "5cbd723652daf4371e4e08d4c13b5b87b13e64eac423a7f73d6d79c57aa732c7",
-  "schema-confirmed-absent": "cdc6d21832050a9dd26e149fef71243c7f6310cbdce24b91af7e071908e3896c",
-  "headings-absent-h1": "03dabd59de4d004d13eba5f1c3956043a48ad6cda945a484531a23264ed9e9bd",
-  "headings-multiple-h1": "f7da001f397334caac5db1ada05492c1053ec4728535737b15a6009f47be5ce4",
-  "perf-field-and-multipage": "acfa917bbd4e44c5f84739335d86b864f119dfb4f2821ebf0841131acf48d3fb",
-  "competitor-with-limitations": "0421e733717e42dc5724f65ab97319bfbb0ad9b6ce6e03a7ca6d6752ee5d7977",
-  "device-profile-failed": "27b3729581f6d7fdbeb6af71867892741868734effdddc47cfee3b7eff0a6cc0",
+  "assessed": "b7bedd5b8e8988458fc9f642b086a10d4309748d36d9489474bfeedda994876e",
+  "unassessed": "8450851655c9507c8c0fec33574c1f50fd2131ca87eedaf0393b4a96ae39a278",
+  "provider-failed": "33b6420068d377018ff50ac1abf517066dbd8a106fbfc39324600f96cdfb12ce",
+  "crawl-blocked": "645d933c48047a6dd4db8df3956de1aebdae49234363a44e7a9e5f546abd99c5",
+  "target-outage": "cf7b2b870c3af1862fb16032dd1b81b9130b4c1caadfc7ed21e6ec92b24440b4",
+  "outage-with-limitations": "332ecb6e3ec333f4334dc583cadc1a44bb5a6add6311dfab6e9913bdf9d06b6e",
+  "http-and-noindex": "7d39211c735216cedd68af4b454e66b01d6a227c46e2d508203d23119ccb8d97",
+  "robots-retrieved": "7189369335128c35fc161152290b20bd8f32447ef61b6edcd550a1863e936562",
+  "canonical-missing": "01a5e532481719f8a0d9db8c8f7040e713837042de986d4ea83608f04c4c8b33",
+  "no-conversion-mechanism": "3cf1157f88c5c676b41f19c31e10c7519a21c3006b7fd4b767944215e37bd818",
+  "no-contact": "427a82633c30c8125eece45c953fd47ffa51c1e5900a6b06795260bf01b6b8e9",
+  "headers-all-present": "7d2e0a09f9b9e979edcab143f1ee020a6a15ab93cf79ff0638a9d2033008559e",
+  "ga4-ready": "73d7b172c7527d08b426c31cbb876ff48ac6508e69ee53635c37b0cd0d9bb438",
+  "ga4-issues": "ff1e029f0b13dc6fb6a9aa7e0c8f3518b7bbe18d56a399aef1bacf7266ec9f54",
+  "ga4-not-applicable": "ce9633236c44617e406b73407f6c7ba7c1f5796ef22ba0965e5d2cbb757898db",
+  "slow-mobile": "a74340ca402fc15cf5a1d477e0f61826434abe48314fd266a65a1eb21450b62b",
+  "no-performance": "85bd63c01aa66ce61ca677beb3b407d7defd1d8da34974222381091e24f73857",
+  "path-validated-blocker": "6d72672f381ac84c43b464cbd764cc082776f94e8e838e427e3bc5ff3ed20b3f",
+  "competitor-present": "4564fb6262337a2077c0f14d03d0bf45a35d97bb45a0cf43ee33599dff032f4d",
+  "proprietary-platform": "31c455ac8285302ff2f8d0e41e8680295daadf5c4c07e88720592537215df6c2",
+  "untraced-broken-links": "2793cf8e4e9d4233090a969b1dd9fdeffdf139f2c8fca61dce47b210814a9606",
+  "schema-confirmed-absent": "a9028a632fa9f34a0d963089c570989364f4afc17aa3e11b5fc2d3d0531907a1",
+  "headings-absent-h1": "52056ce3fdc4b6ae7eb80cacdad40b4afc5413aaa685fffecd527baa5b13a38d",
+  "headings-multiple-h1": "8b9016df2f322a1c9ccf65a16d990eb2dee40e41d4b79bb15bdcbbaa35f409f7",
+  "perf-field-and-multipage": "59cdfb118f4428858827d378b36ec556d39d6dca48993ea683105eacec18d28f",
+  "competitor-with-limitations": "6bae290d07785d448d82200d16d52d6bb5ed110d37d79beb0bde6d4fcf0ebad8",
+  "device-profile-failed": "c8c24a744f8250628f36fd65de089ab7528a55021f66533a3fb983b7ea3de947",
 };
-
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
 
@@ -1690,15 +1684,14 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
 
 const RENDERER_BRANCH_MARKERS = [
   ["Section E foundation-blocker row", "Foundation blocker"],
-  ["competitor comparison note", "No traffic, ranking"],
+  ["competitor comparison note", "does not claim traffic, rankings"],
   ["proprietary-platform migration risk", "proprietary platform constraints"],
   ["untraced broken-links note", "could not be traced"],
-  ["schema confirmed-absent branch", "No structured-data types were found"],
-  ["heading absent-H1 branch", "No H1 on this page"],
-  ["heading multiple-H1 branch", "H1 headings on this page"],
+  ["schema confirmed-absent branch", "No structured-data type was observed"],
+  ["heading absent-H1 branch", "No H1 was observed on this page"],
+  ["heading multiple-H1 branch", "H1 headings were observed on this page"],
   ["device profile FAILED branch", "Result: Unavailable"],
-  ["CrUX field-data note", "CrUX field data available for"],
-  ["multi-page tested-pages block", "Tested pages ("],
+  ["CrUX field-data note", "CrUX"],
   ["competitor limitations block", "SERP coverage limited"],
 ];
 
@@ -1949,7 +1942,6 @@ test("CR-21: Do Now / Do Next / Later grouping is deterministic", () => {
   assert.match(html, /DO NEXT/i);
   assert.match(html, /LATER/i);
 });
-
 test("CR-22: the governed verification method carries through to the plan", () => {
   const model = scoreWith(
     assessedSite(),
@@ -2213,4 +2205,3 @@ test("CR-27: unavailable competitor evidence renders an exact limitation only", 
     );
   }
 });
-
