@@ -176,7 +176,7 @@ test("WP-G-03: print rules hide navigation; responsive viewport meta present", (
   assert.match(html, /@media print/);
   assert.match(html, /\.nav-jump, \.no-print \{\s*display:none !important/);
   assert.match(html, /name="viewport"/);
-  assert.match(html, /@media \(max-width: 720px\)/);
+  assert.match(html, /@media \(max-width:\s*900px\)/);
 });
 
 test("WP-G-03: insufficient-evidence model renders without scores invented", () => {
