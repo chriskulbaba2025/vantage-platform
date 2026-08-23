@@ -37,7 +37,7 @@ import { selectImportantPages, normalizeUrl } from "../../evidence/important-pag
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.2.0";
+const ADAPTER_VERSION = "1.2.1";
 
 // ---------------------------------------------------------------------------
 // Default configuration (PRD v3.0 §8.4 + PRYSM-NEXT-01 WP-B)
@@ -466,10 +466,42 @@ function extractTextFromContentParts(parts) {
 /** EVIDENCE-MATRIX: content.body */
 function normalizeContentParsing(raw) {
   const out = [];
+
+  function addParts(parts, bucket, seen) {
+    if (!Array.isArray(parts)) return;
+
+    for (const part of parts) {
+      const rawText =
+        typeof part === "string"
+          ? part
+          : part?.text ?? part?.content ?? "";
+
+      const text = String(rawText)
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!text || seen.has(text)) continue;
+
+      seen.add(text);
+      bucket.push(text);
+    }
+  }
+
   for (const res of raw?.results || []) {
     if (!res?.url) continue;
-    const item = res.result || (res.items && res.items[0]) || null;
-    if (!item) {
+
+    const productionItem =
+      Array.isArray(res.result?.items) && res.result.items.length > 0
+        ? res.result.items[0]
+        : null;
+
+    const legacyItem =
+      productionItem
+      || (Array.isArray(res.items) ? res.items[0] : null)
+      || res.result
+      || null;
+
+    if (!legacyItem) {
       out.push({
         url: res.url,
         wordCount: null,
@@ -480,26 +512,57 @@ function normalizeContentParsing(raw) {
       });
       continue;
     }
-    const main = extractTextFromContentParts(item.main_content);
-    const secondary = extractTextFromContentParts(item.secondary_content);
-    const fullText = `${main} ${secondary}`.trim();
-    const wordCount = item.plain_text_word_count
-      ?? item.word_count
+
+    const mainFragments = [];
+    const secondaryFragments = [];
+    const seen = new Set();
+
+    const pageContent = legacyItem.page_content || null;
+
+    if (pageContent) {
+      for (const topic of pageContent.main_topic || []) {
+        addParts(topic?.primary_content, mainFragments, seen);
+        addParts(topic?.secondary_content, mainFragments, seen);
+      }
+
+      for (const topic of pageContent.secondary_topic || []) {
+        addParts(topic?.primary_content, secondaryFragments, seen);
+        addParts(topic?.secondary_content, secondaryFragments, seen);
+      }
+    } else {
+      // Preserve the older fixture/legacy response shape.
+      addParts(legacyItem.main_content, mainFragments, seen);
+      addParts(legacyItem.secondary_content, secondaryFragments, seen);
+    }
+
+    const main = mainFragments.join(" ");
+    const secondary = secondaryFragments.join(" ");
+    const fullText = [main, secondary].filter(Boolean).join(" ").trim();
+
+    const wordCount =
+      legacyItem.plain_text_word_count
+      ?? legacyItem.word_count
+      ?? pageContent?.plain_text_word_count
+      ?? pageContent?.word_count
       ?? (fullText ? fullText.split(/\s+/).length : null);
+
     const sentimentScore =
-      typeof item.sentiment_score === "number" ? item.sentiment_score : null;
+      typeof legacyItem.sentiment_score === "number"
+        ? legacyItem.sentiment_score
+        : typeof pageContent?.sentiment_score === "number"
+          ? pageContent.sentiment_score
+          : null;
+
     out.push({
       url: res.url,
       wordCount,
       mainContentChars: main.length || null,
-      hasMainContent: main.length > 0,
+      hasMainContent: fullText.length > 0,
       sentimentScore,
-      // CRIT defect 2a — the parsed text is evidence, not waste: retained
-      // (bounded) so trust/offer signal detection can run on key pages
-      // where the pages endpoint provides no body content.
       text: fullText.slice(0, 20000),
     });
   }
+
   return out;
 }
 

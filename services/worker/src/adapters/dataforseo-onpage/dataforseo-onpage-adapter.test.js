@@ -2879,7 +2879,6 @@ test("WP-B-10: raw artifact payload includes deep acquisition responses with val
   assert.ok(payload.resources, "artifact must preserve resources raw");
   assert.ok(payload.microdata, "artifact must preserve microdata raw");
   assert.equal(payload.adapterVersion, ADAPTER_VERSION);
-  assert.equal(payload.adapterVersion, "1.2.0");
 
   const recomputed = createHash("sha256")
     .update(result._rawArtifactBytes)
