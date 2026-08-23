@@ -25,9 +25,11 @@ import {
 import { validateWriterOutput } from "./writer-output.js";
 import { validateJudgeResponse } from "./judge-contract.js";
 import { renderGovernedNarrativeReportV2 } from "../report/render-narrative-v2.js";
+import { REPORT_V2_VIEWER_VERSION } from "../report/render-report-v2.js";
 
 const T = LIFECYCLE_STATE;
 const NARRATIVE_V2_VERSION = "2.0.0";
+const UAT_RERENDER_AUDIT_ID = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
 
 function defaultClock() {
   return { now: () => new Date().toISOString() };
@@ -249,6 +251,141 @@ function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, de
     contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
     competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
   };
+}
+
+/**
+ * PRYSM-V2-UAT-RERENDER-01 — read-only Viewer v2.2.0 UAT renderer.
+ *
+ * Reads only already-persisted governed inputs and renders the current
+ * report HTML in memory.
+ *
+ * It does not call providers, Writer/Judge/model executors, write
+ * artifacts, transition lifecycle state, approve, or publish.
+ */
+export async function renderNarrativeV2UatFromPersistedArtifacts({
+  auditRequest,
+  artifactStore,
+  validateContract,
+}) {
+  if (
+    !auditRequest ||
+    auditRequest.auditId !== UAT_RERENDER_AUDIT_ID
+  ) {
+    throw new Error(
+      "PRYSM-V2-UAT-RERENDER-01 is authorized only for the governed UAT audit",
+    );
+  }
+
+  if (!isNarrativeV2Request(auditRequest)) {
+    throw new Error(
+      "PRYSM-V2-UAT-RERENDER-01 requires Narrative v2 persisted inputs",
+    );
+  }
+
+  if (!isReportDesignV2(auditRequest.report?.designVersion)) {
+    throw new Error(
+      "PRYSM-V2-UAT-RERENDER-01 requires report design 2.0.0",
+    );
+  }
+
+  if (
+    !artifactStore ||
+    typeof artifactStore.get !== "function"
+  ) {
+    throw new Error(
+      "PRYSM-V2-UAT-RERENDER-01 requires a readable governed artifact store",
+    );
+  }
+
+  if (typeof validateContract !== "function") {
+    throw new Error(
+      "PRYSM-V2-UAT-RERENDER-01 requires contract validation",
+    );
+  }
+
+  const [writerInput, orchestrationResult, inputs] =
+    await Promise.all([
+      loadJsonArtifact({
+        artifactStore,
+        auditRequest,
+        artifactName: "narrative-v2/writer-input.json",
+      }),
+      loadJsonArtifact({
+        artifactStore,
+        auditRequest,
+        artifactName: "narrative-v2/orchestration.json",
+      }),
+      loadScoredInputs({
+        artifactStore,
+        auditRequest,
+        validateContract,
+      }),
+    ]);
+
+  const persistedValidation =
+    validatePersistedReleaseCandidate(
+      writerInput,
+      orchestrationResult,
+    );
+
+  if (!persistedValidation.valid) {
+    throw new Error(
+      `PRYSM-V2-UAT-RERENDER-01 persisted release candidate invalid: ${persistedValidation.errors.join(
+        "; ",
+      )}`,
+    );
+  }
+
+  const model = buildV2Model({
+    auditRequest,
+    scoreSet: inputs.scoreSet,
+    findings: inputs.findings,
+    capabilityEvidence: inputs.capabilityEvidence,
+    decisionEvidence: inputs.decisionEvidence,
+  });
+
+  const gate = runFinalizationGate(
+    {
+      ...model,
+      findings: inputs.findings,
+    },
+    inputs.decisionEvidence,
+  );
+
+  if (!gate.passed) {
+    const message = (gate.errors || [])
+      .map((error) => error.message)
+      .join("; ");
+
+    throw new Error(
+      `PRYSM-V2-UAT-RERENDER-01 finalization gate failed: ${message}`,
+    );
+  }
+
+  const html = renderGovernedNarrativeReportV2({
+    model,
+    writerInput,
+    orchestrationResult,
+  });
+
+  if (
+    !/^<!doctype html>/i.test(html) ||
+    !html.includes('id="narrative-layer"') ||
+    !html.includes(
+      `data-viewer-version="${REPORT_V2_VIEWER_VERSION}"`,
+    )
+  ) {
+    throw new Error(
+      `PRYSM-V2-UAT-RERENDER-01 did not produce governed Viewer v${REPORT_V2_VIEWER_VERSION} HTML`,
+    );
+  }
+
+  return Object.freeze({
+    auditId: auditRequest.auditId,
+    viewerVersion: REPORT_V2_VIEWER_VERSION,
+    contentType: "text/html; charset=utf-8",
+    bytes: Buffer.from(html, "utf8"),
+  });
 }
 
 async function runNarrativeV2FromScored({

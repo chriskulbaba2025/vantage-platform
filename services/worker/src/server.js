@@ -407,6 +407,83 @@ export function createRequestHandler({
           return sendRouteError(res, err);
         }
       }
+      // PRYSM-V2-UAT-RERENDER-01 — bounded read-only Viewer v2.2.0 UAT render.
+      if (
+        req.method === "GET" &&
+        url.pathname === "/api/v1/audits/d3b4cc62-9217-4c0b-b169-e24beb46a79c/uat-render"
+      ) {
+        const auditId = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
+
+        if (
+          !auditService ||
+          typeof auditService.getNarrativeV2UatRender !== "function"
+        ) {
+          return send(res, 501, { error: "UAT rerender not configured" });
+        }
+
+        const access = await authorizeAuditAccess(req, auditId);
+        if (access.status === 401) {
+          return send(res, 401, { error: "Unauthorized" });
+        }
+        if (access.status === 404) {
+          return send(res, 404, { error: "Audit not found" });
+        }
+
+        let currentState;
+        try {
+          const status = await auditService.getAuditStatus(
+            auditId,
+            access.tenantId,
+          );
+          currentState = status?.state || null;
+        } catch {
+          return send(res, 404, { error: "Audit not found" });
+        }
+
+        if (!currentState) {
+          return send(res, 404, { error: "Audit not found" });
+        }
+
+        const reportAuth = authorizeReportAccess({
+          auth: access.auth,
+          auditTenant: access.tenantId,
+          state: currentState,
+        });
+
+        if (!reportAuth.allowed) {
+          return send(res, reportAuth.status, {
+            error: reportAuth.reason,
+            code: reportAuth.code,
+          });
+        }
+
+        if (!reportPageLimiter.hit(`report:${access.tenantId}`)) {
+          return send(res, 429, {
+            error: "Too many report requests — try again later",
+            code: "RATE_LIMITED",
+          });
+        }
+
+        try {
+          const result = await auditService.getNarrativeV2UatRender(
+            auditId,
+            reportAuth.tenantId,
+          );
+
+          const payload = result.bytes;
+
+          res.writeHead(200, {
+            "content-type": result.contentType,
+            "content-length": payload.length,
+            "cache-control": "no-store",
+            "x-prysm-viewer-version": result.viewerVersion,
+          });
+
+          return res.end(payload);
+        } catch (err) {
+          return sendRouteError(res, err);
+        }
+      }
 
       // GET /api/v1/audits/:auditId — audit status
       const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/resume|\/report\/(.+))?$/);

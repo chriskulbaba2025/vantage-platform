@@ -7,7 +7,10 @@
 
 import { randomUUID } from "node:crypto";
 import { createAuditOrchestrator } from "../orchestration/audit-orchestrator.js";
-import { createNarrativeV2ProductionPath } from "../narrative-v2/production-path.js";
+import {
+  createNarrativeV2ProductionPath,
+  renderNarrativeV2UatFromPersistedArtifacts,
+} from "../narrative-v2/production-path.js";
 import { createNarrativeV2LiveBinding } from "../narrative-v2/live-binding.js";
 import { validateNarrativeConfiguration } from "../narrative/narrative-configuration.js";
 import { persistAuditRequest, loadAuditRequest } from "../orchestration/audit-request-persistence.js";
@@ -496,7 +499,49 @@ export function createProductionRuntime({
 
     return Object.freeze(recovered);
   }
+  async function getNarrativeV2UatRender(auditId, tenantId) {
+    const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
 
+    if (!meta) {
+      throw Object.assign(
+        new Error("Audit not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const current = await lifecycleService.currentState(auditId, tenantId).catch(() => null);
+    const clientId =
+      current?.clientId ||
+      meta.client_id ||
+      meta.clientId ||
+      "";
+
+    if (!clientId) {
+      throw Object.assign(
+        new Error("Audit client scope not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const auditRequest = await loadAuditRequest({
+      store: artifactStore,
+      scope: { tenantId, clientId, auditId },
+      validateContract: runtimeValidateContract,
+    });
+
+    if (!auditRequest) {
+      throw Object.assign(
+        new Error("Persisted AuditRequest not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    return renderNarrativeV2UatFromPersistedArtifacts({
+      auditRequest,
+      artifactStore,
+      validateContract: runtimeValidateContract,
+    });
+  }
   async function getAuditStatus(auditId, tenantId) {
     const status = await baseAuditService.getAuditStatus(auditId, tenantId);
     if (!status) return null;
@@ -701,6 +746,7 @@ export function createProductionRuntime({
     ...baseAuditService,
     createAudit,
     getAuditStatus,
+    getNarrativeV2UatRender,
     submitReview,
     approveAudit,
     resumeAudit,
