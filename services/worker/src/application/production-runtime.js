@@ -201,14 +201,14 @@ export function createProductionRuntime({
       const sourceTimeouts = {
         "dataforseo-onpage": config.onpagePollTimeoutMs || 600_000,
         "pagespeed":          config.pagespeedTimeoutMs || 120_000,
-        "dataforseo-serp":    config.serpTimeoutMs || 60_000,
+        "dataforseo-serp":    config.serpTimeoutMs || 1_800_000,
         "backlinks":          config.backlinksTimeoutMs || 60_000,
         "ga4":                config.ga4TimeoutMs || 60_000,
         "gsc":                config.gscTimeoutMs || 60_000,
       };
       return {
         timeoutMs: sourceTimeouts[source] || 60_000,
-        maxAttempts: 3,
+        maxAttempts: source === "dataforseo-serp" ? 1 : 3,
         retryable: (err) => {
           if (err?.category === "timeout") return true;
           if (err?.category === "network" && err?.statusCode >= 500) return true;

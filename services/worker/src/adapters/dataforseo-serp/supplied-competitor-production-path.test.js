@@ -109,8 +109,8 @@ async function executeControlled(request) {
   });
 }
 
-test("PC-02/06: production adapter v1.1.0 benchmarks supplied URL with zero DataForSEO calls when SERP is not connected", async () => {
-  assert.equal(ADAPTER_VERSION, "1.1.0");
+test("PC-02/06: production adapter v1.2.0 benchmarks supplied URL with zero DataForSEO calls when SERP is not connected", async () => {
+  assert.equal(ADAPTER_VERSION, "1.2.0");
   const { fetchImpl, calls } = directCrawlFetch();
 
   const result = await withDfsCredentials(null, null, () => executeControlled(auditRequest(fetchImpl)));
