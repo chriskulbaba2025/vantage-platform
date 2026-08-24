@@ -11,7 +11,6 @@
  * API: POST /v3/serp/google/organic/live/advanced
  */
 
-import { withTimeout } from "../../utils.js";
 import { normalizeLanguage } from "./locale-normalizer.js";
 import { resolveLocation } from "./location-resolver.js";
 
@@ -20,6 +19,24 @@ const SERP_ENDPOINT = `${DATAFORSEO_BASE}/serp/google/organic/live/advanced`;
 
 const API_SUCCESS_CODE = 20000;
 const TASK_SUCCESS_CODES = Object.freeze(new Set([20000]));
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 120000;
+const MAX_TRANSIENT_RETRIES = 1;
+
+const RETRYABLE_TRANSPORT_CODES = Object.freeze(new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EAI_AGAIN",
+  "ENETDOWN",
+  "ENETRESET",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+]));
 
 const SERP_ERROR_TYPE = Object.freeze({
   CONFIGURATION: "CONFIGURATION",
@@ -92,12 +109,15 @@ function inferPageType(item) {
 
 function detectSchema(item) {
   if (!item) return [];
+
   const signals = [];
+
   if (item.rich_snippet?.type) signals.push("rich_snippet");
   if (item.featured_snippet) signals.push("featured_snippet");
   if (item.sitelinks?.length) signals.push("sitelinks");
   if (item.reviews?.length) signals.push("reviews");
   if (item.rating) signals.push("rating");
+
   return signals;
 }
 
@@ -114,6 +134,7 @@ function validateApiResponse(data) {
   if (data.status_code !== API_SUCCESS_CODE) {
     const code = data.status_code;
     const msg = data.status_message || "missing top-level status code";
+
     return {
       valid: false,
       error: `SERP API top-level status ${code != null ? code : "missing"}: ${msg}`,
@@ -123,6 +144,7 @@ function validateApiResponse(data) {
   }
 
   const tasks = data.tasks || [];
+
   if (tasks.length === 0) {
     return {
       valid: false,
@@ -135,8 +157,10 @@ function validateApiResponse(data) {
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
     const taskCode = task.status_code;
+
     if (taskCode == null) {
       const fallbackMsg = "missing task status code";
+
       return {
         valid: false,
         error: `SERP task ${i} failed: ${fallbackMsg}`,
@@ -150,8 +174,10 @@ function validateApiResponse(data) {
         },
       };
     }
+
     if (!TASK_SUCCESS_CODES.has(taskCode)) {
       const taskMsg = task.status_message || "unknown task error";
+
       return {
         valid: false,
         error: `SERP task ${i} failed: status_code=${taskCode}, message="${taskMsg}"`,
@@ -176,44 +202,232 @@ function validateApiResponse(data) {
 }
 
 function classifyException(error) {
-  const message = String(error?.message || error || "Unknown SERP request error");
-  const isTimeout = error?.name === "AbortError" || /timed?\s*out|timeout/i.test(message);
+  const message = String(
+    error?.message || error || "Unknown SERP request error",
+  );
+
+  const isTimeout =
+    error?.name === "AbortError" ||
+    error?.name === "TimeoutError" ||
+    /timed?\s*out|timeout/i.test(message);
+
   return {
     error: message,
-    errorType: isTimeout ? SERP_ERROR_TYPE.TIMEOUT : SERP_ERROR_TYPE.TRANSPORT_OR_PARSE,
+    errorType: isTimeout
+      ? SERP_ERROR_TYPE.TIMEOUT
+      : SERP_ERROR_TYPE.TRANSPORT_OR_PARSE,
   };
 }
 
+function createTimeoutError(label, timeoutMs) {
+  const error = new Error(`${label} timed out after ${timeoutMs}ms`);
+  error.name = "TimeoutError";
+  return error;
+}
+
+function createAbortError(label) {
+  const error = new Error(`${label} aborted`);
+  error.name = "AbortError";
+  return error;
+}
+
+function callerAbortReason(signal, label) {
+  if (signal?.reason instanceof Error) {
+    return signal.reason;
+  }
+
+  return createAbortError(label);
+}
+
+function normalizeRequestTimeoutMs(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+
+  return Math.max(1, Math.floor(value));
+}
+
+function normalizeRetryLimit(value) {
+  if (!Number.isInteger(value)) {
+    return MAX_TRANSIENT_RETRIES;
+  }
+
+  return Math.max(0, Math.min(MAX_TRANSIENT_RETRIES, value));
+}
+
+/**
+ * Build a request-scoped AbortSignal.
+ *
+ * Two cancellation sources are combined:
+ *
+ * 1. the caller/orchestration signal;
+ * 2. the SERP request-local hard timeout.
+ *
+ * The live fetch receives this signal directly. A retry cannot begin until
+ * the previous fetch has settled/rejected, so provider requests remain
+ * sequential rather than overlapping.
+ */
+function createRequestAbortContext(parentSignal, timeoutMs, label) {
+  const controller = new AbortController();
+
+  let timedOut = false;
+  let callerAborted = false;
+  let timeoutHandle = null;
+
+  const abortFromCaller = () => {
+    callerAborted = true;
+
+    if (!controller.signal.aborted) {
+      controller.abort(callerAbortReason(parentSignal, `${label} by caller`));
+    }
+  };
+
+  if (parentSignal?.aborted) {
+    abortFromCaller();
+  } else if (typeof parentSignal?.addEventListener === "function") {
+    parentSignal.addEventListener("abort", abortFromCaller, { once: true });
+  }
+
+  if (!controller.signal.aborted) {
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+
+      if (!controller.signal.aborted) {
+        controller.abort(createTimeoutError(label, timeoutMs));
+      }
+    }, timeoutMs);
+
+    if (typeof timeoutHandle?.unref === "function") {
+      timeoutHandle.unref();
+    }
+  }
+
+  return {
+    signal: controller.signal,
+
+    didTimeout() {
+      return timedOut;
+    },
+
+    didCallerAbort() {
+      return callerAborted;
+    },
+
+    cleanup() {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
+
+      if (typeof parentSignal?.removeEventListener === "function") {
+        parentSignal.removeEventListener("abort", abortFromCaller);
+      }
+    },
+  };
+}
+
+function isRetryableHttpStatus(status) {
+  return Number.isInteger(status) && status >= 500 && status <= 599;
+}
+
+function isRetryableTransportError(error) {
+  if (!error) return false;
+
+  const name = String(error.name || "");
+  if (name === "AbortError" || name === "TimeoutError") {
+    return true;
+  }
+
+  const code = String(
+    error.code ||
+    error.cause?.code ||
+    "",
+  ).toUpperCase();
+
+  if (RETRYABLE_TRANSPORT_CODES.has(code)) {
+    return true;
+  }
+
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  const message = String(error.message || error);
+
+  return /fetch failed|network|socket|connection reset|connection refused|temporary|econn|eai_again|enet|ehost|timed?\s*out|timeout/i.test(
+    message,
+  );
+}
+
+function buildFailureResult({
+  error,
+  errorType,
+  errorStatusCode = null,
+  rawTaskId = null,
+  taskError = null,
+  normalizedLanguage,
+  normalizedLocation,
+}) {
+  return {
+    items: [],
+    rawTaskId,
+    error,
+    errorType,
+    errorStatusCode,
+    ...(taskError ? { taskError } : {}),
+    normalizedLanguage,
+    normalizedLocation,
+  };
+}
 export async function querySerp(keyword, options = {}) {
   const login = options.login || "";
   const password = options.password || "";
   const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const callerSignal = options.signal || null;
+
+  const requestTimeoutMs = normalizeRequestTimeoutMs(
+    options.requestTimeoutMs,
+  );
+
+  const maxTransientRetries = normalizeRetryLimit(
+    options.maxTransientRetries,
+  );
 
   const langResult = normalizeLanguage(options.language || "en");
   const locResult = resolveLocation(options.location || "Canada");
 
   if (!login || !password) {
-    return {
-      items: [],
-      rawTaskId: null,
+    return buildFailureResult({
       error: "DataForSEO credentials not configured",
       errorType: SERP_ERROR_TYPE.CONFIGURATION,
-      errorStatusCode: null,
       normalizedLanguage: langResult,
       normalizedLocation: locResult,
-    };
+    });
   }
 
   if (locResult.error) {
-    return {
-      items: [],
-      rawTaskId: null,
+    return buildFailureResult({
       error: `Location resolution failed: ${locResult.error}`,
       errorType: SERP_ERROR_TYPE.LOCATION,
-      errorStatusCode: null,
       normalizedLanguage: langResult,
       normalizedLocation: locResult,
-    };
+    });
+  }
+
+  if (callerSignal?.aborted) {
+    const classified = classifyException(
+      callerAbortReason(
+        callerSignal,
+        `DataForSEO SERP request for "${keyword}"`,
+      ),
+    );
+
+    return buildFailureResult({
+      error: classified.error,
+      errorType: classified.errorType,
+      normalizedLanguage: langResult,
+      normalizedLocation: locResult,
+    });
   }
 
   const task = buildSerpTask(keyword, {
@@ -222,81 +436,225 @@ export async function querySerp(keyword, options = {}) {
     locationCode: locResult.locationCode,
   });
 
-  try {
-    const response = await withTimeout(
-      fetchImpl(SERP_ENDPOINT, {
+  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    if (callerSignal?.aborted) {
+      const classified = classifyException(
+        callerAbortReason(
+          callerSignal,
+          `DataForSEO SERP request for "${keyword}"`,
+        ),
+      );
+
+      return buildFailureResult({
+        error: classified.error,
+        errorType: classified.errorType,
+        normalizedLanguage: langResult,
+        normalizedLocation: locResult,
+      });
+    }
+
+    const requestLabel =
+      `DataForSEO SERP request for "${keyword}"`;
+
+    const abortContext = createRequestAbortContext(
+      callerSignal,
+      requestTimeoutMs,
+      requestLabel,
+    );
+
+    let phase = "fetch";
+
+    try {
+      const response = await fetchImpl(SERP_ENDPOINT, {
         method: "POST",
         headers: {
           authorization: basicAuth(login, password),
           "content-type": "application/json",
         },
         body: JSON.stringify([task]),
-      }),
-      45000,
-      `DataForSEO SERP: ${keyword}`,
-    );
+        signal: abortContext.signal,
+      });
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      phase = "body";
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+
+        if (callerSignal?.aborted) {
+          throw callerAbortReason(callerSignal, requestLabel);
+        }
+
+        const failure = buildFailureResult({
+          error: `SERP API ${response.status}: ${text.slice(0, 200)}`,
+          errorType: SERP_ERROR_TYPE.HTTP,
+          errorStatusCode: response.status,
+          normalizedLanguage: langResult,
+          normalizedLocation: locResult,
+        });
+
+        if (
+          isRetryableHttpStatus(response.status) &&
+          attempt < maxTransientRetries &&
+          !callerSignal?.aborted
+        ) {
+          continue;
+        }
+
+        return failure;
+      }
+
+      phase = "parse";
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch (error) {
+        /*
+         * Invalid provider JSON is not blindly retried. A SyntaxError means
+         * the HTTP request completed but the payload could not be parsed.
+         *
+         * A TypeError or other transport-style body failure may still be
+         * retried by the outer catch below.
+         */
+        if (error instanceof SyntaxError) {
+          const classified = classifyException(error);
+
+          return buildFailureResult({
+            error: classified.error,
+            errorType: classified.errorType,
+            normalizedLanguage: langResult,
+            normalizedLocation: locResult,
+          });
+        }
+
+        throw error;
+      }
+
+      if (callerSignal?.aborted) {
+        throw callerAbortReason(callerSignal, requestLabel);
+      }
+
+      phase = "validate";
+
+      const validation = validateApiResponse(data);
+
+      /*
+       * Provider/API/task-level failures are authoritative responses, not
+       * transport failures.
+       *
+       * In particular DataForSEO task status 40101 is intentionally not
+       * retried here. Retrying the full paid request would duplicate work
+       * after DataForSEO has already attempted the search internally.
+       */
+      if (!validation.valid) {
+        return buildFailureResult({
+          rawTaskId: validation.taskError?.taskId || null,
+          error: validation.error,
+          errorType: validation.errorType,
+          errorStatusCode: validation.statusCode,
+          taskError: validation.taskError || null,
+          normalizedLanguage: langResult,
+          normalizedLocation: locResult,
+        });
+      }
+
+      const serpTask = data.tasks[0];
+      const rawTaskId = serpTask.id || null;
+      const resultItems = serpTask.result?.[0]?.items || [];
+
+      const items = resultItems
+        .filter((item) => item.type === "organic")
+        .map((item) => normalizeSerpItem(
+          item,
+          keyword,
+          locResult.originalLocation || locResult.locationName,
+          langResult.originalLanguage || langResult.languageName,
+        ));
+
       return {
-        items: [],
-        rawTaskId: null,
-        error: `SERP API ${response.status}: ${text.slice(0, 200)}`,
-        errorType: SERP_ERROR_TYPE.HTTP,
-        errorStatusCode: response.status,
+        items,
+        rawTaskId,
+        error: null,
+        errorType: null,
+        errorStatusCode: null,
         normalizedLanguage: langResult,
         normalizedLocation: locResult,
       };
-    }
+    } catch (error) {
+      const callerAborted =
+        abortContext.didCallerAbort() ||
+        callerSignal?.aborted === true;
 
-    const data = await response.json();
-    const validation = validateApiResponse(data);
-    if (!validation.valid) {
-      return {
-        items: [],
-        rawTaskId: validation.taskError?.taskId || null,
-        error: validation.error,
-        errorType: validation.errorType,
-        errorStatusCode: validation.statusCode,
-        taskError: validation.taskError || null,
+      const localTimedOut = abortContext.didTimeout();
+
+      /*
+       * If our request-local timer caused the abort, normalize the error so
+       * the result deterministically records a timeout even when the fetch
+       * implementation returns a generic AbortError.
+       */
+      const effectiveError =
+        localTimedOut && !callerAborted
+          ? createTimeoutError(requestLabel, requestTimeoutMs)
+          : error;
+
+      const classified = classifyException(effectiveError);
+
+      /*
+       * Retry only an individual request that actually settled/rejected.
+       *
+       * Never retry:
+       * - after caller/orchestration cancellation;
+       * - after the single permitted transient retry;
+       * - provider/API/task validation failures;
+       * - deterministic JSON SyntaxError failures.
+       *
+       * Because this catch runs only after the awaited request has rejected,
+       * the next attempt cannot overlap this request.
+       */
+      const retryable =
+        !callerAborted &&
+        attempt < maxTransientRetries &&
+        (
+          localTimedOut ||
+          (
+            phase !== "validate" &&
+            isRetryableTransportError(error)
+          )
+        );
+
+      if (retryable) {
+        continue;
+      }
+
+      return buildFailureResult({
+        error: classified.error,
+        errorType: classified.errorType,
         normalizedLanguage: langResult,
         normalizedLocation: locResult,
-      };
+      });
+    } finally {
+      abortContext.cleanup();
     }
-
-    const serpTask = data.tasks[0];
-    const rawTaskId = serpTask.id || null;
-    const resultItems = serpTask.result?.[0]?.items || [];
-    const items = resultItems
-      .filter((item) => item.type === "organic")
-      .map((item) => normalizeSerpItem(
-        item,
-        keyword,
-        locResult.originalLocation || locResult.locationName,
-        langResult.originalLanguage || langResult.languageName,
-      ));
-
-    return {
-      items,
-      rawTaskId,
-      error: null,
-      errorType: null,
-      errorStatusCode: null,
-      normalizedLanguage: langResult,
-      normalizedLocation: locResult,
-    };
-  } catch (error) {
-    const classified = classifyException(error);
-    return {
-      items: [],
-      rawTaskId: null,
-      error: classified.error,
-      errorType: classified.errorType,
-      errorStatusCode: null,
-      normalizedLanguage: langResult,
-      normalizedLocation: locResult,
-    };
   }
+
+  /*
+   * Defensive fallback. The bounded loop above always returns, but keeping a
+   * deterministic failure protects callers if the retry boundary is changed
+   * incorrectly in the future.
+   */
+  return buildFailureResult({
+    error: `DataForSEO SERP request for "${keyword}" exhausted its request attempts`,
+    errorType: SERP_ERROR_TYPE.TRANSPORT_OR_PARSE,
+    normalizedLanguage: langResult,
+    normalizedLocation: locResult,
+  });
 }
 
-export { SERP_ERROR_TYPE, validateApiResponse, classifyException };
+export {
+  SERP_ERROR_TYPE,
+  validateApiResponse,
+  classifyException,
+  isRetryableHttpStatus,
+  isRetryableTransportError,
+};
