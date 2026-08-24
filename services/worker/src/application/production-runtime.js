@@ -199,16 +199,23 @@ export function createProductionRuntime({
       //   PageSpeed/Lighthouse typically completes in 30-60s
       //   API-based adapters (SERP, backlinks, GA4, GSC) complete faster
       const sourceTimeouts = {
-        "dataforseo-onpage": config.onpagePollTimeoutMs || 600_000,
+        // On-Page has a 30-minute provider poll budget inside the adapter
+        // and a separate 60-minute whole-source orchestration safety ceiling.
+        "dataforseo-onpage": config.onpagePollTimeoutMs || 3_600_000,
         "pagespeed":          config.pagespeedTimeoutMs || 120_000,
         "dataforseo-serp":    config.serpTimeoutMs || 1_800_000,
         "backlinks":          config.backlinksTimeoutMs || 60_000,
         "ga4":                config.ga4TimeoutMs || 60_000,
         "gsc":                config.gscTimeoutMs || 60_000,
       };
+
       return {
         timeoutMs: sourceTimeouts[source] || 60_000,
-        maxAttempts: source === "dataforseo-serp" ? 1 : 3,
+        maxAttempts:
+          source === "dataforseo-serp" ||
+          source === "dataforseo-onpage"
+            ? 1
+            : 3,
         retryable: (err) => {
           if (err?.category === "timeout") return true;
           if (err?.category === "network" && err?.statusCode >= 500) return true;

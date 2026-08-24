@@ -32,35 +32,180 @@ import {
   createDataforseoOnpageClient,
 } from "./dataforseo-onpage-client.js";
 import { selectImportantPages, normalizeUrl } from "../../evidence/important-page-selector.js";
+import { discoverSitemapFootprint } from "../../evidence/sitemap-footprint.js";
+import { analyzeProgrammaticSeo } from "../../evidence/programmatic-seo-analysis.js";
 
 // ---------------------------------------------------------------------------
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.2.2";
+const ADAPTER_VERSION = "1.3.0";
 
 // ---------------------------------------------------------------------------
-// Default configuration (PRD v3.0 §8.4 + PRYSM-NEXT-01 WP-B)
+// Default configuration (PRD v3.0 §8.4 + DQV-001 Track B)
 // ---------------------------------------------------------------------------
 
 const DEFAULTS = Object.freeze({
   maxPages: 500,
-  pollTimeoutMs: 600000,    // 10 minutes
-  pollIntervalMs: 10000,    // 10 seconds
+  pollTimeoutMs: 1800000,   // 30-minute provider poll budget
+  pollIntervalMs: 10000,
   enableJavascript: false,
   enableBrowserRendering: false,
   loadResources: true,
-  // EVIDENCE-MATRIX: schema.structured_data — microdata collection requires
-  // validate_micromarkup on the task (WP-B-02).
   validateMicromarkup: true,
-  // EVIDENCE-MATRIX: content.body — content parsing is enabled at task level
-  // but requests are scoped to the deterministic key-page set only (WP-B-08).
   enableContentParsing: true,
-  contentParsingPageLimit: 10,
+  contentParsingPageLimit: 20,
   redirectChainsPageLimit: 20,
   nonIndexableLimit: 1000,
   resourcesPageLimit: 10,
 });
+
+function syntheticUnavailableFootprint(targetUrl, limitation) {
+  const root = normalizeUrl(targetUrl);
+
+  return {
+    status: "UNAVAILABLE",
+    discoveredUrlCount: 0,
+    retainedUrlCount: 0,
+    sitemapDocumentCount: 0,
+    capped: false,
+    incomplete: true,
+    clusterCount: 0,
+    clusters: [],
+    priorityUrls: root ? [root] : [],
+    coverage: {
+      usableSitemap: false,
+      complete: false,
+      parsedDocumentCount: 0,
+      failedDocumentCount: 0,
+    },
+    limitations: [limitation],
+  };
+}
+
+function normalizeFootprintForAnalysis(footprint) {
+  if (!footprint || typeof footprint !== "object") return footprint;
+
+  const rawClusters = Array.isArray(footprint.clusters)
+    ? footprint.clusters
+    : [];
+
+  const clusters = rawClusters.map((cluster) => ({
+    ...cluster,
+    discoveredUrlCount:
+      cluster.discoveredUrlCount
+      ?? cluster.discoveredCount
+      ?? 0,
+    representativeUrls: Array.isArray(cluster.representativeUrls)
+      ? cluster.representativeUrls
+      : Array.isArray(cluster.representatives)
+        ? cluster.representatives
+        : [],
+  }));
+
+  const priorityUrls = Array.isArray(footprint.priorityUrls)
+    ? footprint.priorityUrls
+    : Array.isArray(footprint.priority_urls)
+      ? footprint.priority_urls
+      : [];
+
+  return {
+    ...footprint,
+    clusters,
+    clusterCount: footprint.clusterCount ?? clusters.length,
+    priorityUrls,
+  };
+}
+
+async function resolveSiteFootprint(target, options, clientOpts) {
+  if (options.siteFootprint) {
+    return normalizeFootprintForAnalysis(options.siteFootprint);
+  }
+
+  const mode =
+    clientOpts.mode ||
+    (clientOpts.fixtures ? "fixture" : "live");
+
+  if (mode === "fixture") {
+    return syntheticUnavailableFootprint(
+      target,
+      "Sitemap footprint discovery was not executed in fixture mode.",
+    );
+  }
+
+  try {
+    const footprint = await discoverSitemapFootprint(target, {
+      fetchImpl:
+        options.sitemapFetchImpl ||
+        clientOpts.fetchImpl,
+    });
+
+    return normalizeFootprintForAnalysis(footprint);
+  } catch (error) {
+    return syntheticUnavailableFootprint(
+      target,
+      `Sitemap footprint discovery failed: ${error.message}`,
+    );
+  }
+}
+
+function mergeDeepPageUrls({
+  normalizedPages,
+  keyPages,
+  siteFootprint,
+  maxSelected = 20,
+}) {
+  const byNormalizedUrl = new Map();
+
+  for (const page of normalizedPages) {
+    const rawUrl =
+      page.crawledUrl ||
+      page.url ||
+      page.finalUrl ||
+      "";
+
+    const normalized = normalizeUrl(rawUrl);
+
+    if (normalized && !byNormalizedUrl.has(normalized)) {
+      byNormalizedUrl.set(normalized, rawUrl);
+    }
+  }
+
+  const selected = [];
+  const seen = new Set();
+
+  function add(candidate) {
+    const normalized = normalizeUrl(candidate || "");
+
+    if (!normalized || seen.has(normalized)) return;
+
+    const rawUrl = byNormalizedUrl.get(normalized);
+    if (!rawUrl) return;
+
+    seen.add(normalized);
+    selected.push(rawUrl);
+  }
+
+  for (const item of keyPages.selected || []) {
+    add(item.url);
+  }
+
+  for (const cluster of siteFootprint?.clusters || []) {
+    if (cluster?.requiresRepresentativeAssessment !== true) {
+      continue;
+    }
+
+    for (const url of cluster.representativeUrls || []) {
+      add(url);
+    }
+  }
+
+  for (const url of siteFootprint?.priorityUrls || []) {
+    add(url);
+  }
+
+  return selected.slice(0, maxSelected);
+}
 
 // ---------------------------------------------------------------------------
 // Page normalizer — maps DataForSEO page fields to canonical Vantage shape
@@ -1198,7 +1343,7 @@ function summarizeSite({
  * @param {Array<string>} [options.includePatterns] - URL include patterns.
  * @param {Array<string>} [options.excludePatterns] - URL exclude patterns.
  * @param {number} [options.maxExternalResources] - External resource limit.
- * @param {number} [options.pollTimeoutMs=600000] - Polling timeout in ms.
+ * @param {number} [options.pollTimeoutMs=1800000] - Polling timeout in ms.
  * @param {number} [options.pollIntervalMs=10000] - Polling interval in ms.
  * @param {object} [options.clientOptions] - Client-level options (mode, fixtures, fetchImpl).
  * @returns {Promise<object>} Canonical site evidence envelope.
@@ -1217,6 +1362,32 @@ export async function crawlWithDataforseo(target, options = {}) {
   const maxPages = options.maxPages ?? DEFAULTS.maxPages;
   const pollTimeoutMs = options.pollTimeoutMs ?? DEFAULTS.pollTimeoutMs;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULTS.pollIntervalMs;
+
+  const siteFootprint = await resolveSiteFootprint(
+    target,
+    options,
+    {
+      ...clientOpts,
+      mode:
+        clientOpts.mode ||
+        (clientOpts.fixtures ? "fixture" : "live"),
+    },
+  );
+
+  const footprintMode =
+    clientOpts.mode ||
+    (clientOpts.fixtures ? "fixture" : "live");
+
+  if (
+    (options.siteFootprint || footprintMode !== "fixture") &&
+    Array.isArray(siteFootprint?.limitations)
+  ) {
+    for (const limitation of siteFootprint.limitations) {
+      limitations.push(
+        `Sitemap footprint: ${limitation}`,
+      );
+    }
+  }
 
   let rawTaskId = null;
   let retryCount = 0;
@@ -1241,7 +1412,16 @@ export async function crawlWithDataforseo(target, options = {}) {
         enableJavascript: options.enableJavascript ?? DEFAULTS.enableJavascript,
         enableBrowserRendering:
           options.enableBrowserRendering ?? DEFAULTS.enableBrowserRendering,
-        loadResources: options.loadResources ?? DEFAULTS.loadResources,
+                loadResources: options.loadResources ?? DEFAULTS.loadResources,
+        priorityUrls:
+          siteFootprint?.priorityUrls ||
+          options.priorityUrls ||
+          [],
+        respectSitemap:
+          options.respectSitemap ??
+          (siteFootprint?.coverage?.usableSitemap === true),
+        returnDespiteTimeout:
+          options.returnDespiteTimeout ?? true,
         includePatterns: options.includePatterns,
         excludePatterns: options.excludePatterns,
         maxExternalResources: options.maxExternalResources,
@@ -1583,18 +1763,17 @@ export async function crawlWithDataforseo(target, options = {}) {
       pages: normalizedPages,
       links: rawLinks,
       services: options.businessServices || [],
-      maxSelected: Math.max(
-        options.contentParsingPageLimit ?? DEFAULTS.contentParsingPageLimit,
-        options.resourcesPageLimit ?? DEFAULTS.resourcesPageLimit,
-      ),
+      maxSelected: 20,
     });
-    // Provider requests use the RAW crawled URL (exact form the provider
-    // indexed); selection deduplicates on the normalized form.
-    const keyPageUrls = keyPages.selected.map((s) => {
-      const page = normalizedPages.find(
-        (p) => normalizeUrl(p.crawledUrl || p.url || "") === s.url,
-      );
-      return page ? (page.crawledUrl || page.url) : s.url;
+
+    // Merge business-critical pages with representatives from material
+    // structural URL families. Provider sub-endpoints receive the exact
+    // crawled URL already known to the DataForSEO task.
+    const keyPageUrls = mergeDeepPageUrls({
+      normalizedPages,
+      keyPages,
+      siteFootprint,
+      maxSelected: 20,
     });
 
     const subPollOpts = {
@@ -1779,7 +1958,7 @@ export async function crawlWithDataforseo(target, options = {}) {
   const completedAt = new Date().toISOString();
   const targetDomain = domainOf(target);
 
-  const result = summarizeSite({
+    const result = summarizeSite({
     targetUrl: target,
     pages: normalizedPages,
     rawSummary,
@@ -1808,6 +1987,15 @@ export async function crawlWithDataforseo(target, options = {}) {
     robotsBlocked,
     loginBlocked,
   });
+
+  const programmaticSeo = analyzeProgrammaticSeo({
+    siteFootprint,
+    pages: result.pages,
+    contentParsing: result.contentParsing,
+  });
+
+  result.siteFootprint = siteFootprint;
+  result.programmaticSeo = programmaticSeo;
 
   // ── Package raw artifact bytes for caller persistence ─────────────────
   // WP3: adapters return raw bytes to their caller; they no longer own
@@ -1842,6 +2030,8 @@ export async function crawlWithDataforseo(target, options = {}) {
         resources: rawResources,
         resMeta,
         acquisition,
+        siteFootprint,
+        programmaticSeo,
         retryCount,
       };
       const rawJson = JSON.stringify(rawPayload, null, 2);
@@ -2081,6 +2271,8 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         nonIndexablePages: envelope.nonIndexablePages || [],
         pageResources: envelope.pageResources || [],
         acquisition: envelope.acquisition || null,
+        siteFootprint: envelope.siteFootprint || null,
+        programmaticSeo: envelope.programmaticSeo || null,
         trust: envelope.trust || {},
         securityHeaders: envelope.securityHeaders || {},
         collectedAt: envelope.collectedAt,
