@@ -391,28 +391,10 @@ test("untraceable broken destinations never fabricate a source page", async () =
   assert.equal(rec.source, undefined, "no source field fabricated without a proven edge");
 });
 
-test("task submission retries twice with exponential backoff on transient errors", async () => {
+test("task submission is single-attempt on transient errors to prevent duplicate paid tasks", async () => {
   setTestCredentials();
   try {
     let attempts = 0;
-    const fetchImpl = async (_url, _init) => {
-      attempts++;
-      if (attempts < 3) {
-        return new Response("Service Unavailable", { status: 503 });
-      }
-      return new Response(
-        JSON.stringify({
-          status_code: 20000,
-          tasks: [
-            {
-              status_code: 20000,
-              result: [{ id: "retry-task-001" }],
-            },
-          ],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    };
 
     const result = await crawlWithDataforseo("https://example.com", {
       maxPages: 500,
@@ -420,24 +402,25 @@ test("task submission retries twice with exponential backoff on transient errors
       pollIntervalMs: 100,
       clientOptions: {
         mode: "live",
-        fetchImpl: async (url, init) => {
+        fetchImpl: async (url) => {
           if (String(url).includes("task_post")) {
-            return fetchImpl(url, init);
+            attempts++;
+            return new Response("Service Unavailable", { status: 503 });
           }
-          // Non-task_post calls succeed with ready data
-          return new Response(
-            JSON.stringify({
-              status_code: 20000,
-              tasks: [{ status_code: 20000, result: [{ items: buildSuccessfulFixtures(3).pages.items }] }],
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
+
+          throw new Error(
+            "No provider call should occur after task_post fails",
           );
         },
       },
     });
 
-    assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
-    assert.equal(attempts, 3);
+    assert.equal(result.sourceStatus, SOURCE_STATUS.FAILED);
+    assert.equal(
+      attempts,
+      1,
+      "paid task submission must not be automatically retried",
+    );
   } finally {
     restoreCredentials();
   }

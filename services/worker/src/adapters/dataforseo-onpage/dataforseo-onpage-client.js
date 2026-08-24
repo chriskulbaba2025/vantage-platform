@@ -1,4 +1,3 @@
-
 /**
  * DataForSEO On-Page API Client
  *
@@ -26,6 +25,12 @@ const TASK_STATUS = Object.freeze({
 
 // Terminal statuses (task will not change further)
 const TERMINAL_STATUSES = new Set(["ready"]);
+
+const ONPAGE_CLIENT_POLICY = Object.freeze({
+  pollTimeoutMs: 30 * 60 * 1000,
+  maxPriorityUrls: 20,
+  returnDespiteTimeout: true,
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -292,7 +297,7 @@ async function withRetry(fn, maxRetries = 2, baseDelayMs = 1000) {
         error.category === "auth" ||
         (error.httpStatus && error.httpStatus >= 400 &&
          error.httpStatus < 500 && error.httpStatus !== 429)
-      ) {
+               ) {
         throw error;
       }
       if (attempt < maxRetries) {
@@ -333,7 +338,9 @@ export function createDataforseoOnpageClient(opts = {}) {
    * @param {boolean} [options.enableJavascript=false] - Enable JS rendering.
    * @param {boolean} [options.enableBrowserRendering=false] - Enable full browser rendering.
    * @param {boolean} [options.loadResources=false] - Load page resources.
-   * @param {boolean} [options.enableSitemap=true] - Prefer sitemap URLs.
+   * @param {Array<string>} [options.priorityUrls] - Deterministic representative URLs, capped at 20.
+   * @param {boolean} [options.respectSitemap] - Ask DataForSEO to respect sitemap guidance when usable sitemap evidence exists.
+   * @param {boolean} [options.returnDespiteTimeout=true] - Preserve page evidence when individual page loads time out.
    * @param {Array<string>} [options.includePatterns] - URL include patterns.
    * @param {Array<string>} [options.excludePatterns] - URL exclude patterns.
    * @param {number} [options.maxExternalResources] - External resource limit.
@@ -356,10 +363,22 @@ export function createDataforseoOnpageClient(opts = {}) {
       );
     }
 
+    const priorityUrls = [...new Set(
+      (Array.isArray(options.priorityUrls) ? options.priorityUrls : [])
+        .map((url) => String(url || "").trim())
+        .filter(Boolean),
+    )].slice(0, ONPAGE_CLIENT_POLICY.maxPriorityUrls);
+
     const body = [
       {
         target,
         max_crawl_pages: options.maxPages ?? 500,
+        ...(priorityUrls.length && { priority_urls: priorityUrls }),
+        ...(options.respectSitemap != null && {
+          respect_sitemap: Boolean(options.respectSitemap),
+        }),
+        return_despite_timeout:
+          options.returnDespiteTimeout ?? ONPAGE_CLIENT_POLICY.returnDespiteTimeout,
         ...(options.maxDepth != null && { max_crawl_depth: options.maxDepth }),
         load_resources: options.loadResources ?? true,
         enable_javascript: options.enableJavascript ?? false,
@@ -404,14 +423,14 @@ export function createDataforseoOnpageClient(opts = {}) {
       },
     ];
 
-    const submitFn = () =>
-      dataforseoPost("/on_page/task_post", body, {
-        login,
-        password,
-        fetchImpl: opts.fetchImpl,
-      });
-
-    const response = await withRetry(submitFn, 2, 1000);
+    // Paid task creation is intentionally single-submit. A transport failure
+    // must not trigger an automatic repost because the provider may already
+    // have accepted and billed the first task without returning its ID.
+    const response = await dataforseoPost("/on_page/task_post", body, {
+      login,
+      password,
+      fetchImpl: opts.fetchImpl,
+    });
     // task_post may return 20100 ("Task Created") in addition to 20000.
     // When status_code is 20100, result is null and the task ID lives at
     // response.tasks[0].id.  When status_code is 20000, the full task
@@ -441,12 +460,12 @@ export function createDataforseoOnpageClient(opts = {}) {
    *
    * @param {string} taskId - Task ID from task_post.
    * @param {object} [options]
-   * @param {number} [options.timeoutMs=600000] - Max poll time (default 10 min).
+   * @param {number} [options.timeoutMs=1800000] - Max poll time (default 30 min).
    * @param {number} [options.pollIntervalMs=10000] - Interval between polls (default 10s).
    * @returns {Promise<{status: string, taskId: string}>}
    */
   async function pollTask(taskId, options = {}) {
-    const timeoutMs = options.timeoutMs ?? 600000;
+    const timeoutMs = options.timeoutMs ?? ONPAGE_CLIENT_POLICY.pollTimeoutMs;
     const pollIntervalMs = options.pollIntervalMs ?? 10000;
 
     if (mode === "fixture") {
@@ -578,7 +597,7 @@ export function createDataforseoOnpageClient(opts = {}) {
     const { login, password } = getCredentials();
     const body = [
       {
-        id: taskId,
+                id: taskId,
         limit,
         offset,
         ...(options.filters?.length && { filters: options.filters }),
@@ -878,7 +897,7 @@ export function createDataforseoOnpageClient(opts = {}) {
       const { result, metadata } = await pollSubEndpoint("/on_page/duplicate_content", payload, pollOpts);
       allResults.push({ url, items: result?.items || [] });
       allMetadata.push({ ...metadata, url });
-    }
+          }
     return { results: allResults, metadata: allMetadata };
   }
 
@@ -1130,4 +1149,4 @@ export function createDataforseoOnpageClient(opts = {}) {
   };
 }
 
-export { TASK_STATUS, TERMINAL_STATUSES };
+export { TASK_STATUS, TERMINAL_STATUSES, ONPAGE_CLIENT_POLICY };
