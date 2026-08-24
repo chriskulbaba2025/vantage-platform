@@ -2919,6 +2919,54 @@ test("WP-B-08: live content_parsing client posts one payload per key-page URL", 
   }
 });
 
+test("DQV-003: live microdata client posts required task ID and page URL", async () => {
+  const postedPayloads = [];
+
+  const fetchImpl = async (url, init) => {
+    postedPayloads.push({
+      url,
+      body: JSON.parse(init.body),
+    });
+
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{
+        status_code: 20000,
+        result: [{
+          items: [{ type: "Organization" }],
+        }],
+      }],
+    }), { status: 200 });
+  };
+
+  setTestCredentials();
+
+  try {
+    const client = createDataforseoOnpageClient({
+      mode: "live",
+      fetchImpl,
+    });
+
+    const pageUrl = "https://example.com/";
+    const result = await client.getMicrodata("t1", pageUrl);
+
+    assert.equal(postedPayloads.length, 1);
+    assert.ok(postedPayloads[0].url.includes("/on_page/microdata"));
+    assert.deepEqual(postedPayloads[0].body, [{
+      id: "t1",
+      url: pageUrl,
+    }]);
+
+    assert.deepEqual(result.metadata.requestPayload, [{
+      id: "t1",
+      url: pageUrl,
+    }]);
+  } finally {
+    clearTestCredentials();
+  }
+});
+
+
 test("WP-B-08: live non_indexable client paginates until short page", async () => {
   let calls = 0;
   const fetchImpl = async (url, init) => {

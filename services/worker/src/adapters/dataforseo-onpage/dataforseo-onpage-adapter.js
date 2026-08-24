@@ -1,4 +1,4 @@
-/**
+  /**
  * DataForSEO On-Page Adapter
  *
  * Orchestrates the full DataForSEO On-Page crawl flow and normalizes all
@@ -37,7 +37,7 @@ import { selectImportantPages, normalizeUrl } from "../../evidence/important-pag
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.2.1";
+const ADAPTER_VERSION = "1.2.2";
 
 // ---------------------------------------------------------------------------
 // Default configuration (PRD v3.0 §8.4 + PRYSM-NEXT-01 WP-B)
@@ -1572,32 +1572,12 @@ export async function crawlWithDataforseo(target, options = {}) {
         }
       }
     } catch (dcError) {
-      limitations.push(`Duplicate content retrieval failed: ${dcError.message}`);
+      limitations.push(`Duplicate content retrieval
+
+        failed: ${dcError.message}`);
     }
 
-    // 3f. Retrieve microdata / structured data
-    // EVIDENCE-MATRIX: schema.structured_data — valid because the task was
-    // created with validate_micromarkup (WP-B-02).
-    acquisition.microdata.requested = 1;
-    try {
-      const mdResult = await client.getMicrodata(rawTaskId);
-      rawMicrodata = mdResult.result || {};
-      microdataMeta = mdResult.metadata;
-      if (microdataMeta?.finalCode !== 20000 && microdataMeta?.finalCode != null) {
-        acquisition.microdata.failed += 1;
-        limitations.push(
-          `Microdata retrieval returned code ${microdataMeta.finalCode}: "${microdataMeta.finalMessage || "unknown"}".`);
-      } else if (rawMicrodata?.items?.length || rawMicrodata?.types?.length) {
-        acquisition.microdata.completed += 1;
-      }
-    } catch (mdError) {
-      acquisition.microdata.failed += 1;
-      limitations.push(`Microdata retrieval failed: ${mdError.message}`);
-    }
-
-    // 3g. Deep sub-acquisitions scoped to the deterministic key-page set
-    // (PRYSM-NEXT-01 WP-B-08).  Each failure is recorded and limited —
-    // never fails the whole source.
+        // Build the deterministic key-page set used by URL-scoped deep acquisitions.
     const keyPages = selectImportantPages({
       targetUrl: target,
       pages: normalizedPages,
@@ -1622,12 +1602,40 @@ export async function crawlWithDataforseo(target, options = {}) {
       pollIntervalMs,
     };
 
-    if (keyPageUrls.length === 0) {
+          if (keyPageUrls.length === 0) {
       limitations.push(
-        "No decision-bearing pages identified — content parsing, redirect " +
-        "chains, and resource checks were skipped for this crawl.",
+        "No decision-bearing pages identified — microdata, content parsing, " +
+        "redirect chains, and resource checks were skipped for this crawl.",
       );
     } else {
+      // 3f. Retrieve microdata / structured data for the primary key page.
+      // EVIDENCE-MATRIX: schema.structured_data — valid because the task was
+      // created with validate_micromarkup (WP-B-02).
+      acquisition.microdata.requested = 1;
+      try {
+        const mdResult = await client.getMicrodata(
+          rawTaskId,
+          keyPageUrls[0],
+          subPollOpts,
+        );
+        rawMicrodata = mdResult.result || {};
+        microdataMeta = mdResult.metadata;
+
+        if (microdataMeta?.finalCode !== 20000 && microdataMeta?.finalCode != null) {
+          acquisition.microdata.failed += 1;
+          limitations.push(
+            `Microdata retrieval returned code ${microdataMeta.finalCode}: "${microdataMeta.finalMessage || "unknown"}".`,
+          );
+        } else if (rawMicrodata?.items?.length || rawMicrodata?.types?.length) {
+          acquisition.microdata.completed += 1;
+        }
+      } catch (mdError) {
+        acquisition.microdata.failed += 1;
+        limitations.push(`Microdata retrieval failed: ${mdError.message}`);
+      }
+
+      // 3g. Remaining deep sub-acquisitions scoped to the deterministic key-page set.
+
       // 3g1. Content parsing (key pages only)
       if (options.enableContentParsing ?? DEFAULTS.enableContentParsing) {
         const cpUrls = keyPageUrls.slice(

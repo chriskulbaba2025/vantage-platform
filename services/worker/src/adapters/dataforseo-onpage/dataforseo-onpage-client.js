@@ -1,3 +1,4 @@
+
 /**
  * DataForSEO On-Page API Client
  *
@@ -907,19 +908,25 @@ export function createDataforseoOnpageClient(opts = {}) {
     return { results: allResults, metadata: allMetadata };
   }
 
-  /**
-   * Fetch microdata / structured data for a completed task.
+   /**
+   * Fetch microdata / structured data for a completed task and page URL.
    *
    * POST /v3/on_page/microdata
    *
    * @param {string} taskId - Main crawl task ID.
+   * @param {string} url - Crawled page URL to inspect.
    * @param {object} [options] - Poll options.
    * @returns {Promise<{result: object|null, metadata: object}>}
    */
-  async function getMicrodata(taskId, options) {
-    const payload = [{ id: taskId }];
+  async function getMicrodata(taskId, url, options) {
+    if (!url) {
+      throw new TypeError("getMicrodata requires a page URL");
+    }
+
+    const payload = [{ id: taskId, url }];
     return pollSubEndpoint("/on_page/microdata", payload, options);
   }
+
 
   /**
    * Fetch parsed page content for specific URLs (content-parsing endpoint).
