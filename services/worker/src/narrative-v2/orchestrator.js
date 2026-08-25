@@ -38,6 +38,7 @@ export const NARRATIVE_V2_ERROR = Object.freeze({
   JUDGE_EXECUTION_FAILED: "JUDGE_EXECUTION_FAILED",
   JUDGE_RESPONSE_INVALID: "JUDGE_RESPONSE_INVALID",
   INVALID_NEXT_ACTION: "INVALID_NEXT_ACTION",
+  CONTINUATION_INVALID: "CONTINUATION_INVALID",
 });
 
 export const JUDGE_RUNTIME_CONTRACT = Object.freeze({
@@ -77,33 +78,271 @@ export class NarrativeV2OrchestrationError extends Error {
   }
 }
 
-function assertControllerInputs({ writerInput, writerExecutor, judgeExecutor, maxAutomaticPasses }) {
+function assertControllerInputs({
+  writerInput,
+  writerExecutor,
+  judgeExecutor,
+  maxAutomaticPasses,
+}) {
   const errors = [];
+
   if (!isObject(writerInput)) errors.push("writerInput must be an object");
+
   if (isObject(writerInput) && writerInput.contractVersion !== "1.0.0") {
     errors.push("writerInput.contractVersion must equal 1.0.0");
   }
-  if (isObject(writerInput) && writerInput.writerInputVersion !== WRITER_INPUT_VERSION) {
-    errors.push(`writerInput.writerInputVersion must equal ${WRITER_INPUT_VERSION}`);
+
+  if (
+    isObject(writerInput)
+    && writerInput.writerInputVersion !== WRITER_INPUT_VERSION
+  ) {
+    errors.push(
+      `writerInput.writerInputVersion must equal ${WRITER_INPUT_VERSION}`,
+    );
   }
-  if (isObject(writerInput) && !nonEmptyString(writerInput.auditId)) errors.push("writerInput.auditId is required");
-  if (isObject(writerInput) && !isObject(writerInput.referenceIndex)) errors.push("writerInput.referenceIndex is required");
-  if (typeof writerExecutor !== "function") errors.push("writerExecutor must be a function");
-  if (typeof judgeExecutor !== "function") errors.push("judgeExecutor must be a function");
-  if (!Number.isInteger(maxAutomaticPasses) || maxAutomaticPasses < 1 || maxAutomaticPasses > MAX_NARRATIVE_PASSES) {
-    errors.push(`maxAutomaticPasses must be an integer from 1 to ${MAX_NARRATIVE_PASSES}`);
+
+  if (
+    isObject(writerInput)
+    && !nonEmptyString(writerInput.auditId)
+  ) {
+    errors.push("writerInput.auditId is required");
+  }
+
+  if (
+    isObject(writerInput)
+    && !isObject(writerInput.referenceIndex)
+  ) {
+    errors.push("writerInput.referenceIndex is required");
+  }
+
+  if (typeof writerExecutor !== "function") {
+    errors.push("writerExecutor must be a function");
+  }
+
+  if (typeof judgeExecutor !== "function") {
+    errors.push("judgeExecutor must be a function");
+  }
+
+  if (
+    !Number.isInteger(maxAutomaticPasses)
+    || maxAutomaticPasses < 1
+    || maxAutomaticPasses > MAX_NARRATIVE_PASSES
+  ) {
+    errors.push(
+      `maxAutomaticPasses must be an integer from 1 to ${MAX_NARRATIVE_PASSES}`,
+    );
   }
 
   if (errors.length) {
     throw new NarrativeV2OrchestrationError(
       NARRATIVE_V2_ERROR.INVALID_INPUT,
       `Narrative v2 orchestration input rejected: ${errors.join("; ")}`,
-      { stage: "INPUT", validationErrors: errors },
+      {
+        stage: "INPUT",
+        validationErrors: errors,
+      },
     );
   }
 }
 
-function buildTerminalResult({ writerInput, status, passNumber, writerOutput, judgeResponse, history }) {
+function prepareFinalPassContinuation({
+  writerInput,
+  continuation,
+}) {
+  if (continuation === undefined || continuation === null) {
+    return {
+      history: [],
+      startPassNumber: 1,
+      previousOutput: undefined,
+      previousJudgeResponse: undefined,
+    };
+  }
+
+  const errors = [];
+
+  if (!isObject(continuation)) {
+    errors.push("continuation must be an object");
+  } else {
+    if (continuation.authorized !== true) {
+      errors.push("continuation.authorized must equal true");
+    }
+
+    if (!Array.isArray(continuation.passes)) {
+      errors.push("continuation.passes must be an array");
+    } else if (
+      continuation.passes.length !== MAX_NARRATIVE_PASSES - 1
+    ) {
+      errors.push(
+        `continuation.passes must contain exactly ${
+          MAX_NARRATIVE_PASSES - 1
+        } prior passes`,
+      );
+    }
+  }
+
+  if (errors.length) {
+    throw new NarrativeV2OrchestrationError(
+      NARRATIVE_V2_ERROR.CONTINUATION_INVALID,
+      `Narrative v2 continuation rejected: ${errors.join("; ")}`,
+      {
+        stage: "CONTINUATION",
+        validationErrors: errors,
+      },
+    );
+  }
+
+  const history = [];
+  let previousOutput;
+  let previousJudgeResponse;
+
+  for (
+    let index = 0;
+    index < continuation.passes.length;
+    index += 1
+  ) {
+    const expectedPassNumber = index + 1;
+    const candidate = continuation.passes[index];
+    const passErrors = [];
+
+    if (!isObject(candidate)) {
+      passErrors.push(
+        `continuation pass ${expectedPassNumber} must be an object`,
+      );
+    } else {
+      if (candidate.passNumber !== expectedPassNumber) {
+        passErrors.push(
+          `continuation pass ${expectedPassNumber}.passNumber must equal ${expectedPassNumber}`,
+        );
+      }
+
+      if (!isObject(candidate.writerOutput)) {
+        passErrors.push(
+          `continuation pass ${expectedPassNumber}.writerOutput is required`,
+        );
+      }
+
+      if (!isObject(candidate.judgeResponse)) {
+        passErrors.push(
+          `continuation pass ${expectedPassNumber}.judgeResponse is required`,
+        );
+      }
+    }
+
+    if (passErrors.length) {
+      throw new NarrativeV2OrchestrationError(
+        NARRATIVE_V2_ERROR.CONTINUATION_INVALID,
+        `Narrative v2 continuation rejected: ${passErrors.join("; ")}`,
+        {
+          passNumber: expectedPassNumber,
+          stage: "CONTINUATION",
+          validationErrors: passErrors,
+        },
+      );
+    }
+
+    const writerValidation = validateWriterOutput(
+      candidate.writerOutput,
+      {
+        writerInput,
+        expectedPassNumber,
+        ...(expectedPassNumber > 1
+          ? {
+              previousOutput,
+              revisionDirective:
+                previousJudgeResponse.revisionDirective,
+            }
+          : {}),
+      },
+    );
+
+    if (!writerValidation.valid) {
+      throw new NarrativeV2OrchestrationError(
+        NARRATIVE_V2_ERROR.CONTINUATION_INVALID,
+        `Narrative v2 continuation Writer output invalid on pass ${expectedPassNumber}: ${writerValidation.errors.join(
+          "; ",
+        )}`,
+        {
+          passNumber: expectedPassNumber,
+          stage: "CONTINUATION",
+          validationErrors: writerValidation.errors,
+        },
+      );
+    }
+
+    const judgeValidation = validateJudgeResponse(
+      candidate.judgeResponse,
+      {
+        writerInput,
+        expectedPassNumber,
+      },
+    );
+
+    if (!judgeValidation.valid) {
+      throw new NarrativeV2OrchestrationError(
+        NARRATIVE_V2_ERROR.CONTINUATION_INVALID,
+        `Narrative v2 continuation Judge response invalid on pass ${expectedPassNumber}: ${judgeValidation.errors.join(
+          "; ",
+        )}`,
+        {
+          passNumber: expectedPassNumber,
+          stage: "CONTINUATION",
+          validationErrors: judgeValidation.errors,
+        },
+      );
+    }
+
+    const writerOutput = deepFreeze(candidate.writerOutput);
+    const judgeResponse = deepFreeze(candidate.judgeResponse);
+    const nextAction = nextActionForJudge(judgeResponse);
+
+    if (
+      nextAction !== NEXT_ACTION.WRITE_NEXT_PASS
+      || judgeResponse.decision !== JUDGE_DECISION.REVISE
+      || judgeResponse.revisionDirective?.required !== true
+      || judgeResponse.revisionDirective?.mode !== "TARGETED"
+    ) {
+      const validationErrors = [
+        `continuation pass ${expectedPassNumber} must contain a validated targeted REVISE decision authorizing the next pass`,
+      ];
+
+      throw new NarrativeV2OrchestrationError(
+        NARRATIVE_V2_ERROR.CONTINUATION_INVALID,
+        `Narrative v2 continuation rejected: ${validationErrors[0]}`,
+        {
+          passNumber: expectedPassNumber,
+          stage: "CONTINUATION",
+          validationErrors,
+        },
+      );
+    }
+
+    const passRecord = deepFreeze({
+      passNumber: expectedPassNumber,
+      writerOutput,
+      judgeResponse,
+    });
+
+    history.push(passRecord);
+    previousOutput = writerOutput;
+    previousJudgeResponse = judgeResponse;
+  }
+
+  return {
+    history,
+    startPassNumber: continuation.passes.length + 1,
+    previousOutput,
+    previousJudgeResponse,
+  };
+}
+
+function buildTerminalResult({
+  writerInput,
+  status,
+  passNumber,
+  writerOutput,
+  judgeResponse,
+  history,
+}) {
   return deepFreeze({
     contractVersion: "1.0.0",
     orchestrationVersion: NARRATIVE_V2_ORCHESTRATION_VERSION,
@@ -129,6 +368,9 @@ function buildTerminalResult({ writerInput, status, passNumber, writerOutput, ju
  * @param {function} options.writerExecutor async ({ prompt, passNumber, writerInput, previousOutput?, judgeResponse? }) => WriterOutput
  * @param {function} options.judgeExecutor async ({ passNumber, writerInput, writerOutput, judgeContract }) => JudgeResponse
  * @param {number} [options.maxAutomaticPasses] maximum Writer/Judge passes before routing another REVISE to human review
+ * @param {object} [options.continuation] explicit human-authorized final-pass continuation
+ * @param {true} options.continuation.authorized explicit authorization marker for the final governed pass
+ * @param {Array<object>} options.continuation.passes exact validated Pass 1/2 history to preserve and continue
  * @returns {Promise<object>} terminal governed orchestration result
  */
 export async function runNarrativeV2Orchestration({
@@ -136,10 +378,13 @@ export async function runNarrativeV2Orchestration({
   writerExecutor,
   judgeExecutor,
   maxAutomaticPasses,
+  continuation,
 }) {
-  const effectiveMaxAutomaticPasses = maxAutomaticPasses
+  const effectiveMaxAutomaticPasses =
+    maxAutomaticPasses
     ?? writerExecutor?.maxAutomaticPasses
     ?? MAX_NARRATIVE_PASSES;
+
   assertControllerInputs({
     writerInput,
     writerExecutor,
@@ -149,12 +394,25 @@ export async function runNarrativeV2Orchestration({
 
   // Freeze the exact governed input once. Every pass consumes this same object.
   const governedWriterInput = deepFreeze(writerInput);
-  const history = [];
-  let previousOutput;
-  let previousJudgeResponse;
 
-  for (let passNumber = 1; passNumber <= MAX_NARRATIVE_PASSES; passNumber += 1) {
+  const continuationState = prepareFinalPassContinuation({
+    writerInput: governedWriterInput,
+    continuation,
+  });
+
+  const history = [...continuationState.history];
+
+  let previousOutput = continuationState.previousOutput;
+  let previousJudgeResponse =
+    continuationState.previousJudgeResponse;
+
+  for (
+    let passNumber = continuationState.startPassNumber;
+    passNumber <= MAX_NARRATIVE_PASSES;
+    passNumber += 1
+  ) {
     let prompt;
+
     try {
       prompt = buildWriterPrompt({
         writerInput: governedWriterInput,
@@ -170,11 +428,16 @@ export async function runNarrativeV2Orchestration({
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.WRITER_PROMPT_FAILED,
         `Writer prompt construction failed on pass ${passNumber}: ${cause.message}`,
-        { passNumber, stage: "WRITER_PROMPT", cause },
+        {
+          passNumber,
+          stage: "WRITER_PROMPT",
+          cause,
+        },
       );
     }
 
     let candidateWriterOutput;
+
     try {
       const writerRequest = deepFreeze({
         prompt,
@@ -187,30 +450,42 @@ export async function runNarrativeV2Orchestration({
             }
           : {}),
       });
-      candidateWriterOutput = await writerExecutor(writerRequest);
+
+      candidateWriterOutput =
+        await writerExecutor(writerRequest);
     } catch (cause) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.WRITER_EXECUTION_FAILED,
         `Writer execution failed on pass ${passNumber}: ${cause.message}`,
-        { passNumber, stage: "WRITER_EXECUTION", cause },
+        {
+          passNumber,
+          stage: "WRITER_EXECUTION",
+          cause,
+        },
       );
     }
 
-    const writerValidation = validateWriterOutput(candidateWriterOutput, {
-      writerInput: governedWriterInput,
-      expectedPassNumber: passNumber,
-      ...(passNumber > 1
-        ? {
-            previousOutput,
-            revisionDirective: previousJudgeResponse.revisionDirective,
-          }
-        : {}),
-    });
+    const writerValidation = validateWriterOutput(
+      candidateWriterOutput,
+      {
+        writerInput: governedWriterInput,
+        expectedPassNumber: passNumber,
+        ...(passNumber > 1
+          ? {
+              previousOutput,
+              revisionDirective:
+                previousJudgeResponse.revisionDirective,
+            }
+          : {}),
+      },
+    );
 
     if (!writerValidation.valid) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.WRITER_OUTPUT_INVALID,
-        `Writer output validation failed on pass ${passNumber}: ${writerValidation.errors.join("; ")}`,
+        `Writer output validation failed on pass ${passNumber}: ${writerValidation.errors.join(
+          "; ",
+        )}`,
         {
           passNumber,
           stage: "WRITER_VALIDATION",
@@ -224,6 +499,7 @@ export async function runNarrativeV2Orchestration({
     const writerOutput = deepFreeze(candidateWriterOutput);
 
     let candidateJudgeResponse;
+
     try {
       const judgeRequest = deepFreeze({
         passNumber,
@@ -231,24 +507,35 @@ export async function runNarrativeV2Orchestration({
         writerOutput,
         judgeContract: JUDGE_RUNTIME_CONTRACT,
       });
-      candidateJudgeResponse = await judgeExecutor(judgeRequest);
+
+      candidateJudgeResponse =
+        await judgeExecutor(judgeRequest);
     } catch (cause) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.JUDGE_EXECUTION_FAILED,
         `Judge execution failed on pass ${passNumber}: ${cause.message}`,
-        { passNumber, stage: "JUDGE_EXECUTION", cause },
+        {
+          passNumber,
+          stage: "JUDGE_EXECUTION",
+          cause,
+        },
       );
     }
 
-    const judgeValidation = validateJudgeResponse(candidateJudgeResponse, {
-      writerInput: governedWriterInput,
-      expectedPassNumber: passNumber,
-    });
+    const judgeValidation = validateJudgeResponse(
+      candidateJudgeResponse,
+      {
+        writerInput: governedWriterInput,
+        expectedPassNumber: passNumber,
+      },
+    );
 
     if (!judgeValidation.valid) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.JUDGE_RESPONSE_INVALID,
-        `Judge response validation failed on pass ${passNumber}: ${judgeValidation.errors.join("; ")}`,
+        `Judge response validation failed on pass ${passNumber}: ${judgeValidation.errors.join(
+          "; ",
+        )}`,
         {
           passNumber,
           stage: "JUDGE_VALIDATION",
@@ -257,16 +544,28 @@ export async function runNarrativeV2Orchestration({
       );
     }
 
-    const judgeResponse = deepFreeze(candidateJudgeResponse);
-    const passRecord = deepFreeze({ passNumber, writerOutput, judgeResponse });
+    const judgeResponse = deepFreeze(
+      candidateJudgeResponse,
+    );
+
+    const passRecord = deepFreeze({
+      passNumber,
+      writerOutput,
+      judgeResponse,
+    });
+
     history.push(passRecord);
 
-    const nextAction = nextActionForJudge(judgeResponse);
+    const nextAction =
+      nextActionForJudge(judgeResponse);
 
-    if (nextAction === NEXT_ACTION.RELEASE_CANDIDATE) {
+    if (
+      nextAction === NEXT_ACTION.RELEASE_CANDIDATE
+    ) {
       return buildTerminalResult({
         writerInput: governedWriterInput,
-        status: NARRATIVE_V2_STATUS.RELEASE_CANDIDATE,
+        status:
+          NARRATIVE_V2_STATUS.RELEASE_CANDIDATE,
         passNumber,
         writerOutput,
         judgeResponse,
@@ -274,10 +573,13 @@ export async function runNarrativeV2Orchestration({
       });
     }
 
-    if (nextAction === NEXT_ACTION.HUMAN_REVIEW) {
+    if (
+      nextAction === NEXT_ACTION.HUMAN_REVIEW
+    ) {
       return buildTerminalResult({
         writerInput: governedWriterInput,
-        status: NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
+        status:
+          NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
         passNumber,
         writerOutput,
         judgeResponse,
@@ -285,11 +587,19 @@ export async function runNarrativeV2Orchestration({
       });
     }
 
-    if (nextAction !== NEXT_ACTION.WRITE_NEXT_PASS || judgeResponse.decision !== JUDGE_DECISION.REVISE) {
+    if (
+      nextAction !== NEXT_ACTION.WRITE_NEXT_PASS
+      || judgeResponse.decision !== JUDGE_DECISION.REVISE
+    ) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.INVALID_NEXT_ACTION,
-        `Governed next action is invalid on pass ${passNumber}: ${String(nextAction)}`,
-        { passNumber, stage: "NEXT_ACTION" },
+        `Governed next action is invalid on pass ${passNumber}: ${String(
+          nextAction,
+        )}`,
+        {
+          passNumber,
+          stage: "NEXT_ACTION",
+        },
       );
     }
 
@@ -297,10 +607,13 @@ export async function runNarrativeV2Orchestration({
     // rewrites than the global Judge contract. Once that ceiling is reached,
     // preserve the valid Judge REVISE decision and route further work to human
     // review rather than attempting an unauthorized paid Writer call.
-    if (passNumber >= effectiveMaxAutomaticPasses) {
+    if (
+      passNumber >= effectiveMaxAutomaticPasses
+    ) {
       return buildTerminalResult({
         writerInput: governedWriterInput,
-        status: NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
+        status:
+          NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
         passNumber,
         writerOutput,
         judgeResponse,
@@ -310,11 +623,16 @@ export async function runNarrativeV2Orchestration({
 
     // A valid final-contract-pass Judge response can never authorize another
     // write because deriveJudgeDecision() converts a non-pass there to review.
-    if (passNumber >= MAX_NARRATIVE_PASSES) {
+    if (
+      passNumber >= MAX_NARRATIVE_PASSES
+    ) {
       throw new NarrativeV2OrchestrationError(
         NARRATIVE_V2_ERROR.INVALID_NEXT_ACTION,
         `Pass ${MAX_NARRATIVE_PASSES} cannot authorize another automatic pass`,
-        { passNumber, stage: "NEXT_ACTION" },
+        {
+          passNumber,
+          stage: "NEXT_ACTION",
+        },
       );
     }
 
@@ -325,6 +643,8 @@ export async function runNarrativeV2Orchestration({
   throw new NarrativeV2OrchestrationError(
     NARRATIVE_V2_ERROR.INVALID_NEXT_ACTION,
     "Narrative v2 orchestration exhausted without a governed terminal state",
-    { stage: "NEXT_ACTION" },
+    {
+      stage: "NEXT_ACTION",
+    },
   );
 }
