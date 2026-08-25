@@ -9,6 +9,7 @@
  */
 
 import { REPORT_DESIGN_V2 } from "./report-design.js";
+import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 import { computePillars } from "./v2-pillars.js";
 import { ACTION_CLASS, buildActionPlan } from "./action-priority.js";
 import { buildFoundationChecklist } from "./foundation-readiness.js";
@@ -522,13 +523,65 @@ function competitorSection(model) {
   const gaps = opportunityData.gaps || [];
   const qualifiedCandidates = opportunityData.qualifiedCandidates || [];
   const excludedCandidates = opportunityData.excludedCandidates || [];
+  const competitorSourceStatus =
+    model.sourceStatus?.competitors || SOURCE_STATUS.NOT_APPLICABLE;
 
   if (comparisons.length === 0) {
+    const noComparisonState = {
+      [SOURCE_STATUS.FAILED]: {
+        label: "UNAVAILABLE",
+        className: "cap-missing",
+        explanation:
+          "Competitor evidence collection was attempted but failed. No directly comparable competitor evidence was available, so PRYSM does not make a competitive-positioning claim.",
+      },
+      [SOURCE_STATUS.NOT_CONNECTED]: {
+        label: "UNAVAILABLE",
+        className: "cap-neutral",
+        explanation:
+          "The competitor evidence source was not connected for this audit. PRYSM therefore could not collect directly comparable competitor evidence and does not make a competitive-positioning claim.",
+      },
+      [SOURCE_STATUS.NOT_APPLICABLE]: {
+        label: "NOT APPLICABLE",
+        className: "cap-neutral",
+        explanation:
+          "Competitor analysis was not applicable for this audit, so PRYSM does not make a competitive-positioning claim.",
+      },
+      [SOURCE_STATUS.BLOCKED]: {
+        label: "UNAVAILABLE",
+        className: "cap-neutral",
+        explanation:
+          "Competitor evidence collection was blocked by an access restriction. No directly comparable competitor evidence was available, so PRYSM does not make a competitive-positioning claim.",
+      },
+      [SOURCE_STATUS.UNAVAILABLE]: {
+        label: "UNAVAILABLE",
+        className: "cap-neutral",
+        explanation:
+          "The competitor evidence source returned no usable comparison data for this audit, so PRYSM does not make a competitive-positioning claim.",
+      },
+      [SOURCE_STATUS.PARTIAL]: {
+        label: "PARTIAL",
+        className: "cap-partial",
+        explanation:
+          "Competitor evidence collection was partial, but it did not yield directly comparable competitor evidence. PRYSM therefore withholds a competitive-positioning claim.",
+      },
+      [SOURCE_STATUS.AVAILABLE]: {
+        label: "UNAVAILABLE",
+        className: "cap-neutral",
+        explanation:
+          "Competitor evidence was available, but no directly comparable normalized comparison was produced. PRYSM therefore withholds a competitive-positioning claim.",
+      },
+    }[competitorSourceStatus] || {
+      label: "UNAVAILABLE",
+      className: "cap-neutral",
+      explanation:
+        "No directly comparable competitor evidence was available, so PRYSM does not make a competitive-positioning claim.",
+    };
+
     return `<section id="competitors" class="card">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How does your website compare with the competitors buyers are likely to consider?</p>
       <p class="muted small">Competitor Benchmark</p>
       <h2>Competitive context</h2>
-      <p><span class="chip cap-neutral">UNAVAILABLE</span> No directly comparable competitor evidence was available, so PRYSM does not make a competitive-positioning claim.</p>
+      <p><span class="chip ${noComparisonState.className}">${e(noComparisonState.label)}</span> ${e(noComparisonState.explanation)}</p>
       ${limitations.length ? `<h3>Evidence limitations</h3><ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}
     </section>`;
   }
