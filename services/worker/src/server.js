@@ -486,7 +486,7 @@ export function createRequestHandler({
       }
 
       // GET /api/v1/audits/:auditId — audit status
-      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/resume|\/report\/(.+))?$/);
+      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/resume|\/narrative-review|\/narrative-final-pass|\/report\/(.+))?$/);
       if (wp11AuditMatch) {
         const auditId = wp11AuditMatch[1];
         const subPath = wp11AuditMatch[2] || "";
@@ -501,6 +501,80 @@ export function createRequestHandler({
             const status = await auditService.getAuditStatus(auditId, access.tenantId);
             if (!status) return send(res, 404, { error: "Audit not found" });
             return send(res, 200, status);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // GET /api/v1/audits/:auditId/narrative-review
+        // Read-only governed review surface. Exposes the persisted Narrative v2
+        // human-review result, including the exact Judge defects that prevented
+        // automatic release. This endpoint performs no Writer/Judge/model call.
+        if (req.method === "GET" && subPath === "/narrative-review") {
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
+
+          if (
+            !auditService ||
+            typeof auditService.getNarrativeV2HumanReview !== "function"
+          ) {
+            return send(res, 501, {
+              error: "Narrative v2 human review not configured",
+            });
+          }
+
+          try {
+            const result = await auditService.getNarrativeV2HumanReview(
+              auditId,
+              access.tenantId,
+            );
+            return send(res, 200, result);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/audits/:auditId/narrative-final-pass
+        // Explicit human authorization boundary for the single governed third
+        // Writer/Judge round. The runtime enforces narrative_failed state,
+        // persisted AuditRequest reuse, pass limits, and the final-pass contract.
+        if (req.method === "POST" && subPath === "/narrative-final-pass") {
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
+
+          if (
+            !auditService ||
+            typeof auditService.continueNarrativeV2FinalPass !== "function"
+          ) {
+            return send(res, 501, {
+              error: "Narrative v2 final-pass continuation not configured",
+            });
+          }
+
+          try {
+            const payload = await readJson(req);
+            const authorizationId = String(payload.authorizationId || "").trim();
+
+            if (!authorizationId) {
+              return send(res, 422, {
+                error: "Explicit final-pass authorization is required",
+                code: "NARRATIVE_V2_FINAL_PASS_AUTHORIZATION_REQUIRED",
+              });
+            }
+
+            const result = await auditService.continueNarrativeV2FinalPass(
+              auditId,
+              access.tenantId,
+              authorizationId,
+            );
+
+            return send(res, 200, {
+              auditId,
+              authorized: true,
+              ...result,
+            });
           } catch (err) {
             return sendRouteError(res, err);
           }
