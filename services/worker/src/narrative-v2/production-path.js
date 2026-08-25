@@ -16,6 +16,10 @@ import { buildReportContentPackage, serializePackage, packageSha256 } from "../r
 import { loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
 import { loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { runFinalizationGate } from "../scoring/report-finalization-gate.js";
+import {
+  SOURCE_STATUS,
+  isValidSourceStatus,
+} from "../scoring/evidence-contracts.js";
 import { REPORT_DESIGN_V2, isReportDesignV2 } from "../report/report-design.js";
 import { buildWriterInput } from "./writer-input.js";
 import {
@@ -217,6 +221,25 @@ function validatePersistedReleaseCandidate(writerInput, orchestrationResult) {
   return { valid: errors.length === 0, errors };
 }
 
+function resolveCompetitorSourceStatus(decisionEvidence) {
+  const canonicalStatus =
+    decisionEvidence?.sourceStatus?.competitors;
+
+  if (isValidSourceStatus(canonicalStatus)) {
+    return canonicalStatus;
+  }
+
+  const legacyStatus =
+    Array.isArray(decisionEvidence?.competitors) &&
+    decisionEvidence.competitors.length > 0
+      ? decisionEvidence.competitors[0]?.status
+      : null;
+
+  return isValidSourceStatus(legacyStatus)
+    ? legacyStatus
+    : SOURCE_STATUS.NOT_APPLICABLE;
+}
+
 function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, decisionEvidence }) {
   // Use the canonical persisted ScoreSet directly. This intentionally fixes
   // the prior production projection loss of readinessStatusDetail and
@@ -242,6 +265,9 @@ function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, de
     suppressedModules: scoreSet.suppressedModules || [],
     capabilityEvidence,
     evidence: decisionEvidence,
+    sourceStatus: {
+      competitors: resolveCompetitorSourceStatus(decisionEvidence),
+    },
     input: {
       businessName: auditRequest.businessName || "",
       targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
@@ -797,7 +823,7 @@ async function renderNarrativeV2Draft({
     sources: {
       website: inputs.decisionEvidence.site?.sourceStatus || "NOT_APPLICABLE",
       performance: inputs.decisionEvidence.performance?.sourceStatus || "NOT_APPLICABLE",
-      competitors: inputs.decisionEvidence.competitors?.length ? (inputs.decisionEvidence.competitors[0]?.status || "NOT_APPLICABLE") : "NOT_APPLICABLE",
+      competitors: resolveCompetitorSourceStatus(inputs.decisionEvidence),
       backlinks: inputs.decisionEvidence.backlinks?.sourceStatus || "NOT_APPLICABLE",
       ga4: inputs.decisionEvidence.ga4?.sourceStatus || "NOT_APPLICABLE",
       gsc: inputs.decisionEvidence.gsc?.sourceStatus || "NOT_APPLICABLE",

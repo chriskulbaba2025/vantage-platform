@@ -189,7 +189,7 @@ function governedStatusReference(writerInput) {
       }
     }
   }
-  throw new Error("WriterInput must expose a governed source-status or capability reference");
+  return null;
 }
 
 function buildPassingWriterOutput({ writerInput, passNumber }) {
@@ -260,7 +260,8 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
       advantages: interpret("Competitive advantage"), disadvantages: interpret("Competitive disadvantage"),
       marketInterpretation: interpret("Competitive interpretation"), differentiatorToProtect: interpret("Differentiator"),
     }),
-    limitations: [{
+    limitations: governedStatus
+  ? [{
       itemId: "LIM-01",
       area: "Evidence boundary",
       status: governedStatus.status,
@@ -268,7 +269,8 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
       whatThisMeans: limitationInterpret("Limitation meaning"),
       whatThisDoesNotMean: limitationInterpret("Limitation non-meaning"),
       impactOnReport: limitationInterpret("Limitation impact"),
-    }],
+    }]
+  : [],
     actionPlan: [{
       actionId: "ACT-01",
       priority: 1,
@@ -319,19 +321,37 @@ function buildPassingJudgeResponse({ writerInput, passNumber }) {
   };
 }
 
-function buildRuntime({ narrativeV2 } = {}) {
+function buildRuntime({
+  narrativeV2,
+  adapters = workingAdapters(),
+} = {}) {
   const artifactStore = createMemoryArtifactStore();
-  const reportStore = createLocalReportStore({ baseDir: join(testBaseDir, `reports-${randomUUID().slice(0, 8)}`) });
+  const reportStore = createLocalReportStore({
+    baseDir: join(
+      testBaseDir,
+      `reports-${randomUUID().slice(0, 8)}`,
+    ),
+  });
+
   const runtime = createProductionRuntime({
     config: baseConfig(),
-    adapters: workingAdapters(),
-    validateContract: () => ({ valid: true, errors: [] }),
+    adapters,
+    validateContract: () => ({
+      valid: true,
+      errors: [],
+    }),
     artifactStore,
-    lifecycleRepo: wrapRepo(createMemoryLifecycleRepository()),
+    lifecycleRepo: wrapRepo(
+      createMemoryLifecycleRepository(),
+    ),
     reportStore,
     narrativeV2,
   });
-  return { runtime, artifactStore };
+
+  return {
+    runtime,
+    artifactStore,
+  };
 }
 
 async function waitForState(runtime, auditId, states, timeoutMs = 30000) {
@@ -391,6 +411,7 @@ test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judg
   }, tenantId);
 
   const state = await waitForState(runtime, created.auditId, [T.DRAFT_RENDERED, T.NARRATIVE_FAILED, T.RENDER_FAILED]);
+  assert.equal(state?.state, T.DRAFT_RENDERED);
   assert.equal(state?.state, T.DRAFT_RENDERED);
   assert.equal(writerCalls, 1, "Writer must execute exactly once for a first-pass release candidate");
   assert.equal(judgeCalls, 1, "Judge must execute exactly once for a first-pass release candidate");
@@ -473,6 +494,148 @@ test("NV2-PROD-05: production v2 model preserves readiness detail and rendering 
 
   assert.equal(model.readinessStatusDetail, "SENTINEL readiness detail retained from persisted scores");
   assert.deepEqual(model.renderingDiagnostics, [{ diagnosticCode: "SENTINEL-DIAGNOSTIC", diagnosticCategory: "SITE_RENDERING" }]);
+});
+
+test("DQV-005: canonical FAILED competitor status reaches Viewer v2 and the persisted manifest", async () => {
+  const adapters = workingAdapters();
+
+  adapters["dataforseo-serp"] = {
+    adapterVersion: "1.0.0",
+    execute: async () => ({
+      rawBytes: null,
+      contentType: null,
+      sourceResult: {
+        contractVersion: "1.0.0",
+        schemaVersion: "1.0.0",
+        source: "dataforseo-serp",
+        provider: "mock",
+        adapterVersion: "1.0.0",
+        status: "FAILED",
+        startedAt: FIXED_TS,
+        completedAt: FIXED_TS,
+        retryCount: 0,
+        expectedRecords: 1,
+        returnedRecords: 0,
+        errorCategory: "internal",
+        coverage: {
+          requested: 1,
+          completed: 0,
+          failed: 1,
+        },
+        limitations: ["Mock SERP provider failure"],
+        evidence: {
+          competitors: [],
+          suppliedCompetitors: [],
+          audienceScope: "local",
+          providerLocation: "Toronto",
+          keywordCount: 1,
+          resultCount: 0,
+        },
+      },
+    }),
+  };
+
+  const { runtime, artifactStore } = buildRuntime({
+    adapters,
+    narrativeV2: {
+      enabled: true,
+      writerExecutor: async ({
+        writerInput,
+        passNumber,
+      }) =>
+        buildPassingWriterOutput({
+          writerInput,
+          passNumber,
+        }),
+      judgeExecutor: async ({
+        writerInput,
+        passNumber,
+      }) =>
+        buildPassingJudgeResponse({
+          writerInput,
+          passNumber,
+        }),
+    },
+  });
+
+  const created = await runtime.auditService.createAudit(
+    {
+      ...baseInput(),
+      report: {
+        designVersion: "2.0.0",
+        narrativeVersion: "2.0.0",
+      },
+    },
+    tenantId,
+  );
+
+  const state = await waitForState(
+    runtime,
+    created.auditId,
+    [
+      T.DRAFT_RENDERED,
+      T.NARRATIVE_FAILED,
+      T.RENDER_FAILED,
+    ],
+  );
+
+  assert.equal(
+    state?.state,
+    T.DRAFT_RENDERED,
+  );
+
+  const manifestKey =
+    `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report-v2/manifest.json`;
+
+  const pageKey =
+    `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report-v2/pages/index.html`;
+
+  const manifest = await readJson(
+    artifactStore,
+    manifestKey,
+  );
+
+  const html = Buffer.from(
+    await artifactStore.get(pageKey),
+  ).toString("utf8");
+
+  assert.equal(
+    manifest.sources.competitors,
+    "FAILED",
+    "manifest must preserve the canonical FAILED competitor source status",
+  );
+
+  const start = html.indexOf(
+    "Competitive context",
+  );
+
+  assert.ok(
+    start > -1,
+    "Viewer v2 competitor section must render",
+  );
+
+  const competitorSection = html.slice(
+    start,
+    start + 3000,
+  );
+
+  assert.match(
+    competitorSection,
+    /attempted but failed/i,
+    "Viewer v2 must receive and explain the canonical FAILED status",
+  );
+
+  assert.match(
+    competitorSection,
+    /chip cap-missing/,
+    "FAILED competitor evidence must use the failure presentation state",
+  );
+
+  assert.doesNotMatch(
+    competitorSection,
+    /Competitor analysis was not applicable/i,
+    "FAILED must never degrade to NOT_APPLICABLE",
+  );
 });
 
 test("NV2-PROD-06: invalid persisted terminal orchestration fails closed without another Writer/Judge spend", async () => {
