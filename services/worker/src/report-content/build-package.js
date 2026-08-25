@@ -16,7 +16,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
+import {
+  SOURCE_STATUS,
+  isValidSourceStatus,
+} from "../scoring/evidence-contracts.js";
 import { SCORING_VERSION } from "../scoring/score-components.js";
 
 // ---------------------------------------------------------------------------
@@ -94,16 +97,22 @@ function copyBands(scoreSet) {
 // ---------------------------------------------------------------------------
 
 function buildSourceStatus(evidence) {
-  return {
-    website: evidence.site?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,
-    performance: evidence.performance?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,
-    competitors: evidence.competitors?.some(
-      (c) => c.status === SOURCE_STATUS.AVAILABLE,
-    )
+  const canonicalCompetitorStatus = evidence.sourceStatus?.competitors;
+
+  const competitorStatus = isValidSourceStatus(canonicalCompetitorStatus)
+    ? canonicalCompetitorStatus
+    : evidence.competitors?.some(
+        (c) => c.status === SOURCE_STATUS.AVAILABLE,
+      )
       ? SOURCE_STATUS.AVAILABLE
       : evidence.competitors?.length
         ? SOURCE_STATUS.PARTIAL
-        : SOURCE_STATUS.NOT_CONNECTED,
+        : SOURCE_STATUS.NOT_CONNECTED;
+
+  return {
+    website: evidence.site?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,
+    performance: evidence.performance?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,
+    competitors: competitorStatus,
     backlinks: evidence.backlinks?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,
     ga4: evidence.ga4?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,
     gsc: evidence.gsc?.sourceStatus || SOURCE_STATUS.NOT_CONNECTED,

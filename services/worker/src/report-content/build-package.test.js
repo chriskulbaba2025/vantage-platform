@@ -288,6 +288,36 @@ test("WP8-STATUS-01: missing source → NOT_CONNECTED", () => {
   assert.equal(pkg.sourceStatus.backlinks, "NOT_CONNECTED");
 });
 
+test("WP8-STATUS-02: canonical FAILED competitor source stays FAILED when collection is empty", () => {
+  const ev = makeEvidence();
+  ev.sourceStatus = { competitors: "FAILED" };
+  ev.competitors = [];
+
+  const pkg = buildReportContentPackage({
+    auditRequest: makeAuditRequest(),
+    canonicalEvidence: ev,
+    findings: makeFindings(),
+    scoreSet: makeScoreSet(),
+  });
+
+  assert.equal(pkg.sourceStatus.competitors, "FAILED");
+  assert.deepEqual(pkg.competitors, []);
+});
+
+test("WP8-STATUS-02: legacy evidence without root sourceStatus retains collection fallback", () => {
+  const ev = makeEvidence();
+  delete ev.sourceStatus;
+
+  const pkg = buildReportContentPackage({
+    auditRequest: makeAuditRequest(),
+    canonicalEvidence: ev,
+    findings: makeFindings(),
+    scoreSet: makeScoreSet(),
+  });
+
+  assert.equal(pkg.sourceStatus.competitors, "AVAILABLE");
+});
+
 // ---------------------------------------------------------------------------
 // WP8-LIMIT-01 — Limitations from governed evidence
 // ---------------------------------------------------------------------------
