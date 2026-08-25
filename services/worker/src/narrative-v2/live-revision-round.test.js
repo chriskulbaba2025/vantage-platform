@@ -5,6 +5,7 @@ import { createMemoryArtifactStore } from "../storage/memory-artifact-store.js";
 import {
   createNarrativeV2LiveBinding,
   NARRATIVE_V2_LIVE_MAX_CALLS,
+  NARRATIVE_V2_LIVE_MAX_TOTAL_CALLS,
   NARRATIVE_V2_LIVE_MAX_AUTOMATIC_PASSES,
 } from "./live-binding.js";
 import {
@@ -204,6 +205,25 @@ function revisedWriterOutput() {
   return output;
 }
 
+function finalRevisionWriterOutput() {
+  const output = structuredClone(revisedWriterOutput());
+
+  output.passNumber = 3;
+  output.content = {
+    ...output.content,
+    headline:
+      "Content and topical architecture now resolves the final governed defect",
+    importantGaps: atom(
+      "The final governed revision resolves only the authorized content defect.",
+    ),
+    businessMeaning: atom(
+      "The final governed revision makes the business consequence decision-useful.",
+    ),
+  };
+
+  return output;
+}
+
 function fullRubric(overrides = {}) {
   const rubric = {};
   for (const [key, maxScore] of Object.entries(RUBRIC)) {
@@ -300,33 +320,55 @@ function responseFor(payload) {
   };
 }
 
-async function runScenario(finalJudge) {
+async function runScenario(
+  finalJudge,
+  continuationPayloads = [],
+) {
   const artifactStore = createMemoryArtifactStore();
+
   const payloads = [
     validWriterOutput(1),
     revisingJudgeResponse(1),
     revisedWriterOutput(),
     finalJudge,
+    ...continuationPayloads,
   ];
+
   const calls = [];
+
   const binding = createNarrativeV2LiveBinding({
     env: baseEnv(),
     artifactStore,
     clock: { now: () => FIXED_TS },
     fetchImpl: async (_url, options) => {
       calls.push(JSON.parse(options.body));
+
       const payload = payloads[calls.length - 1];
-      if (!payload) throw new Error("unexpected fifth paid call");
+
+      if (!payload) {
+        throw new Error(
+          "unexpected paid Narrative v2 call",
+        );
+      }
+
       return responseFor(payload);
     },
   });
+
   binding.registerAuditScope(SCOPE);
+
   const result = await runNarrativeV2Orchestration({
     writerInput: writerInput(),
     writerExecutor: binding.writerExecutor,
     judgeExecutor: binding.judgeExecutor,
   });
-  return { result, calls, binding, artifactStore };
+
+  return {
+    result,
+    calls,
+    binding,
+    artifactStore,
+  };
 }
 
 test("LIVE-REVISION-01: live binding permits exactly Writer1 Judge1 Writer2 Judge2", async () => {
@@ -357,4 +399,127 @@ test("LIVE-REVISION-02: Judge2 REVISE routes to human review with no Writer3 or 
   assert.equal(result.passCount, 2);
   assert.equal(result.finalJudgeResponse.decision, JUDGE_DECISION.REVISE);
   assert.equal(calls.length, 4, "production live policy must never attempt Writer pass 3");
+});
+test("LIVE-REVISION-03: explicit human authorization permits exactly Writer3 Judge3 and preserves prior passes", async () => {
+  const {
+    result: reviewResult,
+    calls,
+    binding,
+    artifactStore,
+  } = await runScenario(
+    revisingJudgeResponse(2),
+    [
+      finalRevisionWriterOutput(),
+      passingJudgeResponse(3),
+    ],
+  );
+
+  assert.equal(
+    reviewResult.status,
+    NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED,
+  );
+  assert.equal(reviewResult.passCount, 2);
+  assert.equal(calls.length, 4);
+
+  const authorization = binding.authorizeFinalPass({
+    auditId: AUDIT_ID,
+    authorizationId: "human-final-pass-approval-001",
+  });
+
+  assert.equal(authorization.auditId, AUDIT_ID);
+  assert.equal(
+    authorization.authorizationId,
+    "human-final-pass-approval-001",
+  );
+
+  const finalResult = await runNarrativeV2Orchestration({
+    writerInput: writerInput(),
+    writerExecutor: binding.writerExecutor,
+    judgeExecutor: binding.judgeExecutor,
+    continuation: {
+      authorized: true,
+      passes: reviewResult.passes,
+    },
+  });
+
+  assert.equal(NARRATIVE_V2_LIVE_MAX_TOTAL_CALLS, 6);
+  assert.equal(binding.config.maxTotalCallsPerAudit, 6);
+  assert.equal(
+    finalResult.status,
+    NARRATIVE_V2_STATUS.RELEASE_CANDIDATE,
+  );
+  assert.equal(finalResult.passCount, 3);
+  assert.equal(finalResult.passes.length, 3);
+  assert.deepEqual(finalResult.passes[0], reviewResult.passes[0]);
+  assert.deepEqual(finalResult.passes[1], reviewResult.passes[1]);
+  assert.equal(
+    finalResult.finalJudgeResponse.decision,
+    JUDGE_DECISION.PASS,
+  );
+
+  assert.equal(calls.length, 6);
+  assert.deepEqual(
+    calls.map((call) => call.model),
+    [
+      "writer-test",
+      "judge-test",
+      "writer-test",
+      "judge-test",
+      "writer-test",
+      "judge-test",
+    ],
+  );
+
+  const prefix =
+    `tenants/${SCOPE.tenantId}/clients/${SCOPE.clientId}`
+    + `/audits/${SCOPE.auditId}/report-v2/narrative-v2/live-usage`;
+
+  for (let callNumber = 1; callNumber <= 6; callNumber += 1) {
+    const n = String(callNumber).padStart(2, "0");
+
+    assert.equal(
+      await artifactStore.exists(
+        `${prefix}/call-${n}-reservation.json`,
+      ),
+      true,
+    );
+
+    assert.equal(
+      await artifactStore.exists(
+        `${prefix}/call-${n}-result.json`,
+      ),
+      true,
+    );
+  }
+});
+
+test("LIVE-REVISION-04: final continuation fails closed before Writer3 when human authorization is absent", async () => {
+  const {
+    result: reviewResult,
+    calls,
+    binding,
+  } = await runScenario(
+    revisingJudgeResponse(2),
+    [finalRevisionWriterOutput()],
+  );
+
+  await assert.rejects(
+    () =>
+      runNarrativeV2Orchestration({
+        writerInput: writerInput(),
+        writerExecutor: binding.writerExecutor,
+        judgeExecutor: binding.judgeExecutor,
+        continuation: {
+          authorized: true,
+          passes: reviewResult.passes,
+        },
+      }),
+    /requires explicit human final-pass authorization/,
+  );
+
+  assert.equal(
+    calls.length,
+    4,
+    "unauthorized continuation must not make a fifth paid call",
+  );
 });
