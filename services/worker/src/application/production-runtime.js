@@ -235,6 +235,7 @@ export function createProductionRuntime({
     enabled: narrativeV2Enabled,
     writerExecutor: narrativeV2Deps.writerExecutor,
     judgeExecutor: narrativeV2Deps.judgeExecutor,
+    authorizeFinalPass: narrativeV2Deps.authorizeFinalPass,
     clock: runtimeClock,
   });
 

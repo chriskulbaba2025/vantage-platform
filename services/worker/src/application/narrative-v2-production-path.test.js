@@ -840,6 +840,137 @@ test("NV2-PROD-03: enabled runtime fails startup when either governed executor s
   );
 });
 
+test("NV2-PROD-03A: production runtime forwards the governed final-pass authorization binding", async () => {
+  const authorizations = [];
+
+  const writerExecutor = async ({
+    writerInput,
+    passNumber,
+    previousOutput,
+  }) => {
+    if (passNumber === 1) {
+      return buildPassingWriterOutput({
+        writerInput,
+        passNumber,
+      });
+    }
+
+    return buildTargetedWriterRevision({
+      previousOutput,
+      passNumber,
+    });
+  };
+
+  // Match the governed live binding: only two Writer/Judge rounds may run
+  // automatically. Pass 3 requires explicit human authorization.
+  writerExecutor.maxAutomaticPasses = 2;
+
+  const { runtime, artifactStore } = buildRuntime({
+    narrativeV2: {
+      enabled: true,
+
+      authorizeFinalPass: ({
+        auditId,
+        authorizationId,
+      }) => {
+        authorizations.push({
+          auditId,
+          authorizationId,
+        });
+
+        return {
+          auditId,
+          authorizationId,
+          authorizedAt: FIXED_TS,
+        };
+      },
+
+      writerExecutor,
+
+      judgeExecutor: async ({
+        writerInput,
+        passNumber,
+      }) => {
+        if (passNumber < 3) {
+          return buildRevisingJudgeResponse({
+            writerInput,
+            passNumber,
+          });
+        }
+
+        return buildPassingJudgeResponse({
+          writerInput,
+          passNumber,
+        });
+      },
+    },
+  });
+
+  const created = await runtime.auditService.createAudit(
+    {
+      ...baseInput(),
+      report: {
+        designVersion: "2.0.0",
+        narrativeVersion: "2.0.0",
+      },
+    },
+    tenantId,
+  );
+
+  const failedState = await waitForState(
+    runtime,
+    created.auditId,
+    [T.NARRATIVE_FAILED],
+  );
+
+  assert.equal(
+    failedState?.state,
+    T.NARRATIVE_FAILED,
+    "two automatic revision rounds must stop for explicit human authorization",
+  );
+
+  const requestKey =
+    `tenants/${tenantId}`
+    + `/clients/${created.clientId}`
+    + `/audits/${created.auditId}`
+    + `/canonical/audit-request.json`;
+
+  const persistedRequest = await readJson(
+    artifactStore,
+    requestKey,
+  );
+
+  const result =
+    await runtime.orchestrator.continueNarrativeV2FinalPass(
+      persistedRequest,
+      {
+        executionId: "runtime-final-pass-proof",
+        authorizationId: "runtime-authorization-proof",
+      },
+    );
+
+  assert.equal(
+    authorizations.length,
+    1,
+    "production runtime must forward exactly one final-pass authorization",
+  );
+
+  assert.deepEqual(
+    authorizations[0],
+    {
+      auditId: created.auditId,
+      authorizationId:
+        "runtime-authorization-proof",
+    },
+  );
+
+  assert.equal(
+    result.finalState,
+    T.NARRATIVE_READY,
+    "authorized Pass 3 must produce the governed release candidate",
+  );
+});
+
 test("NV2-PROD-04: default report-design v2 remains on the existing narrative/render path when narrativeVersion is not selected", async () => {
   let writerCalls = 0;
   let judgeCalls = 0;
