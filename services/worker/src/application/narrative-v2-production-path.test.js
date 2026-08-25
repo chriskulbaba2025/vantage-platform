@@ -321,6 +321,396 @@ function buildPassingJudgeResponse({ writerInput, passNumber }) {
   };
 }
 
+function buildRevisingJudgeResponse({
+  writerInput,
+  passNumber,
+}) {
+  const response = structuredClone(
+    buildPassingJudgeResponse({
+      writerInput,
+      passNumber,
+    }),
+  );
+
+  const ref =
+    Object.keys(writerInput.referenceIndex)[0];
+
+  const defectId =
+    `D-CONTINUATION-${passNumber}`;
+
+  response.rubric.contentFunnelDepth = {
+    score: 5,
+    maxScore: RUBRIC.contentFunnelDepth,
+    status: "FAIL",
+    rationale:
+      "The content section requires a more specific governed explanation.",
+    evidenceRefs: [ref],
+    defectIds: [defectId],
+  };
+
+  response.totalScore = Object.values(
+    response.rubric,
+  ).reduce(
+    (sum, record) => sum + record.score,
+    0,
+  );
+
+  response.decision = JUDGE_DECISION.REVISE;
+
+  response.defects = [{
+    defectId,
+    criterion: "contentFunnelDepth",
+    section: "content",
+    severity: "MINOR",
+    problem:
+      "The content explanation remains too generic.",
+    whyItMatters:
+      "The client needs the governed content gap stated precisely.",
+    evidenceRefs: [ref],
+    requiredCorrection:
+      "Rewrite only the content section to state the governed gap precisely.",
+    allowedFields: ["content"],
+    mustPreserve: [
+      "executiveConclusion",
+      "conversion",
+    ],
+  }];
+
+  response.revisionDirective = {
+    required: true,
+    mode: "TARGETED",
+    fieldsToRewrite: ["content"],
+    fieldsLocked: [],
+    defectIds: [defectId],
+  };
+
+  return response;
+}
+
+function buildHumanReviewJudgeResponse({
+  writerInput,
+  passNumber,
+}) {
+  const response =
+    buildRevisingJudgeResponse({
+      writerInput,
+      passNumber,
+    });
+
+  response.decision =
+    JUDGE_DECISION.HUMAN_REVIEW_REQUIRED;
+
+  response.revisionDirective = {
+    required: false,
+    mode: "HUMAN_REVIEW",
+    fieldsToRewrite: [],
+    fieldsLocked: [],
+    defectIds:
+      response.defects.map(
+        (defect) => defect.defectId,
+      ),
+  };
+
+  return response;
+}
+
+function buildTargetedWriterRevision({
+  previousOutput,
+  passNumber,
+}) {
+  const output =
+    structuredClone(previousOutput);
+
+  output.passNumber = passNumber;
+
+  output.content = {
+    ...output.content,
+    headline:
+      `Content and topical architecture governed revision ${passNumber}`,
+    importantGaps: {
+      ...output.content.importantGaps,
+      text:
+        `The governed content gap is specifically corrected in pass ${passNumber}.`,
+    },
+    businessMeaning: {
+      ...output.content.businessMeaning,
+      text:
+        `The governed business meaning is specifically clarified in pass ${passNumber}.`,
+    },
+  };
+
+  return output;
+}
+
+async function buildContinuationFixture({
+  finalJudgeOutcome,
+}) {
+  const auditId =
+    "88888888-8888-4888-8888-888888888888";
+
+  const auditRequest = {
+    contractVersion: "1.0.0",
+    auditId,
+    tenantId,
+    clientId: "narrative-continuation-client",
+    report: {
+      designVersion: "2.0.0",
+      narrativeVersion: "2.0.0",
+    },
+  };
+
+  const writerInput = {
+    contractVersion: "1.0.0",
+    writerInputVersion: "1.0.0",
+    auditId,
+    scoreGovernance: {
+      sourceDependencies: {
+        offsite: "UNAVAILABLE",
+      },
+    },
+    referenceIndex: {
+      "finding:F-001": {
+        kind: "finding",
+        path: "findings.F-001",
+      },
+      "source:offsite": {
+        kind: "source-status",
+        path:
+          "scoreGovernance.sourceDependencies.offsite",
+      },
+    },
+  };
+
+  const pass1Writer =
+    buildPassingWriterOutput({
+      writerInput,
+      passNumber: 1,
+    });
+
+  const pass1Judge =
+    buildRevisingJudgeResponse({
+      writerInput,
+      passNumber: 1,
+    });
+
+  const pass2Writer =
+    buildTargetedWriterRevision({
+      previousOutput: pass1Writer,
+      passNumber: 2,
+    });
+
+  const pass2Judge =
+    buildRevisingJudgeResponse({
+      writerInput,
+      passNumber: 2,
+    });
+
+  const originalOrchestration = {
+    contractVersion: "1.0.0",
+    orchestrationVersion: "1.0.0",
+    auditId,
+    status: "HUMAN_REVIEW_REQUIRED",
+    passCount: 2,
+    finalWriterOutput: pass2Writer,
+    finalJudgeResponse: pass2Judge,
+    passes: [
+      {
+        passNumber: 1,
+        writerOutput: pass1Writer,
+        judgeResponse: pass1Judge,
+      },
+      {
+        passNumber: 2,
+        writerOutput: pass2Writer,
+        judgeResponse: pass2Judge,
+      },
+    ],
+  };
+
+  const artifactStore =
+    createMemoryArtifactStore();
+
+  const originalOrchestrationKey =
+    `tenants/${tenantId}`
+    + `/clients/${auditRequest.clientId}`
+    + `/audits/${auditId}`
+    + `/report-v2/narrative-v2/orchestration.json`;
+
+  const finalOrchestrationKey =
+    `tenants/${tenantId}`
+    + `/clients/${auditRequest.clientId}`
+    + `/audits/${auditId}`
+    + `/report-v2/narrative-v2/orchestration-final-pass.json`;
+
+  await putJson(
+    artifactStore,
+    {
+      tenantId,
+      clientId: auditRequest.clientId,
+      auditId,
+      category: "report-v2",
+      artifactName:
+        "narrative-v2/writer-input.json",
+    },
+    writerInput,
+  );
+
+  await putJson(
+    artifactStore,
+    {
+      tenantId,
+      clientId: auditRequest.clientId,
+      auditId,
+      category: "report-v2",
+      artifactName:
+        "narrative-v2/orchestration.json",
+    },
+    originalOrchestration,
+  );
+
+  const lifecycleState = {
+    state: T.NARRATIVE_FAILED,
+  };
+
+  const lifecycleTransitions = [];
+
+  const lifecycleService = {
+    currentState: async () =>
+      lifecycleState,
+
+    transition: async ({ toState }) => {
+      lifecycleTransitions.push(toState);
+      lifecycleState.state = toState;
+      return {
+        state: toState,
+      };
+    },
+  };
+
+  let baseCallCount = 0;
+  let writerCallCount = 0;
+  let judgeCallCount = 0;
+
+  const authorizationRecords = [];
+
+  const productionPath =
+    createNarrativeV2ProductionPath({
+      baseOrchestrator: {
+        execute: async () => {
+          baseCallCount += 1;
+          throw new Error(
+            "continuation must not invoke base collection/scoring",
+          );
+        },
+      },
+
+      lifecycleService,
+      artifactStore,
+
+      validateContract: () => ({
+        valid: true,
+        errors: [],
+      }),
+
+      enabled: true,
+
+      authorizeFinalPass: ({
+        auditId: authorizedAuditId,
+        authorizationId,
+      }) => {
+        authorizationRecords.push({
+          auditId: authorizedAuditId,
+          authorizationId,
+        });
+
+        return {
+          auditId: authorizedAuditId,
+          authorizationId,
+          authorizedAt: FIXED_TS,
+        };
+      },
+
+      writerExecutor: async ({
+        writerInput: executionWriterInput,
+        passNumber,
+        previousOutput,
+        judgeResponse,
+      }) => {
+        writerCallCount += 1;
+
+        assert.equal(passNumber, 3);
+        assert.equal(
+          executionWriterInput.auditId,
+          auditId,
+        );
+        assert.deepEqual(
+          previousOutput,
+          pass2Writer,
+        );
+        assert.deepEqual(
+          judgeResponse,
+          pass2Judge,
+        );
+
+        return buildTargetedWriterRevision({
+          previousOutput,
+          passNumber,
+        });
+      },
+
+      judgeExecutor: async ({
+        writerInput: executionWriterInput,
+        passNumber,
+      }) => {
+        judgeCallCount += 1;
+
+        assert.equal(passNumber, 3);
+
+        if (
+          finalJudgeOutcome
+          === "HUMAN_REVIEW_REQUIRED"
+        ) {
+          return buildHumanReviewJudgeResponse({
+            writerInput:
+              executionWriterInput,
+            passNumber,
+          });
+        }
+
+        return buildPassingJudgeResponse({
+          writerInput:
+            executionWriterInput,
+          passNumber,
+        });
+      },
+
+      clock: {
+        now: () => FIXED_TS,
+      },
+    });
+
+  return {
+    auditRequest,
+    artifactStore,
+    productionPath,
+    originalOrchestration,
+    originalOrchestrationKey,
+    finalOrchestrationKey,
+    transitions: () => [
+      ...lifecycleTransitions,
+    ],
+    authorizations: () => [
+      ...authorizationRecords,
+    ],
+    baseCalls: () => baseCallCount,
+    writerCalls: () => writerCallCount,
+    judgeCalls: () => judgeCallCount,
+  };
+}
+
+
+
+
 function buildRuntime({
   narrativeV2,
   adapters = workingAdapters(),
@@ -702,4 +1092,192 @@ test("NV2-PROD-06: invalid persisted terminal orchestration fails closed without
   assert.equal(writerCalls, 0, "invalid terminal artifact must not trigger a replacement Writer call");
   assert.equal(judgeCalls, 0, "invalid terminal artifact must not trigger a replacement Judge call");
   assert.match(result.narrativeV2Error, /failed validation/i);
+});
+test("NV2-PROD-07: NARRATIVE_FAILED exposes exact Judge defects and an authorized final pass is additive", async () => {
+  const fixture = await buildContinuationFixture({
+    finalJudgeOutcome: "PASS",
+  });
+
+  const review =
+    await fixture.productionPath.getNarrativeV2HumanReview(
+      fixture.auditRequest,
+    );
+
+  assert.equal(review.status, "HUMAN_REVIEW_REQUIRED");
+  assert.equal(review.passCount, 2);
+  assert.equal(review.judgeDecision, JUDGE_DECISION.REVISE);
+  assert.equal(review.finalPassAvailable, true);
+  assert.deepEqual(
+    review.defects,
+    fixture.originalOrchestration.finalJudgeResponse.defects,
+    "human review must expose the exact persisted Judge defects",
+  );
+  assert.deepEqual(
+    review.revisionDirective,
+    fixture.originalOrchestration.finalJudgeResponse.revisionDirective,
+  );
+
+  const originalBytesBefore = Buffer.from(
+    await fixture.artifactStore.get(
+      fixture.originalOrchestrationKey,
+    ),
+  );
+
+  const result =
+    await fixture.productionPath.continueNarrativeV2FinalPass(
+      fixture.auditRequest,
+      {
+        executionId: "final-pass-success",
+        authorizationId: "human-approval-001",
+      },
+    );
+
+  assert.equal(result.finalState, T.NARRATIVE_READY);
+  assert.equal(result.narrativeV2Status, "RELEASE_CANDIDATE");
+  assert.equal(result.narrativeV2PassCount, 3);
+  assert.equal(result.finalPassExecuted, true);
+
+  assert.equal(
+    fixture.writerCalls(),
+    1,
+    "continuation must execute only Writer pass 3",
+  );
+  assert.equal(
+    fixture.judgeCalls(),
+    1,
+    "continuation must execute only Judge pass 3",
+  );
+  assert.equal(
+    fixture.baseCalls(),
+    0,
+    "continuation must not re-enter collection or scoring",
+  );
+  assert.equal(
+    fixture.authorizations().length,
+    1,
+    "final pass requires exactly one explicit authorization",
+  );
+
+  assert.deepEqual(
+    fixture.transitions(),
+    [
+      T.NARRATIVE_PENDING,
+      T.NARRATIVE_READY,
+    ],
+  );
+
+  const originalBytesAfter = Buffer.from(
+    await fixture.artifactStore.get(
+      fixture.originalOrchestrationKey,
+    ),
+  );
+
+  assert.equal(
+    originalBytesAfter.equals(originalBytesBefore),
+    true,
+    "original Pass 1/2 orchestration artifact must remain byte-for-byte immutable",
+  );
+
+  assert.equal(
+    await fixture.artifactStore.exists(
+      fixture.finalOrchestrationKey,
+    ),
+    true,
+    "Pass 3 must be persisted to the additive final-pass artifact",
+  );
+
+  const finalOrchestration = await readJson(
+    fixture.artifactStore,
+    fixture.finalOrchestrationKey,
+  );
+
+  assert.equal(finalOrchestration.status, "RELEASE_CANDIDATE");
+  assert.equal(finalOrchestration.passCount, 3);
+  assert.equal(finalOrchestration.passes.length, 3);
+  assert.deepEqual(
+    finalOrchestration.passes.slice(0, 2),
+    fixture.originalOrchestration.passes,
+    "final orchestration must preserve the exact prior governed history structurally",
+  );
+});
+
+test("NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pass 4", async () => {
+  const fixture = await buildContinuationFixture({
+    finalJudgeOutcome: "HUMAN_REVIEW_REQUIRED",
+  });
+
+  const originalBytesBefore = Buffer.from(
+    await fixture.artifactStore.get(
+      fixture.originalOrchestrationKey,
+    ),
+  );
+
+  const result =
+    await fixture.productionPath.continueNarrativeV2FinalPass(
+      fixture.auditRequest,
+      {
+        executionId: "final-pass-review",
+        authorizationId: "human-approval-002",
+      },
+    );
+
+  assert.equal(result.finalState, T.NARRATIVE_FAILED);
+  assert.equal(
+    result.narrativeV2Status,
+    "HUMAN_REVIEW_REQUIRED",
+  );
+  assert.equal(result.narrativeV2PassCount, 3);
+  assert.equal(result.finalPassExecuted, true);
+  assert.equal(result.humanReview.passCount, 3);
+  assert.equal(result.humanReview.finalPassAvailable, false);
+
+  assert.equal(fixture.writerCalls(), 1);
+  assert.equal(fixture.judgeCalls(), 1);
+  assert.equal(fixture.baseCalls(), 0);
+
+  const finalOrchestration = await readJson(
+    fixture.artifactStore,
+    fixture.finalOrchestrationKey,
+  );
+
+  assert.equal(
+    finalOrchestration.status,
+    "HUMAN_REVIEW_REQUIRED",
+  );
+  assert.equal(finalOrchestration.passCount, 3);
+
+  const originalBytesAfter = Buffer.from(
+    await fixture.artifactStore.get(
+      fixture.originalOrchestrationKey,
+    ),
+  );
+
+  assert.equal(
+    originalBytesAfter.equals(originalBytesBefore),
+    true,
+    "failed Pass 3 must not overwrite Pass 1/2 history",
+  );
+
+  await assert.rejects(
+    () =>
+      fixture.productionPath.continueNarrativeV2FinalPass(
+        fixture.auditRequest,
+        {
+          executionId: "illegal-pass-four",
+          authorizationId: "human-approval-003",
+        },
+      ),
+    /already exists/i,
+  );
+
+  assert.equal(
+    fixture.writerCalls(),
+    1,
+    "no Writer pass 4 may execute",
+  );
+  assert.equal(
+    fixture.judgeCalls(),
+    1,
+    "no Judge pass 4 may execute",
+  );
 });

@@ -34,6 +34,8 @@ import { REPORT_V2_VIEWER_VERSION } from "../report/render-report-v2.js";
 const T = LIFECYCLE_STATE;
 const NARRATIVE_V2_VERSION = "2.0.0";
 const UAT_RERENDER_AUDIT_ID = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
+const FINAL_PASS_ORCHESTRATION_ARTIFACT =
+  "narrative-v2/orchestration-final-pass.json";
 
 function defaultClock() {
   return { now: () => new Date().toISOString() };
@@ -124,6 +126,30 @@ async function loadJsonArtifact({ artifactStore, auditRequest, artifactName }) {
   return JSON.parse(Buffer.from(bytes).toString("utf8"));
 }
 
+async function loadEffectiveOrchestrationResult({
+  artifactStore,
+  auditRequest,
+}) {
+  const finalPassResult =
+    await loadJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName:
+        FINAL_PASS_ORCHESTRATION_ARTIFACT,
+    });
+
+  if (finalPassResult) {
+    return finalPassResult;
+  }
+
+  return loadJsonArtifact({
+    artifactStore,
+    auditRequest,
+    artifactName:
+      "narrative-v2/orchestration.json",
+  });
+}
+
 async function loadScoredInputs({ artifactStore, auditRequest, validateContract }) {
   const scope = scopeFor(auditRequest);
   const decisionEvidence = await loadAndValidateDecisionEvidence({
@@ -189,36 +215,557 @@ async function ensureReportContentPackage({ artifactStore, auditRequest, validat
   return record.key;
 }
 
-function validatePersistedReleaseCandidate(writerInput, orchestrationResult) {
+function validatePersistedReleaseCandidate(
+  writerInput,
+  orchestrationResult,
+) {
   const errors = [];
-  if (!writerInput || typeof writerInput !== "object") errors.push("writerInput missing");
-  if (!orchestrationResult || typeof orchestrationResult !== "object") errors.push("orchestration result missing");
-  if (orchestrationResult?.status !== NARRATIVE_V2_STATUS.RELEASE_CANDIDATE) {
-    errors.push(`orchestration status must be ${NARRATIVE_V2_STATUS.RELEASE_CANDIDATE}`);
-  }
-  if (orchestrationResult?.auditId !== writerInput?.auditId) errors.push("orchestration auditId mismatch");
-  if (!Number.isInteger(orchestrationResult?.passCount) || orchestrationResult.passCount < 1 || orchestrationResult.passCount > 3) {
-    errors.push("orchestration passCount must be an integer from 1 to 3");
-  }
-  if (orchestrationResult?.finalJudgeResponse?.decision !== "PASS") {
-    errors.push("final Judge decision must be PASS for a persisted release candidate");
-  }
-  if (errors.length) return { valid: false, errors };
 
-  const passNumber = orchestrationResult.passCount;
-  const writerValidation = validateWriterOutput(orchestrationResult.finalWriterOutput, {
-    writerInput,
-    expectedPassNumber: passNumber,
+  if (!writerInput || typeof writerInput !== "object") {
+    errors.push("writerInput missing");
+  }
+
+  if (
+    !orchestrationResult
+    || typeof orchestrationResult !== "object"
+  ) {
+    errors.push("orchestration result missing");
+  }
+
+  if (
+    orchestrationResult?.status
+    !== NARRATIVE_V2_STATUS.RELEASE_CANDIDATE
+  ) {
+    errors.push(
+      `orchestration status must be ${NARRATIVE_V2_STATUS.RELEASE_CANDIDATE}`,
+    );
+  }
+
+  if (
+    orchestrationResult?.auditId
+    !== writerInput?.auditId
+  ) {
+    errors.push("orchestration auditId mismatch");
+  }
+
+  if (
+    !Number.isInteger(orchestrationResult?.passCount)
+    || orchestrationResult.passCount < 1
+    || orchestrationResult.passCount > 3
+  ) {
+    errors.push(
+      "orchestration passCount must be an integer from 1 to 3",
+    );
+  }
+
+  if (
+    orchestrationResult?.finalJudgeResponse?.decision
+    !== "PASS"
+  ) {
+    errors.push(
+      "final Judge decision must be PASS for a persisted release candidate",
+    );
+  }
+
+  if (errors.length) {
+    return {
+      valid: false,
+      errors,
+    };
+  }
+
+  const passNumber =
+    orchestrationResult.passCount;
+
+  let previousOutput;
+  let revisionDirective;
+
+  if (passNumber > 1) {
+    if (
+      !Array.isArray(orchestrationResult.passes)
+      || orchestrationResult.passes.length < passNumber
+    ) {
+      errors.push(
+        `persisted release candidate requires ${passNumber} pass records`,
+      );
+    } else {
+      const previousPass =
+        orchestrationResult.passes[
+          passNumber - 2
+        ];
+
+      previousOutput =
+        previousPass?.writerOutput;
+
+      revisionDirective =
+        previousPass?.judgeResponse
+          ?.revisionDirective;
+
+      if (!previousOutput) {
+        errors.push(
+          `Pass ${passNumber} release validation requires Pass ${passNumber - 1} WriterOutput`,
+        );
+      }
+
+      if (
+        !revisionDirective
+        || revisionDirective.required !== true
+        || revisionDirective.mode !== "TARGETED"
+      ) {
+        errors.push(
+          `Pass ${passNumber} release validation requires the prior targeted revision directive`,
+        );
+      }
+    }
+  }
+
+  if (errors.length) {
+    return {
+      valid: false,
+      errors,
+    };
+  }
+
+  const writerValidation =
+    validateWriterOutput(
+      orchestrationResult.finalWriterOutput,
+      {
+        writerInput,
+        expectedPassNumber: passNumber,
+        ...(passNumber > 1
+          ? {
+              previousOutput,
+              revisionDirective,
+            }
+          : {}),
+      },
+    );
+
+  if (!writerValidation.valid) {
+    errors.push(
+      ...writerValidation.errors.map(
+        (error) =>
+          `WriterOutput: ${error}`,
+      ),
+    );
+  }
+
+  const judgeValidation =
+    validateJudgeResponse(
+      orchestrationResult.finalJudgeResponse,
+      {
+        writerInput,
+        expectedPassNumber: passNumber,
+      },
+    );
+
+  if (!judgeValidation.valid) {
+    errors.push(
+      ...judgeValidation.errors.map(
+        (error) =>
+          `JudgeResponse: ${error}`,
+      ),
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+function validatePersistedHumanReviewContinuation(
+  writerInput,
+  orchestrationResult,
+) {
+  const errors = [];
+
+  if (!writerInput || typeof writerInput !== "object") {
+    errors.push("writerInput missing");
+  }
+
+  if (!orchestrationResult || typeof orchestrationResult !== "object") {
+    errors.push("orchestration result missing");
+  }
+
+  if (
+    orchestrationResult?.status
+    !== NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED
+  ) {
+    errors.push(
+      `orchestration status must be ${NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED}`,
+    );
+  }
+
+  if (orchestrationResult?.auditId !== writerInput?.auditId) {
+    errors.push("orchestration auditId mismatch");
+  }
+
+  if (orchestrationResult?.passCount !== 2) {
+    errors.push(
+      "human-review continuation requires exactly two completed prior passes",
+    );
+  }
+
+  if (
+    !Array.isArray(orchestrationResult?.passes)
+    || orchestrationResult.passes.length !== 2
+  ) {
+    errors.push(
+      "human-review continuation requires exactly two persisted pass records",
+    );
+  }
+
+  if (errors.length) {
+    return {
+      valid: false,
+      errors,
+    };
+  }
+
+  let previousOutput;
+  let previousJudgeResponse;
+
+  for (
+    let index = 0;
+    index < orchestrationResult.passes.length;
+    index += 1
+  ) {
+    const expectedPassNumber = index + 1;
+    const pass = orchestrationResult.passes[index];
+
+    if (!pass || pass.passNumber !== expectedPassNumber) {
+      errors.push(
+        `pass ${expectedPassNumber} record is missing or misnumbered`,
+      );
+      continue;
+    }
+
+    const writerValidation = validateWriterOutput(
+      pass.writerOutput,
+      {
+        writerInput,
+        expectedPassNumber,
+        ...(expectedPassNumber > 1
+          ? {
+              previousOutput,
+              revisionDirective:
+                previousJudgeResponse?.revisionDirective,
+            }
+          : {}),
+      },
+    );
+
+    if (!writerValidation.valid) {
+      errors.push(
+        ...writerValidation.errors.map(
+          (error) =>
+            `Pass ${expectedPassNumber} WriterOutput: ${error}`,
+        ),
+      );
+    }
+
+    const judgeValidation = validateJudgeResponse(
+      pass.judgeResponse,
+      {
+        writerInput,
+        expectedPassNumber,
+      },
+    );
+
+    if (!judgeValidation.valid) {
+      errors.push(
+        ...judgeValidation.errors.map(
+          (error) =>
+            `Pass ${expectedPassNumber} JudgeResponse: ${error}`,
+        ),
+      );
+    }
+
+    if (
+      pass.judgeResponse?.decision !== "REVISE"
+      || pass.judgeResponse?.revisionDirective?.required !== true
+      || pass.judgeResponse?.revisionDirective?.mode !== "TARGETED"
+    ) {
+      errors.push(
+        `Pass ${expectedPassNumber} must end in a targeted REVISE directive`,
+      );
+    }
+
+    previousOutput = pass.writerOutput;
+    previousJudgeResponse = pass.judgeResponse;
+  }
+
+  if (
+    JSON.stringify(orchestrationResult.finalWriterOutput)
+    !== JSON.stringify(
+      orchestrationResult.passes[1]?.writerOutput,
+    )
+  ) {
+    errors.push(
+      "finalWriterOutput must reference persisted pass 2 WriterOutput",
+    );
+  }
+
+  if (
+    JSON.stringify(orchestrationResult.finalJudgeResponse)
+    !== JSON.stringify(
+      orchestrationResult.passes[1]?.judgeResponse,
+    )
+  ) {
+    errors.push(
+      "finalJudgeResponse must reference persisted pass 2 JudgeResponse",
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+function buildHumanReviewSummary({
+  auditRequest,
+  orchestrationResult,
+}) {
+  const judgeResponse =
+    orchestrationResult?.finalJudgeResponse || null;
+
+  return Object.freeze({
+    contractVersion: "1.0.0",
+    auditId: auditRequest.auditId,
+    status:
+      orchestrationResult?.status || "FAILED",
+    passCount:
+      orchestrationResult?.passCount ?? null,
+    judgeDecision:
+      judgeResponse?.decision || null,
+    defects: Object.freeze([
+      ...(Array.isArray(judgeResponse?.defects)
+        ? judgeResponse.defects
+        : []),
+    ]),
+    revisionDirective:
+      judgeResponse?.revisionDirective || null,
+    finalPassAvailable:
+      orchestrationResult?.status
+        === NARRATIVE_V2_STATUS.HUMAN_REVIEW_REQUIRED
+      && orchestrationResult?.passCount === 2
+      && judgeResponse?.decision === "REVISE"
+      && judgeResponse?.revisionDirective?.required === true
+      && judgeResponse?.revisionDirective?.mode === "TARGETED",
   });
-  if (!writerValidation.valid) errors.push(...writerValidation.errors.map((e) => `WriterOutput: ${e}`));
+}
 
-  const judgeValidation = validateJudgeResponse(orchestrationResult.finalJudgeResponse, {
+async function runNarrativeV2FinalPass({
+  auditRequest,
+  executionId,
+  startedAt,
+  lifecycleService,
+  artifactStore,
+  writerExecutor,
+  judgeExecutor,
+  authorizeFinalPass,
+  authorizationId,
+  clock,
+}) {
+  if (typeof authorizeFinalPass !== "function") {
+    throw new Error(
+      "Narrative v2 final continuation requires a final-pass authorization binding",
+    );
+  }
+
+  const normalizedAuthorizationId =
+    String(authorizationId || "").trim();
+
+  if (!normalizedAuthorizationId) {
+    throw new Error(
+      "Narrative v2 final continuation requires authorizationId",
+    );
+  }
+
+  const existingFinalResult =
+    await loadJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName:
+        FINAL_PASS_ORCHESTRATION_ARTIFACT,
+    });
+
+  if (existingFinalResult) {
+    throw new Error(
+      "Narrative v2 final-pass orchestration already exists; refusing duplicate continuation",
+    );
+  }
+
+  const [
     writerInput,
-    expectedPassNumber: passNumber,
-  });
-  if (!judgeValidation.valid) errors.push(...judgeValidation.errors.map((e) => `JudgeResponse: ${e}`));
+    originalOrchestration,
+  ] = await Promise.all([
+    loadJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName:
+        "narrative-v2/writer-input.json",
+    }),
+    loadJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName:
+        "narrative-v2/orchestration.json",
+    }),
+  ]);
 
-  return { valid: errors.length === 0, errors };
+  const continuationValidation =
+    validatePersistedHumanReviewContinuation(
+      writerInput,
+      originalOrchestration,
+    );
+
+  if (!continuationValidation.valid) {
+    throw new Error(
+      `Narrative v2 final continuation rejected: ${continuationValidation.errors.join(
+        "; ",
+      )}`,
+    );
+  }
+
+  authorizeFinalPass({
+    auditId: auditRequest.auditId,
+    authorizationId:
+      normalizedAuthorizationId,
+  });
+
+  await transition({
+    lifecycleService,
+    auditRequest,
+    executionId,
+    toState: T.NARRATIVE_PENDING,
+    reason:
+      "narrative-v2-final-pass-authorized",
+  });
+
+  try {
+    const finalResult =
+      await runNarrativeV2Orchestration({
+        writerInput,
+        writerExecutor,
+        judgeExecutor,
+        continuation: {
+          authorized: true,
+          passes:
+            originalOrchestration.passes,
+        },
+      });
+
+    const finalRecord =
+      await persistJsonArtifact({
+        artifactStore,
+        auditRequest,
+        artifactName:
+          FINAL_PASS_ORCHESTRATION_ARTIFACT,
+        value: finalResult,
+      });
+
+    if (
+      finalResult.status
+      === NARRATIVE_V2_STATUS.RELEASE_CANDIDATE
+    ) {
+      const releaseValidation =
+        validatePersistedReleaseCandidate(
+          writerInput,
+          finalResult,
+        );
+
+      if (!releaseValidation.valid) {
+        throw new Error(
+          `Narrative v2 final release-candidate validation failed: ${releaseValidation.errors.join(
+            "; ",
+          )}`,
+        );
+      }
+
+      await transition({
+        lifecycleService,
+        auditRequest,
+        executionId,
+        toState: T.NARRATIVE_READY,
+        reason:
+          "narrative-v2-final-pass-release-candidate",
+        artifactKey: finalRecord.key,
+      });
+
+      return resultSummary({
+        auditRequest,
+        executionId,
+        startedAt,
+        completedAt: clock.now(),
+        finalState: T.NARRATIVE_READY,
+        extra: {
+          narrativeV2Status:
+            finalResult.status,
+          narrativeV2PassCount:
+            finalResult.passCount,
+          finalPassExecuted: true,
+        },
+      });
+    }
+
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_FAILED,
+      reason:
+        "narrative-v2-final-pass-human-review-required",
+      artifactKey: finalRecord.key,
+    });
+
+    return resultSummary({
+      auditRequest,
+      executionId,
+      startedAt,
+      completedAt: clock.now(),
+      finalState: T.NARRATIVE_FAILED,
+      extra: {
+        narrativeV2Status:
+          finalResult.status,
+        narrativeV2PassCount:
+          finalResult.passCount,
+        finalPassExecuted: true,
+        humanReview:
+          buildHumanReviewSummary({
+            auditRequest,
+            orchestrationResult:
+              finalResult,
+          }),
+      },
+    });
+  } catch (err) {
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_FAILED,
+      reason:
+        `narrative-v2-final-pass-failed:${String(
+          err.message || "",
+        ).slice(0, 120)}`,
+    });
+
+    return resultSummary({
+      auditRequest,
+      executionId,
+      startedAt,
+      completedAt: clock.now(),
+      finalState: T.NARRATIVE_FAILED,
+      extra: {
+        narrativeV2Error:
+          err.message,
+        finalPassExecuted: true,
+      },
+    });
+  }
 }
 
 function resolveCompetitorSourceStatus(decisionEvidence) {
@@ -551,11 +1098,11 @@ async function recoverNarrativeV2Pending({ auditRequest, executionId, startedAt,
       auditRequest,
       artifactName: "narrative-v2/writer-input.json",
     });
-    orchestrationResult = await loadJsonArtifact({
-      artifactStore,
-      auditRequest,
-      artifactName: "narrative-v2/orchestration.json",
-    });
+    orchestrationResult =
+      await loadEffectiveOrchestrationResult({
+        artifactStore,
+        auditRequest,
+      });
   } catch (err) {
     await transition({
       lifecycleService,
@@ -674,7 +1221,10 @@ async function renderNarrativeV2Draft({
   try {
     [writerInput, orchestrationResult, inputs] = await Promise.all([
       loadJsonArtifact({ artifactStore, auditRequest, artifactName: "narrative-v2/writer-input.json" }),
-      loadJsonArtifact({ artifactStore, auditRequest, artifactName: "narrative-v2/orchestration.json" }),
+      loadEffectiveOrchestrationResult({
+        artifactStore,
+        auditRequest,
+      }),
       loadScoredInputs({ artifactStore, auditRequest, validateContract }),
     ]);
     const validation = validatePersistedReleaseCandidate(writerInput, orchestrationResult);
@@ -909,6 +1459,7 @@ export function createNarrativeV2ProductionPath({
   enabled = false,
   writerExecutor,
   judgeExecutor,
+  authorizeFinalPass,
   clock,
 }) {
   if (!baseOrchestrator || typeof baseOrchestrator.execute !== "function") {
@@ -972,21 +1523,29 @@ export function createNarrativeV2ProductionPath({
       });
     }
 
-    if (current?.state === T.NARRATIVE_FAILED) {
-      // Do not automatically spend another Writer/Judge pass set. The exact
-      // orchestration artifact remains available for governed human review.
-      const orchestrationResult = await loadJsonArtifact({
-        artifactStore,
-        auditRequest,
-        artifactName: "narrative-v2/orchestration.json",
-      });
+        if (current?.state === T.NARRATIVE_FAILED) {
+      // Do not automatically spend another Writer/Judge pass. Surface the
+      // exact governed Judge review state and require explicit continuation.
+      const orchestrationResult =
+        await loadEffectiveOrchestrationResult({
+          artifactStore,
+          auditRequest,
+        });
+
       return resultSummary({
         auditRequest,
         executionId,
         startedAt,
         completedAt: c.now(),
         finalState: T.NARRATIVE_FAILED,
-        extra: { narrativeV2Status: orchestrationResult?.status || "FAILED" },
+        extra: {
+          narrativeV2Status:
+            orchestrationResult?.status || "FAILED",
+          humanReview: buildHumanReviewSummary({
+            auditRequest,
+            orchestrationResult,
+          }),
+        },
       });
     }
 
@@ -1022,6 +1581,92 @@ export function createNarrativeV2ProductionPath({
     // Collection, evidence locking, scoring, review and publication remain
     // entirely owned by the existing proven orchestrator.
     return baseOrchestrator.execute(auditRequest, opts);
+  }
+
+    async function getNarrativeV2HumanReview(auditRequest) {
+    if (!isNarrativeV2Request(auditRequest)) {
+      throw new Error(
+        "Narrative v2 human review requires a Narrative v2 audit",
+      );
+    }
+
+    const current = await lifecycleService.currentState(
+      auditRequest.auditId,
+      auditRequest.tenantId,
+    );
+
+    if (current?.state !== T.NARRATIVE_FAILED) {
+      throw new Error(
+        "Narrative v2 human review is available only from NARRATIVE_FAILED",
+      );
+    }
+
+    const orchestrationResult =
+      await loadEffectiveOrchestrationResult({
+        artifactStore,
+        auditRequest,
+      });
+
+    if (!orchestrationResult) {
+      throw new Error(
+        "Narrative v2 human review orchestration artifact is missing",
+      );
+    }
+
+    return buildHumanReviewSummary({
+      auditRequest,
+      orchestrationResult,
+    });
+  }
+
+  async function continueNarrativeV2FinalPass(
+    auditRequest,
+    {
+      executionId = randomUUID(),
+      authorizationId,
+    } = {},
+  ) {
+    if (!isNarrativeV2Request(auditRequest)) {
+      throw new Error(
+        "Narrative v2 final continuation requires a Narrative v2 audit",
+      );
+    }
+
+    if (!enabled) {
+      throw new Error(
+        "Narrative v2 final continuation requires the runtime capability",
+      );
+    }
+
+    if (!isReportDesignV2(auditRequest.report?.designVersion)) {
+      throw new Error(
+        "Narrative v2 final continuation requires report.designVersion 2.0.0",
+      );
+    }
+
+    const current = await lifecycleService.currentState(
+      auditRequest.auditId,
+      auditRequest.tenantId,
+    );
+
+    if (current?.state !== T.NARRATIVE_FAILED) {
+      throw new Error(
+        "Narrative v2 final continuation is allowed only from NARRATIVE_FAILED",
+      );
+    }
+
+    return runNarrativeV2FinalPass({
+      auditRequest,
+      executionId,
+      startedAt: c.now(),
+      lifecycleService,
+      artifactStore,
+      writerExecutor,
+      judgeExecutor,
+      authorizeFinalPass,
+      authorizationId,
+      clock: c,
+    });
   }
 
   // Crash recovery from NARRATIVE_PENDING may need to re-run when no terminal
@@ -1122,7 +1767,11 @@ export function createNarrativeV2ProductionPath({
     }
   }
 
-  return Object.freeze({ execute });
+  return Object.freeze({
+    execute,
+    getNarrativeV2HumanReview,
+    continueNarrativeV2FinalPass,
+  });
 }
 
 export { NARRATIVE_V2_VERSION, isNarrativeV2Request, buildV2Model, validatePersistedReleaseCandidate };
