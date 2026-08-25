@@ -41,6 +41,17 @@ const UAT_VIEWER_VERSION = "2.2.0";
 const UAT_HTML =
   "<!doctype html><html><body>PRYSM Viewer v2.2.0 UAT</body></html>";
 
+const NARRATIVE_REVIEW_RESULT = Object.freeze({
+  status: "HUMAN_REVIEW_REQUIRED",
+  passNumber: 2,
+  defects: Object.freeze([
+    Object.freeze({
+      code: "ROOT_CAUSE_INCOMPLETE",
+      message: "Root-cause synthesis requires revision.",
+    }),
+  ]),
+});
+
 function buildHandler(
   webhookSecret,
   auditService = { listAudits: async () => [] },
@@ -97,16 +108,25 @@ function request(
   handler,
   method,
   path,
-  { secret, principalToken } = {},
+  {
+    secret,
+    principalToken,
+    body,
+  } = {},
 ) {
   return new Promise((resolvePromise) => {
+    const requestBody =
+      body === undefined
+        ? Buffer.alloc(0)
+        : Buffer.from(JSON.stringify(body), "utf8");
+
     const req = {
       method,
       url: new URL(path, "http://worker"),
       headers: {},
       on: () => {},
       [Symbol.asyncIterator]: async function* () {
-        yield Buffer.alloc(0);
+        yield requestBody;
       },
     };
 
@@ -116,6 +136,10 @@ function request(
 
     if (principalToken) {
       req.headers["x-prysm-principal"] = principalToken;
+    }
+
+    if (body !== undefined) {
+      req.headers["content-type"] = "application/json";
     }
 
     const res = {
@@ -143,6 +167,10 @@ function request(
 
     handler(req, res);
   });
+}
+
+function readJsonBody(res) {
+  return JSON.parse(res.body.toString("utf8"));
 }
 
 test(
@@ -370,6 +398,308 @@ test(
       res.headers["cache-control"],
       "no-store",
       "UAT response must not be cached",
+    );
+  },
+);
+
+test(
+  "NARRATIVE-V2-REVIEW-HTTP-01: narrative review denies unauthenticated access before reading governed review",
+  async () => {
+    let reviewCallCount = 0;
+
+    const auditService = {
+      listAudits: async () => [],
+      getNarrativeV2HumanReview: async () => {
+        reviewCallCount += 1;
+        return NARRATIVE_REVIEW_RESULT;
+      },
+    };
+
+    const {
+      handler,
+      lifecycleRepo,
+    } = buildHandler(
+      "test-secret",
+      auditService,
+    );
+
+    await seedUatAudit(lifecycleRepo);
+
+    const res = await request(
+      handler,
+      "GET",
+      `/api/v1/audits/${UAT_AUDIT_ID}/narrative-review`,
+    );
+
+    assert.equal(
+      res.status,
+      401,
+      "unauthenticated narrative-review request must be denied",
+    );
+
+    assert.equal(
+      reviewCallCount,
+      0,
+      "governed review must not be read before authorization",
+    );
+  },
+);
+
+test(
+  "NARRATIVE-V2-REVIEW-HTTP-02: authorized narrative review returns the governed Judge result without mutation",
+  async () => {
+    let reviewCallCount = 0;
+
+    const auditService = {
+      listAudits: async () => [],
+      getNarrativeV2HumanReview: async (
+        auditId,
+        tenantId,
+      ) => {
+        reviewCallCount += 1;
+
+        assert.equal(
+          auditId,
+          UAT_AUDIT_ID,
+        );
+
+        assert.equal(
+          tenantId,
+          UAT_TENANT_ID,
+        );
+
+        return NARRATIVE_REVIEW_RESULT;
+      },
+    };
+
+    const {
+      handler,
+      lifecycleRepo,
+    } = buildHandler(
+      "test-secret",
+      auditService,
+    );
+
+    await seedUatAudit(lifecycleRepo);
+
+    const res = await request(
+      handler,
+      "GET",
+      `/api/v1/audits/${UAT_AUDIT_ID}/narrative-review`,
+      {
+        secret: "test-secret",
+      },
+    );
+
+    assert.equal(
+      res.status,
+      200,
+      "authorized narrative-review request must succeed",
+    );
+
+    assert.equal(
+      reviewCallCount,
+      1,
+      "governed review must be read exactly once",
+    );
+
+    assert.deepEqual(
+      readJsonBody(res),
+      NARRATIVE_REVIEW_RESULT,
+      "route must return the exact governed Judge review",
+    );
+  },
+);
+
+test(
+  "NARRATIVE-V2-FINAL-HTTP-01: final-pass route denies unauthenticated access before continuation",
+  async () => {
+    let continuationCallCount = 0;
+
+    const auditService = {
+      listAudits: async () => [],
+      continueNarrativeV2FinalPass: async () => {
+        continuationCallCount += 1;
+
+        return {
+          finalState: "draft_rendered",
+          error: null,
+        };
+      },
+    };
+
+    const {
+      handler,
+      lifecycleRepo,
+    } = buildHandler(
+      "test-secret",
+      auditService,
+    );
+
+    await seedUatAudit(lifecycleRepo);
+
+    const res = await request(
+      handler,
+      "POST",
+      `/api/v1/audits/${UAT_AUDIT_ID}/narrative-final-pass`,
+      {
+        body: {
+          authorizationId: "human-auth-1",
+        },
+      },
+    );
+
+    assert.equal(
+      res.status,
+      401,
+      "unauthenticated final-pass request must be denied",
+    );
+
+    assert.equal(
+      continuationCallCount,
+      0,
+      "final-pass continuation must not execute before authorization",
+    );
+  },
+);
+
+test(
+  "NARRATIVE-V2-FINAL-HTTP-02: final-pass route requires explicit authorization id",
+  async () => {
+    let continuationCallCount = 0;
+
+    const auditService = {
+      listAudits: async () => [],
+      continueNarrativeV2FinalPass: async () => {
+        continuationCallCount += 1;
+
+        return {
+          finalState: "draft_rendered",
+          error: null,
+        };
+      },
+    };
+
+    const {
+      handler,
+      lifecycleRepo,
+    } = buildHandler(
+      "test-secret",
+      auditService,
+    );
+
+    await seedUatAudit(lifecycleRepo);
+
+    const res = await request(
+      handler,
+      "POST",
+      `/api/v1/audits/${UAT_AUDIT_ID}/narrative-final-pass`,
+      {
+        secret: "test-secret",
+        body: {},
+      },
+    );
+
+    assert.equal(
+      res.status,
+      422,
+      "final-pass request without authorization id must fail closed",
+    );
+
+    assert.equal(
+      continuationCallCount,
+      0,
+      "continuation must not execute without explicit authorization",
+    );
+
+    assert.equal(
+      readJsonBody(res).code,
+      "NARRATIVE_V2_FINAL_PASS_AUTHORIZATION_REQUIRED",
+    );
+  },
+);
+
+test(
+  "NARRATIVE-V2-FINAL-HTTP-03: authorized final-pass request forwards one explicit authorization",
+  async () => {
+    let continuationCallCount = 0;
+
+    const authorizationId =
+      "narrative-final-pass:test-human-authorization";
+
+    const auditService = {
+      listAudits: async () => [],
+      continueNarrativeV2FinalPass: async (
+        auditId,
+        tenantId,
+        receivedAuthorizationId,
+      ) => {
+        continuationCallCount += 1;
+
+        assert.equal(
+          auditId,
+          UAT_AUDIT_ID,
+        );
+
+        assert.equal(
+          tenantId,
+          UAT_TENANT_ID,
+        );
+
+        assert.equal(
+          receivedAuthorizationId,
+          authorizationId,
+        );
+
+        return {
+          finalState: "draft_rendered",
+          error: null,
+        };
+      },
+    };
+
+    const {
+      handler,
+      lifecycleRepo,
+    } = buildHandler(
+      "test-secret",
+      auditService,
+    );
+
+    await seedUatAudit(lifecycleRepo);
+
+    const res = await request(
+      handler,
+      "POST",
+      `/api/v1/audits/${UAT_AUDIT_ID}/narrative-final-pass`,
+      {
+        secret: "test-secret",
+        body: {
+          authorizationId,
+        },
+      },
+    );
+
+    assert.equal(
+      res.status,
+      200,
+      "authorized final-pass request must succeed",
+    );
+
+    assert.equal(
+      continuationCallCount,
+      1,
+      "final-pass continuation must execute exactly once",
+    );
+
+    assert.deepEqual(
+      readJsonBody(res),
+      {
+        auditId: UAT_AUDIT_ID,
+        authorized: true,
+        finalState: "draft_rendered",
+        error: null,
+      },
     );
   },
 );
