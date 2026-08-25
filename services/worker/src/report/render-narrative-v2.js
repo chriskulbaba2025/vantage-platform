@@ -453,9 +453,24 @@ function assertGovernedRenderInput({
     );
   }
 
+  const previousPass =
+    orchestrationResult.passCount > 1
+      ? orchestrationResult.passes?.[
+          orchestrationResult.passCount - 2
+        ]
+      : null;
+
   const validation = validateWriterOutput(output, {
     writerInput,
     expectedPassNumber: orchestrationResult.passCount,
+    ...(previousPass
+      ? {
+          previousOutput:
+            previousPass.writerOutput,
+          revisionDirective:
+            previousPass.judgeResponse?.revisionDirective,
+        }
+      : {}),
   });
 
   if (!validation.valid) {

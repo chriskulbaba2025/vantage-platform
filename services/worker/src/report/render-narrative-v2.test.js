@@ -622,3 +622,81 @@ test(
     );
   },
 );
+test(
+  "NARRATIVE-RENDER-07: governed Pass 3 release candidate revalidates against persisted Pass 2 history",
+  () => {
+    const pass2Writer = validWriterOutput(2);
+
+    const pass3Writer = structuredClone(
+      pass2Writer,
+    );
+
+    pass3Writer.passNumber = 3;
+
+    pass3Writer.content = {
+      ...pass3Writer.content,
+      headline:
+        "Content and topical architecture resolves the final governed defect",
+      importantGaps: atom(
+        "The final governed revision resolves the authorized content defect.",
+      ),
+      businessMeaning: atom(
+        "The final governed revision clarifies the governed business consequence.",
+      ),
+    };
+
+    const orchestrationResult = {
+      contractVersion: "1.0.0",
+      orchestrationVersion: "1.0.0",
+      auditId: AUDIT_ID,
+      status:
+        NARRATIVE_V2_STATUS.RELEASE_CANDIDATE,
+      passCount: 3,
+      finalWriterOutput: pass3Writer,
+      finalJudgeResponse:
+        passingJudgeResponse(3),
+      passes: [
+        {
+          passNumber: 1,
+        },
+        {
+          passNumber: 2,
+          writerOutput: pass2Writer,
+          judgeResponse: {
+            revisionDirective: {
+              required: true,
+              mode: "TARGETED",
+              fieldsToRewrite: ["content"],
+              fieldsLocked: [],
+              defectIds: ["D-FINAL"],
+            },
+          },
+        },
+        {
+          passNumber: 3,
+          writerOutput: pass3Writer,
+          judgeResponse:
+            passingJudgeResponse(3),
+        },
+      ],
+    };
+
+    const html =
+      renderGovernedNarrativeReportV2({
+        model: deterministicModel(),
+        writerInput: writerInput(),
+        orchestrationResult,
+        date: "2026-08-20",
+      });
+
+    assert.match(
+      html,
+      /data-writer-pass="3"/,
+    );
+
+    assert.match(
+      html,
+      /resolves the final governed defect/,
+    );
+  },
+);
