@@ -542,3 +542,56 @@ test("DQV-001: unavailable sitemap evidence cannot become NOT_DETECTED programma
     "insufficient programmatic evidence survives losslessly",
   );
 });
+// DQV-005 — source status and returned records are separate facts.
+// A failed SERP collection with zero competitors must retain FAILED rather
+// than being reconstructed downstream as NOT_CONNECTED or NOT_APPLICABLE.
+test("DQV-005: FAILED competitor source survives empty competitor hydration", () => {
+  const validateContract = makeValidator();
+
+  const failedSerp = validSr("dataforseo-serp", {
+    status: "FAILED",
+    coverage: {
+      requested: 1,
+      completed: 0,
+      failed: 1,
+    },
+    limitations: [
+      "SERP collection failed before usable competitor evidence returned",
+    ],
+    evidence: {
+      competitors: [],
+    },
+  });
+
+  const { evidence, errors } = buildDecisionEvidence({
+    allSourceResults: [
+      {
+        source: "dataforseo-serp",
+        sourceResult: failedSerp,
+      },
+    ],
+    validateContract,
+  });
+
+  assert.equal(errors.length, 0, "valid FAILED SourceResult hydrates cleanly");
+  assert.deepEqual(
+    evidence.competitors,
+    [],
+    "zero returned competitors remains an empty evidence collection",
+  );
+  assert.equal(
+    evidence.sourceStatus.competitors,
+    "FAILED",
+    "source-level FAILED status survives independently of item count",
+  );
+  assert.notEqual(
+    evidence.sourceStatus.competitors,
+    "NOT_CONNECTED",
+    "FAILED is never rewritten as NOT_CONNECTED",
+  );
+  assert.notEqual(
+    evidence.sourceStatus.competitors,
+    "NOT_APPLICABLE",
+    "FAILED is never rewritten as NOT_APPLICABLE",
+  );
+});

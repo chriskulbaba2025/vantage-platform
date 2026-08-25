@@ -285,6 +285,11 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
   const evidence = {
     contractVersion: "1.0.0",
     decisionEvidenceVersion: "1.0.0",
+
+    // DQV-005 — admitted source-level states, kept separately from hydrated
+    // records so zero returned items never destroy collection-state truth.
+    sourceStatus: {},
+
     site: null,
     performance: null,
     competitors: null,
@@ -326,6 +331,10 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
       }
     }
 
+    // DQV-005 — source-level collection state is canonical evidence in its
+    // own right. Preserve it independently from item-level hydration so an
+    // empty result cannot erase FAILED, NOT_CONNECTED, or other source truth.
+    evidence.sourceStatus[ek] = sr.status || "NOT_APPLICABLE";
     switch (ek) {
       case "site":
         evidence.site = hydrateSite(sr);

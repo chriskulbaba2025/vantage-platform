@@ -211,3 +211,69 @@ test("DE-06: schema-invalid persisted decision evidence is rejected on load", as
   assert.ok(rejected, "schema-invalid AVAILABLE evidence must be rejected on load");
   assert.match(rejected.message, /validation failed on load/, "rejection names load validation");
 });
+// DQV-005 — source-level status is canonical governed evidence.
+// An empty item collection must not erase the status of the source that
+// attempted to collect it.
+test("DQV-005: canonical source-status map survives governed persistence", async () => {
+  const store = createGovernedArtifactStore({
+    store: createMemoryArtifactStore(),
+  });
+
+  const evidence = completeDecisionEvidence({
+    top: {
+      sourceStatus: {
+        site: "AVAILABLE",
+        performance: "AVAILABLE",
+        competitors: "FAILED",
+        backlinks: "NOT_CONNECTED",
+        ga4: "NOT_CONNECTED",
+        gsc: "NOT_CONNECTED",
+      },
+    },
+  });
+
+  const sv = realValidate(
+    "https://vantage-platform.io/prysm/contracts/v1/decision-evidence.schema.json",
+    evidence,
+  );
+
+  assert.equal(
+    sv.valid,
+    true,
+    `source-status map is accepted by the governed contract: ${JSON.stringify(
+      sv.errors?.slice(0, 3),
+    )}`,
+  );
+
+  await persistDecisionEvidence({
+    store,
+    scope: {
+      tenantId: "t1",
+      clientId: "c1",
+      auditId: "550e8400-e29b-41d4-a716-446655440015",
+    },
+    evidence,
+    validateContract: realValidate,
+  });
+
+  const loaded = await loadAndValidateDecisionEvidence({
+    store,
+    scope: {
+      tenantId: "t1",
+      clientId: "c1",
+      auditId: "550e8400-e29b-41d4-a716-446655440015",
+    },
+    validateContract: realValidate,
+  });
+
+  assert.deepEqual(
+    loaded.sourceStatus,
+    evidence.sourceStatus,
+    "canonical source-status map survives persistence and governed read-back",
+  );
+  assert.equal(
+    loaded.sourceStatus.competitors,
+    "FAILED",
+    "FAILED competitor source status survives governed persistence",
+  );
+});
