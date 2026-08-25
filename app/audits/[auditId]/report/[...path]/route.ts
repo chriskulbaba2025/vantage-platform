@@ -77,7 +77,16 @@ export async function GET(
     }
 
     const contentType = result.contentType || (filename.endsWith(".html") ? "text/html; charset=utf-8" : "application/json");
-    return new NextResponse(result.body, {
+
+    const body =
+      REVIEWER_ONLY_STATES.has(state) && filename === "index.html"
+        ? result.body.toString("utf8").replace(
+            /<body([^>]*)>/i,
+            `<body$1><div style="max-width:1200px;margin:16px auto 0;padding:0 24px;"><a href="/" style="display:inline-block;text-decoration:none;font-weight:600;">← Back to Dashboard</a></div>`,
+          )
+        : result.body;
+
+    return new NextResponse(body, {
       status: 200,
       headers: { "Content-Type": contentType, "Cache-Control": "no-store" },
     });
