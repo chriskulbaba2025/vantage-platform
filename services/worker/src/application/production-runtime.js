@@ -456,6 +456,199 @@ export function createProductionRuntime({
     return { finalState: result.finalState, error };
   }
 
+  async function getNarrativeV2HumanReview(auditId, tenantId) {
+    const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
+    if (!meta) {
+      throw Object.assign(
+        new Error("Audit not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const current = await lifecycleService.currentState(auditId, tenantId).catch(() => null);
+    if (!current) {
+      throw Object.assign(
+        new Error("Audit not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const clientId =
+      current.clientId ||
+      meta.client_id ||
+      meta.clientId ||
+      "";
+
+    if (!clientId) {
+      throw Object.assign(
+        new Error("Audit client scope not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const auditRequest = await loadAuditRequest({
+      store: artifactStore,
+      scope: { tenantId, clientId, auditId },
+      validateContract: runtimeValidateContract,
+    });
+
+    if (!auditRequest) {
+      throw Object.assign(
+        new Error("Persisted AuditRequest not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    if (typeof orchestrator.getNarrativeV2HumanReview !== "function") {
+      throw Object.assign(
+        new Error("Narrative v2 human-review continuation is unavailable"),
+        { statusCode: 409, code: "NARRATIVE_V2_HUMAN_REVIEW_UNAVAILABLE" },
+      );
+    }
+
+    return orchestrator.getNarrativeV2HumanReview(auditRequest);
+  }
+
+  async function continueNarrativeV2FinalPass(
+    auditId,
+    tenantId,
+    authorizationId,
+  ) {
+    const normalizedAuthorizationId = String(authorizationId || "").trim();
+    if (!normalizedAuthorizationId) {
+      throw Object.assign(
+        new Error("Explicit final-pass authorization is required"),
+        { statusCode: 422, code: "NARRATIVE_V2_FINAL_PASS_AUTHORIZATION_REQUIRED" },
+      );
+    }
+
+    const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
+    if (!meta) {
+      throw Object.assign(
+        new Error("Audit not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const current = await lifecycleService.currentState(auditId, tenantId).catch(() => null);
+    if (!current) {
+      throw Object.assign(
+        new Error("Audit not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    if (current.state !== T.NARRATIVE_FAILED) {
+      throw Object.assign(
+        new Error(`Cannot authorize Narrative v2 final pass from ${current.state} state`),
+        {
+          statusCode: 409,
+          code: "NARRATIVE_V2_FINAL_PASS_INVALID_STATE",
+          lifecycleStatus: current.state,
+        },
+      );
+    }
+
+    const businessName = meta.business_name || meta.businessName || "";
+    const clientId =
+      current.clientId ||
+      meta.client_id ||
+      meta.clientId ||
+      "";
+
+    if (!clientId) {
+      throw Object.assign(
+        new Error("Audit client scope not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    const auditRequest = await loadAuditRequest({
+      store: artifactStore,
+      scope: { tenantId, clientId, auditId },
+      validateContract: runtimeValidateContract,
+    });
+
+    if (!auditRequest) {
+      throw Object.assign(
+        new Error("Persisted AuditRequest not found"),
+        { statusCode: 404 },
+      );
+    }
+
+    if (typeof orchestrator.continueNarrativeV2FinalPass !== "function") {
+      throw Object.assign(
+        new Error("Narrative v2 final-pass continuation is unavailable"),
+        { statusCode: 409, code: "NARRATIVE_V2_FINAL_PASS_UNAVAILABLE" },
+      );
+    }
+
+    const executionId = randomUUID();
+
+    if (typeof narrativeV2Deps.registerAuditScope === "function") {
+      narrativeV2Deps.registerAuditScope({
+        tenantId,
+        clientId,
+        auditId,
+        executionId,
+      });
+    }
+
+    let result = await orchestrator.continueNarrativeV2FinalPass(
+      auditRequest,
+      {
+        executionId,
+        authorizationId: normalizedAuthorizationId,
+      },
+    );
+
+    if (result.finalState === T.NARRATIVE_READY) {
+      result = await orchestrator.execute(
+        auditRequest,
+        { executionId: randomUUID() },
+      );
+    }
+
+    const error = result.wp8Error || result.narrativeV2Error || null;
+
+    if (
+      result.finalState === T.DRAFT_RENDERED &&
+      typeof reportStore.writeReport === "function"
+    ) {
+      const slug = slugify(businessName);
+
+      try {
+        const existing = await reportStore.getStatus(slug, auditId).catch(() => null);
+
+        if (!existing || existing.status !== "draft_rendered") {
+          const indexHtml = result.renderedPages instanceof Map
+            ? (result.renderedPages.get("index.html") || "")
+            : "";
+
+          await reportStore.writeReport({
+            slug,
+            runId: auditId,
+            model: { evidence: {} },
+            manifest: {
+              auditId,
+              lifecycleStatus: T.DRAFT_RENDERED,
+              governedManifestKey: result.manifestKey || null,
+            },
+            html: indexHtml,
+            includeIndexHtml: Boolean(indexHtml),
+          });
+        }
+      } catch {
+        /* best-effort sync */
+      }
+    }
+
+    return {
+      finalState: result.finalState,
+      error,
+    };
+  }
+
   const STRANDED_ACTIVE_STATES = new Set([
     T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED,
     T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED,
@@ -754,6 +947,8 @@ export function createProductionRuntime({
     createAudit,
     getAuditStatus,
     getNarrativeV2UatRender,
+    getNarrativeV2HumanReview,
+    continueNarrativeV2FinalPass,
     submitReview,
     approveAudit,
     resumeAudit,
