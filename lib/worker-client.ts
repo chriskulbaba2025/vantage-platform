@@ -44,10 +44,14 @@ class WorkerClient {
     });
   }
 
-  private async fetch(path: string, init?: RequestInit): Promise<Response> {
+  private async fetch(
+    path: string,
+    init?: RequestInit,
+    timeoutMs = 5000,
+  ): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -123,6 +127,43 @@ class WorkerClient {
     });
     const data = await res.json();
     if (!res.ok) throw new WorkerApiError(res.status, data.error || "Resume failed");
+    return data;
+  }
+
+  /** Get the persisted Narrative v2 human-review result and Judge defects */
+  async getNarrativeV2HumanReview(auditId: string) {
+    const res = await this.fetch(`/api/v1/audits/${auditId}/narrative-review`);
+    const data = await res.json();
+    if (!res.ok) {
+      throw new WorkerApiError(
+        res.status,
+        data.error || "Failed to get Narrative v2 human review",
+      );
+    }
+    return data;
+  }
+
+  /** Explicitly authorize the single governed Narrative v2 final pass */
+  async continueNarrativeV2FinalPass(
+    auditId: string,
+    authorizationId: string,
+  ) {
+    const res = await this.fetch(
+      `/api/v1/audits/${auditId}/narrative-final-pass`,
+      {
+        method: "POST",
+        body: JSON.stringify({ authorizationId }),
+      },
+      20 * 60 * 1000,
+    );
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new WorkerApiError(
+        res.status,
+        data.error || "Narrative v2 final-pass continuation failed",
+      );
+    }
     return data;
   }
 
