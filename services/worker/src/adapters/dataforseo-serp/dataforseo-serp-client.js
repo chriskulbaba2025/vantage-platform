@@ -296,10 +296,6 @@ function createRequestAbortContext(parentSignal, timeoutMs, label) {
         controller.abort(createTimeoutError(label, timeoutMs));
       }
     }, timeoutMs);
-
-    if (typeof timeoutHandle?.unref === "function") {
-      timeoutHandle.unref();
-    }
   }
 
   return {
