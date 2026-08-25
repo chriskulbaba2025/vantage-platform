@@ -374,6 +374,171 @@ test("WP-B: deep acquisition fields pass through hydrateSite losslessly", () => 
   assert.deepEqual(evidence.site.pageResources, deepEvidence.pageResources);
   assert.deepEqual(evidence.site.microdataTypes, deepEvidence.microdataTypes);
   assert.deepEqual(evidence.site.acquisition, deepEvidence.acquisition);
-  // Real-validator schema acceptance of the extended site shape is covered
+   // Real-validator schema acceptance of the extended site shape is covered
   // by DE-16 (production regression with the real contract validator).
+});
+
+// DQV-001 Track B — representative site evidence must survive the canonical
+// hydration boundary losslessly when the On-Page source is viable.
+test("DQV-001: available representative site evidence survives hydrateSite losslessly", () => {
+  const validateContract = makeValidator();
+
+  const siteFootprint = {
+    status: "AVAILABLE",
+    discoveredUrlCount: 2400,
+    retainedUrlCount: 2400,
+    sitemapDocumentCount: 4,
+    capped: false,
+    clusters: [
+      {
+        id: "cluster-location",
+        pattern: "/locations/:segment",
+        discoveredUrlCount: 1800,
+        representativeUrls: [
+          "https://example.com/locations/pennsylvania",
+          "https://example.com/locations/texas",
+        ],
+      },
+    ],
+    priorityUrls: [
+      "https://example.com/",
+      "https://example.com/locations/pennsylvania",
+      "https://example.com/locations/texas",
+    ],
+    coverage: {
+      complete: true,
+      retainedUrlCount: 2400,
+    },
+    limitations: [],
+  };
+
+  const programmaticSeo = {
+    status: "LIKELY",
+    clusterCount: 1,
+    assessedClusterCount: 1,
+    clusters: [
+      {
+        clusterId: "cluster-location",
+        status: "LIKELY",
+        sampledUrls: [
+          "https://example.com/locations/pennsylvania",
+          "https://example.com/locations/texas",
+        ],
+        limitations: [],
+      },
+    ],
+    limitations: [],
+  };
+
+  const { evidence, errors } = buildDecisionEvidence({
+    allSourceResults: [
+      {
+        source: "dataforseo-onpage",
+        sourceResult: validSr("dataforseo-onpage", {
+          adapterVersion: "1.3.0",
+          evidence: {
+            sourceStatus: "AVAILABLE",
+            domain: "example.com",
+            targetUrl: "https://example.com/",
+            pages: [],
+            siteFootprint,
+            programmaticSeo,
+          },
+        }),
+      },
+    ],
+    validateContract,
+  });
+
+  assert.equal(errors.length, 0, "representative evidence hydrates cleanly");
+  assert.deepEqual(
+    evidence.site.siteFootprint,
+    siteFootprint,
+    "siteFootprint survives SourceResult → DecisionEvidence losslessly",
+  );
+  assert.deepEqual(
+    evidence.site.programmaticSeo,
+    programmaticSeo,
+    "programmaticSeo survives SourceResult → DecisionEvidence losslessly",
+  );
+});
+
+// DQV-001 Track B — unavailable footprint evidence must remain unavailable.
+// Hydration must never manufacture the stronger semantic conclusion
+// NOT_DETECTED when representative acquisition could not establish absence.
+test("DQV-001: unavailable sitemap evidence cannot become NOT_DETECTED programmatic SEO", () => {
+  const validateContract = makeValidator();
+
+  const siteFootprint = {
+    status: "UNAVAILABLE",
+    discoveredUrlCount: 0,
+    retainedUrlCount: 0,
+    sitemapDocumentCount: 0,
+    capped: false,
+    clusters: [],
+    priorityUrls: [],
+    coverage: {
+      complete: false,
+      retainedUrlCount: 0,
+    },
+    limitations: ["No usable sitemap evidence was available"],
+  };
+
+  const programmaticSeo = {
+    status: "INSUFFICIENT_EVIDENCE",
+    clusterCount: 0,
+    assessedClusterCount: 0,
+    clusters: [],
+    limitations: [
+      "Programmatic SEO could not be assessed without usable footprint evidence",
+    ],
+  };
+
+  const { evidence, errors } = buildDecisionEvidence({
+    allSourceResults: [
+      {
+        source: "dataforseo-onpage",
+        sourceResult: validSr("dataforseo-onpage", {
+          status: "PARTIAL",
+          adapterVersion: "1.3.0",
+          evidence: {
+            sourceStatus: "PARTIAL",
+            domain: "example.com",
+            targetUrl: "https://example.com/",
+            pages: [],
+            siteFootprint,
+            programmaticSeo,
+          },
+        }),
+      },
+    ],
+    validateContract,
+  });
+
+  assert.equal(errors.length, 0, "partial source hydrates cleanly");
+  assert.equal(
+    evidence.site.siteFootprint.status,
+    "UNAVAILABLE",
+    "unavailable footprint status is preserved",
+  );
+  assert.equal(
+    evidence.site.programmaticSeo.status,
+    "INSUFFICIENT_EVIDENCE",
+    "insufficient programmatic evidence is preserved",
+  );
+  assert.notEqual(
+    evidence.site.programmaticSeo.status,
+    "NOT_DETECTED",
+    "unavailable footprint evidence is never converted to NOT_DETECTED",
+  );
+  assert.deepEqual(
+    evidence.site.siteFootprint,
+    siteFootprint,
+    "unavailable footprint evidence survives losslessly",
+  );
+  assert.deepEqual(
+    evidence.site.programmaticSeo,
+    programmaticSeo,
+    "insufficient programmatic evidence survives losslessly",
+  );
 });

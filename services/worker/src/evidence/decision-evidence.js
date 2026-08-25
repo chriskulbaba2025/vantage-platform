@@ -143,6 +143,12 @@ function hydrateSite(sourceResult) {
     pageResources: ev.pageResources,
     microdataTypes: ev.microdataTypes,
     acquisition: ev.acquisition,
+    // DQV-001 Track B — representative site evidence must survive the
+    // SourceResult → DecisionEvidence boundary exactly as acquired.
+    // Do not default, derive, or reinterpret either object here:
+    // unavailable footprint evidence must never become NOT_DETECTED.
+    siteFootprint: ev.siteFootprint,
+    programmaticSeo: ev.programmaticSeo,
   });
 }
 
