@@ -212,7 +212,7 @@ test(
 
       assert.equal(
         submitted[0].max_crawl_pages,
-        500,
+        250,
       );
 
       assert.equal(
