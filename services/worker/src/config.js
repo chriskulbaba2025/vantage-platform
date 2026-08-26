@@ -34,7 +34,7 @@ export function loadConfig(env = process.env) {
     reportsBucket: env.VANTAGE_REPORTS_BUCKET || "",
     reportsPrefix: env.VANTAGE_REPORTS_PREFIX || "vantage/reports",
     // DataForSEO On-Page adapter settings (PRD v3.0 §8.4)
-    onpageMaxPages: intEnv("VANTAGE_ONPAGE_MAX_PAGES", 500, 1, 10000),
+    onpageMaxPages: intEnv("VANTAGE_ONPAGE_MAX_PAGES", 250, 1, 250),
     onpageJsRendering: env.VANTAGE_ONPAGE_JS_RENDERING === "true",
     onpageBrowserRendering: env.VANTAGE_ONPAGE_BROWSER_RENDERING === "true",
     onpagePollTimeoutMs: intEnv("VANTAGE_ONPAGE_POLL_TIMEOUT_MS", 600000, 10000, 3600000),

@@ -173,7 +173,7 @@ async function fetchTextResource(url, options) {
           "user-agent": "PrysmAuditBot/1.0 (+https://omnipresence.com)",
           accept: "application/xml,text/xml,text/plain,*/*;q=0.5",
         },
-              });
+      });
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
@@ -200,7 +200,11 @@ async function fetchTextResource(url, options) {
       let bytes = Buffer.from(await response.arrayBuffer());
       const contentType = String(response.headers.get("content-type") || "").toLowerCase();
       const looksGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-      if (looksGzip || contentType.includes("application/gzip") || contentType.includes("application/x-gzip")) {
+      if (
+        looksGzip ||
+        contentType.includes("application/gzip") ||
+        contentType.includes("application/x-gzip")
+      ) {
         if (looksGzip) bytes = gunzipSync(bytes);
       }
 
@@ -266,7 +270,11 @@ function intrinsicSegmentPattern(segment) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return "{date}";
   if (/^\d{4}$/.test(value)) return "{year}";
   if (/^\d+$/.test(value)) return "{number}";
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) return "{uuid}";
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  ) {
+    return "{uuid}";
+  }
   if (/^[0-9a-f]{12,}$/i.test(value)) return "{id}";
   if (/^(?=.*\d)[a-z0-9_-]{16,}$/i.test(value)) return "{id}";
   return value;
@@ -327,13 +335,19 @@ export function clusterSitemapUrls(urls, options = {}) {
       };
     });
 
-  const maxDepth = records.reduce((max, record) => Math.max(max, record.segments.length), 0);
+  const maxDepth = records.reduce(
+    (max, record) => Math.max(max, record.segments.length),
+    0,
+  );
 
   for (let index = 0; index < maxDepth; index += 1) {
     const groups = new Map();
+
     for (const record of records) {
       if (record.segments.length <= index) continue;
-      const key = `${record.segments.length}|${record.generalized.slice(0, index).join("/")}`;
+      const key = `${record.segments.length}|${record.generalized
+        .slice(0, index)
+        .join("/")}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(record);
     }
@@ -343,16 +357,31 @@ export function clusterSitemapUrls(urls, options = {}) {
         const current = record.generalized[index];
         return !current.startsWith("{") && !STRUCTURAL_SEGMENTS.has(current);
       });
-      const threshold = index === 0 ? topLevelVariableSiblingThreshold : variableSiblingThreshold;
-      const distinct = new Set(candidates.map((record) => record.generalized[index]));
+
+      const threshold =
+        index === 0
+          ? topLevelVariableSiblingThreshold
+          : variableSiblingThreshold;
+
+      const distinct = new Set(
+        candidates.map((record) => record.generalized[index]),
+      );
+
       if (distinct.size < threshold) continue;
-      for (const record of candidates) record.generalized[index] = "{segment}";
-    }
+
+      for (const record of candidates) {
+        record.generalized[index] = "{segment}";
       }
+    }
+  }
 
   const grouped = new Map();
+
   for (const record of records) {
-    const pattern = record.generalized.length ? `/${record.generalized.join("/")}` : "/";
+    const pattern = record.generalized.length
+      ? `/${record.generalized.join("/")}`
+      : "/";
+
     if (!grouped.has(pattern)) grouped.set(pattern, []);
     grouped.get(pattern).push(record.url);
   }
@@ -361,110 +390,351 @@ export function clusterSitemapUrls(urls, options = {}) {
     .sort(([a], [b]) => compareStrings(a, b))
     .map(([pattern, clusterUrls]) => {
       const reasonCodes = [];
-      if (pattern.includes("{segment}")) reasonCodes.push("VARIABLE_SIBLING_FAMILY");
-      if (/\{(?:date|year|number|uuid|id)\}/.test(pattern)) reasonCodes.push("DYNAMIC_IDENTIFIER_FAMILY");
-      if (clusterUrls.length >= materialClusterMinUrls) reasonCodes.push("LARGE_REPEATED_FAMILY");
+
+      if (pattern.includes("{segment}")) {
+        reasonCodes.push("VARIABLE_SIBLING_FAMILY");
+      }
+
+      if (/\{(?:date|year|number|uuid|id)\}/.test(pattern)) {
+        reasonCodes.push("DYNAMIC_IDENTIFIER_FAMILY");
+      }
+
+      if (clusterUrls.length >= materialClusterMinUrls) {
+        reasonCodes.push("LARGE_REPEATED_FAMILY");
+      }
 
       return {
         id: `cluster-${stableHash(pattern).slice(0, 12)}`,
         pattern,
         discoveredUrlCount: clusterUrls.length,
         representativeUrls: representativeUrls(clusterUrls),
-        requiresRepresentativeAssessment: clusterUrls.length >= materialClusterMinUrls,
+        requiresRepresentativeAssessment:
+          clusterUrls.length >= materialClusterMinUrls,
         reasonCodes,
       };
     });
 }
 
 function serviceTerms(services = []) {
-  const stop = new Set(["and", "for", "the", "with", "from", "your", "our", "services", "service"]);
+  const stop = new Set([
+    "and",
+    "for",
+    "the",
+    "with",
+    "from",
+    "your",
+    "our",
+    "services",
+    "service",
+  ]);
+
   return [...new Set(
     services
-      .flatMap((service) => String(service || "").toLowerCase().split(/[^a-z0-9]+/))
+      .flatMap((service) =>
+        String(service || "")
+          .toLowerCase()
+          .split(/[^a-z0-9]+/),
+      )
       .filter((term) => term.length >= 3 && !stop.has(term)),
   )].sort();
 }
 
-function businessRoleScore(url, services) {
+const BUSINESS_ROLE_ORDER = Object.freeze([
+  "conversion",
+  "pricing",
+  "service-match",
+  "services",
+  "company",
+  "proof",
+]);
+
+function classifyBusinessRole(url, services) {
   const segments = pathSegments(url);
   if (!segments.length) return null;
 
-  let best = Number.POSITIVE_INFINITY;
+  let score = Number.POSITIVE_INFINITY;
+  let role = null;
+
+  const roleForScore = (candidateScore) => {
+    if (candidateScore <= 10) return "conversion";
+    if (candidateScore <= 20) return "pricing";
+    if (candidateScore <= 30) return "services";
+    if (candidateScore <= 40) return "company";
+    return "proof";
+  };
+
   for (const segment of segments) {
-    if (BUSINESS_ROLE_SEGMENTS.has(segment)) {
-      best = Math.min(best, BUSINESS_ROLE_SEGMENTS.get(segment));
+    if (!BUSINESS_ROLE_SEGMENTS.has(segment)) continue;
+
+    const candidateScore = BUSINESS_ROLE_SEGMENTS.get(segment);
+
+    if (candidateScore < score) {
+      score = candidateScore;
+      role = roleForScore(candidateScore);
     }
   }
 
   const terms = serviceTerms(services);
-  if (terms.some((term) => segments.some((segment) => segment.includes(term)))) {
-    best = Math.min(best, 25);
+
+  if (
+    terms.some((term) =>
+      segments.some((segment) => segment.includes(term)),
+    ) &&
+    25 < score
+  ) {
+    score = 25;
+    role = "service-match";
   }
 
-  return Number.isFinite(best) ? best : null;
+  if (!Number.isFinite(score) || !role) return null;
+
+  return {
+    score,
+    role,
+  };
 }
 
-export function selectPriorityUrls(targetUrl, retainedUrls, clusters, options = {}) {
+function sortedMaterialClusters(clusters) {
+  return clusters
+    .filter(
+      (cluster) =>
+        cluster.requiresRepresentativeAssessment === true,
+    )
+    .sort(
+      (a, b) =>
+        b.discoveredUrlCount - a.discoveredUrlCount ||
+        compareStrings(a.pattern, b.pattern),
+    );
+}
+
+export function selectPriorityPlan(
+  targetUrl,
+  retainedUrls,
+  clusters,
+  options = {},
+) {
   const maxPriorityUrls = clampInteger(
     options.maxPriorityUrls,
     HARD_MAX_PRIORITY_URLS,
     1,
     HARD_MAX_PRIORITY_URLS,
   );
-  const services = Array.isArray(options.services) ? options.services : [];
-  const normalizedTarget = canonicalizeHttpUrl(normalizeUrl(targetUrl));
+
+  const services = Array.isArray(options.services)
+    ? options.services
+    : [];
+
+  const normalizedTarget = canonicalizeHttpUrl(
+    normalizeUrl(targetUrl),
+  );
+
   const rootUrl = new URL("/", normalizedTarget).toString();
   const sortedUrls = [...new Set(retainedUrls)].sort();
+
   const selected = [];
   const selectedSet = new Set();
+  const mustHaveSet = new Set();
 
-  const add = (url) => {
-    if (!url || selectedSet.has(url) || selected.length >= maxPriorityUrls) return false;
+  const add = (url, { mustHave = false } = {}) => {
+    if (
+      !url ||
+      selectedSet.has(url) ||
+      selected.length >= maxPriorityUrls
+    ) {
+      if (url && selectedSet.has(url) && mustHave) {
+        mustHaveSet.add(url);
+      }
+      return false;
+    }
+
     selected.push(url);
     selectedSet.add(url);
+
+    if (mustHave) {
+      mustHaveSet.add(url);
+    }
+
     return true;
   };
 
-  add(rootUrl);
+  add(rootUrl, { mustHave: true });
 
   const businessCandidates = sortedUrls
-    .map((url) => ({ url, score: businessRoleScore(url, services), depth: pathSegments(url).length }))
-    .filter((item) => item.score !== null && item.url !== rootUrl)
-    .sort((a, b) => a.score - b.score || a.depth - b.depth || compareStrings(a.url, b.url));
+    .map((url) => {
+      const classification = classifyBusinessRole(
+        url,
+        services,
+      );
 
-  const initialBusinessBudget = Math.min(6, Math.max(0, maxPriorityUrls - selected.length));
-  for (const item of businessCandidates.slice(0, initialBusinessBudget)) add(item.url);
+      return {
+        url,
+        score: classification?.score ?? null,
+        role: classification?.role ?? null,
+        depth: pathSegments(url).length,
+      };
+    })
+    .filter(
+      (item) =>
+        item.score !== null &&
+        item.role !== null &&
+        item.url !== rootUrl,
+    )
+    .sort(
+      (a, b) =>
+        a.score - b.score ||
+        a.depth - b.depth ||
+        compareStrings(a.url, b.url),
+    );
 
-  const materialClusters = clusters
-    .filter((cluster) => cluster.requiresRepresentativeAssessment)
-    .sort((a, b) => b.discoveredUrlCount - a.discoveredUrlCount || compareStrings(a.pattern, b.pattern));
+  // Protect one deterministic high-value URL for each material
+  // business role before repetitive families consume capacity.
+  for (const role of BUSINESS_ROLE_ORDER) {
+    const candidate = businessCandidates.find(
+      (item) =>
+        item.role === role &&
+        !selectedSet.has(item.url),
+    );
 
+    if (candidate) {
+      add(candidate.url, { mustHave: true });
+    }
+  }
+
+  const materialClusters = sortedMaterialClusters(clusters);
+
+  // Give every material family one representative opportunity.
+  // Largest families go first. A protected business URL counts as
+  // representation when it is already one of that family's deterministic
+  // representatives.
   for (const cluster of materialClusters) {
-    const candidate = cluster.representativeUrls.find((url) => !selectedSet.has(url));
+    const alreadySelected = cluster.representativeUrls.find(
+      (url) => selectedSet.has(url),
+    );
+
+    if (alreadySelected) continue;
+
+    const candidate = cluster.representativeUrls.find(
+      (url) => !selectedSet.has(url),
+    );
+
     add(candidate);
   }
 
-  for (const item of businessCandidates.slice(initialBusinessBudget)) add(item.url);
+  // Remaining commercial URLs get priority over extra family examples
+  // or generic structural outliers.
+  for (const item of businessCandidates) {
+    add(item.url);
+  }
 
   for (const cluster of materialClusters) {
-    for (const url of cluster.representativeUrls) add(url);
+    for (const url of cluster.representativeUrls) {
+      add(url);
+    }
   }
 
   const outliers = sortedUrls
     .filter((url) => !selectedSet.has(url))
-    .map((url) => ({ url, depth: pathSegments(url).length }))
-    .sort((a, b) => b.depth - a.depth || compareStrings(a.url, b.url));
+    .map((url) => ({
+      url,
+      depth: pathSegments(url).length,
+    }))
+    .sort(
+      (a, b) =>
+        b.depth - a.depth ||
+        compareStrings(a.url, b.url),
+    );
 
-  for (const item of outliers) add(item.url);
+  for (const item of outliers) {
+    add(item.url);
+  }
 
-  return selected;
+  const materialFamilies = materialClusters.map((cluster) => {
+    const selectedPriorityUrl =
+      cluster.representativeUrls.find(
+        (url) => selectedSet.has(url),
+      ) || null;
+
+    return {
+      clusterId: cluster.id,
+      pattern: cluster.pattern,
+      discoveredUrlCount: cluster.discoveredUrlCount,
+      representativeUrls: [...cluster.representativeUrls],
+      selectedPriorityUrl,
+      representedInPrioritySet:
+        selectedPriorityUrl !== null,
+      reasonCodes: [...cluster.reasonCodes],
+    };
+  });
+
+  const representativeUrlSet = new Set(
+    materialFamilies
+      .map((family) => family.selectedPriorityUrl)
+      .filter(Boolean),
+  );
+
+  const mustHaveUrls = selected.filter(
+    (url) => mustHaveSet.has(url),
+  );
+
+  const representativeUrls = selected.filter(
+    (url) => representativeUrlSet.has(url),
+  );
+
+  const supplementalUrls = selected.filter(
+    (url) =>
+      !mustHaveSet.has(url) &&
+      !representativeUrlSet.has(url),
+  );
+
+  const representedMaterialFamilyCount =
+    materialFamilies.filter(
+      (family) => family.representedInPrioritySet,
+    ).length;
+
+  return {
+    strategyVersion: "1.0.0",
+    priorityUrlCap: maxPriorityUrls,
+    priorityUrls: selected,
+    mustHaveUrls,
+    representativeUrls,
+    supplementalUrls,
+    materialFamilyCount: materialFamilies.length,
+    representedMaterialFamilyCount,
+    unrepresentedMaterialFamilyCount:
+      materialFamilies.length -
+      representedMaterialFamilyCount,
+    materialFamilies,
+  };
 }
 
-export async function discoverSitemapFootprint(targetUrl, options = {}) {
-  const normalizedTarget = canonicalizeHttpUrl(normalizeUrl(targetUrl));
+export function selectPriorityUrls(
+  targetUrl,
+  retainedUrls,
+  clusters,
+  options = {},
+) {
+  return selectPriorityPlan(
+    targetUrl,
+    retainedUrls,
+    clusters,
+    options,
+  ).priorityUrls;
+}
+
+export async function discoverSitemapFootprint(
+  targetUrl,
+  options = {},
+) {
+  const normalizedTarget = canonicalizeHttpUrl(
+    normalizeUrl(targetUrl),
+  );
+
   const origin = new URL(normalizedTarget).origin;
   const fetchImpl = options.fetchImpl || globalThis.fetch;
-  if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required");
+
+  if (typeof fetchImpl !== "function") {
+    throw new TypeError("A fetch implementation is required");
+  }
 
   const maxSitemapDocuments = clampInteger(
     options.maxSitemapDocuments,
@@ -472,24 +742,28 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
     1,
     HARD_MAX_SITEMAP_DOCUMENTS,
   );
+
   const maxRetainedUrls = clampInteger(
     options.maxRetainedUrls,
     HARD_MAX_RETAINED_URLS,
     1,
     HARD_MAX_RETAINED_URLS,
   );
+
   const maxPriorityUrls = clampInteger(
     options.maxPriorityUrls,
     HARD_MAX_PRIORITY_URLS,
     1,
     HARD_MAX_PRIORITY_URLS,
   );
+
   const timeoutMs = clampInteger(
     options.documentTimeoutMs,
     DEFAULT_DOCUMENT_TIMEOUT_MS,
     100,
     120000,
   );
+
   const maxDocumentBytes = clampInteger(
     options.maxDocumentBytes,
     DEFAULT_MAX_DOCUMENT_BYTES,
@@ -499,12 +773,15 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
 
   throwIfAborted(options.signal);
 
-  const robotsSitemaps = await discoverRobotsSitemaps(origin, {
-    fetchImpl,
-    signal: options.signal,
-    timeoutMs,
-    maxBytes: maxDocumentBytes,
-  });
+  const robotsSitemaps = await discoverRobotsSitemaps(
+    origin,
+    {
+      fetchImpl,
+      signal: options.signal,
+      timeoutMs,
+      maxBytes: maxDocumentBytes,
+    },
+  );
 
   const fallbackSitemaps = [
     new URL("/sitemap.xml", origin).toString(),
@@ -513,23 +790,34 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
 
   const queue = [];
   const queued = new Set();
+
   const enqueue = (url, required) => {
     const canonical = canonicalizeHttpUrl(url, origin);
+
     if (!canonical || queued.has(canonical)) return;
     if (!sameOrigin(canonical, origin)) return;
+
     queued.add(canonical);
-    queue.push({ url: canonical, required });
+    queue.push({
+      url: canonical,
+      required,
+    });
   };
 
   if (robotsSitemaps.length) {
-    for (const url of robotsSitemaps) enqueue(url, true);
-      } else {
-    for (const url of fallbackSitemaps) enqueue(url, false);
+    for (const url of robotsSitemaps) {
+      enqueue(url, true);
+    }
+  } else {
+    for (const url of fallbackSitemaps) {
+      enqueue(url, false);
+    }
   }
 
   const retained = new Set();
   const processedDocuments = new Set();
   const limitations = [];
+
   let attemptedDocuments = 0;
   let parsedDocuments = 0;
   let failedDocuments = 0;
@@ -540,30 +828,53 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
   let cappedByUrls = false;
   let incomplete = false;
 
-  while (queue.length && attemptedDocuments < maxSitemapDocuments && !cappedByUrls) {
+  while (
+    queue.length &&
+    attemptedDocuments < maxSitemapDocuments &&
+    !cappedByUrls
+  ) {
     throwIfAborted(options.signal);
+
     const entry = queue.shift();
-    if (!entry || processedDocuments.has(entry.url)) continue;
+
+    if (
+      !entry ||
+      processedDocuments.has(entry.url)
+    ) {
+      continue;
+    }
+
     processedDocuments.add(entry.url);
     attemptedDocuments += 1;
 
     let resource;
+
     try {
-      resource = await fetchTextResource(entry.url, {
-        fetchImpl,
-        signal: options.signal,
-        timeoutMs,
-        maxBytes: maxDocumentBytes,
-        allowedOrigin: origin,
-        label: `sitemap ${entry.url}`,
-      });
+      resource = await fetchTextResource(
+        entry.url,
+        {
+          fetchImpl,
+          signal: options.signal,
+          timeoutMs,
+          maxBytes: maxDocumentBytes,
+          allowedOrigin: origin,
+          label: `sitemap ${entry.url}`,
+        },
+      );
     } catch (error) {
-      if (options.signal?.aborted) throw error;
+      if (options.signal?.aborted) {
+        throw error;
+      }
+
       if (entry.required) {
         failedDocuments += 1;
         incomplete = true;
-        limitations.push(`Sitemap document failed at ${entry.url}: ${error.message}`);
+
+        limitations.push(
+          `Sitemap document failed at ${entry.url}: ${error.message}`,
+        );
       }
+
       continue;
     }
 
@@ -571,18 +882,27 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
       if (entry.required) {
         failedDocuments += 1;
         incomplete = true;
-        limitations.push(`Sitemap document returned HTTP ${resource.status}: ${entry.url}`);
+
+        limitations.push(
+          `Sitemap document returned HTTP ${resource.status}: ${entry.url}`,
+        );
       }
+
       continue;
     }
 
     const parsed = parseSitemapXml(resource.text);
+
     if (parsed.type === "unknown") {
       if (entry.required) {
         failedDocuments += 1;
         incomplete = true;
-        limitations.push(`Sitemap document was not a sitemap index or URL set: ${entry.url}`);
+
+        limitations.push(
+          `Sitemap document was not a sitemap index or URL set: ${entry.url}`,
+        );
       }
+
       continue;
     }
 
@@ -590,7 +910,12 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
 
     if (parsed.type === "sitemapindex") {
       const childSitemaps = parsed.locations
-        .map((value) => canonicalizeHttpUrl(value, resource.url))
+        .map((value) =>
+          canonicalizeHttpUrl(
+            value,
+            resource.url,
+          ),
+        )
         .filter(Boolean)
         .sort();
 
@@ -600,59 +925,101 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
           incomplete = true;
           continue;
         }
+
         enqueue(child, true);
       }
+
       continue;
     }
 
     for (const value of parsed.locations) {
-      const pageUrl = canonicalizeHttpUrl(value, resource.url);
+      const pageUrl = canonicalizeHttpUrl(
+        value,
+        resource.url,
+      );
+
       if (!pageUrl) continue;
+
       if (!sameOrigin(pageUrl, origin)) {
         skippedExternalPageUrlCount += 1;
         continue;
       }
+
       if (retained.has(pageUrl)) {
         duplicateUrlCount += 1;
         continue;
       }
+
       if (retained.size >= maxRetainedUrls) {
         cappedByUrls = true;
         incomplete = true;
         break;
       }
+
       retained.add(pageUrl);
     }
   }
 
-  if (queue.length && attemptedDocuments >= maxSitemapDocuments) {
+  if (
+    queue.length &&
+    attemptedDocuments >= maxSitemapDocuments
+  ) {
     cappedByDocuments = true;
     incomplete = true;
   }
 
   if (skippedExternalSitemapCount > 0) {
-    limitations.push(`${skippedExternalSitemapCount} cross-origin sitemap document reference(s) were not fetched.`);
+    limitations.push(
+      `${skippedExternalSitemapCount} cross-origin sitemap document reference(s) were not fetched.`,
+    );
   }
+
   if (skippedExternalPageUrlCount > 0) {
-    limitations.push(`${skippedExternalPageUrlCount} cross-origin page URL(s) were excluded from the site footprint.`);
+    limitations.push(
+      `${skippedExternalPageUrlCount} cross-origin page URL(s) were excluded from the site footprint.`,
+    );
   }
+
   if (cappedByDocuments) {
-    limitations.push(`Sitemap discovery reached the ${maxSitemapDocuments}-document cap; coverage is incomplete.`);
+    limitations.push(
+      `Sitemap discovery reached the ${maxSitemapDocuments}-document cap; coverage is incomplete.`,
+    );
   }
+
   if (cappedByUrls) {
-    limitations.push(`Sitemap discovery reached the ${maxRetainedUrls}-URL retention cap; coverage is incomplete.`);
+    limitations.push(
+      `Sitemap discovery reached the ${maxRetainedUrls}-URL retention cap; coverage is incomplete.`,
+    );
   }
 
   const retainedUrls = [...retained].sort();
-  const clusters = clusterSitemapUrls(retainedUrls, options);
-  const priorityUrls = selectPriorityUrls(normalizedTarget, retainedUrls, clusters, {
-    ...options,
-    maxPriorityUrls,
-  });
-  const usableSitemap = parsedDocuments > 0 && retainedUrls.length > 0;
+
+  const clusters = clusterSitemapUrls(
+    retainedUrls,
+    options,
+  );
+
+  const prioritySelection = selectPriorityPlan(
+    normalizedTarget,
+    retainedUrls,
+    clusters,
+    {
+      ...options,
+      maxPriorityUrls,
+    },
+  );
+
+  const priorityUrls =
+    prioritySelection.priorityUrls;
+
+  const usableSitemap =
+    parsedDocuments > 0 &&
+    retainedUrls.length > 0;
 
   if (!usableSitemap) {
-    limitations.push("No usable same-origin sitemap URL footprint was discovered; absence of sitemap evidence does not prove absence of programmatic SEO.");
+    limitations.push(
+      "No usable same-origin sitemap URL footprint was discovered; absence of sitemap evidence does not prove absence of programmatic SEO.",
+    );
   }
 
   const status = !usableSitemap
@@ -666,26 +1033,40 @@ export async function discoverSitemapFootprint(targetUrl, options = {}) {
     discoveredUrlCount: retainedUrls.length,
     retainedUrlCount: retainedUrls.length,
     sitemapDocumentCount: attemptedDocuments,
-    capped: cappedByDocuments || cappedByUrls,
-    incomplete: !usableSitemap || incomplete,
+    capped:
+      cappedByDocuments ||
+      cappedByUrls,
+    incomplete:
+      !usableSitemap ||
+      incomplete,
     clusterCount: clusters.length,
     clusters,
     priorityUrls,
+    prioritySelection,
     coverage: {
       usableSitemap,
-      complete: usableSitemap && !incomplete,
-      parsedSitemapDocumentCount: parsedDocuments,
-      failedSitemapDocumentCount: failedDocuments,
+      complete:
+        usableSitemap &&
+        !incomplete,
+      parsedSitemapDocumentCount:
+        parsedDocuments,
+      failedSitemapDocumentCount:
+        failedDocuments,
       duplicateUrlCount,
       skippedExternalPageUrlCount,
       skippedExternalSitemapCount,
       cappedByDocuments,
       cappedByUrls,
-      sitemapDocumentCap: maxSitemapDocuments,
-      retainedUrlCap: maxRetainedUrls,
-      priorityUrlCap: maxPriorityUrls,
+      sitemapDocumentCap:
+        maxSitemapDocuments,
+      retainedUrlCap:
+        maxRetainedUrls,
+      priorityUrlCap:
+        maxPriorityUrls,
     },
-    limitations: [...new Set(limitations)],
+    limitations: [
+      ...new Set(limitations),
+    ],
   };
 }
 

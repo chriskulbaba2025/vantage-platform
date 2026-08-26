@@ -28,6 +28,7 @@ const TERMINAL_STATUSES = new Set(["ready"]);
 
 const ONPAGE_CLIENT_POLICY = Object.freeze({
   pollTimeoutMs: 30 * 60 * 1000,
+  maxCrawlPages: 250,
   maxPriorityUrls: 20,
   returnDespiteTimeout: true,
 });
@@ -333,7 +334,7 @@ export function createDataforseoOnpageClient(opts = {}) {
    *
    * @param {string} target - Target domain (e.g. "example.com").
    * @param {object} [options] - Task configuration.
-   * @param {number} [options.maxPages=500] - Maximum pages to crawl.
+   * @param {number} [options.maxPages=250] - Maximum pages to crawl.
    * @param {number} [options.maxDepth] - Maximum crawl depth.
    * @param {boolean} [options.enableJavascript=false] - Enable JS rendering.
    * @param {boolean} [options.enableBrowserRendering=false] - Enable full browser rendering.
@@ -372,7 +373,16 @@ export function createDataforseoOnpageClient(opts = {}) {
     const body = [
       {
         target,
-        max_crawl_pages: options.maxPages ?? 500,
+        max_crawl_pages: Math.min(
+          ONPAGE_CLIENT_POLICY.maxCrawlPages,
+          Math.max(
+            1,
+            Number.parseInt(
+              options.maxPages ?? ONPAGE_CLIENT_POLICY.maxCrawlPages,
+              10,
+            ) || ONPAGE_CLIENT_POLICY.maxCrawlPages,
+          ),
+        ),
         ...(priorityUrls.length && { priority_urls: priorityUrls }),
         ...(options.respectSitemap != null && {
           respect_sitemap: Boolean(options.respectSitemap),
@@ -627,12 +637,21 @@ export function createDataforseoOnpageClient(opts = {}) {
    *
    * @param {string} taskId - Task ID.
    * @param {object} [options]
-   * @param {number} [options.maxPages=500] - Maximum pages to fetch.
+   * @param {number} [options.maxPages=250] - Maximum pages to fetch.
    * @param {number} [options.pageSize=100] - Page size for each request.
    * @returns {Promise<Array<object>>} Array of page items.
    */
   async function getAllPages(taskId, options = {}) {
-    const maxPages = options.maxPages ?? 500;
+    const maxPages = Math.min(
+      ONPAGE_CLIENT_POLICY.maxCrawlPages,
+      Math.max(
+        1,
+        Number.parseInt(
+          options.maxPages ?? ONPAGE_CLIENT_POLICY.maxCrawlPages,
+          10,
+        ) || ONPAGE_CLIENT_POLICY.maxCrawlPages,
+      ),
+    );
     const pageSize = options.pageSize ?? 100;
     const allPages = [];
     let offset = 0;

@@ -871,20 +871,219 @@ test("live mode without credentials returns FAILED with not_configured category"
 });
 
 // ---------------------------------------------------------------------------
-// 15. Default maximum of 500 HTML pages
+// 15. Governed provider crawl ceiling
 // ---------------------------------------------------------------------------
 
-test("default maxPages is 500", async () => {
-  const fixtures = buildSuccessfulFixtures(3);
+test("task_post enforces the governed 250-page ceiling for every requested site size", async () => {
+  setTestCredentials();
+
+  try {
+    const cases = [
+      {
+        label: "small 10-page request",
+        requestedMaxPages: 10,
+        expectedMaxPages: 10,
+      },
+      {
+        label: "exact 250-page request",
+        requestedMaxPages: 250,
+        expectedMaxPages: 250,
+      },
+      {
+        label: "legacy 500-page request",
+        requestedMaxPages: 500,
+        expectedMaxPages: 250,
+      },
+      {
+        label: "very large 100000-page request",
+        requestedMaxPages: 100000,
+        expectedMaxPages: 250,
+      },
+      {
+        label: "default request",
+        requestedMaxPages: undefined,
+        expectedMaxPages: 250,
+      },
+    ];
+
+    for (const testCase of cases) {
+      let capturedBody = null;
+
+      const fetchImpl = async (url, init = {}) => {
+        if (String(url).includes("/on_page/task_post")) {
+          capturedBody = JSON.parse(init.body);
+
+          return new Response(
+            "Service Unavailable",
+            { status: 503 },
+          );
+        }
+
+        throw new Error(
+          `Unexpected provider request during ${testCase.label}: ${url}`,
+        );
+      };
+
+      const options = {
+        pollTimeoutMs: 500,
+        pollIntervalMs: 10,
+        enableContentParsing: false,
+        siteFootprint: {
+          status: "AVAILABLE",
+          discoveredUrlCount: 100000,
+          retainedUrlCount: 100000,
+          sitemapDocumentCount: 1,
+          capped: false,
+          incomplete: false,
+          clusterCount: 0,
+          clusters: [],
+          priorityUrls: ["https://example.com/"],
+          coverage: {
+            usableSitemap: true,
+            complete: true,
+          },
+          limitations: [],
+        },
+        clientOptions: {
+          mode: "live",
+          fetchImpl,
+        },
+      };
+
+      if (testCase.requestedMaxPages !== undefined) {
+        options.maxPages = testCase.requestedMaxPages;
+      }
+
+      await crawlWithDataforseo(
+        "https://example.com",
+        options,
+      );
+
+      assert.ok(
+        capturedBody,
+        `${testCase.label}: task_post request must be captured`,
+      );
+
+      assert.equal(
+        capturedBody[0].max_crawl_pages,
+        testCase.expectedMaxPages,
+        `${testCase.label}: max_crawl_pages must respect the governed ceiling`,
+      );
+    }
+  } finally {
+    restoreCredentials();
+  }
+});
+
+test("oversized crawl request records the governed reduction and never retrieves more than 250 pages", async () => {
+  const fixtures = buildSuccessfulFixtures(300);
+
   const result = await crawlWithDataforseo(
     "https://example.com",
-    crawlOpts(fixtures),
+    {
+      ...crawlOpts(fixtures),
+      maxPages: 100000,
+      enableContentParsing: false,
+    },
   );
 
-  assert.equal(result.pageCount, 3);
-  assert.ok(result.coverage);
-  assert.equal(typeof result.coverage.requested, "number");
-  assert.equal(typeof result.coverage.completed, "number");
+  assert.equal(
+    result.pageCount,
+    250,
+    "adapter must never retrieve more than the governed 250-page maximum",
+  );
+
+  assert.ok(
+    result.limitations.some(
+      (limitation) =>
+        /100000/.test(limitation) &&
+        /250-page provider maximum/i.test(limitation),
+    ),
+    `Expected governed reduction limitation, got: ${JSON.stringify(result.limitations)}`,
+  );
+});
+
+test("task_post keeps priority URLs bounded to 20 while enforcing the page ceiling", async () => {
+  setTestCredentials();
+
+  try {
+    let capturedBody = null;
+
+    const priorityUrls = Array.from(
+      { length: 30 },
+      (_, index) =>
+        `https://example.com/priority-${String(index + 1).padStart(2, "0")}`,
+    );
+
+    const fetchImpl = async (url, init = {}) => {
+      if (String(url).includes("/on_page/task_post")) {
+        capturedBody = JSON.parse(init.body);
+
+        return new Response(
+          "Service Unavailable",
+          { status: 503 },
+        );
+      }
+
+      throw new Error(
+        `Unexpected provider request: ${url}`,
+      );
+    };
+
+    await crawlWithDataforseo(
+      "https://example.com",
+      {
+        maxPages: 100000,
+        pollTimeoutMs: 500,
+        pollIntervalMs: 10,
+        siteFootprint: {
+          status: "AVAILABLE",
+          discoveredUrlCount: 100000,
+          retainedUrlCount: 100000,
+          sitemapDocumentCount: 1,
+          capped: false,
+          incomplete: false,
+          clusterCount: 0,
+          clusters: [],
+          priorityUrls,
+          coverage: {
+            usableSitemap: true,
+            complete: true,
+          },
+          limitations: [],
+        },
+        clientOptions: {
+          mode: "live",
+          fetchImpl,
+        },
+      },
+    );
+
+    assert.ok(
+      capturedBody,
+      "task_post request must be captured",
+    );
+
+    assert.equal(
+      capturedBody[0].max_crawl_pages,
+      250,
+      "100000-page request must be reduced to 250",
+    );
+
+    assert.equal(
+      capturedBody[0].priority_urls.length,
+      20,
+      "priority_urls must remain bounded to the provider-supported 20 URLs",
+    );
+
+    assert.deepEqual(
+      capturedBody[0].priority_urls,
+      priorityUrls.slice(0, 20),
+      "priority URL truncation must remain deterministic",
+    );
+  } finally {
+    restoreCredentials();
+  }
 });
 
 // ---------------------------------------------------------------------------

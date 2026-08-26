@@ -5,6 +5,7 @@ import {
   FOOTPRINT_STATUS,
   clusterSitemapUrls,
   discoverSitemapFootprint,
+  selectPriorityPlan,
   selectPriorityUrls,
 } from "./sitemap-footprint.js";
 
@@ -33,6 +34,13 @@ function makeFetch(routes) {
   };
 
   return { fetchImpl, calls };
+}
+
+function buildFamily(prefix, count) {
+  return Array.from(
+    { length: count },
+    (_, index) => `https://example.com/${prefix}/item-${String(index + 1).padStart(3, "0")}`,
+  );
 }
 
 test("recursively discovers sitemap indexes, filters cross-origin URLs, and deduplicates deterministically", async () => {
@@ -99,10 +107,17 @@ test("recursively discovers sitemap indexes, filters cross-origin URLs, and dedu
       "https://example.com/services/coaching?a=1&b=2",
     ),
   );
+
   assert.ok(
     result.priorityUrls.every(
       (url) => new URL(url).origin === "https://example.com",
     ),
+  );
+
+  assert.equal(result.prioritySelection.strategyVersion, "1.0.0");
+  assert.deepEqual(
+    result.prioritySelection.priorityUrls,
+    result.priorityUrls,
   );
 });
 
@@ -140,6 +155,7 @@ test("reports sitemap-document and retained-URL caps instead of hiding incomplet
   assert.equal(documentCapped.incomplete, true);
   assert.equal(documentCapped.coverage.cappedByDocuments, true);
   assert.equal(documentCapped.sitemapDocumentCount, 2);
+
   assert.match(
     documentCapped.limitations.join(" "),
     /document cap/i,
@@ -173,6 +189,7 @@ test("reports sitemap-document and retained-URL caps instead of hiding incomplet
   assert.equal(urlCapped.capped, true);
   assert.equal(urlCapped.incomplete, true);
   assert.equal(urlCapped.coverage.cappedByUrls, true);
+
   assert.match(
     urlCapped.limitations.join(" "),
     /URL retention cap/i,
@@ -260,8 +277,196 @@ test("representative selection is deterministic, business-aware, cluster-aware, 
   );
 
   assert.ok(locationCluster);
+
   assert.ok(
-    locationCluster.representativeUrls.some((url) => first.includes(url)),
+    locationCluster.representativeUrls.some(
+      (url) => first.includes(url),
+    ),
+  );
+});
+
+test("protects commercial must-haves before large repetitive families consume the 20-URL budget", () => {
+  const commercialUrls = [
+    "https://example.com/",
+    "https://example.com/contact",
+    "https://example.com/pricing",
+    "https://example.com/services",
+    "https://example.com/services/executive-coaching",
+    "https://example.com/about",
+    "https://example.com/case-studies",
+  ];
+
+  const familyUrls = [
+    ...buildFamily("locations", 40),
+    ...buildFamily("resources", 40),
+    ...buildFamily("industries", 40),
+    ...buildFamily("portfolio", 40),
+    ...buildFamily("articles", 40),
+    ...buildFamily("category", 40),
+    ...buildFamily("news", 40),
+    ...buildFamily("products", 40),
+    ...buildFamily("solutions", 40),
+    ...buildFamily("work", 40),
+    ...buildFamily("reviews", 40),
+    ...buildFamily("testimonials", 40),
+    ...buildFamily("results", 40),
+    ...buildFamily("help", 40),
+    ...buildFamily("faq", 40),
+    ...buildFamily("team", 40),
+    ...buildFamily("company", 40),
+    ...buildFamily("blog", 40),
+    ...buildFamily("case-studies", 40),
+    ...buildFamily("services", 40),
+  ];
+
+  const urls = [...commercialUrls, ...familyUrls];
+  const clusters = clusterSitemapUrls(urls);
+
+  const plan = selectPriorityPlan(
+    "https://example.com",
+    urls,
+    clusters,
+    { services: ["Executive Coaching"] },
+  );
+
+  assert.equal(plan.priorityUrls.length, 20);
+  assert.equal(plan.priorityUrlCap, 20);
+
+  assert.ok(plan.mustHaveUrls.includes("https://example.com/"));
+  assert.ok(plan.mustHaveUrls.includes("https://example.com/contact"));
+  assert.ok(plan.mustHaveUrls.includes("https://example.com/pricing"));
+  assert.ok(plan.mustHaveUrls.includes("https://example.com/services"));
+
+  assert.ok(
+    plan.mustHaveUrls.includes(
+      "https://example.com/services/executive-coaching",
+    ),
+  );
+
+  assert.ok(plan.mustHaveUrls.includes("https://example.com/about"));
+  assert.ok(plan.mustHaveUrls.includes("https://example.com/case-studies"));
+
+  assert.ok(plan.materialFamilyCount > 0);
+  assert.ok(plan.representedMaterialFamilyCount > 0);
+
+  assert.equal(
+    plan.representedMaterialFamilyCount +
+      plan.unrepresentedMaterialFamilyCount,
+    plan.materialFamilyCount,
+  );
+});
+
+test("priority plan is deterministic and truthfully records material families that cannot fit inside the 20-URL cap", () => {
+  const urls = [
+    "https://example.com/",
+    "https://example.com/contact",
+    "https://example.com/pricing",
+    "https://example.com/services",
+    "https://example.com/about",
+    "https://example.com/case-studies",
+  ];
+
+  for (let family = 1; family <= 30; family += 1) {
+    urls.push(
+      ...buildFamily(
+        `family-${String(family).padStart(2, "0")}`,
+        10,
+      ),
+    );
+  }
+
+  const clusters = clusterSitemapUrls(urls, {
+    topLevelVariableSiblingThreshold: 1000,
+  });
+
+  const first = selectPriorityPlan(
+    "https://example.com",
+    urls,
+    clusters,
+  );
+
+  const second = selectPriorityPlan(
+    "https://example.com",
+    [...urls].reverse(),
+    [...clusters].reverse(),
+  );
+
+  assert.deepEqual(first, second);
+  assert.equal(first.priorityUrls.length, 20);
+  assert.equal(first.materialFamilyCount, 30);
+  assert.equal(first.representedMaterialFamilyCount, 14);
+  assert.equal(first.unrepresentedMaterialFamilyCount, 16);
+
+  assert.equal(
+    first.materialFamilies.filter(
+      (family) => family.representedInPrioritySet,
+    ).length,
+    first.representedMaterialFamilyCount,
+  );
+
+  assert.equal(
+    first.materialFamilies.filter(
+      (family) => !family.representedInPrioritySet,
+    ).length,
+    first.unrepresentedMaterialFamilyCount,
+  );
+});
+
+test("discoverSitemapFootprint exposes the bounded priority selection contract without confusing footprint size with assessed-page selection", async () => {
+  const pageUrls = [
+    "https://example.com/",
+    "https://example.com/contact",
+    "https://example.com/pricing",
+    "https://example.com/services",
+    "https://example.com/about",
+    "https://example.com/case-studies",
+    ...buildFamily("locations", 30),
+    ...buildFamily("articles", 30),
+  ];
+
+  const sitemapBody = `
+    <urlset>
+      ${pageUrls
+        .map((url) => `<url><loc>${url}</loc></url>`)
+        .join("\n")}
+    </urlset>
+  `;
+
+  const { fetchImpl } = makeFetch({
+    "https://example.com/robots.txt": {
+      body: "Sitemap: https://example.com/sitemap.xml",
+      contentType: "text/plain",
+    },
+    "https://example.com/sitemap.xml": {
+      body: sitemapBody,
+    },
+  });
+
+  const result = await discoverSitemapFootprint(
+    "https://example.com",
+    {
+      fetchImpl,
+    },
+  );
+
+  assert.equal(result.status, FOOTPRINT_STATUS.AVAILABLE);
+  assert.equal(result.discoveredUrlCount, pageUrls.length);
+  assert.equal(result.retainedUrlCount, pageUrls.length);
+  assert.ok(result.priorityUrls.length <= 20);
+  assert.equal(result.prioritySelection.priorityUrlCap, 20);
+
+  assert.deepEqual(
+    result.prioritySelection.priorityUrls,
+    result.priorityUrls,
+  );
+
+  assert.ok(
+    result.discoveredUrlCount >
+      result.priorityUrls.length,
+  );
+
+  assert.ok(
+    result.prioritySelection.materialFamilyCount >= 2,
   );
 });
 
@@ -279,15 +484,33 @@ test("fails soft when no usable sitemap exists and does not infer absence of pro
     },
   });
 
-  const result = await discoverSitemapFootprint("https://example.com", {
-    fetchImpl,
-  });
+  const result = await discoverSitemapFootprint(
+    "https://example.com",
+    {
+      fetchImpl,
+    },
+  );
 
   assert.equal(result.status, FOOTPRINT_STATUS.UNAVAILABLE);
   assert.equal(result.retainedUrlCount, 0);
   assert.equal(result.incomplete, true);
   assert.equal(result.coverage.usableSitemap, false);
-  assert.deepEqual(result.priorityUrls, ["https://example.com/"]);
+
+  assert.deepEqual(
+    result.priorityUrls,
+    ["https://example.com/"],
+  );
+
+  assert.deepEqual(
+    result.prioritySelection.mustHaveUrls,
+    ["https://example.com/"],
+  );
+
+  assert.equal(
+    result.prioritySelection.materialFamilyCount,
+    0,
+  );
+
   assert.match(
     result.limitations.join(" "),
     /does not prove absence of programmatic SEO/i,

@@ -39,14 +39,15 @@ import { analyzeProgrammaticSeo } from "../../evidence/programmatic-seo-analysis
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.3.0";
+const ADAPTER_VERSION = "1.4.0";
+const HARD_MAX_PROVIDER_PAGES = 250;
 
 // ---------------------------------------------------------------------------
-// Default configuration (PRD v3.0 §8.4 + DQV-001 Track B)
+// Default configuration (PRD v3.0 §8.4 + governed representative crawl)
 // ---------------------------------------------------------------------------
 
 const DEFAULTS = Object.freeze({
-  maxPages: 500,
+  maxPages: HARD_MAX_PROVIDER_PAGES,
   pollTimeoutMs: 1800000,   // 30-minute provider poll budget
   pollIntervalMs: 10000,
   enableJavascript: false,
@@ -59,6 +60,22 @@ const DEFAULTS = Object.freeze({
   nonIndexableLimit: 1000,
   resourcesPageLimit: 10,
 });
+
+function resolveProviderMaxPages(value) {
+  const parsed = Number.parseInt(
+    value ?? DEFAULTS.maxPages,
+    10,
+  );
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULTS.maxPages;
+  }
+
+  return Math.min(
+    HARD_MAX_PROVIDER_PAGES,
+    Math.max(1, parsed),
+  );
+}
 
 function syntheticUnavailableFootprint(targetUrl, limitation) {
   const root = normalizeUrl(targetUrl);
@@ -138,6 +155,9 @@ async function resolveSiteFootprint(target, options, clientOpts) {
       fetchImpl:
         options.sitemapFetchImpl ||
         clientOpts.fetchImpl,
+      services: Array.isArray(options.businessServices)
+        ? options.businessServices
+        : [],
     });
 
     return normalizeFootprintForAnalysis(footprint);
@@ -1335,7 +1355,7 @@ function summarizeSite({
  *
  * @param {string} target - Target URL or domain.
  * @param {object} [options] - Crawl configuration.
- * @param {number} [options.maxPages=500] - Maximum pages to crawl.
+ * @param {number} [options.maxPages=250] - Maximum pages to crawl; hard-capped at 250.
  * @param {number} [options.maxDepth] - Maximum crawl depth.
  * @param {boolean} [options.enableJavascript=false] - Enable JS rendering.
  * @param {boolean} [options.enableBrowserRendering=false] - Full browser rendering.
@@ -1359,7 +1379,15 @@ export async function crawlWithDataforseo(target, options = {}) {
     fetchImpl: clientOpts.fetchImpl,
   });
 
-  const maxPages = options.maxPages ?? DEFAULTS.maxPages;
+  const requestedMaxPages = options.maxPages ?? DEFAULTS.maxPages;
+  const maxPages = resolveProviderMaxPages(requestedMaxPages);
+
+  if (Number(requestedMaxPages) > HARD_MAX_PROVIDER_PAGES) {
+    limitations.push(
+      `Requested crawl ceiling ${requestedMaxPages} was reduced to the governed ${HARD_MAX_PROVIDER_PAGES}-page provider maximum.`,
+    );
+  }
+
   const pollTimeoutMs = options.pollTimeoutMs ?? DEFAULTS.pollTimeoutMs;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULTS.pollIntervalMs;
 

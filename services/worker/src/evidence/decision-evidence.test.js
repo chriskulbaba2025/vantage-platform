@@ -435,7 +435,7 @@ test("DQV-001: available representative site evidence survives hydrateSite lossl
       {
         source: "dataforseo-onpage",
         sourceResult: validSr("dataforseo-onpage", {
-          adapterVersion: "1.3.0",
+          adapterVersion: "1.4.0",
           evidence: {
             sourceStatus: "AVAILABLE",
             domain: "example.com",
@@ -500,7 +500,7 @@ test("DQV-001: unavailable sitemap evidence cannot become NOT_DETECTED programma
         source: "dataforseo-onpage",
         sourceResult: validSr("dataforseo-onpage", {
           status: "PARTIAL",
-          adapterVersion: "1.3.0",
+          adapterVersion: "1.4.0",
           evidence: {
             sourceStatus: "PARTIAL",
             domain: "example.com",
