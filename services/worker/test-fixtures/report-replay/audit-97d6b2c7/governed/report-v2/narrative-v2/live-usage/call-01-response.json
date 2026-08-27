@@ -1,0 +1,1020 @@
+{
+  "contractVersion": "1.0.0",
+  "writerOutputVersion": "1.0.0",
+  "auditId": "97d6b2c7-03b9-4530-8ea7-16557502c638",
+  "passNumber": 1,
+  "modelId": "gpt-5.6-terra",
+  "promptVersion": "2.0.0",
+  "generatedAt": "2026-08-23T00:00:00Z",
+  "executiveConclusion": {
+    "headline": "Prioritize control of search-result messaging and mobile first impressions.",
+    "narrative": {
+      "text": "The clearest evidenced opportunity is to restore control of how important pages are described in search results, while improving the homepage mobile loading experience. Content depth is assessed, but overall readiness remains insufficiently evidenced because several conversion, trust, and AI-search capabilities were unavailable.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:rootCause",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "score:contentDepth",
+        "score:readinessStatus",
+        "capabilityContext:summary"
+      ]
+    }
+  },
+  "strengths": [
+    {
+      "itemId": "STR-01",
+      "title": "Content depth is the strongest assessed area",
+      "narrative": {
+        "text": "Content depth is an assessed strength within the available evidence and provides a foundation for organizing audience-facing material around the coaching services.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "score:contentDepth",
+          "score:contentFunnelDimension",
+          "business:services",
+          "capability:content.body"
+        ]
+      }
+    },
+    {
+      "itemId": "STR-02",
+      "title": "A clear service portfolio supports focused content planning",
+      "narrative": {
+        "text": "The defined service portfolio gives the business a practical basis for answer-first, fit, process, outcome, and decision-stage content rather than a broad undifferentiated publishing approach.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "business:services",
+          "analysis:contentIdeas",
+          "analysis:readinessMap"
+        ]
+      }
+    }
+  ],
+  "rootCause": {
+    "headline": "Search-result messaging is uncontrolled on important pages.",
+    "narrative": {
+      "text": "Missing meta descriptions are the most impactful identified issue because they leave search-result messaging uncontrolled for the affected pages. This is the report's primary evidenced root cause.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:rootCause",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+      ]
+    },
+    "businessConsequences": [
+      {
+        "area": "Search acquisition",
+        "narrative": {
+          "text": "When search-result messaging is uncontrolled, the business has less ability to present a clear, relevant reason for prospective clients to choose an important page from search results.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+            "business:primaryGoal"
+          ]
+        }
+      },
+      {
+        "area": "Mobile first impression",
+        "narrative": {
+          "text": "The slow mobile largest contentful paint on the homepage can compound acquisition friction by increasing mobile abandonment before a visitor engages with the site.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+          ]
+        }
+      }
+    ]
+  },
+  "conversion": {
+    "headline": "Conversion readiness cannot be fully assessed.",
+    "whatWorks": {
+      "text": "The stated goal of generating qualified enquiries and the defined coaching services provide a clear commercial direction for future conversion journeys.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services"
+      ]
+    },
+    "constraints": {
+      "text": "Calls to action, forms, offer clarity, and the primary conversion path were not assessed because the relevant evidence was unavailable.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "capability:conversion.path",
+        "capability:offer.clarity",
+        "analysis:conversionPaths"
+      ]
+    },
+    "businessMeaning": {
+      "text": "The report cannot determine whether visitors can easily move from interest to enquiry, so conversion performance should not be inferred from this audit.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:readinessStatus",
+        "scoreGovernance:suppressedModules",
+        "capability:conversion.path"
+      ]
+    },
+    "priority": {
+      "text": "First improve the quality of search entry and mobile arrival; then collect conversion-path evidence before making pathway-specific changes.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "capability:conversion.path"
+      ]
+    }
+  },
+  "content": {
+    "headline": "Use the assessed content foundation to build a buyer-journey architecture.",
+    "currentStrength": {
+      "text": "Content depth is assessed and is the strongest measured content signal in this audit.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:contentDepth",
+        "score:contentFunnelDimension",
+        "capability:content.body"
+      ]
+    },
+    "coverageAssessment": {
+      "text": "Funnel coverage was not eligible for assessment, so the audit does not establish whether the current site adequately serves awareness, consideration, and decision needs.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "scoreGovernance:moduleEligibility",
+        "scoreGovernance:suppressedModules",
+        "capability:trust.proof"
+      ]
+    },
+    "qualityAssessment": {
+      "text": "The available assessment supports a positive view of content depth, but it does not support conclusions about trust proof or offer clarity within the content.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:contentDepth",
+        "capability:trust.proof",
+        "capability:offer.clarity"
+      ]
+    },
+    "topicalArchitecture": {
+      "text": "The deterministic content plan maps the service portfolio to answer-first awareness content, fit and process consideration content, and pricing, first-step, and FAQ decision content.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "business:services"
+      ]
+    },
+    "importantGaps": {
+      "text": "The highest-priority planned topics focus on explaining the 4-Week Reboot Series, clarifying options and fit, setting process expectations, presenting outcomes, and addressing pricing and first-step questions.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas"
+      ]
+    },
+    "businessMeaning": {
+      "text": "A connected content architecture can align service discovery with the goal of generating qualified enquiries, while the unavailable conversion and trust evidence prevents a claim about current funnel effectiveness.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "analysis:contentIdeas",
+        "capability:conversion.path",
+        "capability:trust.proof"
+      ]
+    }
+  },
+  "funnelOpportunities": {
+    "awareness": [
+      {
+        "itemId": "FUN-A-01",
+        "concept": {
+          "text": "Create an answer-first guide explaining what the 4-Week Reboot Series is.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:services"
+          ]
+        },
+        "userNeed": {
+          "text": "Help prospective clients understand what the 4-Week Reboot Series is before evaluating fit.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "This is identified as a high-priority awareness content idea in the deterministic plan.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "businessObjective": {
+          "text": "Connect service discovery to the goal of generating qualified enquiries.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "business:services"
+          ]
+        },
+        "nextAction": {
+          "text": "Develop the guide around a direct definition, intended use, and the questions identified in the content plan.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        }
+      },
+      {
+        "itemId": "FUN-A-02",
+        "concept": {
+          "text": "Publish an educational page addressing whether the 4-Week Reboot Series can produce measurable change.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "userNeed": {
+          "text": "Address the early-stage question of whether the service will work.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "The deterministic plan identifies this as a high-priority objection-handling topic.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "businessObjective": {
+          "text": "Create a more informed audience for qualified enquiries.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:contentIdeas"
+          ]
+        },
+        "nextAction": {
+          "text": "Build the page as an answer-first educational resource connected to the service.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:services"
+          ]
+        }
+      }
+    ],
+    "consideration": [
+      {
+        "itemId": "FUN-C-01",
+        "concept": {
+          "text": "Create a 4-Week Reboot Series options-and-fit page.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:services"
+          ]
+        },
+        "userNeed": {
+          "text": "Help prospective clients decide which option is right for their situation.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "The deterministic plan identifies comparison and fit as a high-priority consideration need.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "businessObjective": {
+          "text": "Move interested visitors toward a more qualified enquiry.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:contentIdeas"
+          ]
+        },
+        "nextAction": {
+          "text": "Explain the options and fit criteria in one dedicated comparison page.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        }
+      },
+      {
+        "itemId": "FUN-C-02",
+        "concept": {
+          "text": "Create a page explaining what happens in the process.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "userNeed": {
+          "text": "Set expectations for what a client should expect from the process.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "Process explanation is designated as a high-priority consideration topic.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "businessObjective": {
+          "text": "Reduce uncertainty before a prospective client considers making an enquiry.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:contentIdeas"
+          ]
+        },
+        "nextAction": {
+          "text": "Develop a process page tied to the coaching services.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:services"
+          ]
+        }
+      }
+    ],
+    "decision": [
+      {
+        "itemId": "FUN-D-01",
+        "concept": {
+          "text": "Create a pricing and what-to-expect page.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "userNeed": {
+          "text": "Answer the decision-stage question about cost and expectations.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "Pricing and expectation-setting are identified as a high-priority risk-reduction topic.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "businessObjective": {
+          "text": "Support qualified enquiries by addressing a key decision question before contact.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:contentIdeas"
+          ]
+        },
+        "nextAction": {
+          "text": "Publish a dedicated pricing and expectations page for the relevant services.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:services"
+          ]
+        }
+      },
+      {
+        "itemId": "FUN-D-02",
+        "concept": {
+          "text": "Create a start-here page describing the first step toward an enquiry.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:primaryGoal"
+          ]
+        },
+        "userNeed": {
+          "text": "Clarify what happens after a prospective client decides to act.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "The deterministic plan marks this first-step topic as high priority.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "businessObjective": {
+          "text": "Make the route to a qualified enquiry easier to understand.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:contentIdeas"
+          ]
+        },
+        "nextAction": {
+          "text": "Define the first-step experience in a dedicated decision-stage page after conversion-path evidence is collected.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "capability:conversion.path"
+          ]
+        }
+      }
+    ]
+  },
+  "seoSerp": {
+    "headline": "Search-result presentation needs immediate control.",
+    "whatWorks": {
+      "text": "The site has a defined set of important service-related pages and an assessed content foundation to support purposeful search messaging.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:services",
+        "score:contentDepth",
+        "capability:content.body"
+      ]
+    },
+    "constraints": {
+      "text": "Missing meta descriptions affect important pages and leave their search-result messaging uncontrolled.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+      ]
+    },
+    "searchImplication": {
+      "text": "Without page-specific descriptions, the business has less control over how relevance and value are communicated at the search-results stage.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "business:primaryGoal"
+      ]
+    },
+    "priority": {
+      "text": "Write a unique description for each important affected page before expanding the content programme.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+      ]
+    }
+  },
+  "aiSearch": {
+    "headline": "AI-search readiness is not assessable in this audit.",
+    "answerability": {
+      "text": "The deterministic plan provides answer-first content concepts, which are a useful direction for making service information easier to address directly.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "business:services"
+      ]
+    },
+    "entityStrength": {
+      "text": "Entity and schema strength cannot be assessed because structured-data evidence was unavailable.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:schema.structured_data",
+        "scoreGovernance:suppressedModules"
+      ]
+    },
+    "citationReadiness": {
+      "text": "Citation readiness cannot be concluded from the available evidence because AI-search readiness was suppressed.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "scoreGovernance:moduleEligibility",
+        "scoreGovernance:suppressedModules",
+        "capability:schema.structured_data"
+      ]
+    },
+    "constraints": {
+      "text": "The audit did not collect structured-data evidence, so it does not establish whether schema is present or absent.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:schema.structured_data"
+      ]
+    },
+    "opportunity": {
+      "text": "Use the planned answer-first guides, process explanations, and FAQs to make service questions easier to answer, then validate structured-data evidence in a future assessment.",
+      "statementClass": "OPPORTUNITY",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "capability:schema.structured_data",
+        "business:services"
+      ]
+    }
+  },
+  "eeatTrust": {
+    "headline": "Trust and proof cannot be evaluated from the collected evidence.",
+    "experience": {
+      "text": "The audit does not provide sufficient trust-proof evidence to assess demonstrated experience.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:trust.proof",
+        "scoreGovernance:moduleEligibility"
+      ]
+    },
+    "expertise": {
+      "text": "The audit does not provide sufficient trust-proof evidence to assess expertise signals.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:trust.proof",
+        "band:trust"
+      ]
+    },
+    "authority": {
+      "text": "Authority cannot be concluded from this audit because the trust-signals module was suppressed.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "scoreGovernance:suppressedModules",
+        "capability:trust.proof"
+      ]
+    },
+    "trust": {
+      "text": "Trust is not assessed; this is an evidence limitation rather than a finding that trust signals are absent.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "band:trust",
+        "capability:trust.proof"
+      ]
+    },
+    "proofGaps": {
+      "text": "Client results, outcomes, and founder or expert material are included in the deterministic content plan as consideration-stage opportunities, but their current on-site presence was not assessed.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "capability:trust.proof"
+      ]
+    },
+    "businessMeaning": {
+      "text": "Because prospective clients may need confidence before making an enquiry, collect trust-proof evidence before making claims about current trust performance.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "capability:trust.proof"
+      ]
+    }
+  },
+  "technical": {
+    "headline": "Technical hygiene requires focused remediation.",
+    "assessment": {
+      "text": "The technical assessment identifies issues in search metadata, heading structure, and image alternative text, while technical scoring is limited to the evidence collected.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:technical",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+        "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+      ]
+    },
+    "materialIssues": {
+      "text": "Address missing meta descriptions first, then establish one descriptive H1 with sequential subheadings and add concise alternative text to meaningful images.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+        "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+      ]
+    },
+    "businessMeaning": {
+      "text": "These changes improve control of search presentation and strengthen semantic and accessibility clarity without requiring a broad technical rebuild.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+        "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+      ]
+    }
+  },
+  "performanceUx": {
+    "headline": "The homepage mobile arrival experience is a material risk.",
+    "assessment": {
+      "text": "Lab performance evidence identifies slow mobile largest contentful paint on the homepage.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "capability:performance.lab"
+      ]
+    },
+    "userImpact": {
+      "text": "A slow first visual impression can increase mobile abandonment before users engage with the coaching offer.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+      ]
+    },
+    "conversionImpact": {
+      "text": "For a business seeking qualified enquiries, friction on the homepage can reduce the number of visitors who reach the point of considering contact; the audit does not measure the current conversion path itself.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "business:primaryGoal",
+        "capability:conversion.path"
+      ]
+    }
+  },
+  "competitors": {
+    "headline": "Competitor comparison is unavailable for interpretation.",
+    "advantages": {
+      "text": "No evidence supports a competitor-based advantage claim in this audit.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ]
+    },
+    "disadvantages": {
+      "text": "No evidence supports a competitor-based disadvantage claim in this audit.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ]
+    },
+    "marketInterpretation": {
+      "text": "The named competitor set does not have comparison results in the deterministic analysis, so relative market position cannot be assessed.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:competitors",
+        "analysis:competitors"
+      ]
+    },
+    "differentiatorToProtect": {
+      "text": "The defined coaching service portfolio is the appropriate business anchor for future differentiation work, but this audit does not validate its competitive distinctiveness.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:services",
+        "analysis:competitors"
+      ]
+    }
+  },
+  "limitations": [
+    {
+      "itemId": "LIM-01",
+      "area": "Conversion pathways",
+      "status": "UNAVAILABLE",
+      "clientExplanation": {
+        "text": "Interactive call-to-action, form, and conversion-path evidence was not collected.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:conversion.cta",
+          "capability:conversion.form",
+          "capability:conversion.path"
+        ]
+      },
+      "whatThisMeans": {
+        "text": "The report cannot assess the current route from visitor interest to enquiry.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:conversion.path",
+          "capability:conversion.cta"
+        ]
+      },
+      "whatThisDoesNotMean": {
+        "text": "It does not mean that calls to action, forms, or a conversion path are absent.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:conversion.cta",
+          "capability:conversion.form",
+          "capability:conversion.path"
+        ]
+      },
+      "impactOnReport": {
+        "text": "Conversion conclusions are deliberately limited, and pathway-specific recommendations are deferred pending evidence collection.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "score:readinessStatus",
+          "scoreGovernance:suppressedModules",
+          "capability:conversion.path"
+        ]
+      }
+    },
+    {
+      "itemId": "LIM-02",
+      "area": "Trust proof",
+      "status": "UNAVAILABLE",
+      "clientExplanation": {
+        "text": "Evidence for credentials, testimonials, policies, and other trust proof was unavailable.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:trust.proof"
+        ]
+      },
+      "whatThisMeans": {
+        "text": "Experience, expertise, authority, and trust cannot be assessed reliably in this report.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:trust.proof",
+          "capability:technical.headers"
+        ]
+      },
+      "whatThisDoesNotMean": {
+        "text": "It does not mean that trust proof is absent from the site.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:trust.proof"
+        ]
+      },
+      "impactOnReport": {
+        "text": "The trust assessment remains not assessed, and the report avoids claims about current proof strength.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "band:trust",
+          "scoreGovernance:suppressedModules",
+          "capability:trust.proof"
+        ]
+      }
+    },
+    {
+      "itemId": "LIM-03",
+      "area": "Structured data and AI search",
+      "status": "UNAVAILABLE",
+      "clientExplanation": {
+        "text": "Structured-data evidence was not collected.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:schema.structured_data"
+        ]
+      },
+      "whatThisMeans": {
+        "text": "Entity, schema, and AI-search readiness cannot be evaluated from this audit.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:schema.structured_data"
+        ]
+      },
+      "whatThisDoesNotMean": {
+        "text": "It does not mean that structured data is absent or invalid.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:schema.structured_data"
+        ]
+      },
+      "impactOnReport": {
+        "text": "AI-search conclusions are limited to content-direction opportunities rather than a readiness assessment.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "scoreGovernance:suppressedModules",
+          "analysis:contentIdeas",
+          "capability:schema.structured_data"
+        ]
+      }
+    },
+    {
+      "itemId": "LIM-04",
+      "area": "Field performance",
+      "status": "UNAVAILABLE",
+      "clientExplanation": {
+        "text": "Field performance data was not returned for the site.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field"
+        ]
+      },
+      "whatThisMeans": {
+        "text": "The performance conclusion is based on available lab evidence rather than observed real-user field data.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field",
+          "capability:performance.field"
+        ]
+      },
+      "whatThisDoesNotMean": {
+        "text": "It does not mean that real-user performance is good or poor.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field"
+        ]
+      },
+      "impactOnReport": {
+        "text": "The identified mobile loading issue remains actionable, while its real-user prevalence is not established here.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+          "capability:performance.field"
+        ]
+      }
+    }
+  ],
+  "actionPlan": [
+    {
+      "actionId": "ACT-01",
+      "priority": 1,
+      "title": "Restore control of search-result messaging",
+      "action": {
+        "text": "Write and publish a unique description for each important affected page.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+        ]
+      },
+      "whyNow": {
+        "text": "This is the highest-impact identified opportunity and directly addresses uncontrolled search-result messaging.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "score:rootCause",
+          "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Improve the business's control over how relevance is communicated to prospective clients in search results.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+          "business:primaryGoal"
+        ]
+      },
+      "effort": "L",
+      "verification": {
+        "text": "Re-crawl the affected pages and confirm descriptions are present.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-02",
+      "priority": 2,
+      "title": "Improve the homepage mobile first impression",
+      "action": {
+        "text": "Optimize the largest above-the-fold asset and remove render-blocking work on the homepage.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+        ]
+      },
+      "whyNow": {
+        "text": "The identified slow mobile loading experience can increase abandonment before visitors engage with the site.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Reduce friction for mobile visitors arriving before they consider an enquiry.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+          "business:primaryGoal"
+        ]
+      },
+      "effort": "M",
+      "verification": {
+        "text": "Re-run the available lab performance assessment and confirm the recommended mobile loading threshold is met.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+          "capability:performance.lab"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-03",
+      "priority": 3,
+      "title": "Build the planned service-led content journey",
+      "action": {
+        "text": "Prioritize answer-first 4-Week Reboot Series content, options and fit, process explanation, pricing and expectations, and a first-step page.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "business:services"
+        ]
+      },
+      "whyNow": {
+        "text": "The content plan identifies these topics as priority opportunities aligned to the service portfolio and enquiry goal.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "business:primaryGoal",
+          "business:services"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Give prospective clients clearer information as they move from discovery to a qualified enquiry.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "business:primaryGoal"
+        ]
+      },
+      "effort": "H",
+      "verification": {
+        "text": "Confirm that the prioritized planned topics are published and connected to the relevant services.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "business:services"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-04",
+      "priority": 4,
+      "title": "Correct homepage semantic and accessibility issues",
+      "action": {
+        "text": "Use one descriptive H1 with sequential subheadings and add concise alternative text to meaningful images.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+          "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+        ]
+      },
+      "whyNow": {
+        "text": "The findings identify reduced semantic clarity, accessibility, and image understanding on the homepage.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+          "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Strengthen the clarity and accessibility of the homepage while supporting search understanding.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+          "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+        ]
+      },
+      "effort": "M",
+      "verification": {
+        "text": "Re-crawl the relevant pages and verify the heading structure and image alternative text.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+          "finding:a8680687-02b5-46b0-9b4d-b636b9281021"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-05",
+      "priority": 5,
+      "title": "Collect missing conversion, trust, and schema evidence",
+      "action": {
+        "text": "Run a follow-up assessment with conversion-path, trust-proof, and structured-data evidence available.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "capability:conversion.path",
+          "capability:trust.proof",
+          "capability:schema.structured_data"
+        ]
+      },
+      "whyNow": {
+        "text": "These unavailable capabilities suppress key modules and prevent a complete readiness assessment.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "scoreGovernance:suppressedModules",
+          "score:readinessStatus",
+          "capabilityContext:summary"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Enable decisions about enquiry pathways, proof, and AI-search readiness using direct evidence rather than assumption.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "business:primaryGoal",
+          "capability:conversion.path",
+          "capability:trust.proof",
+          "capability:schema.structured_data"
+        ]
+      },
+      "effort": "M",
+      "verification": {
+        "text": "Confirm that the previously unavailable capabilities return usable evidence in the follow-up assessment.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "capability:conversion.path",
+          "capability:trust.proof",
+          "capability:schema.structured_data"
+        ]
+      }
+    }
+  ],
+  "executiveDecision": {
+    "preserve": {
+      "text": "Preserve the assessed content-depth foundation and the clear service portfolio as the basis for future audience-facing content.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:contentDepth",
+        "business:services"
+      ]
+    },
+    "change": {
+      "text": "Change the uncontrolled search-result messaging and the slow mobile homepage arrival experience first.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+      ]
+    },
+    "doNext": {
+      "text": "Publish unique meta descriptions for the affected important pages, then verify their presence through a re-crawl.",
+      "statementClass": "OPPORTUNITY",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+      ]
+    }
+  }
+}

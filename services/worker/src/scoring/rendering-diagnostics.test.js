@@ -179,7 +179,7 @@ test("T-DIAG-01: buildDiagnostic produces all required fields", () => {
     confidence: 0.85,
     clientExplanation: "Test explanation.",
     technicalExplanation: "Technical detail.",
-    businessImpact: "Impact description.",
+    businessImpact: "This condition may affect the tested page experience.",
     recommendation: "Do something.",
     verificationMethod: "Re-test.",
     collectedAt: new Date().toISOString(),
@@ -209,7 +209,7 @@ test("T-DIAG-02: buildDiagnosticEnvelope wraps diagnostics with metadata", () =>
     confidence: 0.85,
     clientExplanation: "Test.",
     technicalExplanation: "Tech.",
-    businessImpact: "Impact.",
+    businessImpact: "This condition may affect the tested page experience.",
     recommendation: "Fix.",
     verificationMethod: "Re-test.",
   });
@@ -222,7 +222,7 @@ test("T-DIAG-02: buildDiagnosticEnvelope wraps diagnostics with metadata", () =>
     confidence: 0.95,
     clientExplanation: "Rate limited.",
     technicalExplanation: "429.",
-    businessImpact: "No data.",
+    businessImpact: "Provider failure may delay performance assessment.",
     recommendation: "Retry.",
     verificationMethod: "Re-test.",
   });
@@ -252,7 +252,7 @@ test("T-DIAG-03: validateDiagnostic catches invalid shapes", () => {
     confidence: 0.5,
     clientExplanation: "Test.",
     technicalExplanation: "Tech.",
-    businessImpact: "Impact.",
+    businessImpact: "This condition may affect the tested page experience.",
     recommendation: "Fix.",
     verificationMethod: "Re-test.",
   });

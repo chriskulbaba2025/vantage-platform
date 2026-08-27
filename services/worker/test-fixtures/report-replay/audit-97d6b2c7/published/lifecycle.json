@@ -1,0 +1,19 @@
+{
+  "runId": "97d6b2c7-03b9-4530-8ea7-16557502c638",
+  "slug": "rebootbusinesscoaching",
+  "status": "draft",
+  "createdAt": "2026-08-23T03:14:46.079Z",
+  "review": null,
+  "approval": null,
+  "overrides": [],
+  "artifacts": {
+    "draft": [
+      "index.html",
+      "audit.json",
+      "evidence.json",
+      "manifest.json"
+    ],
+    "final": null
+  },
+  "limitations": []
+}

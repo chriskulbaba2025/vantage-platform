@@ -707,10 +707,26 @@ function assessCluster(
   cluster,
   pageMap,
   options,
+  deepAssessmentUrlSet = null,
 ) {
-  const samples = getRepresentativePages(cluster, pageMap);
+  const samples = getRepresentativePages(
+    cluster,
+    pageMap,
+  );
+
+  // A crawled page is not automatically a deeply assessed page.
+  // With a governed URL-aware acquisition ledger, only URLs proven
+  // completed by Content Parsing participate in deep-dependent analysis.
+  // Legacy artifacts without that ledger retain their historical semantics.
   const assessedSamples = samples.filter(
-    ({ page }) => Boolean(page),
+    ({ url, page }) =>
+      Boolean(page) &&
+      (
+        deepAssessmentUrlSet === null ||
+        deepAssessmentUrlSet.has(
+          normalizeUrlKey(url),
+        )
+      ),
   );
 
   const sampleCoverage = {
@@ -805,12 +821,34 @@ function footprintIsUsable(siteFootprint) {
 
 export function analyzeProgrammaticSeo(input = {}) {
   const siteFootprint = input.siteFootprint || null;
+
   const pages = Array.isArray(input.pages)
     ? input.pages
     : [];
+
   const contentParsing = Array.isArray(input.contentParsing)
     ? input.contentParsing
     : [];
+
+  const contentParsingAcquisition =
+    input.contentParsingAcquisition &&
+    typeof input.contentParsingAcquisition === "object"
+      ? input.contentParsingAcquisition
+      : null;
+
+  // New URL-aware acquisition ledgers explicitly prove which governed
+  // representatives completed deep assessment. When the ledger is absent,
+  // preserve legacy artifact semantics rather than inventing a new state.
+  const deepAssessmentUrlSet =
+    contentParsingAcquisition &&
+    Array.isArray(contentParsingAcquisition.selectedUrls) &&
+    Array.isArray(contentParsingAcquisition.completedUrls)
+      ? new Set(
+          contentParsingAcquisition.completedUrls
+            .map((url) => normalizeUrlKey(url))
+            .filter(Boolean),
+        )
+      : null;
 
   const options = {
     thinWordThreshold: boundedNumber(
@@ -917,7 +955,12 @@ export function analyzeProgrammaticSeo(input = {}) {
 
   const assessedClusters = materialClusters.map(
     (cluster) =>
-      assessCluster(cluster, pageMap, options),
+      assessCluster(
+        cluster,
+        pageMap,
+        options,
+        deepAssessmentUrlSet,
+      ),
   );
 
   const status = likelyClusters.length

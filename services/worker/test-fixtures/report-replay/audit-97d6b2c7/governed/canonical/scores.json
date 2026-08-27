@@ -1,0 +1,676 @@
+{
+  "contractVersion": "1.0.0",
+  "scoringVersion": "4.1.1",
+  "generatedAt": "2026-08-23T03:13:22.041Z",
+  "assessedWeight": 30,
+  "readinessStatus": "Insufficient Evidence for Overall Score",
+  "readinessStatusDetail": "Insufficient Evidence for Overall Score",
+  "showNumericScore": false,
+  "evidenceConfidenceScore": 86,
+  "evidenceConfidenceFactors": {
+    "sourceAvailability": 87,
+    "dataCompleteness": 67,
+    "sourceValidity": 90,
+    "dataFreshness": 100,
+    "urlMatching": 100,
+    "crossSourceAgreement": 100,
+    "competitorRelevance": 50,
+    "ruleCertainty": 100
+  },
+  "evidenceConfidenceFactorAvailability": [
+    {
+      "factor": "sourceAvailability",
+      "available": true,
+      "weight": 0.2
+    },
+    {
+      "factor": "dataCompleteness",
+      "available": true,
+      "weight": 0.15
+    },
+    {
+      "factor": "sourceValidity",
+      "available": true,
+      "weight": 0.15
+    },
+    {
+      "factor": "dataFreshness",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "urlMatching",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "crossSourceAgreement",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "competitorRelevance",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "ruleCertainty",
+      "available": true,
+      "weight": 0.1
+    }
+  ],
+  "capabilityEvidence": {
+    "capabilityEvidenceVersion": "2.0.0",
+    "summary": {
+      "total": 13,
+      "available": 5,
+      "partial": 0,
+      "unavailable": 8,
+      "failed": 0,
+      "notConnected": 0,
+      "notApplicable": 0,
+      "assessed": 5
+    },
+    "capabilities": {
+      "content.body": {
+        "capability": "content.body",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 5,
+          "completed": 5,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "offer.clarity": {
+        "capability": "offer.clarity",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Offer clarity requires body-content evidence (services, CTAs, forms, descriptions)"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "trust.proof": {
+        "capability": "trust.proof",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Trust proof requires body-content evidence (credentials, testimonials, policies)"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "conversion.cta": {
+        "capability": "conversion.cta",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Interactive extraction evidence was not collected"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "conversion.form": {
+        "capability": "conversion.form",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Interactive extraction evidence was not collected"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "conversion.path": {
+        "capability": "conversion.path",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Conversion path evidence was not collected",
+          "Browser validation not enabled for this run"
+        ],
+        "requiredFieldsPresent": false,
+        "kind": "inferred",
+        "validated": false,
+        "validatedBy": null,
+        "validationSummary": null
+      },
+      "technical.indexability": {
+        "capability": "technical.indexability",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 1000,
+          "completed": 0,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.redirects": {
+        "capability": "technical.redirects",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 5,
+          "completed": 5,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.resources": {
+        "capability": "technical.resources",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 5,
+          "completed": 5,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.headers": {
+        "capability": "technical.headers",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Response headers were not collected by the provider"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "schema.structured_data": {
+        "capability": "schema.structured_data",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": 1,
+          "completed": 0,
+          "failed": 1
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Structured-data evidence was not collected"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "performance.lab": {
+        "capability": "performance.lab",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "performance.field": {
+        "capability": "performance.field",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [
+          "CrUX field data was not returned for this site (not populated or not collected)"
+        ],
+        "requiredFieldsPresent": false
+      }
+    }
+  },
+  "suppressedFindingReasons": [
+    {
+      "ruleId": "VAN-TRUST-001",
+      "title": "No visible trust proof",
+      "capability": "trust.proof",
+      "capabilityStatus": "UNAVAILABLE"
+    },
+    {
+      "ruleId": "VAN-SCHEMA-001",
+      "title": "No structured data detected",
+      "capability": "schema.structured_data",
+      "capabilityStatus": "UNAVAILABLE"
+    },
+    {
+      "ruleId": "VAN-TECH-003",
+      "title": "Security headers are incomplete",
+      "capability": "technical.headers",
+      "capabilityStatus": "UNAVAILABLE"
+    },
+    {
+      "ruleId": "VAN-CONTENT-002",
+      "title": "No buyer-question content detected",
+      "capability": "trust.proof",
+      "capabilityStatus": "UNAVAILABLE"
+    },
+    {
+      "ruleId": "VAN-TRUST-002",
+      "title": "Pricing or investment context is absent",
+      "capability": "trust.proof",
+      "capabilityStatus": "UNAVAILABLE"
+    }
+  ],
+  "aiReadinessBasis": "structural",
+  "moduleScores": {
+    "conversion_paths": {
+      "score": null,
+      "eligible": false,
+      "weight": 12.5,
+      "reason": "Capability \"conversion.cta\" is UNAVAILABLE — module suppressed; Capability \"conversion.form\" is UNAVAILABLE — module suppressed"
+    },
+    "offer_clarity": {
+      "score": null,
+      "eligible": false,
+      "weight": 12.5,
+      "reason": "Capability \"offer.clarity\" is UNAVAILABLE — module suppressed"
+    },
+    "trust_signals": {
+      "score": null,
+      "eligible": false,
+      "weight": 12.5,
+      "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed"
+    },
+    "risk_reduction": {
+      "score": null,
+      "eligible": false,
+      "weight": 12.5,
+      "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed; Capability \"technical.headers\" is UNAVAILABLE — module suppressed"
+    },
+    "content_depth": {
+      "score": 81,
+      "eligible": true,
+      "weight": 10,
+      "reason": null
+    },
+    "funnel_coverage": {
+      "score": null,
+      "eligible": false,
+      "weight": 10,
+      "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed"
+    },
+    "technical_hygiene": {
+      "score": 10,
+      "eligible": true,
+      "weight": 10,
+      "reason": null,
+      "subWeightAssessed": 20,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "indexability",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "redirects",
+          "weight": 10,
+          "score": 10
+        }
+      ]
+    },
+    "performance": {
+      "score": 80,
+      "eligible": true,
+      "weight": 10,
+      "reason": null
+    },
+    "schema_entity": {
+      "score": null,
+      "eligible": false,
+      "weight": 5,
+      "reason": "Capability \"schema.structured_data\" is UNAVAILABLE — module suppressed"
+    },
+    "ai_readiness": {
+      "score": null,
+      "eligible": false,
+      "weight": 5,
+      "reason": "Capability \"schema.structured_data\" is UNAVAILABLE — module suppressed"
+    }
+  },
+  "moduleEligibility": {
+    "conversion_paths": false,
+    "offer_clarity": false,
+    "trust_signals": false,
+    "risk_reduction": false,
+    "content_depth": true,
+    "funnel_coverage": false,
+    "technical_hygiene": true,
+    "performance": true,
+    "schema_entity": false,
+    "ai_readiness": false
+  },
+  "suppressedModules": [
+    {
+      "moduleId": "conversion_paths",
+      "dimension": "conversion_pathways",
+      "label": "Conversion Paths",
+      "reason": "Capability \"conversion.cta\" is UNAVAILABLE — module suppressed; Capability \"conversion.form\" is UNAVAILABLE — module suppressed"
+    },
+    {
+      "moduleId": "offer_clarity",
+      "dimension": "conversion_pathways",
+      "label": "Offer Clarity",
+      "reason": "Capability \"offer.clarity\" is UNAVAILABLE — module suppressed"
+    },
+    {
+      "moduleId": "trust_signals",
+      "dimension": "trust_eeat",
+      "label": "Trust Signals",
+      "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed"
+    },
+    {
+      "moduleId": "risk_reduction",
+      "dimension": "trust_eeat",
+      "label": "Risk Reduction",
+      "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed; Capability \"technical.headers\" is UNAVAILABLE — module suppressed"
+    },
+    {
+      "moduleId": "funnel_coverage",
+      "dimension": "content_funnel",
+      "label": "Funnel Coverage",
+      "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed"
+    },
+    {
+      "moduleId": "schema_entity",
+      "dimension": "entity_schema_ai",
+      "label": "Schema & Entity",
+      "reason": "Capability \"schema.structured_data\" is UNAVAILABLE — module suppressed"
+    },
+    {
+      "moduleId": "ai_readiness",
+      "dimension": "entity_schema_ai",
+      "label": "AI-Search Readiness",
+      "reason": "Capability \"schema.structured_data\" is UNAVAILABLE — module suppressed"
+    }
+  ],
+  "scores": {
+    "trust": null,
+    "contentDepth": 81,
+    "conversionPathways": null,
+    "technical": 10,
+    "performance": 80,
+    "conversionReadiness": null,
+    "awareness": null,
+    "consideration": null,
+    "decision": null,
+    "aiReadiness": null,
+    "conversionPathwaysDimension": null,
+    "trustEeatDimension": null,
+    "contentFunnelDimension": 81,
+    "technicalPerformanceDimension": 45,
+    "entitySchemaAiDimension": null
+  },
+  "bands": {
+    "conversionReadiness": "Limited",
+    "trust": "Not Assessed",
+    "evidenceConfidence": "High"
+  },
+  "dimensionEligibility": {
+    "conversion_pathways": false,
+    "trust_eeat": false,
+    "content_funnel": true,
+    "technical_performance": true,
+    "entity_schema_ai": false
+  },
+  "rootCause": "The most impactful opportunity is missing meta descriptions. Search-result messaging is uncontrolled for these pages.",
+  "findingCount": 4,
+  "findingIds": [
+    "62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+    "b33d6f64-410e-462c-a257-88efdd94c7e1",
+    "4fa38028-44f0-4bae-846d-15522b90e0f0",
+    "a8680687-02b5-46b0-9b4d-b636b9281021"
+  ],
+  "conversionPaths": [
+    {
+      "name": "Primary conversion path",
+      "cta": null,
+      "host": "none",
+      "steps": [
+        "Interactive conversion-path evidence was not collected for this audit."
+      ],
+      "blockers": [],
+      "status": "Not Assessed"
+    }
+  ],
+  "readinessMap": [
+    {
+      "topic": "4-Week Reboot Series",
+      "stage": "TOFU",
+      "blocker": "Not Assessed",
+      "trustAsset": "Not Assessed",
+      "eeat": "Not Assessed",
+      "cta": "Not Assessed",
+      "path": "Not Assessed",
+      "priority": "H"
+    },
+    {
+      "topic": "Group Coaching",
+      "stage": "TOFU",
+      "blocker": "Not Assessed",
+      "trustAsset": "Not Assessed",
+      "eeat": "Not Assessed",
+      "cta": "Not Assessed",
+      "path": "Not Assessed",
+      "priority": "H"
+    },
+    {
+      "topic": "Individual Coaching",
+      "stage": "TOFU",
+      "blocker": "Not Assessed",
+      "trustAsset": "Not Assessed",
+      "eeat": "Not Assessed",
+      "cta": "Not Assessed",
+      "path": "Not Assessed",
+      "priority": "H"
+    },
+    {
+      "topic": "One-Page Business Planning",
+      "stage": "TOFU",
+      "blocker": "Not Assessed",
+      "trustAsset": "Not Assessed",
+      "eeat": "Not Assessed",
+      "cta": "Not Assessed",
+      "path": "Not Assessed",
+      "priority": "H"
+    }
+  ],
+  "contentIdeas": {
+    "tofu": [
+      {
+        "idea": "What Is 4-Week Reboot Series?",
+        "frame": "Answer-first",
+        "type": "Guide",
+        "question": "What is this?",
+        "priority": "H"
+      },
+      {
+        "idea": "Signs You May Need Group Coaching",
+        "frame": "Answer-first",
+        "type": "Article",
+        "question": "Does this apply to me?",
+        "priority": "M"
+      },
+      {
+        "idea": "Can 4-Week Reboot Series Produce Measurable Change?",
+        "frame": "Objection handler",
+        "type": "Educational page",
+        "question": "Will this work?",
+        "priority": "H"
+      }
+    ],
+    "mofu": [
+      {
+        "idea": "4-Week Reboot Series: Options and Fit",
+        "frame": "Comparison/fit",
+        "type": "Comparison page",
+        "question": "Which option is right?",
+        "priority": "H"
+      },
+      {
+        "idea": "What Happens in the Process",
+        "frame": "Process page",
+        "type": "Process page",
+        "question": "What should I expect?",
+        "priority": "H"
+      },
+      {
+        "idea": "Client Results and Outcomes",
+        "frame": "Case study",
+        "type": "Case study",
+        "question": "What results are possible?",
+        "priority": "H"
+      },
+      {
+        "idea": "Who Leads This Work?",
+        "frame": "Founder/expert",
+        "type": "Founder page",
+        "question": "Why trust this provider?",
+        "priority": "H"
+      }
+    ],
+    "bofu": [
+      {
+        "idea": "Pricing and What to Expect",
+        "frame": "Risk-reversal",
+        "type": "Pricing page",
+        "question": "What does it cost?",
+        "priority": "H"
+      },
+      {
+        "idea": "Your First Step Toward generating qualified enquiries",
+        "frame": "Process page",
+        "type": "Start-here",
+        "question": "What happens after I act?",
+        "priority": "H"
+      },
+      {
+        "idea": "Frequently Asked Questions with Examples",
+        "frame": "Testimonial FAQ",
+        "type": "FAQ page",
+        "question": "What concerns are common?",
+        "priority": "H"
+      }
+    ],
+    "leading": [
+      {
+        "query": "4-Week Reboot Series for generating qualified enquiries",
+        "rationale": "Connects the offer directly to the stated business goal",
+        "priority": "H"
+      },
+      {
+        "query": "4-Week Reboot Series for decision making",
+        "rationale": "Connects the offer to an urgent practical use",
+        "priority": "H"
+      },
+      {
+        "query": "4-Week Reboot Series results and process",
+        "rationale": "Combines proof and buyer intent",
+        "priority": "M"
+      }
+    ]
+  },
+  "competitors": {
+    "comparisons": [],
+    "opportunities": {
+      "topics": [],
+      "qualifiedCandidates": [],
+      "excludedCandidates": [],
+      "gaps": [],
+      "allGaps": [],
+      "sources": {},
+      "limitations": []
+    }
+  },
+  "renderingDiagnostics": [],
+  "findingsArtifact": {
+    "key": "tenants/omnipressence/clients/rebootbusinesscoaching.com-rebootbusinesscoaching/audits/97d6b2c7-03b9-4530-8ea7-16557502c638/canonical/findings.json",
+    "sha256": "338a1adf6441fa000bb1c598a702144797dbba1fe62c9ff24438b84d306d2bec",
+    "bytes": 6202
+  },
+  "scoresArtifact": null
+}

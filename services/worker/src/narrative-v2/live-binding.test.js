@@ -295,6 +295,24 @@ test("LIVE-BIND-03: one Writer + one Judge call are validated, cost-ledgered, an
   assert.equal("temperature" in judgeRequest, false);
   assert.equal("max_tokens" in judgeRequest, false);
 
+  const judgeUserPrompt = judgeRequest.messages.find(
+    (message) => message.role === "user",
+  )?.content;
+
+  assert.equal(typeof judgeUserPrompt, "string");
+  assert.match(judgeUserPrompt, /independent/i);
+  assert.match(judgeUserPrompt, /causal/i);
+  assert.match(judgeUserPrompt, /commercial/i);
+  assert.match(
+    judgeUserPrompt,
+    /conversion.*revenue.*traffic.*ranking.*engagement.*abandonment/is,
+  );
+  assert.match(judgeUserPrompt, /UNSUPPORTED_FACT/);
+  assert.match(judgeUserPrompt, /evidenceFidelity/);
+  assert.match(
+    judgeUserPrompt,
+    /UNKNOWN.*UNAVAILABLE.*PARTIAL.*ABSENT.*FALSE.*ZERO.*fully assessed/is,
+  );
 
   await assert.rejects(
     () => binding.writerExecutor({ prompt: "pass two", passNumber: 2, writerInput: input, previousOutput: writer, judgeResponse: judge }),

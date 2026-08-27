@@ -1,0 +1,34 @@
+{
+  "contractVersion": "1.0.0",
+  "artifactVersion": "1.0.0",
+  "reportVersion": "4.1.1",
+  "reportDesignVersion": "2.0.0",
+  "runId": "b088a9bd-b517-46d8-8d6c-e9f97dd828f4",
+  "slug": "rebootbusinesscoaching",
+  "targetUrl": "https://rebootbusinesscoaching.com/",
+  "targetDomain": "rebootbusinesscoaching.com",
+  "startedAt": "2026-08-23T03:14:45.196Z",
+  "completedAt": "2026-08-23T03:14:45.599Z",
+  "status": "draft",
+  "scores": {
+    "trust": null,
+    "contentDepth": 81,
+    "conversionPathways": null,
+    "technical": 10,
+    "performance": 80,
+    "conversionReadiness": null
+  },
+  "sources": {
+    "website": "PARTIAL",
+    "performance": "AVAILABLE",
+    "competitors": "NOT_APPLICABLE",
+    "backlinks": "AVAILABLE",
+    "ga4": "NOT_APPLICABLE",
+    "gsc": "NOT_APPLICABLE"
+  },
+  "files": [
+    "index.html"
+  ],
+  "auditId": "97d6b2c7-03b9-4530-8ea7-16557502c638",
+  "lifecycleStatus": "DRAFT_RENDERED"
+}

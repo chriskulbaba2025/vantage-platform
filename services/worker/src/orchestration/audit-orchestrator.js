@@ -164,13 +164,13 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
     competitors: auditRequest.competitors || [],
     ga4PropertyId: auditRequest.ga4?.propertyId || null,
     gscSiteUrl: auditRequest.gsc?.siteUrl || null,
-    maxPages: auditRequest.crawl?.maxPages || 500,
+    maxPages: auditRequest.crawl?.maxPages ?? 250,
     enableJavascript: auditRequest.crawl?.enableJavascript || false,
     // PRYSM-NEXT-01 WP-B-11 — deep acquisition options participate in the
     // source execution identity (config hashing).
     enableContentParsing: auditRequest.crawl?.enableContentParsing ?? true,
     validateMicromarkup: auditRequest.crawl?.validateMicromarkup ?? true,
-    contentParsingPageLimit: auditRequest.crawl?.contentParsingPageLimit ?? 10,
+    contentParsingPageLimit: auditRequest.crawl?.contentParsingPageLimit ?? 20,
     redirectChainsPageLimit: auditRequest.crawl?.redirectChainsPageLimit ?? 20,
     nonIndexableLimit: auditRequest.crawl?.nonIndexableLimit ?? 1000,
     resourcesPageLimit: auditRequest.crawl?.resourcesPageLimit ?? 10,

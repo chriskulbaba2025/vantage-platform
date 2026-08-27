@@ -219,7 +219,7 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
     const artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
     const lifecycleService = createLifecycleService(createMemoryLifecycleRepository());
     const realAdapters = {
-      "dataforseo-onpage": { adapterVersion: "1.4.0", execute: async (a) => onpageExecute(a) },
+      "dataforseo-onpage": { adapterVersion: "1.4.1", execute: async (a) => onpageExecute(a) },
       pagespeed: { adapterVersion: "1.1.0", execute: async (a) => pagespeedExecute(a) },
       "dataforseo-serp": { adapterVersion: "1.0.0", execute: async (a) => serpExecute(a) },
       backlinks: { adapterVersion: "1.0.0", execute: async (a) => backlinksExecute(a) },

@@ -1,0 +1,910 @@
+{
+  "contractVersion": "1.0.0",
+  "writerInputVersion": "1.0.0",
+  "auditId": "97d6b2c7-03b9-4530-8ea7-16557502c638",
+  "business": {
+    "businessName": "Rebootbusinesscoaching",
+    "targetUrl": "https://rebootbusinesscoaching.com/",
+    "primaryGoal": "Generate qualified enquiries",
+    "market": "Canada",
+    "language": "en-CA",
+    "services": [
+      "4-Week Reboot Series",
+      "Group Coaching",
+      "Individual Coaching",
+      "One-Page Business Planning"
+    ],
+    "competitors": [
+      "https://ginakeeping.ca/",
+      "https://traceyjazmin.com/",
+      "https://clarityofgoalsandvision.com/"
+    ]
+  },
+  "score": {
+    "scores": {
+      "trust": null,
+      "contentDepth": 81,
+      "conversionPathways": null,
+      "technical": 10,
+      "performance": 80,
+      "conversionReadiness": null,
+      "awareness": null,
+      "consideration": null,
+      "decision": null,
+      "aiReadiness": null,
+      "conversionPathwaysDimension": null,
+      "trustEeatDimension": null,
+      "contentFunnelDimension": 81,
+      "technicalPerformanceDimension": 45,
+      "entitySchemaAiDimension": null
+    },
+    "bands": {
+      "conversionReadiness": "Limited",
+      "trust": "Not Assessed",
+      "evidenceConfidence": "High"
+    },
+    "assessedWeight": 30,
+    "readinessStatus": "Insufficient Evidence for Overall Score",
+    "readinessStatusDetail": "Insufficient Evidence for Overall Score",
+    "showNumericScore": false,
+    "evidenceConfidenceScore": 86,
+    "rootCause": "The most impactful opportunity is missing meta descriptions. Search-result messaging is uncontrolled for these pages."
+  },
+  "findings": [
+    {
+      "findingId": "62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+      "ruleId": "VAN-TECH-001",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "technical_hygiene",
+      "title": "Missing meta descriptions",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/cdn-cgi/l/email-protection",
+        "https://rebootbusinesscoaching.com/",
+        "https://rebootbusinesscoaching.com/about",
+        "https://rebootbusinesscoaching.com/home",
+        "https://rebootbusinesscoaching.com/privacy-and-accessibility-statements",
+        "https://rebootbusinesscoaching.com/services"
+      ],
+      "evidence": [
+        {
+          "field": "meta_description",
+          "observedValue": null,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "AVAILABLE",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Search-result messaging is uncontrolled for these pages.",
+      "recommendation": "Write a unique 150–160 character description for each important page",
+      "implementationEffort": "L",
+      "verificationMethod": "Re-crawl the URLs and confirm descriptions are present.",
+      "scoreBearing": true,
+      "severity": "High",
+      "finalPriority": 76,
+      "rawPriority": 76
+    },
+    {
+      "findingId": "b33d6f64-410e-462c-a257-88efdd94c7e1",
+      "ruleId": "VAN-PERF-001",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "performance",
+      "title": "Mobile largest contentful paint is slow",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/"
+      ],
+      "evidence": [
+        {
+          "field": "lcp_ms",
+          "observedValue": 6962.003298736525,
+          "provider": "pagespeed-insights",
+          "sourceStatus": "AVAILABLE",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Slow first impressions increase mobile abandonment",
+      "recommendation": "Optimize the largest above-the-fold asset and remove render-blocking work",
+      "implementationEffort": "M",
+      "verificationMethod": "Re-run PageSpeed Insights and confirm LCP is under 2.5 seconds.",
+      "scoreBearing": true,
+      "severity": "High",
+      "finalPriority": 74,
+      "rawPriority": 74
+    },
+    {
+      "findingId": "4fa38028-44f0-4bae-846d-15522b90e0f0",
+      "ruleId": "VAN-TECH-002",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "technical_hygiene",
+      "title": "Heading structure is inconsistent",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/"
+      ],
+      "evidence": [
+        {
+          "field": "h1_missing",
+          "observedValue": 0,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "AVAILABLE",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        {
+          "field": "h1_multiple",
+          "observedValue": 5,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "AVAILABLE",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Semantic clarity and accessibility are reduced",
+      "recommendation": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+      "implementationEffort": "M",
+      "verificationMethod": "Re-crawl and verify heading structure on all pages.",
+      "scoreBearing": true,
+      "severity": "Medium",
+      "finalPriority": 54,
+      "rawPriority": 54
+    },
+    {
+      "findingId": "a8680687-02b5-46b0-9b4d-b636b9281021",
+      "ruleId": "VAN-TECH-004",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "technical_hygiene",
+      "title": "Images are missing alternative text",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/"
+      ],
+      "evidence": [
+        {
+          "field": "images_missing_alt",
+          "observedValue": 3,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "AVAILABLE",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Accessibility and image understanding are reduced",
+      "recommendation": "Add concise descriptive alt text to meaningful images",
+      "implementationEffort": "L",
+      "verificationMethod": "Re-crawl and verify alt text on all images.",
+      "scoreBearing": true,
+      "severity": "Low",
+      "finalPriority": 32,
+      "rawPriority": 32
+    }
+  ],
+  "capabilityContext": {
+    "capabilities": {
+      "content.body": {
+        "capability": "content.body",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 5,
+          "completed": 5,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "offer.clarity": {
+        "capability": "offer.clarity",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Offer clarity requires body-content evidence (services, CTAs, forms, descriptions)"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "trust.proof": {
+        "capability": "trust.proof",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Trust proof requires body-content evidence (credentials, testimonials, policies)"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "conversion.cta": {
+        "capability": "conversion.cta",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Interactive extraction evidence was not collected"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "conversion.form": {
+        "capability": "conversion.form",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Interactive extraction evidence was not collected"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "conversion.path": {
+        "capability": "conversion.path",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Conversion path evidence was not collected",
+          "Browser validation not enabled for this run"
+        ],
+        "requiredFieldsPresent": false,
+        "kind": "inferred",
+        "validated": false,
+        "validatedBy": null,
+        "validationSummary": null
+      },
+      "technical.indexability": {
+        "capability": "technical.indexability",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 1000,
+          "completed": 0,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.redirects": {
+        "capability": "technical.redirects",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 5,
+          "completed": 5,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.resources": {
+        "capability": "technical.resources",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 5,
+          "completed": 5,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.headers": {
+        "capability": "technical.headers",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Response headers were not collected by the provider"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "schema.structured_data": {
+        "capability": "schema.structured_data",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": 1,
+          "completed": 0,
+          "failed": 1
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.2.0",
+          "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+        },
+        "limitations": [
+          "Structured-data evidence was not collected"
+        ],
+        "requiredFieldsPresent": false
+      },
+      "performance.lab": {
+        "capability": "performance.lab",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "performance.field": {
+        "capability": "performance.field",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [
+          "CrUX field data was not returned for this site (not populated or not collected)"
+        ],
+        "requiredFieldsPresent": false
+      }
+    },
+    "capabilityEvidenceVersion": "2.0.0",
+    "generatedAt": "2026-08-23T03:13:23.138Z",
+    "summary": {
+      "total": 13,
+      "available": 5,
+      "partial": 0,
+      "unavailable": 8,
+      "failed": 0,
+      "notConnected": 0,
+      "notApplicable": 0,
+      "assessed": 5
+    }
+  },
+  "scoreGovernance": {
+    "scoringVersion": "4.1.1",
+    "dimensionEligibility": {
+      "conversion_pathways": false,
+      "trust_eeat": false,
+      "content_funnel": true,
+      "technical_performance": true,
+      "entity_schema_ai": false
+    },
+    "moduleEligibility": {
+      "conversion_paths": false,
+      "offer_clarity": false,
+      "trust_signals": false,
+      "risk_reduction": false,
+      "content_depth": true,
+      "funnel_coverage": false,
+      "technical_hygiene": true,
+      "performance": true,
+      "schema_entity": false,
+      "ai_readiness": false
+    },
+    "suppressedModules": [
+      {
+        "moduleId": "conversion_paths",
+        "dimension": "conversion_pathways",
+        "label": "Conversion Paths",
+        "reason": "Capability \"conversion.cta\" is UNAVAILABLE — module suppressed; Capability \"conversion.form\" is UNAVAILABLE — module suppressed"
+      },
+      {
+        "moduleId": "offer_clarity",
+        "dimension": "conversion_pathways",
+        "label": "Offer Clarity",
+        "reason": "Capability \"offer.clarity\" is UNAVAILABLE — module suppressed"
+      },
+      {
+        "moduleId": "trust_signals",
+        "dimension": "trust_eeat",
+        "label": "Trust Signals",
+        "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed"
+      },
+      {
+        "moduleId": "risk_reduction",
+        "dimension": "trust_eeat",
+        "label": "Risk Reduction",
+        "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed; Capability \"technical.headers\" is UNAVAILABLE — module suppressed"
+      },
+      {
+        "moduleId": "funnel_coverage",
+        "dimension": "content_funnel",
+        "label": "Funnel Coverage",
+        "reason": "Capability \"trust.proof\" is UNAVAILABLE — module suppressed"
+      },
+      {
+        "moduleId": "schema_entity",
+        "dimension": "entity_schema_ai",
+        "label": "Schema & Entity",
+        "reason": "Capability \"schema.structured_data\" is UNAVAILABLE — module suppressed"
+      },
+      {
+        "moduleId": "ai_readiness",
+        "dimension": "entity_schema_ai",
+        "label": "AI-Search Readiness",
+        "reason": "Capability \"schema.structured_data\" is UNAVAILABLE — module suppressed"
+      }
+    ],
+    "evidenceConfidenceFactors": {
+      "sourceAvailability": 87,
+      "dataCompleteness": 67,
+      "sourceValidity": 90,
+      "dataFreshness": 100,
+      "urlMatching": 100,
+      "crossSourceAgreement": 100,
+      "competitorRelevance": 50,
+      "ruleCertainty": 100
+    }
+  },
+  "deterministicAnalysis": {
+    "conversionPaths": [
+      {
+        "name": "Primary conversion path",
+        "cta": null,
+        "host": "none",
+        "steps": [
+          "Interactive conversion-path evidence was not collected for this audit."
+        ],
+        "blockers": [],
+        "status": "Not Assessed"
+      }
+    ],
+    "readinessMap": [
+      {
+        "topic": "4-Week Reboot Series",
+        "stage": "TOFU",
+        "blocker": "Not Assessed",
+        "trustAsset": "Not Assessed",
+        "eeat": "Not Assessed",
+        "cta": "Not Assessed",
+        "path": "Not Assessed",
+        "priority": "H"
+      },
+      {
+        "topic": "Group Coaching",
+        "stage": "TOFU",
+        "blocker": "Not Assessed",
+        "trustAsset": "Not Assessed",
+        "eeat": "Not Assessed",
+        "cta": "Not Assessed",
+        "path": "Not Assessed",
+        "priority": "H"
+      },
+      {
+        "topic": "Individual Coaching",
+        "stage": "TOFU",
+        "blocker": "Not Assessed",
+        "trustAsset": "Not Assessed",
+        "eeat": "Not Assessed",
+        "cta": "Not Assessed",
+        "path": "Not Assessed",
+        "priority": "H"
+      },
+      {
+        "topic": "One-Page Business Planning",
+        "stage": "TOFU",
+        "blocker": "Not Assessed",
+        "trustAsset": "Not Assessed",
+        "eeat": "Not Assessed",
+        "cta": "Not Assessed",
+        "path": "Not Assessed",
+        "priority": "H"
+      }
+    ],
+    "contentIdeas": {
+      "tofu": [
+        {
+          "idea": "What Is 4-Week Reboot Series?",
+          "frame": "Answer-first",
+          "type": "Guide",
+          "question": "What is this?",
+          "priority": "H"
+        },
+        {
+          "idea": "Signs You May Need Group Coaching",
+          "frame": "Answer-first",
+          "type": "Article",
+          "question": "Does this apply to me?",
+          "priority": "M"
+        },
+        {
+          "idea": "Can 4-Week Reboot Series Produce Measurable Change?",
+          "frame": "Objection handler",
+          "type": "Educational page",
+          "question": "Will this work?",
+          "priority": "H"
+        }
+      ],
+      "mofu": [
+        {
+          "idea": "4-Week Reboot Series: Options and Fit",
+          "frame": "Comparison/fit",
+          "type": "Comparison page",
+          "question": "Which option is right?",
+          "priority": "H"
+        },
+        {
+          "idea": "What Happens in the Process",
+          "frame": "Process page",
+          "type": "Process page",
+          "question": "What should I expect?",
+          "priority": "H"
+        },
+        {
+          "idea": "Client Results and Outcomes",
+          "frame": "Case study",
+          "type": "Case study",
+          "question": "What results are possible?",
+          "priority": "H"
+        },
+        {
+          "idea": "Who Leads This Work?",
+          "frame": "Founder/expert",
+          "type": "Founder page",
+          "question": "Why trust this provider?",
+          "priority": "H"
+        }
+      ],
+      "bofu": [
+        {
+          "idea": "Pricing and What to Expect",
+          "frame": "Risk-reversal",
+          "type": "Pricing page",
+          "question": "What does it cost?",
+          "priority": "H"
+        },
+        {
+          "idea": "Your First Step Toward generating qualified enquiries",
+          "frame": "Process page",
+          "type": "Start-here",
+          "question": "What happens after I act?",
+          "priority": "H"
+        },
+        {
+          "idea": "Frequently Asked Questions with Examples",
+          "frame": "Testimonial FAQ",
+          "type": "FAQ page",
+          "question": "What concerns are common?",
+          "priority": "H"
+        }
+      ],
+      "leading": [
+        {
+          "query": "4-Week Reboot Series for generating qualified enquiries",
+          "rationale": "Connects the offer directly to the stated business goal",
+          "priority": "H"
+        },
+        {
+          "query": "4-Week Reboot Series for decision making",
+          "rationale": "Connects the offer to an urgent practical use",
+          "priority": "H"
+        },
+        {
+          "query": "4-Week Reboot Series results and process",
+          "rationale": "Combines proof and buyer intent",
+          "priority": "M"
+        }
+      ]
+    },
+    "competitors": {
+      "comparisons": [],
+      "opportunities": {
+        "topics": [],
+        "qualifiedCandidates": [],
+        "excludedCandidates": [],
+        "gaps": [],
+        "allGaps": [],
+        "sources": {},
+        "limitations": []
+      }
+    },
+    "renderingDiagnostics": []
+  },
+  "referenceIndex": {
+    "business:businessName": {
+      "kind": "business",
+      "path": "business.businessName"
+    },
+    "business:targetUrl": {
+      "kind": "business",
+      "path": "business.targetUrl"
+    },
+    "business:primaryGoal": {
+      "kind": "business",
+      "path": "business.primaryGoal"
+    },
+    "business:market": {
+      "kind": "business",
+      "path": "business.market"
+    },
+    "business:language": {
+      "kind": "business",
+      "path": "business.language"
+    },
+    "business:services": {
+      "kind": "business",
+      "path": "business.services"
+    },
+    "business:competitors": {
+      "kind": "business",
+      "path": "business.competitors"
+    },
+    "score:trust": {
+      "kind": "score",
+      "path": "score.scores.trust"
+    },
+    "score:contentDepth": {
+      "kind": "score",
+      "path": "score.scores.contentDepth"
+    },
+    "score:conversionPathways": {
+      "kind": "score",
+      "path": "score.scores.conversionPathways"
+    },
+    "score:technical": {
+      "kind": "score",
+      "path": "score.scores.technical"
+    },
+    "score:performance": {
+      "kind": "score",
+      "path": "score.scores.performance"
+    },
+    "score:conversionReadiness": {
+      "kind": "score",
+      "path": "score.scores.conversionReadiness"
+    },
+    "score:awareness": {
+      "kind": "score",
+      "path": "score.scores.awareness"
+    },
+    "score:consideration": {
+      "kind": "score",
+      "path": "score.scores.consideration"
+    },
+    "score:decision": {
+      "kind": "score",
+      "path": "score.scores.decision"
+    },
+    "score:aiReadiness": {
+      "kind": "score",
+      "path": "score.scores.aiReadiness"
+    },
+    "score:conversionPathwaysDimension": {
+      "kind": "score",
+      "path": "score.scores.conversionPathwaysDimension"
+    },
+    "score:trustEeatDimension": {
+      "kind": "score",
+      "path": "score.scores.trustEeatDimension"
+    },
+    "score:contentFunnelDimension": {
+      "kind": "score",
+      "path": "score.scores.contentFunnelDimension"
+    },
+    "score:technicalPerformanceDimension": {
+      "kind": "score",
+      "path": "score.scores.technicalPerformanceDimension"
+    },
+    "score:entitySchemaAiDimension": {
+      "kind": "score",
+      "path": "score.scores.entitySchemaAiDimension"
+    },
+    "band:conversionReadiness": {
+      "kind": "score-band",
+      "path": "score.bands.conversionReadiness"
+    },
+    "band:trust": {
+      "kind": "score-band",
+      "path": "score.bands.trust"
+    },
+    "band:evidenceConfidence": {
+      "kind": "score-band",
+      "path": "score.bands.evidenceConfidence"
+    },
+    "score:assessedWeight": {
+      "kind": "score",
+      "path": "score.assessedWeight"
+    },
+    "score:readinessStatus": {
+      "kind": "score",
+      "path": "score.readinessStatus"
+    },
+    "score:readinessStatusDetail": {
+      "kind": "score",
+      "path": "score.readinessStatusDetail"
+    },
+    "score:showNumericScore": {
+      "kind": "score",
+      "path": "score.showNumericScore"
+    },
+    "score:evidenceConfidenceScore": {
+      "kind": "score",
+      "path": "score.evidenceConfidenceScore"
+    },
+    "score:rootCause": {
+      "kind": "score",
+      "path": "score.rootCause"
+    },
+    "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee": {
+      "kind": "finding",
+      "path": "findings.62a5b1fa-20f2-498e-8b7b-e1f5d38311ee"
+    },
+    "finding:b33d6f64-410e-462c-a257-88efdd94c7e1": {
+      "kind": "finding",
+      "path": "findings.b33d6f64-410e-462c-a257-88efdd94c7e1"
+    },
+    "finding:4fa38028-44f0-4bae-846d-15522b90e0f0": {
+      "kind": "finding",
+      "path": "findings.4fa38028-44f0-4bae-846d-15522b90e0f0"
+    },
+    "finding:a8680687-02b5-46b0-9b4d-b636b9281021": {
+      "kind": "finding",
+      "path": "findings.a8680687-02b5-46b0-9b4d-b636b9281021"
+    },
+    "capability:content.body": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.content.body"
+    },
+    "capability:offer.clarity": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.offer.clarity"
+    },
+    "capability:trust.proof": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.trust.proof"
+    },
+    "capability:conversion.cta": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.conversion.cta"
+    },
+    "capability:conversion.form": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.conversion.form"
+    },
+    "capability:conversion.path": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.conversion.path"
+    },
+    "capability:technical.indexability": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.indexability"
+    },
+    "capability:technical.redirects": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.redirects"
+    },
+    "capability:technical.resources": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.resources"
+    },
+    "capability:technical.headers": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.headers"
+    },
+    "capability:schema.structured_data": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.schema.structured_data"
+    },
+    "capability:performance.lab": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.performance.lab"
+    },
+    "capability:performance.field": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.performance.field"
+    },
+    "capabilityContext:capabilityEvidenceVersion": {
+      "kind": "capability-context",
+      "path": "capabilityContext.capabilityEvidenceVersion"
+    },
+    "capabilityContext:summary": {
+      "kind": "capability-context",
+      "path": "capabilityContext.summary"
+    },
+    "scoreGovernance:scoringVersion": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.scoringVersion"
+    },
+    "scoreGovernance:dimensionEligibility": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.dimensionEligibility"
+    },
+    "scoreGovernance:moduleEligibility": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.moduleEligibility"
+    },
+    "scoreGovernance:suppressedModules": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.suppressedModules"
+    },
+    "scoreGovernance:evidenceConfidenceFactors": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.evidenceConfidenceFactors"
+    },
+    "analysis:conversionPaths": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.conversionPaths"
+    },
+    "analysis:readinessMap": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.readinessMap"
+    },
+    "analysis:contentIdeas": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.contentIdeas"
+    },
+    "analysis:competitors": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.competitors"
+    },
+    "analysis:renderingDiagnostics": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.renderingDiagnostics"
+    }
+  }
+}

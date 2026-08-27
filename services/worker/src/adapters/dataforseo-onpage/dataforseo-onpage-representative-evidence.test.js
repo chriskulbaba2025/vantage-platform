@@ -542,3 +542,286 @@ test(
     );
   },
 );
+test(
+  "EVIDENCE-01: governed deep selection survives beyond 20 and budget overflow is explicitly unassessed",
+  async () => {
+    const mustHaveUrls = [
+      "https://example.com/",
+      "https://example.com/contact",
+      "https://example.com/pricing",
+      "https://example.com/services/executive-coaching",
+      "https://example.com/services",
+      "https://example.com/about",
+      "https://example.com/testimonials",
+      "https://example.com/insights",
+    ];
+
+    const familyNames = [
+      "industries",
+      "locations",
+      "markets",
+      "programs",
+      "resources",
+      "solutions",
+    ];
+
+    const clusters = familyNames.map((family) => ({
+      id: family,
+      pattern: `/${family}/`,
+      discoveredUrlCount: 8,
+      requiresRepresentativeAssessment: true,
+      representativeUrls: [
+        `https://example.com/${family}/item-01`,
+        `https://example.com/${family}/item-04`,
+        `https://example.com/${family}/item-08`,
+      ],
+    }));
+
+    const representativeUrls = clusters.flatMap(
+      (cluster) => cluster.representativeUrls,
+    );
+
+    const expectedSelectedUrls = [
+      ...mustHaveUrls,
+      ...representativeUrls,
+    ];
+
+    assert.equal(expectedSelectedUrls.length, 26);
+
+    const titleByUrl = new Map([
+      ["https://example.com/", "Home"],
+      ["https://example.com/contact", "Contact"],
+      ["https://example.com/pricing", "Pricing"],
+      [
+        "https://example.com/services/executive-coaching",
+        "Executive Coaching",
+      ],
+      [
+        "https://example.com/services",
+        "Executive Coaching Services",
+      ],
+      ["https://example.com/about", "About"],
+      ["https://example.com/testimonials", "Testimonials"],
+      ["https://example.com/insights", "Insights"],
+    ]);
+
+    const pages = expectedSelectedUrls.map(
+      (url, index) =>
+        rawPage(
+          url,
+          titleByUrl.get(url) || `Item ${index + 1}`,
+        ),
+    );
+
+    const siteFootprint = {
+      status: "AVAILABLE",
+      discoveredUrlCount: 56,
+      retainedUrlCount: 56,
+      sitemapDocumentCount: 1,
+      capped: false,
+      incomplete: false,
+      clusterCount: clusters.length,
+      clusters,
+      priorityUrls: [...mustHaveUrls],
+      prioritySelection: {
+        priorityUrls: [...mustHaveUrls],
+        mustHaveUrls: [...mustHaveUrls],
+        representativeUrls: [],
+        supplementalUrls: [],
+      },
+      coverage: {
+        usableSitemap: true,
+        complete: true,
+      },
+      limitations: [],
+    };
+
+    const fixtures = {
+      taskPost: {
+        taskId: "evidence-01-task",
+        rawTask: {
+          id: "evidence-01-task",
+        },
+      },
+      pollTask: {
+        status: "ready",
+        taskId: "evidence-01-task",
+      },
+      summary: {
+        crawl_status: {
+          crawl_stop_reason: "empty_queue",
+          max_crawl_pages: 250,
+          pages_crawled: 26,
+          pages_in_queue: 0,
+        },
+        pages_crawled: 26,
+        total_pages: 26,
+        max_crawl_pages: 250,
+        domain_info: {
+          start_page_status_code: 200,
+          checks: {},
+        },
+        page_metrics: {
+          links_internal: 0,
+          checks: {},
+        },
+      },
+      pages: {
+        items: pages,
+        total_count: pages.length,
+      },
+      links: {
+        items: [],
+        total_count: 0,
+      },
+      duplicateTags: {
+        items: [],
+      },
+      duplicateContent: {
+        items: [],
+      },
+      microdata: {
+        items: [],
+      },
+      contentParsing: parsedResult(
+        "Substantive governed page content.",
+      ),
+      redirectChains: [],
+      nonIndexable: {
+        items: [],
+        total_count: 0,
+      },
+      resources: {},
+    };
+
+    const baseOptions = {
+      maxPages: 250,
+      pollTimeoutMs: 1000,
+      pollIntervalMs: 1,
+      siteFootprint,
+      businessServices: [
+        "Executive Coaching",
+      ],
+      clientOptions: {
+        mode: "fixture",
+        fixtures,
+      },
+    };
+
+    const defaultResult =
+      await crawlWithDataforseo(
+        "https://example.com/",
+        baseOptions,
+      );
+
+    const defaultLedger =
+      defaultResult.acquisition.contentParsing;
+
+    assert.deepEqual(
+      defaultLedger.selectedUrls,
+      expectedSelectedUrls,
+    );
+
+    assert.equal(
+      defaultLedger.selectedUrls.length,
+      26,
+    );
+
+    assert.equal(
+      defaultLedger.requested,
+      20,
+    );
+
+    assert.deepEqual(
+      defaultLedger.requestedUrls,
+      expectedSelectedUrls.slice(0, 20),
+    );
+
+    assert.equal(
+      defaultLedger.completed,
+      20,
+    );
+
+    assert.deepEqual(
+      defaultLedger.completedUrls,
+      expectedSelectedUrls.slice(0, 20),
+    );
+
+    assert.equal(
+      defaultLedger.failed,
+      0,
+    );
+
+    assert.deepEqual(
+      defaultLedger.failedUrls,
+      [],
+    );
+
+    assert.deepEqual(
+      defaultLedger.unassessedUrls,
+      expectedSelectedUrls.slice(20),
+    );
+
+    assert.equal(
+      defaultLedger.unassessedReason,
+      "CONTENT_PARSING_PAGE_LIMIT",
+    );
+
+    const expandedResult =
+      await crawlWithDataforseo(
+        "https://example.com/",
+        {
+          ...baseOptions,
+          contentParsingPageLimit: 30,
+        },
+      );
+
+    const expandedLedger =
+      expandedResult.acquisition.contentParsing;
+
+    assert.deepEqual(
+      expandedLedger.selectedUrls,
+      expectedSelectedUrls,
+    );
+
+    assert.equal(
+      expandedLedger.requested,
+      26,
+    );
+
+    assert.deepEqual(
+      expandedLedger.requestedUrls,
+      expectedSelectedUrls,
+    );
+
+    assert.equal(
+      expandedLedger.completed,
+      26,
+    );
+
+    assert.deepEqual(
+      expandedLedger.completedUrls,
+      expectedSelectedUrls,
+    );
+
+    assert.equal(
+      expandedLedger.failed,
+      0,
+    );
+
+    assert.deepEqual(
+      expandedLedger.failedUrls,
+      [],
+    );
+
+    assert.deepEqual(
+      expandedLedger.unassessedUrls,
+      [],
+    );
+
+    assert.equal(
+      expandedLedger.unassessedReason,
+      null,
+    );
+  },
+);

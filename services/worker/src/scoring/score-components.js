@@ -1,5 +1,9 @@
 import { average, clamp, stableHash } from "../utils.js";
-import { SOURCE_STATUS } from "./evidence-contracts.js";
+import { SOURCE_STATUS, isValidSourceStatus } from "./evidence-contracts.js";
+import {
+  BUSINESS_IMPACT_BASIS,
+  governBusinessImpact,
+} from "./business-impact-policy.js";
 
 // ---------------------------------------------------------------------------
 // Scoring version (PRD v3.0 §15.1 + PRYSM-NEXT-01 WP-D/WP-J)
@@ -961,11 +965,18 @@ export function buildFindings(site, performance, gsc, opts = {}) {
 
     const evidenceRecords = (opts.evidence || []).map((er) => ({
       provider: er.provider || "dataforseo_onpage",
-      sourceStatus: er.sourceStatus || SOURCE_STATUS.AVAILABLE,
+      sourceStatus:
+        (er.provider || "dataforseo_onpage") === "dataforseo_onpage"
+          ? site?.sourceStatus
+          : er.sourceStatus,
       field: er.field,
       observedValue: er.observedValue ?? null,
       artifactRef: er.artifactRef || site.rawArtifactRef || null,
     }));
+
+    if (evidenceRecords.some((er) => !isValidSourceStatus(er.sourceStatus))) {
+      return;
+    }
 
     // Enforce: no finding without evidence (PRD §16)
     if (!evidenceRecords.length) return;
@@ -991,6 +1002,13 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       confidence,
     });
 
+    const businessImpact = governBusinessImpact(
+  opts.businessImpact || opts.impact || "",
+  {
+    label: `Finding ${opts.ruleId} businessImpact`,
+    basis: opts.businessImpactBasis || BUSINESS_IMPACT_BASIS.INFERRED,
+  },
+);
     findings.push({
       contractVersion: "1.0.0",
       findingId,
@@ -1002,7 +1020,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       affectedUrls,
       evidence: evidenceRecords,
       confidence,
-      businessImpact: opts.businessImpact || opts.impact || "",
+      businessImpact,
       recommendation: opts.recommendation || opts.fix || "",
       implementationEffort: opts.effort || "M",
       verificationMethod: opts.verificationMethod || "Re-audit after changes are applied.",
@@ -1013,7 +1031,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       // Display compatibility aliases — the renderer uses problem/impact/fix/effort
       // as display keys.  These replicate the canonical fields.
       problem: opts.title,
-      impact: opts.businessImpact || opts.impact || "",
+      impact: businessImpact,
       fix: opts.recommendation || opts.fix || "",
       effort: opts.effort || "M",
       key: opts.key || "",
@@ -1047,7 +1065,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.caseStudies", observedValue: false },
       ],
       evidenceText: "No testimonials, case studies, or credentials detected",
-      businessImpact: "Visitors cannot verify credibility before deciding",
+      businessImpact: "Limited visible trust proof may make credibility harder for visitors to verify before deciding.",
       recommendation: "Add credentials, client proof, and outcome-based case studies",
       effort: "M",
       conversionImpact: 85,
@@ -1073,7 +1091,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "meta_description", observedValue: null },
       ],
       evidenceText: `${site.missingDescriptions} of ${site.pageCount} crawled pages`,
-      businessImpact: "Search-result messaging is uncontrolled for these pages.",
+      businessImpact: "Missing meta descriptions may reduce control over search-result messaging for these pages.",
       recommendation: "Write a unique 150–160 character description for each important page",
       effort: "L",
       conversionImpact: 75,
@@ -1099,7 +1117,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "schema_types", observedValue: [] },
       ],
       evidenceText: "No JSON-LD schema types found",
-      businessImpact: "Search and AI systems receive weak entity context",
+      businessImpact: "Missing structured data may provide search and AI systems with less explicit entity context.",
       recommendation: "Add Organization or LocalBusiness, Person, Service, and FAQ schema where supported",
       effort: "M",
       conversionImpact: 60,
@@ -1125,14 +1143,14 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       evidence: [
         {
           provider: performance?.mobile?.source || "pagespeed-insights",
-          sourceStatus: performance?.mobile?.status || SOURCE_STATUS.AVAILABLE,
+          sourceStatus: performance?.mobile?.status ?? performance?.sourceStatus,
           field: "lcp_ms",
           observedValue: lcp,
           artifactRef: null,
         },
       ],
       evidenceText: `${(lcp / 1000).toFixed(1)} seconds`,
-      businessImpact: "Slow first impressions increase mobile abandonment",
+      businessImpact: "Slow LCP may create friction for mobile visitors.",
       recommendation: "Optimize the largest above-the-fold asset and remove render-blocking work",
       effort: "M",
       conversionImpact: 80,
@@ -1160,7 +1178,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "services", observedValue: site.services.length },
       ],
       evidenceText: `${site.pageCount} crawlable page(s) for ${site.services.length || "multiple"} service topics`,
-      businessImpact: "Individual offers cannot build enough relevance or answer buyer questions",
+      businessImpact: "Limited dedicated page depth may make it harder for individual offers to build relevance and answer buyer questions.",
       recommendation: "Create one focused page for each primary service",
       effort: "H",
       conversionImpact: 70,
@@ -1186,7 +1204,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "h1_multiple", observedValue: site.h1Multiple },
       ],
       evidenceText: `${site.h1Missing} pages missing H1; ${site.h1Multiple} pages with multiple H1s`,
-      businessImpact: "Semantic clarity and accessibility are reduced",
+      businessImpact: "Inconsistent heading structure may reduce semantic clarity and accessibility.",
       recommendation: "Use one descriptive H1 per page with sequential H2 and H3 sections",
       effort: "M",
       conversionImpact: 50,
@@ -1215,7 +1233,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "security_headers", observedValue: missingSecurity.join(", ") },
       ],
       evidenceText: missingSecurity.join(", "),
-      businessImpact: "Missing browser protections can weaken technical trust",
+      businessImpact: "Missing browser protections may weaken technical trust.",
       recommendation: "Configure the missing response headers at the hosting layer",
       effort: "L",
       conversionImpact: 35,
@@ -1241,7 +1259,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.faq", observedValue: false },
       ],
       evidenceText: "No FAQ or common-question section found",
-      businessImpact: "Unanswered objections can stop conversion",
+      businessImpact: "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
       recommendation: "Add an FAQ based on the questions prospects ask before booking",
       effort: "M",
       conversionImpact: 55,
@@ -1267,7 +1285,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.pricing", observedValue: false },
       ],
       evidenceText: "No pricing, cost, fee, or investment language detected",
-      businessImpact: "Visitors may leave before contacting because commitment is unclear",
+      businessImpact: "Missing pricing context may leave commitment expectations unclear before contact.",
       recommendation: "State pricing, starting price, or the process used to determine cost",
       effort: "L",
       conversionImpact: 65,
@@ -1293,14 +1311,15 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       evidence: [
         {
           provider: "playwright-conversion-path",
-          sourceStatus: SOURCE_STATUS.AVAILABLE,
+          sourceStatus: capabilities["conversion.path"]?.status,
           field: "conversion.path.obstruction",
           observedValue: pathValidation.obstructionCount,
           artifactRef: null,
         },
       ],
       evidenceText: `${pathValidation.obstructionCount} browser-validated page(s) have an obstructed CTA`,
-      businessImpact: "Visitors cannot reliably reach the primary action on key pages",
+      businessImpact: "Browser validation found the primary action obstructed on tested pages.",
+      businessImpactBasis: BUSINESS_IMPACT_BASIS.OBSERVED,
       recommendation: "Remove or reposition overlays, cookie banners, or stacked elements covering the primary CTA",
       effort: "M",
       conversionImpact: 90,
@@ -1312,7 +1331,13 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  if (site.imagesMissingAlt) {
+  const imageAltEvidenceKnown =
+    site._metaCountersAvailable !== false &&
+    Number.isFinite(site.imageCount) &&
+    site.imageCount > 0 &&
+    Number.isFinite(site.imagesMissingAlt);
+
+  if (imageAltEvidenceKnown && site.imagesMissingAlt > 0) {
     add({
       ruleId: "VAN-TECH-004",
       dimension: "technical_performance",
@@ -1325,7 +1350,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "images_missing_alt", observedValue: site.imagesMissingAlt },
       ],
       evidenceText: `${site.imagesMissingAlt} of ${site.imageCount} images`,
-      businessImpact: "Accessibility and image understanding are reduced",
+      businessImpact: "Missing alternative text may reduce accessibility and image understanding.",
       recommendation: "Add concise descriptive alt text to meaningful images",
       effort: "L",
       conversionImpact: 20,
@@ -1350,7 +1375,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "images_missing_dimensions", observedValue: site.imagesMissingDimensions },
       ],
       evidenceText: `${site.imagesMissingDimensions} of ${site.imageCount} images`,
-      businessImpact: "Layout shifts can reduce visual stability",
+      businessImpact: "Missing explicit image dimensions may increase the risk of visual instability.",
       recommendation: "Set width and height on rendered images",
       effort: "L",
       conversionImpact: 15,
@@ -1389,7 +1414,8 @@ export function buildFindings(site, performance, gsc, opts = {}) {
           artifactRef: null,
         })),
         evidenceText: `${lowCtrQueries.length} queries below 3% CTR with at least 50 impressions each`,
-        businessImpact: "Valuable search visibility is not converting into visits — title or snippet may not match intent",
+        businessImpact: "The measured queries have search visibility but a low observed click-through rate.",
+businessImpactBasis: BUSINESS_IMPACT_BASIS.OBSERVED,
         recommendation: "Review low-CTR queries and improve titles and meta descriptions to match search intent",
         effort: "M",
         conversionImpact: 55,
@@ -1423,7 +1449,8 @@ export function buildFindings(site, performance, gsc, opts = {}) {
           artifactRef: null,
         })),
         evidenceText: `${positionGapQueries.length} queries with position > 10 and >= ${gscThreshold} impressions each`,
-        businessImpact: "Content may not be comprehensive enough to rank on page one for important terms",
+        businessImpact: "Lower observed positions may indicate that content does not yet compete strongly enough for page-one visibility on these terms.",
+        businessImpactBasis: BUSINESS_IMPACT_BASIS.OBSERVED,
         recommendation: "Expand content depth for these query topics and improve internal linking to supporting pages",
         effort: "H",
         conversionImpact: 50,
@@ -1455,7 +1482,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
           },
         ],
         evidenceText: `${(gsc.topQueries || []).length} search queries generating impressions without dedicated content`,
-        businessImpact: "Search demand exists for topics that lack dedicated landing pages",
+        businessImpact: "Observed search demand may indicate opportunities for dedicated landing pages around these topics.",
         recommendation: "Create content targeted at high-impression, low-position queries",
         effort: "H",
         conversionImpact: 40,
@@ -1546,8 +1573,10 @@ export function buildRenderingDiagnosticFindings(diagnostics, site) {
     const affectedUrls = d.affectedUrl
       ? [d.affectedUrl]
       : ([site?.targetUrl || site?.domain || "https://unknown"].filter(Boolean));
+        if (!isValidSourceStatus(d.providerStatus)) continue;
+
     const evidenceRecords = [
-      { provider: d.provider || "pagespeed-insights", sourceStatus: d.providerStatus || SOURCE_STATUS.AVAILABLE, field: "diagnostic", observedValue: d.diagnosticCode, artifactRef: null },
+      { provider: d.provider || "pagespeed-insights", sourceStatus: d.providerStatus, field: "diagnostic", observedValue: d.diagnosticCode, artifactRef: null },
     ];
 
     findings.push({

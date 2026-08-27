@@ -52,6 +52,122 @@ test("changing page limits changes the source execution key", () => {
   assert.notEqual(base.sourceExecutionKey, changed.sourceExecutionKey);
 });
 
+test("EVIDENCE-02: omitted Content Parsing limit is identity-equivalent to explicit 20", () => {
+  const omitted = buildSourceExecutionIdentity({
+    auditRequest: BASE_REQUEST,
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  const explicit = buildSourceExecutionIdentity({
+    auditRequest: {
+      ...BASE_REQUEST,
+      crawl: {
+        contentParsingPageLimit: 20,
+      },
+    },
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  assert.equal(
+    omitted.normalizedConfig,
+    explicit.normalizedConfig,
+  );
+
+  assert.equal(
+    omitted.configHash,
+    explicit.configHash,
+  );
+
+  assert.equal(
+    omitted.sourceExecutionKey,
+    explicit.sourceExecutionKey,
+  );
+});
+
+test("EVIDENCE-02: explicit Content Parsing limit 30 differs from default 20", () => {
+  const base = buildSourceExecutionIdentity({
+    auditRequest: BASE_REQUEST,
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  const changed = buildSourceExecutionIdentity({
+    auditRequest: {
+      ...BASE_REQUEST,
+      crawl: {
+        contentParsingPageLimit: 30,
+      },
+    },
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  assert.notEqual(
+    base.sourceExecutionKey,
+    changed.sourceExecutionKey,
+  );
+});
+
+test("EVIDENCE-03: omitted maxPages is identity-equivalent to explicit 250", () => {
+  const omitted = buildSourceExecutionIdentity({
+    auditRequest: BASE_REQUEST,
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  const explicit = buildSourceExecutionIdentity({
+    auditRequest: {
+      ...BASE_REQUEST,
+      crawl: {
+        maxPages: 250,
+      },
+    },
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  assert.equal(
+    omitted.normalizedConfig,
+    explicit.normalizedConfig,
+  );
+
+  assert.equal(
+    omitted.configHash,
+    explicit.configHash,
+  );
+
+  assert.equal(
+    omitted.sourceExecutionKey,
+    explicit.sourceExecutionKey,
+  );
+});
+
+test("EVIDENCE-03: explicit oversized maxPages remains distinguishable in execution identity", () => {
+  const base = buildSourceExecutionIdentity({
+    auditRequest: BASE_REQUEST,
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  const oversized = buildSourceExecutionIdentity({
+    auditRequest: {
+      ...BASE_REQUEST,
+      crawl: {
+        maxPages: 500,
+      },
+    },
+    source: "dataforseo-onpage",
+    adapterVersion: "1.4.0",
+  });
+
+  assert.notEqual(
+    base.sourceExecutionKey,
+    oversized.sourceExecutionKey,
+  );
+});
+
 test("key is stable across object key insertion order (stable stringify)", () => {
   const a = buildSourceExecutionIdentity({ auditRequest: BASE_REQUEST, source: "dataforseo-onpage", adapterVersion: "1.1.0" });
   const reordered = {

@@ -576,6 +576,58 @@ test("page ceiling produces PARTIAL status with coverage metadata", async () => 
   assert.equal(result.pageCount, 10);
   assert.equal(result._sourceStatus.returnedRecordCount, 10);
 });
+test("EVIDENCE-06: completed small crawl never converts the 250-page ceiling into failed coverage", async () => {
+  const fixtures = buildFixturesWithExtras({
+    pageCount: 7,
+    summary: {
+      crawl_status: {
+        crawl_stop_reason: "empty_queue",
+        max_crawl_pages: 250,
+        pages_crawled: 7,
+        pages_in_queue: 0,
+      },
+      pages_crawled: 7,
+      total_pages: 7,
+      max_crawl_pages: 250,
+      duplicate_content: 0,
+      duplicate_tags: 0,
+    },
+  });
+
+  const result = await crawlWithDataforseo(
+    "https://small.example.com",
+    {
+      ...crawlOpts(fixtures),
+      maxPages: 250,
+      enableContentParsing: false,
+    },
+  );
+
+  assert.deepEqual(
+    result.coverage,
+    {
+      requested: 7,
+      completed: 7,
+      failed: 0,
+    },
+  );
+
+  assert.equal(
+    result._sourceStatus.expectedRecordCount,
+    7,
+  );
+
+  assert.equal(
+    result._sourceStatus.returnedRecordCount,
+    7,
+  );
+
+  assert.notEqual(
+    result.coverage.requested,
+    250,
+    "provider crawl ceiling must never become requested record volume",
+  );
+});
 
 // ---------------------------------------------------------------------------
 // 7. Partial JavaScript evidence
@@ -3025,22 +3077,68 @@ test("WP-B-08/09: deep acquisitions normalize into the site envelope", async () 
   assert.ok(!result.limitations.some((l) => l.includes("No decision-bearing pages")));
 });
 
-test("WP-B-08: missing sub-endpoint results produce failed counts without degrading the source", async () => {
+test("WP-B-08: successful empty content-parsing observation is completed without degrading the source", async () => {
   const fixtures = buildDeepFixtures();
-  // Content parsing returns nothing for the pricing URL.
+
+  // Remove the populated pricing fixture. Fixture mode still returns a
+  // provider-successful 20000 observation with no parsed body for this URL.
   fixtures.content_parsing = fixtures.content_parsing.filter(
     (f) => f.url !== "https://example.com/pricing",
   );
-  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
 
-  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE, "sub-endpoint gaps must not fail the crawl");
-  assert.equal(result.acquisition.contentParsing.requested, 3);
-  assert.equal(result.acquisition.contentParsing.completed, 2);
-  assert.equal(result.acquisition.contentParsing.failed, 1);
-  // The pricing entry must remain present with null content, not fabricated text.
-  const pricing = result.contentParsing.find((c) => c.url === "https://example.com/pricing");
-  assert.equal(pricing.hasMainContent, null);
-  assert.equal(pricing.wordCount, null);
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.equal(
+    result.sourceStatus,
+    SOURCE_STATUS.AVAILABLE,
+    "a successful empty sub-endpoint observation must not fail the crawl",
+  );
+
+  assert.equal(
+    result.acquisition.contentParsing.requested,
+    3,
+  );
+
+  assert.equal(
+    result.acquisition.contentParsing.completed,
+    3,
+  );
+
+  assert.equal(
+    result.acquisition.contentParsing.failed,
+    0,
+  );
+
+  assert.ok(
+    result.acquisition.contentParsing.completedUrls.includes(
+      "https://example.com/pricing",
+    ),
+  );
+
+  assert.ok(
+    !result.acquisition.contentParsing.failedUrls.includes(
+      "https://example.com/pricing",
+    ),
+  );
+
+  // Successful empty observation remains unknown content,
+  // never fabricated text and never a failed acquisition.
+  const pricing = result.contentParsing.find(
+    (c) => c.url === "https://example.com/pricing",
+  );
+
+  assert.equal(
+    pricing.hasMainContent,
+    null,
+  );
+
+  assert.equal(
+    pricing.wordCount,
+    null,
+  );
 });
 
 test("WP-B-10: raw artifact payload includes deep acquisition responses with valid SHA-256", async () => {

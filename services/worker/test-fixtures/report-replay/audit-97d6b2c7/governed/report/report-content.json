@@ -1,0 +1,198 @@
+{
+  "contractVersion": "1.0.0",
+  "packageVersion": "1.0.0",
+  "auditId": "97d6b2c7-03b9-4530-8ea7-16557502c638",
+  "business": {
+    "name": "Rebootbusinesscoaching",
+    "domain": "rebootbusinesscoaching.com",
+    "platform": "Unknown"
+  },
+  "scores": {
+    "trust": null,
+    "contentDepth": 81,
+    "conversionPathways": null,
+    "technical": 10,
+    "performance": 80,
+    "conversionReadiness": null,
+    "awareness": null,
+    "consideration": null,
+    "decision": null,
+    "aiReadiness": null,
+    "conversionPathwaysDimension": null,
+    "trustEeatDimension": null,
+    "contentFunnelDimension": 81,
+    "technicalPerformanceDimension": 45,
+    "entitySchemaAiDimension": null
+  },
+  "bands": {
+    "conversionReadiness": "Limited",
+    "trust": "Not Assessed",
+    "evidenceConfidence": "High"
+  },
+  "readinessStatus": "Insufficient Evidence for Overall Score",
+  "assessedWeight": 30,
+  "showNumericScore": false,
+  "evidenceConfidenceScore": 86,
+  "rootCause": "The most impactful opportunity is missing meta descriptions. Search-result messaging is uncontrolled for these pages.",
+  "renderingDiagnostics": [],
+  "sourceStatus": {
+    "website": "PARTIAL",
+    "performance": "AVAILABLE",
+    "competitors": "NOT_CONNECTED",
+    "backlinks": "AVAILABLE",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  },
+  "competitors": [],
+  "performanceCoverage": {
+    "requested": 2,
+    "completed": 2,
+    "failed": 0,
+    "pagesTested": 2
+  },
+  "limitations": [
+    "Microdata retrieval returned code 40501: \"Invalid Field: 'url'.\".",
+    "Page body content, link arrays, image arrays, CTAs, forms, and structured data are not extracted by the DataForSEO On-Page pages endpoint. Content-dependent signals (trust, CTAs, forms, schemas) are reported as unavailable rather than confirmed absent.",
+    "Screenshot persistence failed for mobile: runId is required for screenshot persistence",
+    "Screenshot persistence failed for desktop: runId is required for screenshot persistence",
+    "CrUX PHONE failed (403)",
+    "CrUX DESKTOP failed (403)"
+  ],
+  "findings": [
+    {
+      "findingId": "62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+      "ruleId": "VAN-TECH-001",
+      "title": "Missing meta descriptions",
+      "severity": "High",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Search-result messaging is uncontrolled for these pages.",
+      "recommendation": "Write a unique 150–160 character description for each important page",
+      "verificationMethod": "Re-crawl the URLs and confirm descriptions are present.",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/cdn-cgi/l/email-protection",
+        "https://rebootbusinesscoaching.com/",
+        "https://rebootbusinesscoaching.com/about",
+        "https://rebootbusinesscoaching.com/home",
+        "https://rebootbusinesscoaching.com/privacy-and-accessibility-statements",
+        "https://rebootbusinesscoaching.com/services"
+      ],
+      "evidence": [
+        {
+          "field": "meta_description",
+          "observedValue": null
+        }
+      ],
+      "implementationEffort": "L"
+    },
+    {
+      "findingId": "b33d6f64-410e-462c-a257-88efdd94c7e1",
+      "ruleId": "VAN-PERF-001",
+      "title": "Mobile largest contentful paint is slow",
+      "severity": "High",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Slow first impressions increase mobile abandonment",
+      "recommendation": "Optimize the largest above-the-fold asset and remove render-blocking work",
+      "verificationMethod": "Re-run PageSpeed Insights and confirm LCP is under 2.5 seconds.",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/"
+      ],
+      "evidence": [
+        {
+          "field": "lcp_ms",
+          "observedValue": 6962.003298736525
+        }
+      ],
+      "implementationEffort": "M"
+    },
+    {
+      "findingId": "4fa38028-44f0-4bae-846d-15522b90e0f0",
+      "ruleId": "VAN-TECH-002",
+      "title": "Heading structure is inconsistent",
+      "severity": "Medium",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Semantic clarity and accessibility are reduced",
+      "recommendation": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+      "verificationMethod": "Re-crawl and verify heading structure on all pages.",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/"
+      ],
+      "evidence": [
+        {
+          "field": "h1_missing",
+          "observedValue": 0
+        },
+        {
+          "field": "h1_multiple",
+          "observedValue": 5
+        }
+      ],
+      "implementationEffort": "M"
+    },
+    {
+      "findingId": "a8680687-02b5-46b0-9b4d-b636b9281021",
+      "ruleId": "VAN-TECH-004",
+      "title": "Images are missing alternative text",
+      "severity": "Low",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Accessibility and image understanding are reduced",
+      "recommendation": "Add concise descriptive alt text to meaningful images",
+      "verificationMethod": "Re-crawl and verify alt text on all images.",
+      "affectedUrls": [
+        "https://rebootbusinesscoaching.com/"
+      ],
+      "evidence": [
+        {
+          "field": "images_missing_alt",
+          "observedValue": 3
+        }
+      ],
+      "implementationEffort": "L"
+    }
+  ],
+  "siteMetrics": {
+    "pageCount": 7,
+    "services": [],
+    "topicKeywords": [
+      "prefer a one-to-one conversation",
+      "about reboot business clarity strategist",
+      "heres what clients say",
+      "insight 1",
+      "insight 2",
+      "insight 3",
+      "privacy",
+      "services reboot reiliency coach",
+      "conversationcourageclarity"
+    ],
+    "platform": "Unknown",
+    "hasHttps": true,
+    "schemaCount": 0,
+    "ctaCount": 0,
+    "formCount": 0
+  },
+  "trustFlags": {
+    "testimonials": false,
+    "credentials": false,
+    "caseStudies": false,
+    "faq": false,
+    "pricing": false,
+    "policies": false,
+    "contact": false
+  },
+  "technical": {
+    "missingTitles": 4,
+    "missingDescriptions": 5,
+    "h1Missing": 0,
+    "h1Multiple": 5,
+    "imagesMissingAlt": 3,
+    "internalLinkCount": 37
+  },
+  "gateRecommendation": "",
+  "gateNextAction": "",
+  "gateServiceCategories": [],
+  "promptVersion": "1.0.0",
+  "outputSchemaVersion": "1.0.0"
+}

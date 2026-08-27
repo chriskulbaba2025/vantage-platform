@@ -39,7 +39,7 @@ import { analyzeProgrammaticSeo } from "../../evidence/programmatic-seo-analysis
 // Adapter version
 // ---------------------------------------------------------------------------
 
-const ADAPTER_VERSION = "1.4.0";
+const ADAPTER_VERSION = "1.4.1";
 const HARD_MAX_PROVIDER_PAGES = 250;
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,6 @@ function mergeDeepPageUrls({
   normalizedPages,
   keyPages,
   siteFootprint,
-  maxSelected = 20,
 }) {
   const byNormalizedUrl = new Map();
 
@@ -184,10 +183,17 @@ function mergeDeepPageUrls({
       page.finalUrl ||
       "";
 
-    const normalized = normalizeUrl(rawUrl);
+    const normalized =
+      normalizeUrl(rawUrl);
 
-    if (normalized && !byNormalizedUrl.has(normalized)) {
-      byNormalizedUrl.set(normalized, rawUrl);
+    if (
+      normalized &&
+      !byNormalizedUrl.has(normalized)
+    ) {
+      byNormalizedUrl.set(
+        normalized,
+        rawUrl,
+      );
     }
   }
 
@@ -195,36 +201,76 @@ function mergeDeepPageUrls({
   const seen = new Set();
 
   function add(candidate) {
-    const normalized = normalizeUrl(candidate || "");
+    const normalized =
+      normalizeUrl(candidate || "");
 
-    if (!normalized || seen.has(normalized)) return;
+    if (
+      !normalized ||
+      seen.has(normalized)
+    ) {
+      return;
+    }
 
-    const rawUrl = byNormalizedUrl.get(normalized);
-    if (!rawUrl) return;
+    const rawUrl =
+      byNormalizedUrl.get(normalized);
+
+    if (!rawUrl) {
+      return;
+    }
 
     seen.add(normalized);
     selected.push(rawUrl);
   }
 
-  for (const item of keyPages.selected || []) {
+  // Governed must-have URLs always come first.
+  for (
+    const url of
+    siteFootprint?.prioritySelection
+      ?.mustHaveUrls || []
+  ) {
+    add(url);
+  }
+
+  // Add deterministic commercial/key pages.
+  for (
+    const item of
+    keyPages.selected || []
+  ) {
     add(item.url);
   }
 
-  for (const cluster of siteFootprint?.clusters || []) {
-    if (cluster?.requiresRepresentativeAssessment !== true) {
+  // Preserve every required material-family representative.
+  for (
+    const cluster of
+    siteFootprint?.clusters || []
+  ) {
+    if (
+      cluster?.requiresRepresentativeAssessment !==
+      true
+    ) {
       continue;
     }
 
-    for (const url of cluster.representativeUrls || []) {
+    for (
+      const url of
+      cluster.representativeUrls || []
+    ) {
       add(url);
     }
   }
 
-  for (const url of siteFootprint?.priorityUrls || []) {
+  // Supplemental sitemap priority entries come last.
+  for (
+    const url of
+    siteFootprint?.priorityUrls || []
+  ) {
     add(url);
   }
 
-  return selected.slice(0, maxSelected);
+  // IMPORTANT:
+  // Do not apply the Content Parsing runtime budget here.
+  // The complete governed selection must remain auditable.
+  return selected;
 }
 
 // ---------------------------------------------------------------------------
@@ -1172,18 +1218,25 @@ function summarizeSite({
     sourceStatus = SOURCE_STATUS.PARTIAL;
   }
 
-  // Build coverage information
+  const requestedCrawlRecords = Math.max(
+    pages.length,
+    totalCrawlPages ?? pages.length,
+  );
+
   const coverage = {
-    requested: totalCrawlPages ?? pages.length,
+    requested: requestedCrawlRecords,
     completed: pages.length,
-    failed: (totalCrawlPages ?? pages.length) - pages.length,
+    failed: Math.max(
+      0,
+      requestedCrawlRecords - pages.length,
+    ),
   };
 
   // Collect limitation strings
   const allLimitations = [...limitations];
   if (cappedPages) {
     allLimitations.push(
-      `Page ceiling reached: ${pages.length} of ${totalCrawlPages} pages crawled`,
+     `Page ceiling reached after ${pages.length} pages crawled`,
     );
   }
   if (jsContentMissing) {
@@ -1303,7 +1356,7 @@ function summarizeSite({
       requestId: rawTaskId || null,
       retryCount: 0,
       returnedRecordCount: pages.length,
-      expectedRecordCount: totalCrawlPages ?? pages.length,
+      expectedRecordCount: requestedCrawlRecords,
       errorCategory,
       limitation: allLimitations.join("; ") || null,
       rawArtifactRef: rawTaskId
@@ -1556,7 +1609,7 @@ export async function crawlWithDataforseo(target, options = {}) {
   let jsContentMissing = false;
   let robotsBlocked = false;
   let loginBlocked = false;
-  let totalCrawlPages = maxPages;
+  let totalCrawlPages = null;
   let normalizedPages = [];
 
   try {
@@ -1594,15 +1647,39 @@ export async function crawlWithDataforseo(target, options = {}) {
       }
 
       // §Crawl-limit detection: authoritative fields from crawl_status
-      const crawlStopReason = crawlStatus.crawl_stop_reason || rawSummary.crawl_stop_reason || "";
-      const maxCrawlPages = crawlStatus.max_crawl_pages ?? rawSummary.max_crawl_pages ?? maxPages;
-      const pagesCrawled = crawlStatus.pages_crawled ?? rawSummary.pages_crawled ?? 0;
-      const pagesInQueue = crawlStatus.pages_in_queue ?? rawSummary.pages_in_queue ?? 0;
+      const crawlStopReason =
+        crawlStatus.crawl_stop_reason ||
+        rawSummary.crawl_stop_reason ||
+        "";
 
-      cappedPages = (crawlStopReason === "limit_exceeded");
+      const maxCrawlPages =
+        crawlStatus.max_crawl_pages ??
+        rawSummary.max_crawl_pages ??
+        maxPages;
 
-      // Configured limit from max_crawl_pages (provider-specified ceiling)
-      totalCrawlPages = maxCrawlPages;
+      const pagesCrawled =
+        crawlStatus.pages_crawled ??
+        rawSummary.pages_crawled ??
+        null;
+
+      const pagesInQueue =
+        crawlStatus.pages_in_queue ??
+        rawSummary.pages_in_queue ??
+        0;
+
+      cappedPages =
+        crawlStopReason === "limit_exceeded";
+
+      // Evidence volume comes from provider-observed crawl execution.
+      // max_crawl_pages is only a ceiling and must never become an
+      // expected/requested record count.
+      if (
+        pagesCrawled !== null &&
+        Number.isFinite(Number(pagesCrawled))
+      ) {
+        totalCrawlPages =
+          Number(pagesCrawled);
+      }
 
       // Record crawl-limit metadata
       if (cappedPages) {
@@ -1670,7 +1747,7 @@ export async function crawlWithDataforseo(target, options = {}) {
             : "Site requires authentication — crawl not attempted",
         ],
         collectedAt: completedAt,
-        coverage: { requested: maxPages, completed: 0, failed: maxPages },
+        coverage: { requested: 0, completed: 0, failed: 0 },
         rawArtifactRef: `dataforseo://on_page/${rawTaskId}`,
         _contentEvidenceAvailable: false,
         _responseHeadersAvailable: false,
@@ -1682,7 +1759,7 @@ export async function crawlWithDataforseo(target, options = {}) {
           requestId: rawTaskId,
           retryCount,
           returnedRecordCount: 0,
-          expectedRecordCount: maxPages,
+          expectedRecordCount: 0,
           errorCategory: null,
           limitation: robotsBlocked
             ? "robots.txt blocked the crawl"
@@ -1694,7 +1771,13 @@ export async function crawlWithDataforseo(target, options = {}) {
     }
 
     // 3b. Retrieve pages (paginated)
-    rawPages = await client.getAllPages(rawTaskId, { maxPages });
+       rawPages = await client.getAllPages(rawTaskId, { maxPages });
+
+    // Crawl coverage is based on provider-observed execution volume,
+    // never on the configured max_crawl_pages ceiling.
+    if (totalCrawlPages == null) {
+      totalCrawlPages = rawPages.length;
+    }
 
     // Page ceiling detection: only report capped when more pages
     // existed than were actually retrieved (i.e. we hit a genuine
@@ -1801,8 +1884,59 @@ export async function crawlWithDataforseo(target, options = {}) {
       normalizedPages,
       keyPages,
       siteFootprint,
-      maxSelected: 20,
     });
+
+    const contentParsingEnabled =
+      options.enableContentParsing ??
+      DEFAULTS.enableContentParsing;
+
+    const contentParsingBudget =
+      options.contentParsingPageLimit ??
+      DEFAULTS.contentParsingPageLimit;
+
+    const cpUrls =
+      contentParsingEnabled
+        ? keyPageUrls.slice(
+            0,
+            contentParsingBudget,
+          )
+        : [];
+
+    const cpUnassessedUrls =
+      contentParsingEnabled
+        ? keyPageUrls.slice(
+            contentParsingBudget,
+          )
+        : [...keyPageUrls];
+
+    acquisition.contentParsing = {
+      requested: cpUrls.length,
+      completed: 0,
+      failed: 0,
+      selectedUrls: [...keyPageUrls],
+      requestedUrls: [...cpUrls],
+      completedUrls: [],
+      failedUrls: [],
+      unassessedUrls: cpUnassessedUrls,
+      unassessedReason:
+        cpUnassessedUrls.length > 0
+          ? (
+              contentParsingEnabled
+                ? "CONTENT_PARSING_PAGE_LIMIT"
+                : "CONTENT_PARSING_DISABLED"
+            )
+          : null,
+    };
+
+    if (cpUnassessedUrls.length > 0) {
+      limitations.push(
+        `${cpUnassessedUrls.length} governed Content Parsing URL(s) were not requested because ${
+          contentParsingEnabled
+            ? `the page limit is ${contentParsingBudget}`
+            : "Content Parsing is disabled"
+        }; these URLs are unassessed, not failed.`,
+      );
+    }
 
     const subPollOpts = {
       timeoutMs: options.subPollTimeoutMs ?? 120000,
@@ -1844,29 +1978,109 @@ export async function crawlWithDataforseo(target, options = {}) {
       // 3g. Remaining deep sub-acquisitions scoped to the deterministic key-page set.
 
       // 3g1. Content parsing (key pages only)
-      if (options.enableContentParsing ?? DEFAULTS.enableContentParsing) {
-        const cpUrls = keyPageUrls.slice(
-          0, options.contentParsingPageLimit ?? DEFAULTS.contentParsingPageLimit);
-        acquisition.contentParsing.requested = cpUrls.length;
+      if (contentParsingEnabled) {
         try {
-          rawContentParsing = await client.getContentParsing(rawTaskId, cpUrls, {
-            ...subPollOpts,
-            maxUrls: cpUrls.length,
-          });
-          cpMeta = rawContentParsing.metadata;
-          for (const res of rawContentParsing.results) {
-            if (res.items?.length || res.result) acquisition.contentParsing.completed += 1;
-            else acquisition.contentParsing.failed += 1;
-          }
-          for (const m of (cpMeta || [])) {
-            if (m.timedOut || (m.finalCode !== 20000 && m.finalCode != null)) {
-              limitations.push(
-                `Content parsing for ${m.url} ${m.timedOut ? "timed out" : `returned code ${m.finalCode}`} after ${m.retryCount} retries.`);
+          rawContentParsing =
+            await client.getContentParsing(
+              rawTaskId,
+              cpUrls,
+              {
+                ...subPollOpts,
+                maxUrls: cpUrls.length,
+              },
+            );
+
+          cpMeta =
+            rawContentParsing.metadata || [];
+
+          const metadataByUrl =
+            new Map(
+              cpMeta.map((metadata) => [
+                normalizeUrl(metadata.url || ""),
+                metadata,
+              ]),
+            );
+
+          const resultUrls =
+            new Set(
+              (rawContentParsing.results || [])
+                .map((result) =>
+                  normalizeUrl(result.url || ""),
+                )
+                .filter(Boolean),
+            );
+
+          const completedUrls = [];
+          const failedUrls = [];
+
+          for (const url of cpUrls) {
+            const normalized =
+              normalizeUrl(url);
+
+            const metadata =
+              metadataByUrl.get(normalized);
+
+            const failed =
+              metadata
+                ? (
+                    metadata.timedOut === true ||
+                    metadata.finalCode !== 20000
+                  )
+                : !resultUrls.has(normalized);
+
+            if (failed) {
+              failedUrls.push(url);
+            } else {
+              // A successful provider response is a completed
+              // observation even when no main body was returned.
+              completedUrls.push(url);
             }
           }
+
+          acquisition.contentParsing.completedUrls =
+            completedUrls;
+
+          acquisition.contentParsing.failedUrls =
+            failedUrls;
+
+          acquisition.contentParsing.completed =
+            completedUrls.length;
+
+          acquisition.contentParsing.failed =
+            failedUrls.length;
+
+          for (const url of failedUrls) {
+            const metadata =
+              metadataByUrl.get(
+                normalizeUrl(url),
+              );
+
+            limitations.push(
+              `Content parsing for ${url} ${
+                metadata?.timedOut
+                  ? "timed out"
+                  : `returned code ${
+                      metadata?.finalCode ??
+                      "unknown"
+                    }`
+              } after ${
+                metadata?.retryCount ?? 0
+              } retries.`,
+            );
+          }
         } catch (cpError) {
-          acquisition.contentParsing.failed = acquisition.contentParsing.requested;
-          limitations.push(`Content parsing retrieval failed: ${cpError.message}`);
+          acquisition.contentParsing.completed = 0;
+          acquisition.contentParsing.completedUrls = [];
+
+          acquisition.contentParsing.failed =
+            cpUrls.length;
+
+          acquisition.contentParsing.failedUrls =
+            [...cpUrls];
+
+          limitations.push(
+            `Content parsing retrieval failed: ${cpError.message}`,
+          );
         }
       }
 
@@ -2020,6 +2234,8 @@ export async function crawlWithDataforseo(target, options = {}) {
     siteFootprint,
     pages: result.pages,
     contentParsing: result.contentParsing,
+    contentParsingAcquisition:
+      result.acquisition?.contentParsing || null,
   });
 
   result.siteFootprint = siteFootprint;

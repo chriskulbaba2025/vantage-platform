@@ -1,0 +1,158 @@
+[
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+    "ruleId": "VAN-TECH-001",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "technical_hygiene",
+    "title": "Missing meta descriptions",
+    "affectedUrls": [
+      "https://rebootbusinesscoaching.com/cdn-cgi/l/email-protection",
+      "https://rebootbusinesscoaching.com/",
+      "https://rebootbusinesscoaching.com/about",
+      "https://rebootbusinesscoaching.com/home",
+      "https://rebootbusinesscoaching.com/privacy-and-accessibility-statements",
+      "https://rebootbusinesscoaching.com/services"
+    ],
+    "evidence": [
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "AVAILABLE",
+        "field": "meta_description",
+        "observedValue": null,
+        "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Search-result messaging is uncontrolled for these pages.",
+    "recommendation": "Write a unique 150–160 character description for each important page",
+    "implementationEffort": "L",
+    "verificationMethod": "Re-crawl the URLs and confirm descriptions are present.",
+    "scoreBearing": true,
+    "rawPriority": 76,
+    "finalPriority": 76,
+    "severity": "High",
+    "problem": "Missing meta descriptions",
+    "impact": "Search-result messaging is uncontrolled for these pages.",
+    "fix": "Write a unique 150–160 character description for each important page",
+    "effort": "L",
+    "key": "meta",
+    "evidenceText": "5 of 7 crawled pages"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "b33d6f64-410e-462c-a257-88efdd94c7e1",
+    "ruleId": "VAN-PERF-001",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "performance",
+    "title": "Mobile largest contentful paint is slow",
+    "affectedUrls": [
+      "https://rebootbusinesscoaching.com/"
+    ],
+    "evidence": [
+      {
+        "provider": "pagespeed-insights",
+        "sourceStatus": "AVAILABLE",
+        "field": "lcp_ms",
+        "observedValue": 6962.003298736525,
+        "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Slow first impressions increase mobile abandonment",
+    "recommendation": "Optimize the largest above-the-fold asset and remove render-blocking work",
+    "implementationEffort": "M",
+    "verificationMethod": "Re-run PageSpeed Insights and confirm LCP is under 2.5 seconds.",
+    "scoreBearing": true,
+    "rawPriority": 74,
+    "finalPriority": 74,
+    "severity": "High",
+    "problem": "Mobile largest contentful paint is slow",
+    "impact": "Slow first impressions increase mobile abandonment",
+    "fix": "Optimize the largest above-the-fold asset and remove render-blocking work",
+    "effort": "M",
+    "key": "lcp",
+    "evidenceText": "7.0 seconds"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "4fa38028-44f0-4bae-846d-15522b90e0f0",
+    "ruleId": "VAN-TECH-002",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "technical_hygiene",
+    "title": "Heading structure is inconsistent",
+    "affectedUrls": [
+      "https://rebootbusinesscoaching.com/"
+    ],
+    "evidence": [
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "AVAILABLE",
+        "field": "h1_missing",
+        "observedValue": 0,
+        "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+      },
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "AVAILABLE",
+        "field": "h1_multiple",
+        "observedValue": 5,
+        "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Semantic clarity and accessibility are reduced",
+    "recommendation": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+    "implementationEffort": "M",
+    "verificationMethod": "Re-crawl and verify heading structure on all pages.",
+    "scoreBearing": true,
+    "rawPriority": 54,
+    "finalPriority": 54,
+    "severity": "Medium",
+    "problem": "Heading structure is inconsistent",
+    "impact": "Semantic clarity and accessibility are reduced",
+    "fix": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+    "effort": "M",
+    "key": "headings",
+    "evidenceText": "0 pages missing H1; 5 pages with multiple H1s"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "a8680687-02b5-46b0-9b4d-b636b9281021",
+    "ruleId": "VAN-TECH-004",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "technical_hygiene",
+    "title": "Images are missing alternative text",
+    "affectedUrls": [
+      "https://rebootbusinesscoaching.com/"
+    ],
+    "evidence": [
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "AVAILABLE",
+        "field": "images_missing_alt",
+        "observedValue": 3,
+        "artifactRef": "dataforseo://on_page/08230309-1281-0216-0000-1ebd25f37b7e?sha256=edd1be0ca0815d42325a76f15254a01fe7e62861f663222349e8dd4ff5eecf75"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Accessibility and image understanding are reduced",
+    "recommendation": "Add concise descriptive alt text to meaningful images",
+    "implementationEffort": "L",
+    "verificationMethod": "Re-crawl and verify alt text on all images.",
+    "scoreBearing": true,
+    "rawPriority": 32,
+    "finalPriority": 32,
+    "severity": "Low",
+    "problem": "Images are missing alternative text",
+    "impact": "Accessibility and image understanding are reduced",
+    "fix": "Add concise descriptive alt text to meaningful images",
+    "effort": "L",
+    "key": "alt",
+    "evidenceText": "3 of 0 images"
+  }
+]

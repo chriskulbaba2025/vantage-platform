@@ -1,0 +1,207 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "97d6b2c7-03b9-4530-8ea7-16557502c638",
+  "passNumber": 1,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-23T03:30:00Z",
+  "hardGate": {
+    "status": "PASS",
+    "violations": []
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 20,
+      "maxScore": 20,
+      "status": "PASS",
+      "rationale": "Claims, limitations, priorities, source states, and recommendations remain aligned with authorized findings, scores, capabilities, governance, and deterministic analysis. Unavailable evidence is consistently distinguished from evidence of absence, and no score, URL, metric, or competitor result is invented.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "score:readinessStatus",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "capability:conversion.path",
+        "capability:trust.proof",
+        "capability:schema.structured_data",
+        "analysis:competitors"
+      ],
+      "defectIds": []
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects search presentation, mobile arrival, content planning, and evidence collection to the stated goal of generating qualified enquiries and to the defined coaching services.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The conclusion, root cause, priorities, and final executive decision are direct and understandable. The extensive governed structure creates some unavoidable detail, but the principal message remains clear.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "score:readinessStatus",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The report preserves the supplied root cause—missing meta descriptions and uncontrolled search-result messaging—and coherently separates the mobile performance issue as an additional acquisition risk.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+      ],
+      "defectIds": []
+    },
+    "actionability": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The action plan is prioritized, evidence-linked, effort-aware, and paired with verification steps. It covers metadata, mobile performance, content development, semantic and accessibility remediation, and collection of missing evidence.",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+        "finding:a8680687-02b5-46b0-9b4d-b636b9281021",
+        "analysis:contentIdeas",
+        "scoreGovernance:suppressedModules"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Conversion readiness is correctly treated as not fully assessable. The narrative does not infer absent calls to action, forms, or pathways and appropriately recommends evidence collection before pathway-specific changes.",
+      "evidenceRefs": [
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "capability:conversion.path",
+        "capability:offer.clarity",
+        "analysis:conversionPaths",
+        "score:readinessStatus"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The report distinguishes assessed content depth from unassessed funnel coverage and develops authorized awareness, consideration, and decision opportunities directly from the deterministic content plan.",
+      "evidenceRefs": [
+        "score:contentDepth",
+        "score:contentFunnelDimension",
+        "scoreGovernance:moduleEligibility",
+        "analysis:contentIdeas",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Experience, expertise, authority, and trust are correctly presented as unassessed because trust-proof evidence was unavailable. Planned proof-oriented content is framed as an opportunity rather than as an observation about current presence.",
+      "evidenceRefs": [
+        "band:trust",
+        "capability:trust.proof",
+        "scoreGovernance:suppressedModules",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The narrative accurately covers missing meta descriptions, inconsistent heading structure, missing image alternative text, and slow mobile LCP, with remedies and verification aligned to the findings.",
+      "evidenceRefs": [
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1",
+        "finding:4fa38028-44f0-4bae-846d-15522b90e0f0",
+        "finding:a8680687-02b5-46b0-9b4d-b636b9281021",
+        "capability:performance.lab",
+        "capability:performance.field"
+      ],
+      "defectIds": []
+    },
+    "competitiveUsefulness": {
+      "score": 3,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The report correctly avoids unsupported relative claims because no comparison results are available. It provides a restrained future differentiation anchor, though no substantive competitive insight is possible from the supplied analysis.",
+      "evidenceRefs": [
+        "business:competitors",
+        "business:services",
+        "analysis:competitors"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The report identifies evidence-backed strengths in assessed content depth and the defined service portfolio without overstating broader readiness or trust, conversion, and AI-search performance.",
+      "evidenceRefs": [
+        "score:contentDepth",
+        "score:contentFunnelDimension",
+        "business:services",
+        "capability:content.body"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 3,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Core messages recur across executive, diagnostic, action, and decision sections, but repetition generally serves section-specific synthesis and does not materially obscure the recommendations.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "score:readinessStatus",
+        "finding:62a5b1fa-20f2-498e-8b7b-e1f5d38311ee",
+        "finding:b33d6f64-410e-462c-a257-88efdd94c7e1"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 97,
+  "decision": "PASS",
+  "defects": [],
+  "revisionDirective": {
+    "required": false,
+    "mode": "NONE",
+    "fieldsToRewrite": [],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "rootCause",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "defectIds": []
+  }
+}
