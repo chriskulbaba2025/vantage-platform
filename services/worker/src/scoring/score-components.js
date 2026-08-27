@@ -325,21 +325,136 @@ function scoreContentV4({ site, input }) {
 }
 
 /**
- * v4.1 conversion: base inferred score; when the conversion.path capability
- * is browser-validated (WP-E), verified pages add a bounded bonus and
- * obstructed CTAs subtract — validated evidence, never inferred strings.
- * Validation NOT_ASSESSED keeps the inferred baseline (no penalty).
+ * v4.1 conversion: use site interactive evidence when it was actually
+ * collected; otherwise use genuine browser-observed CTA/form readiness.
+ * Browser-unassessed pages never contribute a negative score.
+ *
+ * Validated conversion.path evidence retains the existing bounded
+ * bonus/obstruction adjustment.
  */
-function scoreConversionV4({ site, capabilities }) {
-  const base = scoreConversion(site);
-  const pathCap = capabilities?.["conversion.path"];
-  const summary = pathCap?.validationSummary;
-  if (pathCap?.validated === true && summary) {
-    const verified = (summary.pass ?? 0) + (summary.partial ?? 0);
-    const bonus = Math.min(10, verified * 2);
-    const obstructionPenalty = (summary.obstructionCount ?? 0) > 0 ? 10 : 0;
-    return clamp(base + bonus - obstructionPenalty);
+function scoreConversionV4({
+  site,
+  capabilities,
+}) {
+  const ctaCap =
+    capabilities?.["conversion.cta"];
+
+  const formCap =
+    capabilities?.["conversion.form"];
+
+  const ctaBrowser =
+    ctaCap?.browserSummary;
+
+  const formBrowser =
+    formCap?.browserSummary;
+
+  const ctaUsesSite =
+    site._interactiveEvidenceAvailable !== false ||
+    (
+      Array.isArray(site.ctas) &&
+      site.ctas.length > 0
+    );
+
+  const formUsesSite =
+    site._interactiveEvidenceAvailable !== false ||
+    (
+      Array.isArray(site.forms) &&
+      site.forms.length > 0
+    );
+
+  const ctaScore = ctaUsesSite
+    ? Math.min(
+        25,
+        site.ctas.length * 5,
+      )
+    : ctaBrowser?.completed > 0
+      ? 25 *
+        (
+          ctaBrowser.readyPages /
+          ctaBrowser.completed
+        )
+      : 0;
+
+  const formScore = formUsesSite
+    ? (
+        site.forms.length
+          ? 20
+          : 0
+      )
+    : (
+        formBrowser?.completed > 0 &&
+        formBrowser.readyPages > 0
+          ? 20
+          : 0
+      );
+
+  const pricing =
+    site.trust.pricing
+      ? 15
+      : 0;
+
+  const reassurance =
+    (site.trust.policies ? 10 : 0) +
+    (site.trust.testimonials ? 10 : 0);
+
+  const contact =
+    site.trust.contact
+      ? 10
+      : 0;
+
+  // CTA-count hierarchy is score-bearing only when the site extractor
+  // actually collected CTA cardinality. Browser validation confirms
+  // readiness on selected pages but does not measure total CTA hierarchy.
+  const hierarchy = ctaUsesSite
+    ? (
+        site.ctas.length > 0 &&
+        site.ctas.length <= 8
+          ? 10
+          : 3
+      )
+    : 0;
+
+  const base = clamp(
+    ctaScore +
+    formScore +
+    pricing +
+    reassurance +
+    contact +
+    hierarchy,
+  );
+
+  const pathCap =
+    capabilities?.["conversion.path"];
+
+  const summary =
+    pathCap?.validationSummary;
+
+  if (
+    pathCap?.validated === true &&
+    summary
+  ) {
+    const verified =
+      (summary.pass ?? 0) +
+      (summary.partial ?? 0);
+
+    const bonus =
+      Math.min(
+        10,
+        verified * 2,
+      );
+
+    const obstructionPenalty =
+      (summary.obstructionCount ?? 0) > 0
+        ? 10
+        : 0;
+
+    return clamp(
+      base +
+      bonus -
+      obstructionPenalty,
+    );
   }
+
   return base;
 }
 
@@ -366,13 +481,65 @@ function scoreOfferClarityV4({ site, input }) {
 }
 
 /** v4 risk reduction: same formula; eligibility gates unknown. */
-function scoreRiskReductionV4({ site }) {
-  const policies = site.trust.policies ? 25 : 0;
-  const contact = site.trust.contact ? 20 : 0;
-  const security = 25 * (Object.values(site.securityHeaders).filter(Boolean).length / 4);
-  const https = site.targetUrl && site.targetUrl.startsWith("https:") ? 15 : 0;
-  const faq = site.trust.faq ? 15 : 0;
-  return clamp(policies + contact + security + https + faq);
+/** v4 risk reduction: same formula; eligibility gates unknown. */
+function scoreRiskReductionV4({
+  site,
+  capabilities,
+}) {
+  const policies =
+    site.trust.policies
+      ? 25
+      : 0;
+
+  const contact =
+    site.trust.contact
+      ? 20
+      : 0;
+
+  const headerCapability =
+    capabilities?.[
+      "technical.headers"
+    ];
+
+  const securityHeaders =
+    headerCapability
+      ?.observedHeaders &&
+    typeof headerCapability
+      .observedHeaders ===
+      "object"
+      ? headerCapability
+          .observedHeaders
+      : site.securityHeaders;
+
+  const security =
+    25 *
+    (
+      Object.values(
+        securityHeaders || {},
+      ).filter(Boolean).length /
+      4
+    );
+
+  const https =
+    site.targetUrl &&
+    site.targetUrl.startsWith(
+      "https:",
+    )
+      ? 15
+      : 0;
+
+  const faq =
+    site.trust.faq
+      ? 15
+      : 0;
+
+  return clamp(
+    policies +
+    contact +
+    security +
+    https +
+    faq,
+  );
 }
 
 /** v4 funnel coverage: business-context services union. */
@@ -541,10 +708,45 @@ function scoreTechnicalV4({ site, capabilities }) {
   }
 
   // Headers — technical.headers capability.
-  if (capStatus("technical.headers") === "AVAILABLE") {
-    const headersPresent = Object.values(site.securityHeaders || {}).filter(Boolean).length;
-    const score = Math.round(10 * (headersPresent / 4));
-    subRules.push({ key: "headers", weight: 10, score });
+  if (
+    capStatus(
+      "technical.headers",
+    ) === "AVAILABLE"
+  ) {
+    const headerCapability =
+      capabilities?.[
+        "technical.headers"
+      ];
+
+    const securityHeaders =
+      headerCapability
+        ?.observedHeaders &&
+      typeof headerCapability
+        .observedHeaders ===
+        "object"
+        ? headerCapability
+            .observedHeaders
+        : site.securityHeaders;
+
+    const headersPresent =
+      Object.values(
+        securityHeaders || {},
+      ).filter(Boolean).length;
+
+    const score =
+      Math.round(
+        10 *
+          (
+            headersPresent /
+            4
+          ),
+      );
+
+    subRules.push({
+      key: "headers",
+      weight: 10,
+      score,
+    });
   }
 
   const totalWeight = subRules.reduce((s, r) => s + r.weight, 0);
@@ -1216,32 +1418,88 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  const missingSecurity = Object.entries(site.securityHeaders)
-    .filter(([, present]) => !present)
-    .map(([name]) => name);
+  const headerCapability =
+    capabilities[
+      "technical.headers"
+    ];
+
+  const securityHeaderEvidence =
+    headerCapability
+      ?.observedHeaders &&
+    typeof headerCapability
+      .observedHeaders === "object"
+      ? headerCapability
+          .observedHeaders
+      : site.securityHeaders;
+
+  const missingSecurity =
+    Object.entries(
+      securityHeaderEvidence || {},
+    )
+      .filter(
+        ([, present]) =>
+          present === false,
+      )
+      .map(([name]) => name);
+
   if (missingSecurity.length) {
+    const browserHeaderEvidence =
+      headerCapability
+        ?.observedHeaders &&
+      typeof headerCapability
+        .observedHeaders ===
+        "object";
+
     add({
       ruleId: "VAN-TECH-003",
       requires: "technical.headers",
-      dimension: "technical_performance",
-      module: "technical_hygiene",
-      title: "Security headers are incomplete",
+      dimension:
+        "technical_performance",
+      module:
+        "technical_hygiene",
+      title:
+        "Security headers are incomplete",
       severity: "Medium",
       key: "security",
-      confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
+      confidence:
+        CONFIDENCE_LEVELS.DETERMINISTIC,
       evidence: [
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "security_headers", observedValue: missingSecurity.join(", ") },
+        {
+          provider:
+            browserHeaderEvidence
+              ? (
+                  headerCapability
+                    .validatedBy ||
+                  "playwright-conversion-path"
+                )
+              : "dataforseo_onpage",
+
+          sourceStatus:
+            browserHeaderEvidence
+              ? headerCapability.status
+              : SOURCE_STATUS.AVAILABLE,
+
+          field:
+            "security_headers",
+
+          observedValue:
+            missingSecurity.join(", "),
+        },
       ],
-      evidenceText: missingSecurity.join(", "),
-      businessImpact: "Missing browser protections may weaken technical trust.",
-      recommendation: "Configure the missing response headers at the hosting layer",
+      evidenceText:
+        missingSecurity.join(", "),
+      businessImpact:
+        "Missing browser protections may weaken technical trust.",
+      recommendation:
+        "Configure the missing response headers at the hosting layer",
       effort: "L",
       conversionImpact: 35,
       gapSeverity: 45,
       businessRelevance: 50,
       competitiveSignal: 25,
       implementationPracticality: 75,
-      verificationMethod: "Re-crawl and confirm security headers are present in response.",
+      verificationMethod:
+        "Re-crawl and confirm security headers are present in response.",
     });
   }
 

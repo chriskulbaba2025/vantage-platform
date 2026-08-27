@@ -266,11 +266,124 @@ async function validatePage(browser, keyPage, opts) {
   const runPass = async (viewport, label) => {
     const ctx = await browser.newContext({ viewport });
     const page = await ctx.newPage();
+    let documentResponse = null;
+
     try {
-      await page.goto(url, { waitUntil: "networkidle", timeout: timeouts.gotoTimeoutMs });
+      documentResponse = await page.goto(
+        url,
+        {
+          waitUntil: "networkidle",
+          timeout: timeouts.gotoTimeoutMs,
+        },
+      );
     } catch (err) {
       await ctx.close();
-      return { loadable: false, limitation: `Page did not load: ${err.message}` };
+
+      return {
+        loadable: false,
+        limitation:
+          `Page did not load: ${err.message}`,
+      };
+    }
+
+    // Capture only the four governed security headers from the real
+    // document response. No cookies or unrelated response metadata are
+    // persisted.
+    const responseHeaders = {
+      collected: false,
+      xFrameOptions: null,
+      xContentTypeOptions: null,
+      referrerPolicy: null,
+      contentSecurityPolicy: null,
+      values: {
+        xFrameOptions: null,
+        xContentTypeOptions: null,
+        referrerPolicy: null,
+        contentSecurityPolicy: null,
+      },
+    };
+
+    try {
+      let rawHeaders = null;
+
+      if (
+        typeof documentResponse?.allHeaders ===
+        "function"
+      ) {
+        rawHeaders =
+          await documentResponse.allHeaders();
+      } else if (
+        typeof documentResponse?.headers ===
+        "function"
+      ) {
+        rawHeaders =
+          await documentResponse.headers();
+      }
+
+      if (
+        rawHeaders &&
+        typeof rawHeaders === "object"
+      ) {
+        const normalized =
+          Object.fromEntries(
+            Object.entries(rawHeaders).map(
+              ([name, value]) => [
+                String(name).toLowerCase(),
+                value,
+              ],
+            ),
+          );
+
+        const hasHeader = (name) =>
+          Object.prototype.hasOwnProperty.call(
+            normalized,
+            name,
+          );
+
+        const valueOf = (name) =>
+          hasHeader(name)
+            ? String(normalized[name])
+            : null;
+
+        responseHeaders.collected = true;
+
+        responseHeaders.xFrameOptions =
+          hasHeader("x-frame-options");
+
+        responseHeaders.xContentTypeOptions =
+          hasHeader(
+            "x-content-type-options",
+          );
+
+        responseHeaders.referrerPolicy =
+          hasHeader("referrer-policy");
+
+        responseHeaders.contentSecurityPolicy =
+          hasHeader(
+            "content-security-policy",
+          );
+
+        responseHeaders.values = {
+          xFrameOptions:
+            valueOf("x-frame-options"),
+
+          xContentTypeOptions:
+            valueOf(
+              "x-content-type-options",
+            ),
+
+          referrerPolicy:
+            valueOf("referrer-policy"),
+
+          contentSecurityPolicy:
+            valueOf(
+              "content-security-policy",
+            ),
+        };
+      }
+    } catch {
+      // Header collection stays unknown.
+      // Never convert collection failure into confirmed absence.
     }
     try {
       const cta = await checkCta(page, url);
@@ -288,6 +401,7 @@ async function validatePage(browser, keyPage, opts) {
         menu,
         form,
         destination,
+        responseHeaders,
       };
       await ctx.close();
       return { loadable: true, checks, passCount, failCount };

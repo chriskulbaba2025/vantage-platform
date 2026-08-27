@@ -1445,6 +1445,7 @@ export function scoreAudit(
     conversionPaths:
       buildConversionPaths(
         decisionSite,
+        capabilities,
       ),
 
     readinessMap:

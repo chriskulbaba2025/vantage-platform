@@ -328,8 +328,16 @@ export function createProductionRuntime({
       };
     }
 
-    if (input.crawl && typeof input.crawl === "object") {
-      auditRequest.crawl = { ...(auditRequest.crawl || {}), ...input.crawl };
+    auditRequest.crawl =
+      input.crawl && typeof input.crawl === "object" ? { ...input.crawl } : {};
+
+    // Normal production audits browser-validate conversion paths unless the
+    // intake explicitly disables the browser or the environment kill-switch
+    // forces it off.
+    if (process.env.PRYSM_DISABLE_LIVE_BROWSER) {
+      auditRequest.crawl.pathValidationLiveBrowser = false;
+    } else if (auditRequest.crawl.pathValidationLiveBrowser === undefined) {
+      auditRequest.crawl.pathValidationLiveBrowser = true;
     }
     if (input.performance && typeof input.performance === "object") {
       auditRequest.performance = input.performance;

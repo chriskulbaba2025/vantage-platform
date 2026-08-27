@@ -2,53 +2,244 @@ import { domainOf } from "../utils.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 import { band, scoreTrust } from "./score-components.js";
 
-function buildConversionPaths(site) {
+function buildConversionPaths(
+  site,
+  capabilities = {},
+) {
   const unique = [];
   const seen = new Set();
+
   for (const cta of site.ctas) {
-    const key = `${cta.text}|${cta.url}`;
-    if (!seen.has(key)) { seen.add(key); unique.push(cta); }
-  }
-  const paths = unique.slice(0, 2).map((cta, index) => {
-    let host = "on-site";
-    try { if (domainOf(cta.url) !== site.domain) host = new URL(cta.url).hostname; } catch { /* ignore */ }
-    const blockers = [];
-    if (!site.trust.testimonials && !site.trust.credentials) blockers.push("no trust proof");
-    if (!site.trust.pricing) blockers.push("no pricing context");
-    if (!site.trust.policies) blockers.push("no policy or next-step reassurance");
-    // Strip extra CTA properties so the output matches the frozen schema.
-    const cleanCta = cta ? { text: cta.text || "", url: cta.url || "" } : null;
-    return {
-      name: `${index === 0 ? "Primary" : "Secondary"} Path: ${cta.text || "Conversion action"}`,
-      cta: cleanCta,
-      host,
-      steps: ["Land on the relevant page", `Locate "${cta.text || "the call to action"}"`, `Continue through ${host}`, "Complete the requested action"],
-      blockers,
-      status: blockers.length === 0 ? "Clear" : blockers.length <= 1 ? "Weak" : "Missing support",
-    };
-  });
-  if (!paths.length) {
-    // PRYSM production defect 1 — an absent CTA is only a "Missing" finding
-    // when interactive conversion evidence was actually assessed.  When
-    // interactive evidence was never collected (browser validation
-    // unavailable/disabled), the honest state is Not Assessed — never a
-    // fabricated negative conversion claim.
-    if (site._interactiveEvidenceAvailable !== true) {
-      paths.push({
-        name: "Primary conversion path",
-        cta: null,
-        host: "none",
-        // The limitation message rides in the existing steps field — the
-        // frozen report-view-model path item has no separate limitation
-        // property (additionalProperties: false).
-        steps: ["Interactive conversion-path evidence was not collected for this audit."],
-        blockers: [],
-        status: "Not Assessed",
-      });
-    } else {
-      paths.push({ name: "Primary conversion path", cta: null, host: "none", steps: ["Land on the website", "Search for a clear next step"], blockers: ["no clear conversion action detected"], status: "Missing" });
+    const key =
+      `${cta.text}|${cta.url}`;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(cta);
     }
   }
+
+  const paths =
+    unique
+      .slice(0, 2)
+      .map((cta, index) => {
+        let host = "on-site";
+
+        try {
+          if (
+            domainOf(cta.url) !==
+            site.domain
+          ) {
+            host =
+              new URL(
+                cta.url,
+              ).hostname;
+          }
+        } catch {
+          /* ignore */
+        }
+
+        const blockers = [];
+
+        if (
+          !site.trust.testimonials &&
+          !site.trust.credentials
+        ) {
+          blockers.push(
+            "no trust proof",
+          );
+        }
+
+        if (!site.trust.pricing) {
+          blockers.push(
+            "no pricing context",
+          );
+        }
+
+        if (!site.trust.policies) {
+          blockers.push(
+            "no policy or next-step reassurance",
+          );
+        }
+
+        const cleanCta = cta
+          ? {
+              text:
+                cta.text || "",
+              url:
+                cta.url || "",
+            }
+          : null;
+
+        return {
+          name:
+            `${index === 0 ? "Primary" : "Secondary"} Path: ${cta.text || "Conversion action"}`,
+          cta: cleanCta,
+          host,
+          steps: [
+            "Land on the relevant page",
+            `Locate "${cta.text || "the call to action"}"`,
+            `Continue through ${host}`,
+            "Complete the requested action",
+          ],
+          blockers,
+          status:
+            blockers.length === 0
+              ? "Clear"
+              : blockers.length <= 1
+                ? "Weak"
+                : "Missing support",
+        };
+      });
+
+  if (!paths.length) {
+    const browserCta =
+      capabilities[
+        "conversion.cta"
+      ]?.browserSummary;
+
+    const pathCap =
+      capabilities[
+        "conversion.path"
+      ];
+
+    const browserAssessed =
+      pathCap?.validated === true &&
+      (browserCta?.completed ?? 0) > 0;
+
+    if (browserAssessed) {
+      const requested =
+        browserCta.requested;
+
+      const completed =
+        browserCta.completed;
+
+      const present =
+        browserCta.presentPages;
+
+      const ready =
+        browserCta.readyPages;
+
+      const fullCoverage =
+        requested > 0 &&
+        completed === requested;
+
+      const blockers = [];
+
+      if (!fullCoverage) {
+        blockers.push(
+          "browser validation coverage is partial",
+        );
+      }
+
+      if (
+        fullCoverage &&
+        present === 0
+      ) {
+        blockers.push(
+          "no conversion action found on browser-assessed pages",
+        );
+      } else if (
+        ready < completed
+      ) {
+        blockers.push(
+          "conversion action is not ready on every browser-assessed page",
+        );
+      }
+
+      if (
+        !site.trust.testimonials &&
+        !site.trust.credentials
+      ) {
+        blockers.push(
+          "no trust proof",
+        );
+      }
+
+      if (!site.trust.pricing) {
+        blockers.push(
+          "no pricing context",
+        );
+      }
+
+      if (!site.trust.policies) {
+        blockers.push(
+          "no policy or next-step reassurance",
+        );
+      }
+
+      let status;
+
+      if (
+        fullCoverage &&
+        present === 0
+      ) {
+        status = "Missing";
+      } else if (
+        !fullCoverage ||
+        ready < completed
+      ) {
+        status = "Weak";
+      } else {
+        status =
+          blockers.length === 0
+            ? "Clear"
+            : blockers.length <= 1
+              ? "Weak"
+              : "Missing support";
+      }
+
+      paths.push({
+        name:
+          "Primary conversion path",
+        cta: null,
+        host: "none",
+        steps: [
+          `Browser validation assessed conversion actions on ${completed} of ${requested} selected page(s).`,
+          present > 0
+            ? `A conversion action was observed on ${present} assessed page(s).`
+            : "No conversion action was observed on the assessed pages.",
+          ready > 0
+            ? `A visible, interactable, unobstructed action was confirmed on ${ready} assessed page(s).`
+            : "No fully ready conversion action was confirmed on the assessed pages.",
+        ],
+        blockers,
+        status,
+      });
+    } else if (
+      site._interactiveEvidenceAvailable !== true
+    ) {
+      paths.push({
+        name:
+          "Primary conversion path",
+        cta: null,
+        host: "none",
+        steps: [
+          "Interactive conversion-path evidence was not collected for this audit.",
+        ],
+        blockers: [],
+        status:
+          "Not Assessed",
+      });
+    } else {
+      paths.push({
+        name:
+          "Primary conversion path",
+        cta: null,
+        host: "none",
+        steps: [
+          "Land on the website",
+          "Search for a clear next step",
+        ],
+        blockers: [
+          "no clear conversion action detected",
+        ],
+        status:
+          "Missing",
+      });
+    }
+  }
+
   return paths;
 }
 
@@ -125,60 +316,126 @@ function topicRows(site, input = {}, capabilities = {}) {
   const pretty = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
 
   // CRIT defect 3a — per-topic trust/CTA claims require the underlying
-  // evidence.  When trust-proof evidence is not available (content was not
-  // extracted), topic rows must NOT assert blockers or trust assets from
-  // unknown booleans.  v1 row shape preserved (string fields only).
-  const trustCap = capabilities["trust.proof"];
-  const trustEvidenceAvailable =
-    trustCap?.status === "AVAILABLE" || trustCap?.status === "PARTIAL";
-  const bookingCta = (site.ctas || []).some((c) =>
-    /book|schedule|reserve|appointment/i.test(String(c?.text || "")),
-  );
+  // evidence. When trust-proof evidence is not available, topic rows must
+  // not assert blockers or trust assets from unknown booleans.
+  const trustCap =
+    capabilities["trust.proof"];
 
-  return services.slice(0, 8).map((service, index) => {
-    const page = servicePages.get(service);
-    const stage = page
-      ? (pagePurposeStage(page) || siteFallbackStage(site))
-      : siteFallbackStage(site);
-    // NOTE (WP-D-06): the frozen report-view-model schema forbids
-    // additional properties on readinessMap rows and constrains stage to
-    // TOFU/MOFU/BOFU — stage semantics change, the row SHAPE does not.
-    // True "Not Assessed" rows land in report design v2 (WP-G).
-    const blocker = !trustEvidenceAvailable
-      ? "Not Assessed"
-      : stage === "BOFU" && !site.trust.pricing
-        ? "Offer clarity"
-        : !site.trust.credentials
-          ? "Doubt"
-          : "Unclear next step";
-    const trustAsset = !trustEvidenceAvailable
-      ? "Not Assessed"
-      : !site.trust.credentials
-        ? "Credential"
-        : !site.trust.testimonials
-          ? "Testimonial"
-          : "Process proof";
-    const eeat = !trustEvidenceAvailable
-      ? "Not Assessed"
-      : !site.trust.credentials
-        ? "Expertise proof"
-        : "Experience proof";
-    // CRIT defect 3b — never invent a CTA type claim without evidence.
-    const cta = site.forms.length
-      ? "Form"
-      : bookingCta
-        ? "Book"
-        : "Not Assessed";
-    // CRIT rescore #5 — "Missing" asserts absence; when interactive
-    // extraction never ran, the honest value is "Not Assessed".
-    const interactiveRan = site._interactiveEvidenceAvailable !== false;
-    const path = site.ctas.length
-      ? stage === "BOFU"
-        ? "Clear"
-        : "Weak"
-      : interactiveRan
-        ? "Missing"
-        : "Not Assessed";
+  const trustEvidenceAvailable =
+    trustCap?.status === "AVAILABLE" ||
+    trustCap?.status === "PARTIAL";
+
+  const bookingCta =
+    (site.ctas || []).some((c) =>
+      /book|schedule|reserve|appointment/i.test(
+        String(c?.text || ""),
+      ),
+    );
+
+  const browserCta =
+    capabilities[
+      "conversion.cta"
+    ]?.browserSummary;
+
+  const browserForm =
+    capabilities[
+      "conversion.form"
+    ]?.browserSummary;
+
+  const browserInteractiveAssessed =
+    site._interactiveEvidenceAvailable === false &&
+    (
+      (browserCta?.completed ?? 0) > 0 ||
+      (browserForm?.completed ?? 0) > 0
+    );
+
+  const browserCtaFullCoverage =
+    (browserCta?.requested ?? 0) > 0 &&
+    browserCta.completed ===
+      browserCta.requested;
+
+  return services.slice(0, 8).map(
+    (service, index) => {
+      const page =
+        servicePages.get(service);
+
+      const stage = page
+        ? (
+            pagePurposeStage(page) ||
+            siteFallbackStage(site)
+          )
+        : siteFallbackStage(site);
+
+      const blocker =
+        !trustEvidenceAvailable
+          ? "Not Assessed"
+          : stage === "BOFU" &&
+              !site.trust.pricing
+            ? "Offer clarity"
+            : !site.trust.credentials
+              ? "Doubt"
+              : "Unclear next step";
+
+      const trustAsset =
+        !trustEvidenceAvailable
+          ? "Not Assessed"
+          : !site.trust.credentials
+            ? "Credential"
+            : !site.trust.testimonials
+              ? "Testimonial"
+              : "Process proof";
+
+      const eeat =
+        !trustEvidenceAvailable
+          ? "Not Assessed"
+          : !site.trust.credentials
+            ? "Expertise proof"
+            : "Experience proof";
+
+      // Never invent CTA text/type. Browser evidence can establish only
+      // that a conversion action or conversion-relevant form was observed.
+      const cta =
+        site.forms.length
+          ? "Form"
+          : bookingCta
+            ? "Book"
+            : (
+                browserInteractiveAssessed &&
+                (browserForm?.readyPages ?? 0) > 0
+              )
+              ? "Form"
+              : (
+                  browserInteractiveAssessed &&
+                  (browserCta?.presentPages ?? 0) > 0
+                )
+                ? "Action"
+                : browserInteractiveAssessed
+                  ? "None observed"
+                  : "Not Assessed";
+
+      const browserPath =
+        !browserCtaFullCoverage
+          ? "Weak"
+          : (browserCta?.presentPages ?? 0) === 0
+            ? "Missing"
+            : browserCta.readyPages ===
+                browserCta.completed
+              ? "Clear"
+              : "Weak";
+
+      const interactiveRan =
+        site._interactiveEvidenceAvailable !== false;
+
+      const path =
+        site.ctas.length
+          ? stage === "BOFU"
+            ? "Clear"
+            : "Weak"
+          : browserInteractiveAssessed
+            ? browserPath
+            : interactiveRan
+              ? "Missing"
+              : "Not Assessed";
     return {
       topic: typeof service === "string" ? pretty(service) : String(service),
       stage,

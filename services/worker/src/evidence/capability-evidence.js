@@ -319,13 +319,10 @@ caps[name] = capability({
 });
   }
 
-  // ── conversion.cta / conversion.form — INTERACTIVE evidence ──────────
-  // CRIT defect 2a: parsed text proves CONTENT, not CTAs/forms. Empty
-  // CTA/form arrays are confirmed absence ONLY when an interactive
-  // extractor ran (legacy crawler / browser pass: marker undefined or
-  // true). When the source explicitly marks interactive extraction as
-  // not-run (DataForSEO pages endpoint + text parsing only), empty arrays
-  // mean "not extracted" — UNAVAILABLE, never false-absent.
+   // ── conversion.cta / conversion.form — INTERACTIVE evidence ──────────
+  // Parsed text does not prove interactive behavior. Prefer genuine
+  // site-level interactive extraction when available; otherwise bridge
+  // bounded browser observations into CTA/form capability evidence.
   const interactiveExtracted =
     site?._interactiveEvidenceAvailable !== false;
 
@@ -337,60 +334,281 @@ caps[name] = capability({
     isArray(site?.forms) &&
     site.forms.length > 0;
 
+  const browserInteractiveSummary = (kind) => {
+    const pages =
+      isArray(pathValidationEvidence?.pages)
+        ? pathValidationEvidence.pages
+        : [];
+
+    const requested =
+      typeof pathValidationEvidence?.summary?.requested === "number"
+        ? pathValidationEvidence.summary.requested
+        : pages.length;
+
+    let completed = 0;
+    let presentPages = 0;
+    let readyPages = 0;
+
+    for (const page of pages) {
+      if (
+        page?.status !== "PASS" &&
+        page?.status !== "PARTIAL" &&
+        page?.status !== "FAILED"
+      ) {
+        continue;
+      }
+
+      const observations = [
+        page?.checks?.desktop?.[kind],
+        page?.checks?.mobile?.[kind],
+      ].filter(
+        (value) =>
+          value &&
+          typeof value === "object",
+      );
+
+      let definitive = false;
+      let present = false;
+      let ready = false;
+
+      for (const observation of observations) {
+        if (kind === "cta") {
+          if (observation.found === false) {
+            definitive = true;
+            continue;
+          }
+
+          if (observation.found !== true) {
+            continue;
+          }
+
+          present = true;
+
+          const observationReady =
+            observation.visible === true &&
+            observation.interactable === true &&
+            observation.obstructed === false;
+
+          const observationFailed =
+            observation.visible === false ||
+            observation.interactable === false ||
+            observation.obstructed === true;
+
+          if (
+            observationReady ||
+            observationFailed
+          ) {
+            definitive = true;
+          }
+
+          if (observationReady) {
+            ready = true;
+          }
+        } else {
+          if (observation.found === false) {
+            definitive = true;
+            continue;
+          }
+
+          if (
+            observation.found !== true ||
+            observation.limitation
+          ) {
+            continue;
+          }
+
+          present = true;
+
+          const observationReady =
+            observation.fieldsEditable === true &&
+            observation.submitEnabled === true;
+
+          const observationFailed =
+            observation.fieldsEditable === false ||
+            observation.submitEnabled === false;
+
+          if (
+            observationReady ||
+            observationFailed
+          ) {
+            definitive = true;
+          }
+
+          if (observationReady) {
+            ready = true;
+          }
+        }
+      }
+
+      if (!definitive) {
+        continue;
+      }
+
+      completed += 1;
+
+      if (present) {
+        presentPages += 1;
+      }
+
+      if (ready) {
+        readyPages += 1;
+      }
+    }
+
+    return {
+      requested: Math.max(
+        requested,
+        completed,
+      ),
+      completed,
+      unassessed: Math.max(
+        0,
+        requested - completed,
+      ),
+      presentPages,
+      readyPages,
+    };
+  };
+
+  const browserCtaSummary =
+    browserInteractiveSummary("cta");
+
+  const browserFormSummary =
+    browserInteractiveSummary("form");
+
   const interactiveCapabilities = [
-    [
-      "conversion.cta",
-      "ctas",
-      hasCtas,
-      "CTA evidence was not extracted from the pages endpoint (parsed text does not prove CTA absence)",
-    ],
-    [
-      "conversion.form",
-      "forms",
-      hasForms,
-      "Form evidence was not extracted from the pages endpoint (parsed text does not prove form absence)",
-    ],
+    {
+      name: "conversion.cta",
+      present: hasCtas,
+      browserSummary: browserCtaSummary,
+      limitation:
+        "CTA evidence was not extracted from the pages endpoint (parsed text does not prove CTA absence)",
+      browserLabel: "CTA",
+    },
+    {
+      name: "conversion.form",
+      present: hasForms,
+      browserSummary: browserFormSummary,
+      limitation:
+        "Form evidence was not extracted from the pages endpoint (parsed text does not prove form absence)",
+      browserLabel: "form",
+    },
   ];
 
-  for (
-    const [
-      name,
-      _field,
-      present,
-      limitation,
-    ] of interactiveCapabilities
-  ) {
-    let status;
+  for (const {
+    name,
+    present,
+    browserSummary,
+    limitation,
+    browserLabel,
+  } of interactiveCapabilities) {
     const limitations = [];
 
-    if (
+    const siteAssessed =
       contentState === "available" &&
-      (present || interactiveExtracted)
+      (present || interactiveExtracted);
+
+    const browserAssessed =
+      !siteAssessed &&
+      browserSummary.completed > 0;
+
+    let status;
+
+    if (siteAssessed) {
+      status =
+        CAPABILITY_STATUS.AVAILABLE;
+    } else if (browserAssessed) {
+      status =
+        browserSummary.completed ===
+        browserSummary.requested
+          ? CAPABILITY_STATUS.AVAILABLE
+          : CAPABILITY_STATUS.PARTIAL;
+
+      if (
+        browserSummary.completed <
+        browserSummary.requested
+      ) {
+        limitations.push(
+          `Browser ${browserLabel} evidence was assessed on ${browserSummary.completed} of ${browserSummary.requested} selected pages; unassessed pages remain unknown`,
+        );
+      }
+    } else if (
+      contentState === "available"
     ) {
-      status = CAPABILITY_STATUS.AVAILABLE;
-    } else if (contentState === "available") {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
+      status =
+        CAPABILITY_STATUS.UNAVAILABLE;
+
       limitations.push(limitation);
+
+      if (
+        isArray(
+          pathValidationEvidence?.limitations,
+        )
+      ) {
+        limitations.push(
+          ...pathValidationEvidence.limitations,
+        );
+      }
     } else {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
+      status =
+        CAPABILITY_STATUS.UNAVAILABLE;
+
       limitations.push(
         "Interactive extraction evidence was not collected",
       );
+
+      if (
+        isArray(
+          pathValidationEvidence?.limitations,
+        )
+      ) {
+        limitations.push(
+          ...pathValidationEvidence.limitations,
+        );
+      }
     }
 
     caps[name] = capability({
       capability: name,
       status,
-      coverage: {
-        requested: null,
-        completed: null,
-        failed: null,
-      },
-      provenance: siteProv,
+      coverage: browserAssessed
+        ? {
+            requested:
+              browserSummary.requested,
+            completed:
+              browserSummary.completed,
+            failed:
+              browserSummary.unassessed,
+          }
+        : {
+            requested: null,
+            completed: null,
+            failed: null,
+          },
+      provenance: browserAssessed
+        ? {
+            source:
+              pathValidationEvidence
+                ?.provider ||
+              "playwright-conversion-path",
+            adapterVersion: null,
+            artifactRef: null,
+          }
+        : siteProv,
       limitations,
       requiredFieldsPresent:
-        contentState === "available" &&
-        (present || interactiveExtracted),
+        siteAssessed ||
+        browserAssessed,
+      extra: browserAssessed
+        ? {
+            validated: true,
+            validatedBy:
+              pathValidationEvidence
+                ?.provider ||
+              "playwright-conversion-path",
+            browserSummary,
+          }
+        : {},
     });
   }
 
@@ -685,29 +903,188 @@ caps[name] = capability({
     });
   }
 
-  // ── technical.headers ────────────────────────────────────────────────
+    // ── technical.headers ────────────────────────────────────────────────
   {
-    const headersAvailable =
+    const siteHeadersAvailable =
       site?._responseHeadersAvailable === true;
 
-    caps["technical.headers"] = capability({
-      capability: "technical.headers",
-      status: headersAvailable
-        ? CAPABILITY_STATUS.AVAILABLE
-        : CAPABILITY_STATUS.UNAVAILABLE,
-      coverage: {
-        requested: null,
-        completed: null,
-        failed: null,
-      },
-      provenance: siteProv,
-      limitations: headersAvailable
-        ? []
-        : [
-            "Response headers were not collected by the provider",
-          ],
-      requiredFieldsPresent: headersAvailable,
-    });
+    const validationPages =
+      isArray(pathValidationEvidence?.pages)
+        ? pathValidationEvidence.pages
+        : [];
+
+    const securityHeaderKeys = [
+      "xFrameOptions",
+      "xContentTypeOptions",
+      "referrerPolicy",
+      "contentSecurityPolicy",
+    ];
+
+    const browserHeaderPages = [];
+
+    for (const page of validationPages) {
+      const observations = [
+        page?.checks?.desktop
+          ?.responseHeaders,
+        page?.checks?.mobile
+          ?.responseHeaders,
+      ].filter(
+        (value) =>
+          value?.collected === true,
+      );
+
+      if (!observations.length) {
+        continue;
+      }
+
+      // Conservative aggregation: a header is present for the page only
+      // when every collected viewport response contained it.
+      const pageHeaders =
+        Object.fromEntries(
+          securityHeaderKeys.map(
+            (key) => [
+              key,
+              observations.every(
+                (observation) =>
+                  observation[key] === true,
+              ),
+            ],
+          ),
+        );
+
+      browserHeaderPages.push(
+        pageHeaders,
+      );
+    }
+
+    const rawRequested =
+      typeof pathValidationEvidence
+        ?.summary?.requested === "number"
+        ? pathValidationEvidence
+            .summary.requested
+        : validationPages.length;
+
+    const completed =
+      browserHeaderPages.length;
+
+    const requested =
+      Math.max(
+        rawRequested,
+        completed,
+      );
+
+    const unassessed =
+      Math.max(
+        0,
+        requested - completed,
+      );
+
+    const browserHeadersAvailable =
+      !siteHeadersAvailable &&
+      completed > 0;
+
+    const observedHeaders =
+      browserHeadersAvailable
+        ? Object.fromEntries(
+            securityHeaderKeys.map(
+              (key) => [
+                key,
+                browserHeaderPages.every(
+                  (pageHeaders) =>
+                    pageHeaders[key] === true,
+                ),
+              ],
+            ),
+          )
+        : null;
+
+    let status;
+    const limitations = [];
+
+    if (siteHeadersAvailable) {
+      status =
+        CAPABILITY_STATUS.AVAILABLE;
+    } else if (
+      browserHeadersAvailable
+    ) {
+      status =
+        completed === requested
+          ? CAPABILITY_STATUS.AVAILABLE
+          : CAPABILITY_STATUS.PARTIAL;
+
+      if (completed < requested) {
+        limitations.push(
+          `Response headers were collected on ${completed} of ${requested} selected browser-validated pages; unassessed pages remain unknown`,
+        );
+      }
+    } else {
+      status =
+        CAPABILITY_STATUS.UNAVAILABLE;
+
+      limitations.push(
+        "Response headers were not collected by the provider or browser validation",
+      );
+    }
+
+    caps["technical.headers"] =
+      capability({
+        capability:
+          "technical.headers",
+
+        status,
+
+        coverage:
+          browserHeadersAvailable
+            ? {
+                requested,
+                completed,
+                failed: unassessed,
+              }
+            : {
+                requested: null,
+                completed: null,
+                failed: null,
+              },
+
+        provenance:
+          browserHeadersAvailable
+            ? {
+                source:
+                  pathValidationEvidence
+                    ?.provider ||
+                  "playwright-conversion-path",
+
+                adapterVersion: null,
+                artifactRef: null,
+              }
+            : siteProv,
+
+        limitations,
+
+        requiredFieldsPresent:
+          siteHeadersAvailable ||
+          browserHeadersAvailable,
+
+        extra:
+          browserHeadersAvailable
+            ? {
+                validated: true,
+
+                validatedBy:
+                  pathValidationEvidence
+                    ?.provider ||
+                  "playwright-conversion-path",
+
+                observedHeaders,
+
+                headerCoverage: {
+                  requested,
+                  completed,
+                  unassessed,
+                },
+              }
+            : {},
+      });
   }
 
   // ── schema.structured_data ───────────────────────────────────────────
