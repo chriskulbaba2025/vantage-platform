@@ -64,6 +64,7 @@ function makeMockPage(overrides = {}) {
       calls.screenshots += 1;
       return Buffer.from("fake-png-bytes");
     },
+    async waitForTimeout() {},
     async evaluate() { return false; },
     async close() {},
   };
@@ -246,6 +247,101 @@ test("CRIT 5a: a weak search-style form never yields a conversion-form PASS", as
   assert.ok(formCheck.limitation && formCheck.limitation.includes("conversion-relevant"), "limitation recorded");
 });
 
+test("browser waits for bounded client-side rendering before evaluating conversion evidence", async () => {
+  let settled = false;
+
+  const form = {
+    async $$(selector) {
+      if (selector.includes("input") || selector.includes("textarea") || selector.includes("select")) {
+        return [
+          makeMockElement({ text: "name" }),
+          makeMockElement({ text: "email" }),
+        ];
+      }
+      return [];
+    },
+    async $(selector) {
+      if (selector.includes("submit")) {
+        return makeMockElement({ text: "Request a Quote" });
+      }
+      return null;
+    },
+  };
+
+  const page = makeMockPage({ form: null });
+  page.waitForTimeout = async () => {
+    settled = true;
+  };
+
+  const originalQueryAll = page.$$;
+  page.$$ = async (selector) => {
+    if (selector.includes("form")) {
+      return settled ? [form] : [];
+    }
+    return originalQueryAll.call(page, selector);
+  };
+
+  const pw = makeMockPlaywright({ page });
+  const result = await validateConversionPaths({
+    targetUrl: "https://x.com",
+    keyPages: [{ url: "https://x.com/contact", role: "conversion" }],
+    playwrightImpl: pw,
+  });
+
+  assert.equal(
+    result.pages[0].checks.desktop.form.found,
+    true,
+    "conversion form rendered after bounded settling should be assessed",
+  );
+});
+
+test("conversion evidence detects a conversion form rendered inside an iframe", async () => {
+  const embeddedForm = {
+    async $$(selector) {
+      if (selector.includes("input") || selector.includes("textarea") || selector.includes("select")) {
+        return [
+          makeMockElement({ text: "name" }),
+          makeMockElement({ text: "email" }),
+        ];
+      }
+      return [];
+    },
+    async $(selector) {
+      if (selector.includes("submit")) {
+        return makeMockElement({ text: "Request a Quote" });
+      }
+      return null;
+    },
+  };
+
+  const embeddedFrame = {
+    async $$(selector) {
+      if (selector.includes("form")) return [embeddedForm];
+      return [];
+    },
+    async $(selector) {
+      if (selector === "form") return embeddedForm;
+      return null;
+    },
+  };
+
+  const page = makeMockPage({ form: null });
+  page.frames = () => [page, embeddedFrame];
+
+  const pw = makeMockPlaywright({ page });
+  const result = await validateConversionPaths({
+    targetUrl: "https://x.com",
+    keyPages: [{ url: "https://x.com/contact", role: "conversion" }],
+    playwrightImpl: pw,
+  });
+
+  assert.equal(
+    result.pages[0].checks.desktop.form.found,
+    true,
+    "conversion form inside an iframe should be assessed",
+  );
+});
+
 // ---------------------------------------------------------------------------
 // WP-E-02 — form-safety invariant (behavioural)
 // ---------------------------------------------------------------------------
@@ -277,4 +373,32 @@ test("WP-E-02: no click, no fill, no submit across any scenario", async () => {
   assert.equal(cta._calls.click, 0, "CTA click() never invoked");
   assert.equal(cta._calls.fill, 0, "fill() never invoked");
   assert.equal(formCalls.submit, 0, "no submit interaction");
+});
+
+test("page-level browser failures are promoted to top-level validation limitations", async () => {
+  const page = makeMockPage({
+    gotoThrows: "page.goto: Timeout 30000ms exceeded",
+  });
+  const pw = makeMockPlaywright({ page });
+
+  const result = await validateConversionPaths({
+    targetUrl: "https://x.com",
+    keyPages: [{ url: "https://x.com/contact", role: "conversion" }],
+    playwrightImpl: pw,
+  });
+
+  assert.equal(result.status, PATH_VALIDATION_STATUS.NOT_ASSESSED);
+
+  assert.ok(
+    result.pages[0].limitations.some(
+      (limitation) => limitation.includes("Timeout 30000ms exceeded"),
+    ),
+  );
+
+  assert.ok(
+    result.limitations.some(
+      (limitation) => limitation.includes("Timeout 30000ms exceeded"),
+    ),
+    "page-level browser failure should be visible in top-level limitations",
+  );
 });

@@ -136,9 +136,30 @@ function inlinkCount(url, links) {
 
 function containsServiceKeyword(text, keywords) {
   if (!keywords || keywords.length === 0) return false;
+
   const haystack = tokens(text);
-  const keywordSet = new Set(keywords.flatMap((k) => tokens(k)));
+  const keywordSet = new Set(
+    keywords.flatMap((k) => tokens(k)),
+  );
+
   return haystack.some((w) => keywordSet.has(w));
+}
+
+function isEditorialUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+
+    return (
+      /\/(?:blog|blogs|article|articles|insights?|news|press|learn|guides?|tips)(?:\/|$)/i.test(
+        pathname,
+      ) ||
+      /\/20\d{2}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])(?:\/|$)/.test(
+        pathname,
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +170,13 @@ function scoreCandidate(page, role, ctx) {
   const url = normalizeUrl(page?.crawledUrl || page?.url || "");
   const title = page?.title || "";
   const h1 = pageH1(page);
+  if (
+    role !== "home" &&
+    role !== "education" &&
+    isEditorialUrl(url)
+  ) {
+    return { score: 0, matchedBy: [] };
+  }
 
   let score = 0;
   const matchedBy = [];

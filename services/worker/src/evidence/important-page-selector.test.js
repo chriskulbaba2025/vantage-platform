@@ -153,3 +153,87 @@ test("selection respects maxSelected cap deterministically", () => {
   const urls = result.selected.map((s) => s.url);
   assert.deepEqual(urls, [...new Set(urls)]);
 });
+test("conversion-first selection does not let editorial pages consume commercial roles", () => {
+  const pages = [
+    page(`${TARGET}/`, {
+      title: "Digital Marketing Agency",
+      h1: "Grow Your Business",
+    }),
+
+    page(`${TARGET}/contact`, {
+      title: "Contact Us",
+      h1: "Start Your Project",
+      forms: [{ action: "/submit" }],
+      ctas: [{ text: "Request a Quote", url: "/contact" }],
+    }),
+
+    page(`${TARGET}/services/web-design`, {
+      title: "Web Design Services",
+      h1: "Web Design",
+    }),
+
+    page(`${TARGET}/services/digital-marketing`, {
+      title: "Digital Marketing Services",
+      h1: "Digital Marketing",
+    }),
+
+    page(`${TARGET}/case-studies/client-growth`, {
+      title: "Client Success Story",
+      h1: "Client Results",
+    }),
+
+    page(`${TARGET}/2022/03/24/how-digital-marketing-helps-business`, {
+      title: "How Digital Marketing Helps Business",
+      h1: "Digital Marketing Guide",
+    }),
+
+    page(`${TARGET}/blog/web-design-conversion-tips`, {
+      title: "Web Design Conversion Tips",
+      h1: "Improve Website Conversion",
+    }),
+
+    page(`${TARGET}/insights/request-more-from-your-marketing`, {
+      title: "Request More From Your Marketing",
+      h1: "Marketing Insights",
+    }),
+  ];
+
+  const result = selectImportantPages({
+    targetUrl: TARGET,
+    pages,
+    links: [],
+    services: ["Web Design", "Digital Marketing"],
+    topicKeywords: ["marketing", "conversion"],
+    maxSelected: 6,
+  });
+
+  const commercialSelections = result.selected.filter(
+    (item) => item.role !== PAGE_ROLES.EDUCATION,
+  );
+
+  assert.ok(
+    commercialSelections.every(
+      (item) =>
+        !item.url.includes("/blog/") &&
+        !item.url.includes("/insights/") &&
+        !/\/20\d{2}\/\d{2}\/\d{2}\//.test(item.url),
+    ),
+    `editorial page consumed a commercial role: ${JSON.stringify(result.selected)}`,
+  );
+
+  assert.ok(
+    result.selected.some(
+      (item) =>
+        item.role === PAGE_ROLES.CONVERSION &&
+        item.url === `${TARGET}/contact`,
+    ),
+  );
+
+  assert.ok(
+    result.selected.some(
+      (item) =>
+        item.role === PAGE_ROLES.SERVICE &&
+        item.url === `${TARGET}/services/web-design`,
+    ),
+  );
+});

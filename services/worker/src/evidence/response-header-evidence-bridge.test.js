@@ -119,7 +119,9 @@ function mockMainPage(
       return null;
     },
 
-    async close() {},
+async waitForTimeout() {},
+
+async close() {},
   };
 }
 

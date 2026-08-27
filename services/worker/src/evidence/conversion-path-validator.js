@@ -173,33 +173,94 @@ const CONVERSION_SUBMIT_RE =
   /\b(submit|send|book|contact|request|enquir|inquir|sign|subscribe|apply|start|continue|quote|reserve|join|get started)\b/i;
 
 async function checkForm(page) {
-  const result = { found: false, fieldsEditable: null, submitEnabled: null, limitation: null };
+  const result = {
+    found: false,
+    fieldsEditable: null,
+    submitEnabled: null,
+    limitation: null,
+  };
+
   try {
-    const forms = await page.$$("form");
+    const scopes = [page];
+
+    if (typeof page.frames === "function") {
+      for (const frame of page.frames()) {
+        if (!frame || frame === page) continue;
+
+        if (
+          typeof page.mainFrame === "function" &&
+          frame === page.mainFrame()
+        ) {
+          continue;
+        }
+
+        scopes.push(frame);
+      }
+    }
+
+    const forms = [];
+
+    for (const scope of scopes) {
+      try {
+        const scopeForms = await scope.$$("form");
+        forms.push(...scopeForms);
+      } catch {
+        // An inaccessible frame stays unknown.
+        // Continue assessing other document scopes.
+      }
+    }
+
     result.found = forms.length > 0;
+
     let selected = null;
     let selectedFieldsEditable = null;
     let selectedSubmitEnabled = null;
     let selectedLimitation = null;
 
     for (const form of forms) {
-      const fields = await form.$$("input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select");
+      const fields = await form.$$(
+        "input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select",
+      );
+
       let editable = 0;
-      for (const f of fields) {
+
+      for (const field of fields) {
         try {
-          if ((await f.isVisible()) && (await f.isEnabled())) editable += 1;
-        } catch { /* skip */ }
+          if (
+            (await field.isVisible()) &&
+            (await field.isEnabled())
+          ) {
+            editable += 1;
+          }
+        } catch {
+          // Skip fields that cannot be assessed.
+        }
       }
-      const submit = await form.$('input[type="submit"], button[type="submit"], button:not([type="button"])');
+
+      const submit = await form.$(
+        'input[type="submit"], button[type="submit"], button:not([type="button"])',
+      );
+
       let submitText = "";
       let submitEnabled = null;
+
       if (submit) {
         try {
-          submitText = (await submit.textContent()) || "";
-          submitEnabled = (await submit.isVisible()) && (await submit.isEnabled());
-        } catch { submitEnabled = null; }
+          submitText =
+            (await submit.textContent()) || "";
+
+          submitEnabled =
+            (await submit.isVisible()) &&
+            (await submit.isEnabled());
+        } catch {
+          submitEnabled = null;
+        }
       }
-      const conversionRelevant = CONVERSION_SUBMIT_RE.test(submitText) || editable >= 2;
+
+      const conversionRelevant =
+        CONVERSION_SUBMIT_RE.test(submitText) ||
+        editable >= 2;
+
       if (conversionRelevant) {
         selected = form;
         selectedFieldsEditable = editable > 0;
@@ -207,23 +268,28 @@ async function checkForm(page) {
         selectedLimitation = null;
         break;
       }
-      // Remember the first weak form so we can report it honestly.
+
       if (!selected && !selectedLimitation) {
         selected = form;
         selectedFieldsEditable = editable > 0;
         selectedSubmitEnabled = null;
-        selectedLimitation = "No conversion-relevant form identified (submit text/intent too weak to claim conversion readiness)";
+        selectedLimitation =
+          "No conversion-relevant form identified (submit text/intent too weak to claim conversion readiness)";
       }
     }
 
     if (selected) {
-      result.fieldsEditable = selectedFieldsEditable;
-      result.submitEnabled = selectedSubmitEnabled;
-      result.limitation = selectedLimitation;
+      result.fieldsEditable =
+        selectedFieldsEditable;
+      result.submitEnabled =
+        selectedSubmitEnabled;
+      result.limitation =
+        selectedLimitation;
     }
   } catch {
     result.fieldsEditable = null;
   }
+
   return result;
 }
 
@@ -257,7 +323,7 @@ async function validatePage(browser, keyPage, opts) {
   const { url, role } = keyPage;
   const mobile = opts.mobile ?? true;
   const screenshots = opts.screenshots ?? true;
-  const timeouts = { gotoTimeoutMs: opts.gotoTimeoutMs ?? 20000 };
+  const timeouts = { gotoTimeoutMs: opts.gotoTimeoutMs ?? 30000 };
 
   const pageChecks = { desktop: null, mobile: null };
   const limitations = [];
@@ -272,10 +338,14 @@ async function validatePage(browser, keyPage, opts) {
       documentResponse = await page.goto(
         url,
         {
-          waitUntil: "networkidle",
+          waitUntil: "domcontentloaded",
           timeout: timeouts.gotoTimeoutMs,
-        },
+       },
       );
+
+await page.waitForTimeout(
+  opts.settleTimeoutMs ?? 3000,
+);
     } catch (err) {
       await ctx.close();
 
@@ -536,14 +606,31 @@ export async function validateConversionPaths({ targetUrl, keyPages = [], playwr
     };
   }
 
-  const pages = [];
-  try {
-    for (const kp of keyPages.slice(0, pageLimit)) {
-      pages.push(await validatePage(browser, kp, options));
-    }
-  } finally {
-    try { await browser.close(); } catch { /* ignore */ }
+const pages = [];
+
+try {
+  for (const kp of keyPages.slice(0, pageLimit)) {
+    pages.push(
+      await validatePage(browser, kp, options),
+    );
   }
+} finally {
+  try {
+    await browser.close();
+  } catch {
+    /* ignore */
+  }
+}
+
+// Promote page-level browser failures so production diagnostics
+// cannot hide the actual reason a page was NOT_ASSESSED.
+for (const page of pages) {
+  for (const limitation of page.limitations || []) {
+    limitations.push(
+      `${page.url}: ${limitation}`,
+    );
+  }
+}
 
   const summary = {
     requested: Math.min(keyPages.length, pageLimit),
