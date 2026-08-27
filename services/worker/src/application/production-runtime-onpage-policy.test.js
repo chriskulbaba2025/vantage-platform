@@ -17,7 +17,7 @@ test(
   () => {
     assert.match(
       runtimeSource,
-      /"dataforseo-onpage":\s*config\.onpagePollTimeoutMs\s*\|\|\s*3_600_000/,
+      /"dataforseo-onpage":\s*3_600_000/,
     );
 
     assert.match(

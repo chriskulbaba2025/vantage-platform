@@ -17,7 +17,7 @@ test(
 
     assert.match(
       source,
-      /"dataforseo-onpage":\s+config\.onpagePollTimeoutMs\s+\|\|\s+3_600_000/,
+      /"dataforseo-onpage":\s*3_600_000/,
       "dataforseo-onpage must default to a 60-minute whole-source timeout",
     );
 
