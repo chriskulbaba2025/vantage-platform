@@ -201,7 +201,7 @@ export function createProductionRuntime({
       const sourceTimeouts = {
         // On-Page has a 30-minute provider poll budget inside the adapter
         // and a separate 60-minute whole-source orchestration safety ceiling.
-        "dataforseo-onpage": config.onpagePollTimeoutMs || 3_600_000,
+        "dataforseo-onpage": 3_600_000,
         "pagespeed":          config.pagespeedTimeoutMs || 120_000,
         "dataforseo-serp":    config.serpTimeoutMs || 1_800_000,
         "backlinks":          config.backlinksTimeoutMs || 60_000,
