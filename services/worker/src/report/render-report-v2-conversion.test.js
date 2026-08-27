@@ -24,7 +24,10 @@ import {
   DIMENSIONS,
 } from "../scoring/score-components.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
-import { renderReportV2 } from "./render-report-v2.js";
+import {
+  clientFacingPageUrls,
+  renderReportV2,
+} from "./render-report-v2.js";
 import {
   ACTION_CLASS,
   ACTION_GROUP,
@@ -1630,33 +1633,33 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
 });
 
 const RENDER_GOLDEN = {
-  assessed: "b221d32dc418fc13e2d650da55cc5a9ed67fba91ff932bd3d85b43b656adfb5f",
+  assessed: "8b51fde99ff2e974884caeeeaaba21971c0ba2cb63b1f8e0b00383ed0ebd2fac",
   unassessed: "ed8b925ec1af11e8002e53307bcda848cb83646a5a067346d6ae4704122ccdc2",
   "provider-failed": "25e1bad8a1b92323a7ab0e9fd1ea0464f98d7f8d03e79850dbcf17d0cbed4c29",
   "crawl-blocked": "357037928e47f99754ada485b7c251c38f6cadf5d97033b4b179bc7c28c3f9ba",
-  "target-outage": "b33298c941d81e9a057fd6aa6de51e0c36a1d9b539498578fdcacbdb89d3c1cf",
-  "outage-with-limitations": "93920cdc637f25569851fad1061acf9cbcc55c2d44f22b311987c75e0fb3787c",
-  "http-and-noindex": "ef820ab16f1059f72e74e72b8b0dfb0cf4e11d55c3fbc76dd22e7e262139c63a",
-  "robots-retrieved": "9bd05e4d2c3356d6a85f0a52382f2c1ac743f6a4f53feb33597e7df0b006460b",
-  "canonical-missing": "458bfbad7f70ac0b482975b127a2a349341bd24b6b7f4d2d47286bef42b1b7d0",
-  "no-conversion-mechanism": "2ef0276563081fbbdee5d715c70ff9ef54bb89c1d1ad8a65c6db2b0b6b919fc5",
-  "no-contact": "c84571247835190c1079e4b87dc70277f75210bda01c79a369c3fffb21726403",
-  "headers-all-present": "eb659192ffe1b8ec3b928e34e17cc0efa790cba784c6fb77ba3afed42542146a",
-  "ga4-ready": "ad7b00271a2acb98963afee65d356211224f51fde3c4ab2ef170ab75e500b19a",
-  "ga4-issues": "73f1e4dd58d851170ba533d725f9e5ea9e376b6604b5cce78a14cdf45f30444c",
-  "ga4-not-applicable": "aafd8df50279683d62a034bc00915b1629a860e0d84bc13afb6e387e0bfb4e4c",
-  "slow-mobile": "8dd240d82bbc2788f63443d5a5dd468d0f52fda065500176e10dfd3906bcaf97",
-  "no-performance": "7025ee9dae22a1740136bc2fdc6125877e7b0c1e7e3f7f64f9b47b4efbb96c50",
-  "path-validated-blocker": "4a306a7a1f5065cd528e7eb861ca1adbb3c9640291b8ee0c99762983d89a7fd6",
-  "competitor-present": "0820ae732fb7e6bbb2d9ae480d93728de707a4a54369bc7eb40fa83f886e7a12",
-  "proprietary-platform": "52955ea8c9f3046e92301d0c9e56eb61e20e90e5a78af9e71eb7c0d6b61c5fc0",
-  "untraced-broken-links": "828aa1fc67308cb675e6e57850a4ea343f8e70d70653e65e2792bf6c15281800",
-  "schema-confirmed-absent": "ac410075fe0638cc6f90c4cd9bbd9a38e4dbc94e539eb0f7e362788add2ea17b",
-  "headings-absent-h1": "afe873080814aec4381107117fa4e2246dea427f6deaa1f2dae03fb6e68ec738",
-  "headings-multiple-h1": "d1b3cdb957da13b8cb34e8217ccc3469c34a0b5a6fc4825164782e4eab3460b2",
-  "perf-field-and-multipage": "91a044219a522171ef94ed25a500663186a82f2e3010fd9055180f166867e278",
-  "competitor-with-limitations": "5f7811e94fe3c113904edc71a11927988d1a359c81c00c5a7fb7460390f28cd9",
-  "device-profile-failed": "e615cd05c4960f3842623c7e0061e4ce220c66516fbccb3b3c72b6bc22688f56",
+  "target-outage": "98f5c4902aa0c3b0952f9a2d28aad3101ecdbfcf2a26213d7ee3edb9c660b2e7",
+  "outage-with-limitations": "e1d23cd741d8f493ea85668e8c985b94302925c1ad3db7f44fc2c763bc2ab2ab",
+  "http-and-noindex": "a09a71af2db7c2ed1e12567f31a0b55adfeaedfc613ff3759a19809d7ea5ca07",
+  "robots-retrieved": "956db6ee0da1324b285efc7c7455b63055ff0750bcc0af3b5407f3389bdd21b8",
+  "canonical-missing": "ee354a46ef86382056f02e840f16e8ef1fdb07c198101cab95a1d0149f319121",
+  "no-conversion-mechanism": "9f6ba27c8d7cc57dfc880a1fc9e257825915c8f172cc846a4c97fd8346351403",
+  "no-contact": "3e0d7bfceb435d3ebfbbf4ead73a286eff06492ab16ca0840d980b4391e84a0b",
+  "headers-all-present": "af62eca1899f0cf55b382f89672c1c465a060f3d8966f5d500dbd224ee898b7f",
+  "ga4-ready": "6807de3ec4f9567ae0dd08eecb457c7f9568196d4c933f5d7d8bd64db89a0a9e",
+  "ga4-issues": "a64ebbc746b9be4077d06ca933951ada4433ca82a598586d43612230c3fa3f00",
+  "ga4-not-applicable": "bef8c2777cdbe944aa653bca149ee0741d619dc9a4e8c057323d815b548cab03",
+  "slow-mobile": "5c5ebc1bb947a87a584d52f0e280d3b264b03696938d495f6bb9b22573742a18",
+  "no-performance": "fdd6e413593518e26ff2536b7d4bf31764feaaded782d6c22bdc88fd959086fb",
+  "path-validated-blocker": "75933c40a21bfa07e6d1c3c9a6cc57ae248ff750c76b95642857a296c79bb9e7",
+  "competitor-present": "50ab1d4300bb145ad6628d33dba57e35e60561c6a4b4b91f025f2194f98c8a38",
+  "proprietary-platform": "2026e7cf426abb01199420c36447bfa4d4e4f94f5eb4a88741e87798a77a5efd",
+  "untraced-broken-links": "70101e4ced4c446c9d759ccb015aeb679e26d0732dec2723e23179da91ca94ad",
+  "schema-confirmed-absent": "477a6a85b00eb69d8173567b14d0b3860d9062fc9bb3fb90a6eba4e3aaefcfda",
+  "headings-absent-h1": "e32bbeeab8f7cf0ae95664ecb050e0fae9bffa643b906c22b136e54433342053",
+  "headings-multiple-h1": "f885d80b483fe061058829f27783884df32fbc9c5237d6ed0e38427370d070a3",
+  "perf-field-and-multipage": "9b0713c5522369ba4bbc1584c7ae367ebcd6fb99953d52de0a487484ab68c540",
+  "competitor-with-limitations": "2d74d0d88ab65bfd0028c1225c11015f77a394d5498bbabe38c5caf5878bb9d6",
+  "device-profile-failed": "6eb2a021be2eab60fb1aa387491fc107a58d9cfed2efbcfcb6fd475b17095163",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
@@ -2192,6 +2195,8 @@ test("CR-27: competitor no-comparison rendering preserves canonical source statu
       },
     };
 
+
+
     const html = renderReportV2(model);
     const idx = html.indexOf("Competitive context");
 
@@ -2264,4 +2269,30 @@ test("CR-27: competitor no-comparison rendering preserves canonical source statu
       );
     }
   }
+});
+
+    test("CR-45: infrastructure URLs are excluded from client-facing report URLs", () => {
+  const model = {
+    input: {
+      targetUrl: "https://x.com",
+    },
+  };
+
+  const rawUrls = [
+    "https://x.com/",
+    "https://x.com/services",
+    "https://x.com/cdn-cgi/l/email-protection",
+    "https://cdnjs.cloudflare.com/library.js",
+    "https://third-party.example.com/page",
+    "https://x.com/assets/app.js",
+  ];
+
+  const filtered = clientFacingPageUrls(model, rawUrls);
+
+  assert.deepEqual(filtered, [
+    "https://x.com/",
+    "https://x.com/services",
+  ]);
+
+  assert.equal(rawUrls.length, 6);
 });

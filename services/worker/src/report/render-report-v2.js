@@ -83,6 +83,73 @@ function capabilityStatusClass(status) {
   return "cap-neutral";
 }
 
+export function clientFacingPageUrls(model, urls) {
+  if (!Array.isArray(urls)) return [];
+
+  let targetHost = "";
+
+  try {
+    const target =
+      model?.input?.targetUrl ||
+      model?.evidence?.site?.domain ||
+      "";
+
+    targetHost = new URL(
+      String(target).startsWith("http")
+        ? target
+        : `https://${target}`,
+    ).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    targetHost = "";
+  }
+
+  return urls.filter((value) => {
+    try {
+      const parsed = new URL(String(value));
+      const host = parsed.hostname
+        .replace(/^www\./, "")
+        .toLowerCase();
+      const path = parsed.pathname.toLowerCase();
+
+      // Only client-owned site URLs belong in the client-facing report.
+      if (
+        targetHost &&
+        host !== targetHost &&
+        !host.endsWith(`.${targetHost}`)
+      ) {
+        return false;
+      }
+
+      // Infrastructure / proxy / holder routes are evidence, not pages.
+      if (
+        path.startsWith("/cdn-cgi/") ||
+        path.match(
+          /\.(?:css|js|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot)$/i,
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function clientFacingReportModel(model) {
+  return {
+    ...model,
+    findings: (model?.findings || []).map((finding) => ({
+      ...finding,
+      affectedUrls: clientFacingPageUrls(
+        model,
+        finding.affectedUrls,
+      ),
+    })),
+  };
+}
+
 function executiveScorecard(model, pillars) {
   const readiness = model.scores.conversionReadiness;
   const confidence = model.evidenceConfidenceScore;
@@ -1959,8 +2026,10 @@ footer {
 }
 
 export function renderReportV2(model, options = {}) {
-  const generated = model?.generatedAt
-    ? new Date(model.generatedAt)
+  const renderModel = clientFacingReportModel(model);
+
+  const generated = renderModel?.generatedAt
+    ? new Date(renderModel.generatedAt)
     : new Date(0);
 
   const date =
@@ -1969,12 +2038,12 @@ export function renderReportV2(model, options = {}) {
       ? "Unknown date"
       : generated.toISOString().slice(0, 10));
 
-  const pillars = computePillars(model);
-  const checklist = buildFoundationChecklist(model);
-  const plan = buildActionPlan(model, checklist);
+  const pillars = computePillars(renderModel);
+  const checklist = buildFoundationChecklist(renderModel);
+  const plan = buildActionPlan(renderModel, checklist);
 
   return pageShell(
-    model,
+    renderModel,
     date,
     pillars,
     checklist,
