@@ -1278,6 +1278,9 @@ function pageShell(model, date, pillars, checklist, plan) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${e(business)} — Conversion Readiness Report</title>
 <style>
 :root {
@@ -1827,6 +1830,358 @@ footer {
   main > section:not(.card) {
     box-shadow:none;
     page-break-inside:avoid;
+  }
+}
+</style>
+<style data-prysm-theme="brand-v1">
+:root {
+  --prysm-primary:#3D756B;
+  --prysm-dark:#173C36;
+  --prysm-deep:#102D29;
+  --prysm-mint:#EAF5F1;
+  --prysm-mint-2:#F4F9F7;
+  --prysm-lime:#D9ED9A;
+  --prysm-paper:#FCFDFC;
+  --prysm-ink:#17221F;
+  --prysm-muted:#64736F;
+  --prysm-line:#D9E3DF;
+  --prysm-success:#28735F;
+  --prysm-warning:#9A7028;
+  --prysm-risk:#A94A43;
+}
+
+/* Visual theme only.
+   Viewer layout, sticky sidebar positioning,
+   responsive grid, page switching and print logic
+   remain controlled by PRYSM Viewer v2.2.0. */
+
+body {
+  font-family:'DM Sans',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color:var(--prysm-ink);
+  background:var(--prysm-paper);
+  font-size:18.5px;
+  line-height:1.6;
+}
+
+header.brand {
+  background:#fff;
+  border-bottom:1px solid var(--prysm-line);
+  padding:20px 32px;
+}
+
+header.brand h1 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:38px;
+  font-weight:800;
+  line-height:1.10;
+  letter-spacing:-0.035em;
+  color:var(--prysm-deep);
+}
+
+header.brand .sub {
+  margin-top:8px;
+  color:var(--prysm-muted);
+  font-size:12.5px;
+  font-weight:600;
+  line-height:1.5;
+}
+
+.viewer-sidebar {
+  background:var(--prysm-deep);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:16px;
+  box-shadow:0 8px 24px rgba(16,45,41,.08);
+}
+
+.viewer-sidebar-title {
+  color:#B8CEC7;
+  font-family:'DM Sans',sans-serif;
+  font-size:12.5px;
+  font-weight:700;
+  letter-spacing:.14em;
+}
+
+.viewer-nav-link {
+  color:#DCEAE5;
+  font-family:'DM Sans',sans-serif;
+  font-weight:500;
+  border-radius:10px;
+  transition:
+    background-color .2s ease,
+    color .2s ease;
+}
+
+.viewer-nav-link:hover {
+  background:rgba(255,255,255,.07);
+  color:#fff;
+}
+
+.viewer-nav-link[aria-current='page'] {
+  background:var(--prysm-mint);
+  color:var(--prysm-deep);
+  box-shadow:none;
+}
+
+.viewer-nav-num {
+  background:rgba(255,255,255,.08);
+  color:#DCEAE5;
+  border-radius:6px;
+}
+
+.viewer-nav-link[aria-current='page'] .viewer-nav-num {
+  background:#fff;
+  color:var(--prysm-primary);
+}
+
+.viewer-toolbar {
+  padding-top:12px;
+  padding-bottom:24px;
+}
+
+.viewer-toolbar h2 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:40px;
+  font-weight:700;
+  line-height:1.12;
+  letter-spacing:-0.035em;
+  color:var(--prysm-deep);
+}
+
+.print-page-btn {
+  font-family:'DM Sans',sans-serif;
+  border:1px solid var(--prysm-primary);
+  border-radius:999px;
+  padding:15px 20px;
+  background:var(--prysm-primary);
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  box-shadow:none;
+  transition:
+    transform .25s ease,
+    background-color .25s ease;
+}
+
+.print-page-btn:hover {
+  filter:none;
+  background:var(--prysm-dark);
+  transform:translateY(-1px);
+}
+
+.print-page-btn:focus-visible,
+.viewer-nav-link:focus-visible {
+  outline:3px solid var(--prysm-lime);
+  outline-offset:3px;
+}
+
+.card,
+main > section:not(.card) {
+  background:#fff;
+  border:1px solid var(--prysm-line);
+  border-radius:16px;
+  padding:32px;
+  box-shadow:0 6px 20px rgba(16,45,41,.045);
+}
+
+section > h2,
+.card h2 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:40px;
+  font-weight:700;
+  line-height:1.12;
+  letter-spacing:-0.035em;
+  color:var(--prysm-deep);
+  border-bottom:1px solid var(--prysm-line);
+  padding-bottom:20px;
+  margin-bottom:24px;
+}
+
+section > h3,
+.card h3 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:32px;
+  font-weight:800;
+  line-height:1.20;
+  letter-spacing:-0.025em;
+  color:var(--prysm-deep);
+  margin-top:40px;
+}
+
+p,
+li {
+  font-size:18.5px;
+  line-height:1.6;
+}
+
+.small,
+.muted {
+  color:var(--prysm-muted);
+}
+
+.small {
+  font-size:15px;
+  line-height:1.55;
+}
+
+a {
+  color:var(--prysm-primary);
+}
+
+.pillar {
+  background:var(--prysm-mint-2);
+  border:1px solid var(--prysm-line);
+  border-radius:14px;
+  box-shadow:none;
+  padding:24px;
+}
+
+.pillar h3 {
+  font-family:'Manrope',sans-serif;
+  color:var(--prysm-deep);
+}
+
+.pillar-score,
+.readiness,
+.confidence,
+.coverage {
+  font-family:'Manrope',system-ui,sans-serif;
+  color:var(--prysm-primary);
+  font-weight:800;
+}
+
+.chip {
+  font-family:'DM Sans',sans-serif;
+  font-size:12.5px;
+  font-weight:700;
+  line-height:1.35;
+}
+
+.band-strong,
+.cap-ok {
+  background:#E5F3ED;
+  color:var(--prysm-success);
+}
+
+.band-moderate,
+.cap-partial {
+  background:#F8F0DC;
+  color:var(--prysm-warning);
+}
+
+.band-limited,
+.band-weak,
+.cap-missing {
+  background:#F8E8E6;
+  color:var(--prysm-risk);
+}
+
+.cap-neutral {
+  background:#EEF3F1;
+  color:var(--prysm-muted);
+}
+
+.note {
+  background:var(--prysm-mint-2);
+  border:1px solid var(--prysm-line);
+  border-radius:14px;
+  padding:20px 22px;
+}
+
+.table-wrap {
+  border:1px solid var(--prysm-line);
+  border-radius:14px;
+}
+
+table {
+  font-family:'DM Sans',sans-serif;
+  font-size:15px;
+  line-height:1.5;
+}
+
+th {
+  background:var(--prysm-mint-2);
+  color:var(--prysm-dark);
+  font-size:12.5px;
+  font-weight:700;
+  letter-spacing:.02em;
+}
+
+th,
+td {
+  border-bottom:1px solid var(--prysm-line);
+  padding:14px 16px;
+}
+
+.narrative-card {
+  border-color:#C9DCD5;
+}
+
+.narrative-eyebrow {
+  color:var(--prysm-primary);
+  font-family:'DM Sans',sans-serif;
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+
+.narrative-field {
+  background:var(--prysm-mint-2);
+  border-color:var(--prysm-line);
+}
+
+footer {
+  color:var(--prysm-muted);
+  font-family:'DM Sans',sans-serif;
+  font-size:12.5px;
+}
+
+/* Keep PRYSM's existing responsive LEFT navigation. */
+
+@media (max-width:720px) {
+  body {
+    font-size:15px;
+  }
+
+  header.brand h1 {
+    font-size:24px;
+  }
+
+  .viewer-toolbar h2 {
+    font-size:28px;
+  }
+
+  section > h2,
+  .card h2 {
+    font-size:26px;
+  }
+
+  section > h3,
+  .card h3 {
+    font-size:22px;
+  }
+
+  p,
+  li {
+    font-size:15px;
+  }
+
+  .card,
+  main > section:not(.card) {
+    padding:18px;
+  }
+}
+
+@media print {
+  body {
+    background:#fff;
+    color:#111;
+  }
+
+  .card,
+  main > section:not(.card),
+  .pillar {
+    box-shadow:none;
   }
 }
 </style>
