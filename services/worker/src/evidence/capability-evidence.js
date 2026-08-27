@@ -251,14 +251,17 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
       limitations.push("Page body content evidence was not collected");
     }
 
-    if (governedDeepCoverageIncomplete(site)) {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
-      requiredFields = false;
+ if (
+  governedDeepCoverageIncomplete(site) &&
+  status !== CAPABILITY_STATUS.UNAVAILABLE
+) {
+  status = CAPABILITY_STATUS.PARTIAL;
+  requiredFields = true;
 
-      limitations.push(
-        "Governed deep-content coverage is incomplete; site-wide body conclusions are not score-bearing.",
-      );
-    }
+  limitations.push(
+    "Governed deep-content coverage is incomplete; conclusions are limited to the assessed representative pages.",
+  );
+}
 
     caps["content.body"] = capability({
       capability: "content.body",
@@ -286,31 +289,34 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
     let status;
     const limitations = [];
 
-    if (governedDeepCoverageIncomplete(site)) {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
-      limitations.push(
-        "Governed deep-content coverage is incomplete; site-wide conclusions are not score-bearing.",
-      );
-    } else if (contentState === "available") {
-      status = CAPABILITY_STATUS.AVAILABLE;
-    } else {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
-      limitations.push(limitation);
-    }
+    if (contentState === "available") {
+  if (governedDeepCoverageIncomplete(site)) {
+    status = CAPABILITY_STATUS.PARTIAL;
+    limitations.push(
+      "Governed deep-content coverage is incomplete; conclusions are limited to the assessed representative pages.",
+    );
+  } else {
+    status = CAPABILITY_STATUS.AVAILABLE;
+  }
+} else {
+  status = CAPABILITY_STATUS.UNAVAILABLE;
+  limitations.push(limitation);
+}
 
-    caps[name] = capability({
-      capability: name,
-      status,
-      coverage: {
-        requested: null,
-        completed: null,
-        failed: null,
-      },
-      provenance: siteProv,
-      limitations,
-      requiredFieldsPresent:
-        status === CAPABILITY_STATUS.AVAILABLE,
-    });
+caps[name] = capability({
+  capability: name,
+  status,
+  coverage: {
+    requested: null,
+    completed: null,
+    failed: null,
+  },
+  provenance: siteProv,
+  limitations,
+  requiredFieldsPresent:
+    status === CAPABILITY_STATUS.AVAILABLE ||
+    status === CAPABILITY_STATUS.PARTIAL,
+});
   }
 
   // ── conversion.cta / conversion.form — INTERACTIVE evidence ──────────

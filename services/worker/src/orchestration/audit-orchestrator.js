@@ -170,7 +170,7 @@ function buildSourceExecutionIdentity({ auditRequest, source, adapterVersion }) 
     // source execution identity (config hashing).
     enableContentParsing: auditRequest.crawl?.enableContentParsing ?? true,
     validateMicromarkup: auditRequest.crawl?.validateMicromarkup ?? true,
-    contentParsingPageLimit: auditRequest.crawl?.contentParsingPageLimit ?? 20,
+    contentParsingPageLimit: auditRequest.crawl?.contentParsingPageLimit ?? 50,
     redirectChainsPageLimit: auditRequest.crawl?.redirectChainsPageLimit ?? 20,
     nonIndexableLimit: auditRequest.crawl?.nonIndexableLimit ?? 1000,
     resourcesPageLimit: auditRequest.crawl?.resourcesPageLimit ?? 10,

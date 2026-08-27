@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   buildCapabilityEvidence,
@@ -10,8 +11,22 @@ import {
 } from "./programmatic-seo-analysis.js";
 
 test(
-  "EVIDENCE-04: incomplete governed deep coverage fails closed for body, trust, and offer capabilities",
+  "EVIDENCE-04: incomplete governed deep coverage remains score-bearing as PARTIAL",
   () => {
+    const adapterSource = readFileSync(
+      new URL(
+        "../adapters/dataforseo-onpage/dataforseo-onpage-adapter.js",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    assert.match(
+      adapterSource,
+      /contentParsingPageLimit:\s*50/,
+      "governed deep-content parsing default must be 50 pages",
+    );
+
     const completedUrl =
       "https://example.com/services";
 
@@ -91,17 +106,35 @@ test(
 
     assert.equal(
       result.capabilities["content.body"].status,
-      "UNAVAILABLE",
+      "PARTIAL",
+    );
+
+    assert.equal(
+      result.capabilities["content.body"]
+        .requiredFieldsPresent,
+      true,
     );
 
     assert.equal(
       result.capabilities["trust.proof"].status,
-      "UNAVAILABLE",
+      "PARTIAL",
+    );
+
+    assert.equal(
+      result.capabilities["trust.proof"]
+        .requiredFieldsPresent,
+      true,
     );
 
     assert.equal(
       result.capabilities["offer.clarity"].status,
-      "UNAVAILABLE",
+      "PARTIAL",
+    );
+
+    assert.equal(
+      result.capabilities["offer.clarity"]
+        .requiredFieldsPresent,
+      true,
     );
 
     assert.match(

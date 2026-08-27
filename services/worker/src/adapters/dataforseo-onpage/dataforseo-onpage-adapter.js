@@ -55,7 +55,7 @@ const DEFAULTS = Object.freeze({
   loadResources: true,
   validateMicromarkup: true,
   enableContentParsing: true,
-  contentParsingPageLimit: 20,
+  contentParsingPageLimit: 50,
   redirectChainsPageLimit: 20,
   nonIndexableLimit: 1000,
   resourcesPageLimit: 10,
