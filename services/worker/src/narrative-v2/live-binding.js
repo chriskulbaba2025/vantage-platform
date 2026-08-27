@@ -1197,6 +1197,95 @@ export function createNarrativeV2LiveBinding({
     normalize = (value) => value,
     previousJudgeResponse = null,
   }) {
+    // A final-pass restart may occur after Writer3 returned and validated
+    // successfully but before Judge3 could be reserved. Reuse that exact
+    // governed Writer3 result only when the model and prompt hash match.
+    // No other pass or role is replayed through this recovery path.
+    if (
+      role === "writer" &&
+      passNumber === 3
+    ) {
+      const existing =
+        await existingReservations(scope);
+
+      const priorWriter =
+        existing.find(
+          (entry) =>
+            entry.role === "writer" &&
+            entry.passNumber === 3,
+        ) || null;
+
+      if (priorWriter) {
+        if (
+          priorWriter.modelId !== modelId ||
+          priorWriter.promptSha256 !==
+            sha256(prompt)
+        ) {
+          throw new Error(
+            "Narrative v2 persisted Writer pass 3 does not match the current governed continuation",
+          );
+        }
+
+        const [
+          priorResult,
+          priorResponse,
+        ] = await Promise.all([
+          readJsonByName(
+            artifactStore,
+            scope,
+            resultName(
+              priorWriter.callNumber,
+            ),
+          ),
+          readJsonByName(
+            artifactStore,
+            scope,
+            responseName(
+              priorWriter.callNumber,
+            ),
+          ),
+        ]);
+
+        if (
+          !priorResult ||
+          priorResult.validationResult !==
+            "PASS" ||
+          !priorResponse
+        ) {
+          throw new Error(
+            "Narrative v2 persisted Writer pass 3 is not a complete validated recovery artifact",
+          );
+        }
+
+        const parsed =
+          normalize(priorResponse);
+
+        const validation =
+          validate(parsed);
+
+        const metadataValid =
+          parsed?.modelId === modelId;
+
+        if (
+          !validation.valid ||
+          !metadataValid
+        ) {
+          throw new Error(
+            `Narrative v2 persisted Writer pass 3 failed recovery validation: ${[
+              ...(validation.errors || []),
+              ...(!metadataValid
+                ? [
+                    `modelId must equal configured Writer model ${modelId}`,
+                  ]
+                : []),
+            ].join("; ")}`,
+          );
+        }
+
+        return parsed;
+      }
+    }
+
     const {
       callNumber,
       reservation,

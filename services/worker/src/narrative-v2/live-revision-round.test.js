@@ -523,3 +523,148 @@ test("LIVE-REVISION-04: final continuation fails closed before Writer3 when huma
     "unauthorized continuation must not make a fifth paid call",
   );
 });
+test(
+  "LIVE-REVISION-05: restart recovery reuses validated Writer3 and calls only Judge3",
+  async () => {
+    const {
+      result: reviewResult,
+      artifactStore,
+    } = await runScenario(
+      revisingJudgeResponse(2),
+    );
+
+    const constrainedEnv = {
+      ...baseEnv(),
+      PRYSM_LLM_SOFT_BUDGET_USD: "0",
+      PRYSM_LLM_HARD_BUDGET_USD: "0.20",
+      PRYSM_NARRATIVE_V2_PRICE_TABLE_JSON:
+        JSON.stringify({
+          "writer-test": {
+            inputPricePer1K: 0.0001,
+            outputPricePer1K: 0.001,
+          },
+          "judge-test": {
+            inputPricePer1K: 0.01,
+            outputPricePer1K: 0.1,
+          },
+        }),
+    };
+
+    const firstRecoveryCalls = [];
+
+    const constrainedBinding =
+      createNarrativeV2LiveBinding({
+        env: constrainedEnv,
+        artifactStore,
+        clock: { now: () => FIXED_TS },
+        fetchImpl: async (_url, options) => {
+          firstRecoveryCalls.push(
+            JSON.parse(options.body),
+          );
+
+          return responseFor(
+            finalRevisionWriterOutput(),
+          );
+        },
+      });
+
+    constrainedBinding.registerAuditScope(SCOPE);
+
+    constrainedBinding.authorizeFinalPass({
+      auditId: AUDIT_ID,
+      authorizationId:
+        "human-final-pass-budget-failure",
+    });
+
+    await assert.rejects(
+      () =>
+        runNarrativeV2Orchestration({
+          writerInput: writerInput(),
+          writerExecutor:
+            constrainedBinding.writerExecutor,
+          judgeExecutor:
+            constrainedBinding.judgeExecutor,
+          continuation: {
+            authorized: true,
+            passes: reviewResult.passes,
+          },
+        }),
+      /cost preflight rejected judge/,
+    );
+
+    assert.equal(
+      firstRecoveryCalls.length,
+      1,
+      "first continuation must persist Writer3 before Judge3 budget rejection",
+    );
+
+    assert.equal(
+      firstRecoveryCalls[0].model,
+      "writer-test",
+    );
+
+    const recoveryEnv = {
+      ...constrainedEnv,
+      PRYSM_LLM_HARD_BUDGET_USD: "5.00",
+    };
+
+    const resumedCalls = [];
+
+    const resumedBinding =
+      createNarrativeV2LiveBinding({
+        env: recoveryEnv,
+        artifactStore,
+        clock: { now: () => FIXED_TS },
+        fetchImpl: async (_url, options) => {
+          resumedCalls.push(
+            JSON.parse(options.body),
+          );
+
+          return responseFor(
+            passingJudgeResponse(3),
+          );
+        },
+      });
+
+    resumedBinding.registerAuditScope(SCOPE);
+
+    resumedBinding.authorizeFinalPass({
+      auditId: AUDIT_ID,
+      authorizationId:
+        "human-final-pass-resume",
+    });
+
+    const finalResult =
+      await runNarrativeV2Orchestration({
+        writerInput: writerInput(),
+        writerExecutor:
+          resumedBinding.writerExecutor,
+        judgeExecutor:
+          resumedBinding.judgeExecutor,
+        continuation: {
+          authorized: true,
+          passes: reviewResult.passes,
+        },
+      });
+
+    assert.equal(
+      finalResult.status,
+      NARRATIVE_V2_STATUS.RELEASE_CANDIDATE,
+    );
+
+    assert.equal(finalResult.passCount, 3);
+
+    assert.equal(
+      resumedCalls.length,
+      1,
+      "restart recovery must not make a second paid Writer3 call",
+    );
+
+    assert.equal(
+      resumedCalls[0].model,
+      "judge-test",
+      "the only resumed paid call must be Judge3",
+    );
+  },
+);
+
