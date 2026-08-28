@@ -698,6 +698,7 @@ test(
       maxPages: 250,
       pollTimeoutMs: 1000,
       pollIntervalMs: 1,
+      contentParsingPageLimit: 20,
       siteFootprint,
       businessServices: [
         "Executive Coaching",
