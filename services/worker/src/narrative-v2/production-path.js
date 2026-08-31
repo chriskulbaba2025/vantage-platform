@@ -13,6 +13,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
 import { buildArtifactKey } from "../storage/artifact-key.js";
 import { assertCurrentScoreSet } from "../scoring/current-score-set.js";
+import { hydrateCurrentReportModel } from "../report-model/current-model.js";
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
 import { loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
 import { loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
@@ -790,31 +791,9 @@ function resolveCompetitorSourceStatus(decisionEvidence) {
 }
 
 function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, decisionEvidence }) {
-  // Use the canonical persisted ScoreSet directly. This intentionally fixes
-  // the prior production projection loss of readinessStatusDetail and
-  // renderingDiagnostics while preserving the exact deterministic renderer
-  // model fields already used by report-design v2.
+  const current = hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence });
   return {
-    scoringVersion: scoreSet.scoringVersion || "4.1.0",
-    generatedAt: scoreSet.generatedAt,
-    scores: scoreSet.scores || {},
-    bands: scoreSet.bands || {},
-    assessedWeight: scoreSet.assessedWeight ?? 0,
-    readinessStatus: scoreSet.readinessStatus || "",
-    readinessStatusDetail: scoreSet.readinessStatusDetail || scoreSet.readinessStatus || "",
-    showNumericScore: scoreSet.showNumericScore ?? false,
-    evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
-    evidenceConfidenceFactorAvailability: scoreSet.evidenceConfidenceFactorAvailability || [],
-    rootCauseRuleId: scoreSet.rootCauseRuleId || null,
-    rootCause: scoreSet.rootCause || "",
-    findings,
-    renderingDiagnostics: Array.isArray(scoreSet.renderingDiagnostics) ? scoreSet.renderingDiagnostics : undefined,
-    suppressedFindingReasons: scoreSet.suppressedFindingReasons || [],
-    moduleEligibility: scoreSet.moduleEligibility || {},
-    moduleScores: scoreSet.moduleScores || {},
-    suppressedModules: scoreSet.suppressedModules || [],
-    capabilityEvidence,
-    evidence: decisionEvidence,
+    ...current,
     sourceStatus: {
       competitors: resolveCompetitorSourceStatus(decisionEvidence),
     },
@@ -822,10 +801,6 @@ function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, de
       businessName: auditRequest.businessName || "",
       targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
     },
-    conversionPaths: scoreSet.conversionPaths || [],
-    readinessMap: scoreSet.readinessMap || [],
-    contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
-    competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
   };
 }
 

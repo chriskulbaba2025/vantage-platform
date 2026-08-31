@@ -13,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { hydrateCurrentReportModel } from "../report-model/current-model.js";
 
 // ---------------------------------------------------------------------------
 // Locked report design version — must match schema const
@@ -197,6 +198,12 @@ export function buildReportViewModel({
     };
   }
 
+  // Current ScoreSet artifacts have one canonical semantic hydration source.
+  // Older WP10 fixtures remain supported only as historical compatibility.
+  const current = scoringModel.contractVersion === "2.0.0"
+    ? hydrateCurrentReportModel({ scoreSet: scoringModel, findings: scoringModel.findings, evidence })
+    : null;
+
   // --- 5. Assemble ReportViewModel ---
   const generatedAt = now || new Date().toISOString();
 
@@ -218,15 +225,19 @@ export function buildReportViewModel({
       competitors: (reportPackage.competitors || []).map((c) => c.url),
     },
     // Scores from scoring model
-    scores: scoringModel.scores || {},
-    bands: scoringModel.bands || {},
+    scores: current?.scores || scoringModel.scores || {},
+    bands: current?.bands || scoringModel.bands || {},
     assessedWeight: scoringModel.assessedWeight ?? reportPackage.assessedWeight ?? 0,
     readinessStatus: scoringModel.readinessStatus || reportPackage.readinessStatus || "",
     showNumericScore:
       scoringModel.showNumericScore ?? reportPackage.showNumericScore ?? false,
     evidenceConfidenceScore:
       scoringModel.evidenceConfidenceScore ?? reportPackage.evidenceConfidenceScore ?? 0,
-    rootCause: scoringModel.rootCause || reportPackage.rootCause || "",
+    rootCause: current?.rootCause || scoringModel.rootCause || reportPackage.rootCause || "",
+    ...(current ? {
+      rootCauseRuleId: current.rootCauseRuleId,
+      decisionHierarchy: current.decisionHierarchy,
+    } : {}),
     // Findings from scoring model
     findings: (scoringModel.findings || []).map((f) => ({
       contractVersion: f.contractVersion || "1.0.0",
