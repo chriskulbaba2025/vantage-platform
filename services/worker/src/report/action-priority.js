@@ -3,17 +3,17 @@
  *
  * Section E must answer "what should this business actually fix first to
  * improve conversion?", not "which technical defect has the largest abstract
- * score". This module derives, at RENDER TIME, a deterministic action class
- * and implementation group for each governed finding.
+ * score". This module derives, at RENDER TIME, a deterministic action class,
+ * Conversion-First v4.2 influence domain, and implementation group for each
+ * governed finding.
  *
  * GOVERNANCE
  *  - `finding.schema.json` is frozen with `additionalProperties: false`, so
  *    nothing here is persisted onto a finding. Every value is derived from
  *    existing governed fields (ruleId, dimension, module, confidence,
  *    scoreBearing, finalPriority, severity, implementationEffort).
- *  - No evidence is invented. A finding only exists when its capability was
- *    available and its evidence was collected, so classification cannot
- *    manufacture a claim.
+ *  - No evidence is invented. Classification does not upgrade unknown,
+ *    partial, or insufficient evidence into a confirmed claim.
  *  - Classification never changes a score. Ordering changes; scores do not.
  */
 
@@ -32,28 +32,39 @@ export const ACTION_GROUP = Object.freeze({
 });
 
 /**
- * Client-facing decision order.
+ * Shared derived Conversion-First v4.2 client-influence contract.
  *
- * This is deliberately separate from score priority. A technically severe
- * hygiene issue must not outrank a materially relevant conversion, trust, or
- * user-experience issue merely because its numeric finding priority is higher.
+ * This is deliberately separate from canonical finding priority and scoring.
+ * It is a render-time decision view that downstream report/narrative consumers
+ * can reuse without mutating the persisted FindingSet.
+ *
+ * For action ranking, the v4.2 action-ordering rule is:
+ * direct conversion path/action -> trust/proof -> offer/audience clarity ->
+ * friction/experience -> buyer decision support -> acquisition/discoverability
+ * -> technical causes/resilience.
+ *
+ * Proven foundation blockers still override this order.
  */
-const IMPACT_DOMAIN = Object.freeze({
-  CONVERSION: "conversion",
-  TRUST: "trust",
-  PERFORMANCE_UX: "performance_ux",
-  ACQUISITION: "acquisition",
-  TECHNICAL: "technical",
+export const CONVERSION_INFLUENCE = Object.freeze({
+  CONVERSION_PATH_ACTION: "conversion_path_action",
+  TRUST_PROOF: "trust_proof",
+  OFFER_AUDIENCE_CLARITY: "offer_audience_clarity",
+  FRICTION_EXPERIENCE: "friction_experience",
+  BUYER_DECISION_SUPPORT: "buyer_question_decision_support",
+  ACQUISITION_DISCOVERABILITY: "acquisition_discoverability",
+  TECHNICAL_CAUSES_RESILIENCE: "technical_causes_resilience",
   OTHER: "other",
 });
 
-const IMPACT_DOMAIN_RANK = Object.freeze({
-  [IMPACT_DOMAIN.CONVERSION]: 0,
-  [IMPACT_DOMAIN.TRUST]: 1,
-  [IMPACT_DOMAIN.PERFORMANCE_UX]: 2,
-  [IMPACT_DOMAIN.ACQUISITION]: 3,
-  [IMPACT_DOMAIN.TECHNICAL]: 4,
-  [IMPACT_DOMAIN.OTHER]: 5,
+export const CONVERSION_INFLUENCE_RANK = Object.freeze({
+  [CONVERSION_INFLUENCE.CONVERSION_PATH_ACTION]: 0,
+  [CONVERSION_INFLUENCE.TRUST_PROOF]: 1,
+  [CONVERSION_INFLUENCE.OFFER_AUDIENCE_CLARITY]: 2,
+  [CONVERSION_INFLUENCE.FRICTION_EXPERIENCE]: 3,
+  [CONVERSION_INFLUENCE.BUYER_DECISION_SUPPORT]: 4,
+  [CONVERSION_INFLUENCE.ACQUISITION_DISCOVERABILITY]: 5,
+  [CONVERSION_INFLUENCE.TECHNICAL_CAUSES_RESILIENCE]: 6,
+  [CONVERSION_INFLUENCE.OTHER]: 7,
 });
 
 /**
@@ -70,12 +81,22 @@ export const FOUNDATION_RULE_DOMAINS = Object.freeze({
   "VAN-PATH-001": "conversion_completion",
 });
 
-/**
- * Confidence floor for the foundation class.
- */
+/** Confidence floor for the foundation class. */
 const FOUNDATION_CONFIDENCE = Object.freeze([
   "deterministic",
   "strongly_supported",
+]);
+
+/**
+ * Minimum confidence allowed to lead the client-facing hierarchy.
+ *
+ * Directional evidence remains visible but cannot outrank a supported finding
+ * merely because it belongs to a higher business-impact domain.
+ */
+const CLIENT_LEAD_CONFIDENCE = Object.freeze([
+  "deterministic",
+  "strongly_supported",
+  "supported",
 ]);
 
 /** Final-priority floor for high-conversion work. */
@@ -96,14 +117,24 @@ function priorityOf(finding) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function hasLeadConfidence(finding) {
+  return CLIENT_LEAD_CONFIDENCE.includes(finding?.confidence);
+}
+
 /**
- * Determine the client-facing impact domain from governed finding identity.
+ * Determine the shared client-facing Conversion-First influence domain from
+ * governed finding identity.
  *
- * Matching order is intentional. Performance findings may live inside a
- * broader technical dimension, so performance/UX is detected before generic
- * technical classification.
+ * Matching order is intentional:
+ *  - direct path/action rules are separated from offer clarity even though
+ *    both can live in the conversion_pathways scoring dimension;
+ *  - GSC/SEO/SERP/schema identities are acquisition/discoverability even when
+ *    their scoring module lives under content;
+ *  - buyer-question/content findings remain decision-support findings rather
+ *    than being collapsed into generic acquisition;
+ *  - technical hygiene is last unless separately proven foundational.
  */
-function impactDomainOf(finding) {
+export function conversionInfluenceOf(finding) {
   const ruleId = String(finding?.ruleId || "").toUpperCase();
   const dimension = String(finding?.dimension || "").toLowerCase();
   const module = String(finding?.module || "").toLowerCase();
@@ -111,44 +142,69 @@ function impactDomainOf(finding) {
   if (
     ruleId.startsWith("VAN-PATH-") ||
     ruleId.startsWith("VAN-CONV-") ||
-    dimension.includes("conversion") ||
-    module.includes("conversion")
+    module === "conversion_paths"
   ) {
-    return IMPACT_DOMAIN.CONVERSION;
+    return CONVERSION_INFLUENCE.CONVERSION_PATH_ACTION;
   }
 
   if (
     ruleId.startsWith("VAN-TRUST-") ||
     ruleId.startsWith("VAN-EEAT-") ||
-    dimension.includes("trust") ||
-    dimension.includes("authority") ||
+    dimension === "trust_eeat" ||
+    module === "trust_signals" ||
+    module === "risk_reduction" ||
     module.includes("trust") ||
     module.includes("eeat")
   ) {
-    return IMPACT_DOMAIN.TRUST;
+    return CONVERSION_INFLUENCE.TRUST_PROOF;
+  }
+
+  if (
+    ruleId.startsWith("VAN-OFFER-") ||
+    ruleId.startsWith("VAN-AUDIENCE-") ||
+    module === "offer_clarity" ||
+    module.includes("offer") ||
+    module.includes("audience")
+  ) {
+    return CONVERSION_INFLUENCE.OFFER_AUDIENCE_CLARITY;
   }
 
   if (
     ruleId.startsWith("VAN-PERF-") ||
     ruleId.startsWith("VAN-UX-") ||
     ruleId.startsWith("VAN-A11Y-") ||
-    module.includes("performance") ||
+    module === "performance" ||
     module.includes("usability") ||
     module.includes("accessibility")
   ) {
-    return IMPACT_DOMAIN.PERFORMANCE_UX;
+    return CONVERSION_INFLUENCE.FRICTION_EXPERIENCE;
   }
 
   if (
     ruleId.startsWith("VAN-SEO-") ||
     ruleId.startsWith("VAN-SERP-") ||
-    ruleId.startsWith("VAN-CONTENT-") ||
+    ruleId.startsWith("VAN-GSC-") ||
+    ruleId.startsWith("VAN-SCHEMA-") ||
     dimension.includes("search") ||
+    dimension.includes("schema") ||
+    dimension.includes("entity") ||
     module.includes("search") ||
     module.includes("serp") ||
-    module.includes("content")
+    module.includes("schema") ||
+    module.includes("ai_readiness")
   ) {
-    return IMPACT_DOMAIN.ACQUISITION;
+    return CONVERSION_INFLUENCE.ACQUISITION_DISCOVERABILITY;
+  }
+
+  if (
+    ruleId.startsWith("VAN-CONTENT-") ||
+    dimension === "content_funnel" ||
+    module === "content_depth" ||
+    module === "funnel_coverage" ||
+    module.includes("content") ||
+    module.includes("funnel")
+  ) {
+    return CONVERSION_INFLUENCE.BUYER_DECISION_SUPPORT;
   }
 
   if (
@@ -156,17 +212,16 @@ function impactDomainOf(finding) {
     dimension.includes("technical") ||
     module.includes("technical")
   ) {
-    return IMPACT_DOMAIN.TECHNICAL;
+    return CONVERSION_INFLUENCE.TECHNICAL_CAUSES_RESILIENCE;
   }
 
-  return IMPACT_DOMAIN.OTHER;
+  return CONVERSION_INFLUENCE.OTHER;
 }
 
-function isConversionFacingDomain(domain) {
+function isConversionLeadingInfluence(influence) {
   return (
-    domain === IMPACT_DOMAIN.CONVERSION ||
-    domain === IMPACT_DOMAIN.TRUST ||
-    domain === IMPACT_DOMAIN.PERFORMANCE_UX
+    influence !== CONVERSION_INFLUENCE.TECHNICAL_CAUSES_RESILIENCE &&
+    influence !== CONVERSION_INFLUENCE.OTHER
   );
 }
 
@@ -176,7 +231,13 @@ function isConversionFacingDomain(domain) {
  * @param {object} finding — governed finding (finding.schema.json shape)
  * @param {Set<string>|Array<string>} [foundationRuleIds] — additional rule IDs
  *        proven foundational by the First Things First checklist.
- * @returns {{actionClass: string, foundationDomain: string|null, group: string}}
+ * @returns {{
+ *   actionClass: string,
+ *   foundationDomain: string|null,
+ *   conversionInfluence: string,
+ *   conversionInfluenceRank: number,
+ *   group: string
+ * }}
  */
 export function classifyFinding(finding, foundationRuleIds = []) {
   const linked =
@@ -191,7 +252,9 @@ export function classifyFinding(finding, foundationRuleIds = []) {
   const inFoundationScope =
     domain !== null || linked.has(finding?.ruleId);
 
-  const impactDomain = impactDomainOf(finding);
+  const conversionInfluence = conversionInfluenceOf(finding);
+  const conversionInfluenceRank =
+    CONVERSION_INFLUENCE_RANK[conversionInfluence];
 
   let actionClass;
   let foundationDomain = null;
@@ -200,7 +263,9 @@ export function classifyFinding(finding, foundationRuleIds = []) {
     actionClass = ACTION_CLASS.FOUNDATION_BLOCKER;
     foundationDomain = domain ?? "first_things_first";
   } else if (
-    isConversionFacingDomain(impactDomain) &&
+    scoreBearing &&
+    hasLeadConfidence(finding) &&
+    isConversionLeadingInfluence(conversionInfluence) &&
     priorityOf(finding) >= HIGH_CONVERSION_FLOOR
   ) {
     actionClass = ACTION_CLASS.HIGH_CONVERSION;
@@ -211,13 +276,13 @@ export function classifyFinding(finding, foundationRuleIds = []) {
   return {
     actionClass,
     foundationDomain,
+    conversionInfluence,
+    conversionInfluenceRank,
     group: groupFor(actionClass, finding),
   };
 }
 
-/**
- * Deterministic implementation grouping.
- */
+/** Deterministic implementation grouping. */
 function groupFor(actionClass, finding) {
   if (actionClass === ACTION_CLASS.FOUNDATION_BLOCKER) {
     return ACTION_GROUP.DO_NOW;
@@ -249,16 +314,20 @@ const CLASS_RANK = Object.freeze({
  * Ranking contract:
  *
  * 1. Proven foundation blockers.
- * 2. Conversion.
- * 3. Trust.
- * 4. Performance / UX.
- * 5. Acquisition / SEO.
- * 6. Technical hygiene.
- * 7. Other.
+ * 2. Direct conversion path / action.
+ * 3. Trust / proof.
+ * 4. Offer / audience clarity.
+ * 5. Friction / experience.
+ * 6. Buyer-question / decision support.
+ * 7. Acquisition / discoverability.
+ * 8. Technical causes / resilience.
+ * 9. Other.
  *
- * Numeric finalPriority ranks findings only inside the same client-impact
- * domain. It can no longer promote a technical hygiene item above a more
- * material conversion-facing category.
+ * Evidence confidence is a lead-eligibility gate, not a ranking tier:
+ * supported, strongly-supported, and deterministic findings may all lead,
+ * while directional evidence remains visible but cannot displace them.
+ * Among lead-eligible findings, conversion influence determines business-impact
+ * class before action class and numeric finalPriority resolve comparable work.
  *
  * @param {object} model — scored audit model
  * @param {Array<object>} [checklist] — First Things First items
@@ -282,6 +351,8 @@ export function buildActionPlan(model, checklist = []) {
       const {
         actionClass,
         foundationDomain,
+        conversionInfluence,
+        conversionInfluenceRank,
         group,
       } = classifyFinding(finding, foundationRuleIds);
 
@@ -289,6 +360,8 @@ export function buildActionPlan(model, checklist = []) {
         finding,
         actionClass,
         foundationDomain,
+        conversionInfluence,
+        conversionInfluenceRank,
         group,
         priority: priorityOf(finding),
         effort: effortOf(finding),
@@ -305,22 +378,17 @@ export function buildActionPlan(model, checklist = []) {
         return aFoundation ? -1 : 1;
       }
 
-      const aPriorityConfidence = FOUNDATION_CONFIDENCE.includes(
-        a.finding?.confidence,
-      );
-      const bPriorityConfidence = FOUNDATION_CONFIDENCE.includes(
-        b.finding?.confidence,
-      );
+                 const aLeadEligible = hasLeadConfidence(a.finding);
+      const bLeadEligible = hasLeadConfidence(b.finding);
 
-      if (aPriorityConfidence !== bPriorityConfidence) {
-        return aPriorityConfidence ? -1 : 1;
+      if (aLeadEligible !== bLeadEligible) {
+        return aLeadEligible ? -1 : 1;
       }
 
-      const byDomain =
-        IMPACT_DOMAIN_RANK[impactDomainOf(a.finding)] -
-        IMPACT_DOMAIN_RANK[impactDomainOf(b.finding)];
+      const byInfluence =
+        a.conversionInfluenceRank - b.conversionInfluenceRank;
 
-      if (byDomain !== 0) return byDomain;
+      if (byInfluence !== 0) return byInfluence;
 
       const byClass =
         CLASS_RANK[a.actionClass] - CLASS_RANK[b.actionClass];
@@ -362,7 +430,10 @@ export function buildActionPlan(model, checklist = []) {
 export default {
   ACTION_CLASS,
   ACTION_GROUP,
+  CONVERSION_INFLUENCE,
+  CONVERSION_INFLUENCE_RANK,
   FOUNDATION_RULE_DOMAINS,
+  conversionInfluenceOf,
   classifyFinding,
   buildActionPlan,
 };

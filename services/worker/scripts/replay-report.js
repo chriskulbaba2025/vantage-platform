@@ -520,13 +520,41 @@ function assertReplayContracts(
       },
     );
 
-  if (!judgeValidation.valid) {
+if (!judgeValidation.valid) {
+  // Historical governed Narrative v2 fixtures may contain a Judge PASS
+  // produced under the prior 1.0.0 / 2.0.0 Judge contract pair.
+  //
+  // Offline replay may accept that historical provenance only when the
+  // CURRENT validator reports version mismatches and no other defect.
+  // Production validation remains unchanged.
+  const historicalJudge =
+    orchestration.finalJudgeResponse
+      ?.contractVersion === "1.0.0" &&
+    orchestration.finalJudgeResponse
+      ?.judgePromptVersion === "2.0.0";
+
+  const nonVersionErrors =
+    judgeValidation.errors.filter(
+      (error) =>
+        !/^contractVersion must equal \d+\.\d+\.\d+$/.test(
+          error,
+        ) &&
+        !/^judgePromptVersion must equal \d+\.\d+\.\d+$/.test(
+          error,
+        ),
+    );
+
+  if (
+    !historicalJudge ||
+    nonVersionErrors.length > 0
+  ) {
     throw new Error(
       `Persisted final JudgeResponse is invalid: ${judgeValidation.errors.join(
         "; ",
       )}`,
     );
   }
+}
 }
 
 function resolveCompetitorSourceStatus(

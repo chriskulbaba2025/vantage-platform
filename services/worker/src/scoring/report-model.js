@@ -332,20 +332,29 @@ function topicRows(site, input = {}, capabilities = {}) {
       ),
     );
 
-  const browserCta =
+  const ctaCapability =
     capabilities[
       "conversion.cta"
-    ]?.browserSummary;
+    ];
 
-  const browserForm =
+  const formCapability =
     capabilities[
       "conversion.form"
-    ]?.browserSummary;
+    ];
+
+  const browserCta =
+    ctaCapability?.browserSummary;
+
+  const browserForm =
+    formCapability?.browserSummary;
 
   const browserInteractiveAssessed =
-    site._interactiveEvidenceAvailable === false &&
     (
-      (browserCta?.completed ?? 0) > 0 ||
+      ctaCapability?.validated === true &&
+      (browserCta?.completed ?? 0) > 0
+    ) ||
+    (
+      formCapability?.validated === true &&
       (browserForm?.completed ?? 0) > 0
     );
 
@@ -423,17 +432,22 @@ function topicRows(site, input = {}, capabilities = {}) {
               ? "Clear"
               : "Weak";
 
-      const interactiveRan =
-        site._interactiveEvidenceAvailable !== false;
+            const siteInteractiveAssessed =
+        site._interactiveEvidenceAvailable ===
+        true;
+
+      const siteMechanismPresent =
+        (site.ctas || []).length > 0 ||
+        (site.forms || []).length > 0;
 
       const path =
-        site.ctas.length
+        siteMechanismPresent
           ? stage === "BOFU"
             ? "Clear"
             : "Weak"
           : browserInteractiveAssessed
             ? browserPath
-            : interactiveRan
+            : siteInteractiveAssessed
               ? "Missing"
               : "Not Assessed";
     return {
@@ -589,44 +603,210 @@ function contentIdeas(site, input = {}) {
   };
 }
 
-function competitorComparison(competitorResults, competitorOpportunities) {
-  // Backward-compatible: build basic crawl comparison
-  const comparisons = competitorResults.map((item) => {
-    if (item.status !== SOURCE_STATUS.AVAILABLE) return { name: item.url, url: item.url, status: "Unavailable", note: item.error };
-    const site = item.evidence || {};
-    // Guard against thin/hollow evidence from decision-evidence hydration.
-    // Some competitor items may have SERP-only metadata without crawl content.
-    if (!site.pages && !site.services && !site.pageCount) {
-      return { name: item.domain || item.url, url: item.url, status: "Insufficient Evidence", topic: "", offerClarity: "Not Assessed", trustProof: "Not Assessed", ctaClarity: "Not Assessed", contentDepth: "Not Assessed", eeat: "Not Assessed", pathClarity: "Not Assessed" };
-    }
+function competitorComparison(
+  competitorResults,
+  competitorOpportunities,
+  suppliedCompetitors = [],
+) {
+  /*
+   * Client-facing competitor comparison is governed by the
+   * explicitly supplied competitor allowlist.
+   *
+   * SERP-discovered candidates remain available in canonical
+   * evidence but do not enter the report or Writer projection.
+   */
+  const suppliedCompetitorUrls =
+    new Set(
+      suppliedCompetitors ||
+        [],
+    );
+
+  const allowedCompetitorResults =
+    (competitorResults || []).filter(
+      (item) =>
+        suppliedCompetitorUrls.has(
+          item?.url,
+        ),
+    );
+
+  const comparisons =
+    allowedCompetitorResults.map(
+      (item) => {
+        const evidenceStatus =
+          item?.status ||
+          SOURCE_STATUS.UNAVAILABLE;
+
+        const site =
+          item?.evidence || {};
+
+        const name =
+          site.pages?.[0]?.title ||
+          site.domain ||
+          item?.domain ||
+          item?.url;
+
+        if (
+          evidenceStatus !==
+          SOURCE_STATUS.AVAILABLE
+        ) {
+          return {
+            name,
+            url: item.url,
+            status: evidenceStatus,
+            note:
+              item?.error ||
+              `Competitor evidence status: ${evidenceStatus}.`,
+          };
+        }
+
+        const usableSiteEvidence =
+          (
+            Array.isArray(site.pages) &&
+            site.pages.length > 0
+          ) ||
+          (
+            Array.isArray(site.services) &&
+            site.services.length > 0
+          ) ||
+          (
+            typeof site.pageCount ===
+              "number" &&
+            site.pageCount > 0
+          );
+
+        if (!usableSiteEvidence) {
+          return {
+            name,
+            url: item.url,
+            status:
+              "INSUFFICIENT_EVIDENCE",
+            note:
+              `Competitor evidence status: ${evidenceStatus}. The available record does not contain enough crawl evidence for comparison.`,
+            topic: "",
+            offerClarity:
+              "Not Assessed",
+            trustProof:
+              "Not Assessed",
+            ctaClarity:
+              "Not Assessed",
+            contentDepth:
+              "Not Assessed",
+            eeat:
+              "Not Assessed",
+            pathClarity:
+              "Not Assessed",
+          };
+        }
+
+                const serviceCount =
+          Array.isArray(site.services)
+            ? site.services.length
+            : 0;
+
+        const ctaCount =
+          Array.isArray(site.ctas)
+            ? site.ctas.length
+            : 0;
+
+        const formCount =
+          Array.isArray(site.forms)
+            ? site.forms.length
+            : 0;
+
+        const pageCount =
+          typeof site.pageCount ===
+            "number" &&
+          Number.isFinite(
+            site.pageCount,
+          )
+            ? site.pageCount
+            : null;
+
+                const hasTrustEvidence =
+          site.trust &&
+          typeof site.trust ===
+            "object" &&
+          Array.isArray(
+            site.socialLinks,
+          );
+
+        const trustScore =
+          hasTrustEvidence
+            ? scoreTrust(site)
+            : null;
+
+        return {
+          name,
+          url: item.url,
+          status: evidenceStatus,
+
+          topic:
+            (site.services || [])
+              .slice(0, 4)
+              .join(", ") ||
+            (site.topicKeywords || [])
+              .slice(0, 4)
+              .join(", "),
+
+          offerClarity:
+            serviceCount >= 3
+              ? "Strong"
+              : serviceCount > 0
+                ? "Moderate"
+                : "Not Assessed",
+
+          trustProof:
+            hasTrustEvidence
+              ? band(trustScore)
+              : "Not Assessed",
+
+          ctaClarity:
+            ctaCount >= 1 &&
+            ctaCount <= 8
+              ? "Strong"
+              : ctaCount > 0
+                ? "Moderate"
+                : "Not Assessed",
+
+          contentDepth:
+            pageCount >= 6
+              ? "Strong"
+              : pageCount >= 3
+                ? "Moderate"
+                : pageCount > 0
+                  ? "Light"
+                  : "Not Assessed",
+
+          eeat:
+            hasTrustEvidence
+              ? band(trustScore)
+              : "Not Assessed",
+
+          pathClarity:
+            formCount > 0 ||
+            ctaCount > 0
+              ? "Moderate"
+              : "Not Assessed",
+        };
+      },
+    );
+
     return {
-      name: (site.pages || [])[0]?.title || site.domain || item.domain,
-      url: item.url,
-      topic: (site.services || []).slice(0, 4).join(", ") || (site.topicKeywords || []).slice(0, 4).join(", "),
-      offerClarity: (site.services || []).length >= 3 || site.pageCount >= 4 ? "Strong" : (site.services || []).length ? "Moderate" : "Light",
-      trustProof: band(scoreTrust(site)),
-      ctaClarity: (site.ctas || []).length >= 1 && (site.ctas || []).length <= 8 ? "Strong" : (site.ctas || []).length ? "Moderate" : "Light",
-      contentDepth: site.pageCount >= 6 ? "Strong" : site.pageCount >= 3 ? "Moderate" : "Light",
-      eeat: band(scoreTrust(site)),
-      pathClarity: (site.forms || []).length || (site.ctas || []).length ? "Moderate" : "Light",
-    };
-  });
-
-  // Attach competitor opportunity layer data
-  const oppGaps = competitorOpportunities?.gaps || [];
-  const oppQualified = competitorOpportunities?.candidates?.qualified || [];
-  const oppExcluded = competitorOpportunities?.candidates?.excluded || [];
-
-  return {
     comparisons,
     opportunities: {
-      topics: competitorOpportunities?.topics || [],
-      qualifiedCandidates: oppQualified,
-      excludedCandidates: oppExcluded,
-      gaps: oppGaps,
-      allGaps: competitorOpportunities?.allGaps || [],
-      sources: competitorOpportunities?.sources || {},
-      limitations: competitorOpportunities?.limitations || [],
+      topics:
+        competitorOpportunities
+          ?.topics || [],
+      qualifiedCandidates: [],
+      excludedCandidates: [],
+      gaps: [],
+      allGaps: [],
+      sources:
+        competitorOpportunities
+          ?.sources || {},
+      limitations:
+        competitorOpportunities
+          ?.limitations || [],
     },
   };
 }

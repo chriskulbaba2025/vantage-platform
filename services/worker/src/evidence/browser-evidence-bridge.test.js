@@ -369,7 +369,7 @@ test(
       model.moduleScores
         .conversion_paths
         .score,
-      94,
+      100,
       "conversion score uses browser-observed CTA/form readiness rather than stale empty site arrays",
     );
 

@@ -2332,6 +2332,140 @@ test("missingDescriptions uses page_metrics.checks.no_description", async () => 
   assert.equal(result.missingDescriptions, 16);
 });
 
+// PF-04 — field-specific metadata certainty must survive SourceResult packaging.
+test(
+  "PF-04: SourceResult preserves field metadata certainty without fabricating aggregate false",
+  async () => {
+    const { execute } = await import(
+      "./dataforseo-onpage-adapter.js"
+    );
+
+    const fixtures = {
+      taskPost: {
+        taskId: "pf04-meta-proof",
+      },
+
+      pollTask: {
+        status: "ready",
+      },
+
+      summary: {
+        crawl_status: {
+          pages_crawled: 1,
+          max_crawl_pages: 10,
+        },
+
+        domain_info: {
+          checks: {},
+        },
+
+        page_metrics: {
+          links_internal: 2,
+          checks: {
+            no_description: 0,
+            no_h1_tag: 0,
+          },
+        },
+      },
+
+      pages: {
+        total_count: 1,
+        items: [
+          {
+            url: "https://pf04.example.com/",
+            status_code: 200,
+
+            meta: {
+              title: "PF-04 Proof",
+              description: "Known description",
+              canonical:
+                "https://pf04.example.com/",
+
+              htags: {
+                h1: ["PF-04 Proof"],
+              },
+
+              content: {
+                plain_text_word_count: 100,
+              },
+            },
+
+            checks: {},
+          },
+        ],
+      },
+
+      links: {
+        items: [],
+        total_count: 0,
+      },
+
+      duplicate_tags: {
+        items: [],
+      },
+
+      duplicate_content: {
+        items: [],
+      },
+
+      microdata: {
+        items: [],
+      },
+    };
+
+    const result = await execute({
+      auditRequest: {
+        auditId: "pf04-proof",
+        targetUrl:
+          "https://pf04.example.com/",
+        services: [],
+        competitors: [],
+
+        crawl: {
+          fixtures,
+          maxPages: 10,
+        },
+      },
+
+      source:
+        "dataforseo-onpage",
+
+      executionId:
+        "pf04-execution",
+
+      sourceExecutionKey:
+        "pf04-source",
+
+      signal:
+        new AbortController().signal,
+
+      attempt: 1,
+    });
+
+    const evidence =
+      result.sourceResult.evidence;
+
+    assert.deepEqual(
+      evidence._metaFieldAvailability,
+      {
+        titles: true,
+        descriptions: true,
+        canonicals: true,
+        headings: true,
+      },
+    );
+
+    assert.equal(
+      Object.hasOwn(
+        evidence,
+        "_metaCountersAvailable",
+      ),
+      false,
+      "an absent legacy aggregate marker must remain absent",
+    );
+  },
+);
+
 // Regression: imagesMissingAlt from page_metrics.checks.no_image_alt
 test("imagesMissingAlt uses page_metrics.checks.no_image_alt when image arrays unavailable", async () => {
   const pages = [buildRealisticDfPage(0)];

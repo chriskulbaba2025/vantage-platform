@@ -55,6 +55,11 @@ const INPUT = {
   primaryGoal: "Generate qualified enquiries",
 };
 
+const COMPETITOR_INPUT = {
+  ...INPUT,
+  competitors: ["https://rival.com"],
+};
+
 // ---------------------------------------------------------------------------
 // Fixtures — governed evidence shapes only.  No provider call.
 // ---------------------------------------------------------------------------
@@ -187,15 +192,22 @@ const OBSTRUCTED_PATH_EVIDENCE = {
   ],
 };
 
-function scoreWith(site, { pathValidationEvidence = null, evidenceOverrides = {} } = {}) {
+function scoreWith(
+  site,
+  {
+    pathValidationEvidence = null,
+    evidenceOverrides = {},
+    input = INPUT,
+  } = {},
+) {
   const evidence = evidenceWith(site, evidenceOverrides);
   const capabilityEvidence = buildCapabilityEvidence({
     decisionEvidence: evidence,
-    auditId: INPUT.auditId,
+    auditId: input.auditId,
     generatedAt: FIXED_TS,
     pathValidationEvidence,
   });
-  return scoreAudit(INPUT, evidence, { capabilityEvidence, scoredAt: FIXED_TS });
+  return scoreAudit(input, evidence, { capabilityEvidence, scoredAt: FIXED_TS });
 }
 
 const findingByRule = (model, ruleId) =>
@@ -298,47 +310,96 @@ test("CR-03: a verified foundation blocker outranks a higher-scoring optimizatio
   );
 });
 
-test("CR-04: a low-confidence foundation-domain finding is not promoted by classification", () => {
-  const strongOrdinary = {
+test("CR-04: Conversion-First ranking uses confidence as a lead gate, not a confidence-first sort", () => {
+  const supportedBusiness = {
+    ruleId: "VAN-CONTENT-900",
+    confidence: CONFIDENCE_LEVELS.SUPPORTED,
+    scoreBearing: true,
+    finalPriority: 60,
+    severity: "High",
+    implementationEffort: "M",
+  };
+
+  const technicalHygiene = {
     ruleId: "VAN-TECH-001",
     confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
     scoreBearing: true,
-    finalPriority: 76,
+    finalPriority: 100,
     severity: "High",
     implementationEffort: "L",
   };
 
-  for (const weak of [CONFIDENCE_LEVELS.SUPPORTED, CONFIDENCE_LEVELS.DIRECTIONAL]) {
-    const weakBlocker = {
-      ruleId: "VAN-PATH-001",
-      confidence: weak,
-      scoreBearing: true,
-      finalPriority: 40,
-      severity: "High",
-      implementationEffort: "M",
-    };
+  const directionalPath = {
+    ruleId: "VAN-PATH-999",
+    confidence: CONFIDENCE_LEVELS.DIRECTIONAL,
+    scoreBearing: true,
+    finalPriority: 100,
+    severity: "High",
+    implementationEffort: "M",
+  };
 
-    assert.notEqual(
-      classifyFinding(weakBlocker).actionClass,
-      ACTION_CLASS.FOUNDATION_BLOCKER,
-      `${weak} confidence must not qualify as a foundation blocker`,
-    );
-
-    const plan = buildActionPlan({ findings: [weakBlocker, strongOrdinary] });
-
-    assert.equal(
-      plan.actions[0].finding.ruleId,
-      "VAN-TECH-001",
-      "the strong deterministic finding must still lead",
-    );
-  }
+  const plan = buildActionPlan({
+    findings: [
+      technicalHygiene,
+      directionalPath,
+      supportedBusiness,
+    ],
+  });
 
   assert.equal(
-    classifyFinding({
-      ...strongOrdinary,
-      ruleId: "VAN-PATH-001",
-      confidence: CONFIDENCE_LEVELS.STRONGLY_SUPPORTED,
-    }).actionClass,
+    plan.actions[0].finding.ruleId,
+    "VAN-CONTENT-900",
+    "supported stronger business-impact work must outrank deterministic technical hygiene",
+  );
+
+  assert.equal(
+    plan.actions[0].actionClass,
+    ACTION_CLASS.HIGH_CONVERSION,
+    "supported business-impact evidence must remain eligible to lead",
+  );
+
+  assert.notEqual(
+    plan.actions[0].finding.ruleId,
+    "VAN-PATH-999",
+    "directional evidence must not become the client lead",
+  );
+
+  assert.ok(
+    technicalHygiene.finalPriority > supportedBusiness.finalPriority,
+    "fixture must prove numeric priority alone cannot promote technical hygiene over the stronger business-impact class",
+  );
+
+  const foundationBlocker = {
+    ruleId: "VAN-PATH-001",
+    confidence: CONFIDENCE_LEVELS.STRONGLY_SUPPORTED,
+    scoreBearing: true,
+    finalPriority: 10,
+    severity: "High",
+    implementationEffort: "M",
+  };
+
+  assert.equal(
+    classifyFinding(foundationBlocker).actionClass,
+    ACTION_CLASS.FOUNDATION_BLOCKER,
+    "strongly-supported proven foundation evidence must retain the governed blocker classification",
+  );
+
+  const blockerPlan = buildActionPlan({
+    findings: [
+      technicalHygiene,
+      supportedBusiness,
+      foundationBlocker,
+    ],
+  });
+
+  assert.equal(
+    blockerPlan.actions[0].finding.ruleId,
+    "VAN-PATH-001",
+    "proven foundation blocker must override the normal Conversion-First hierarchy",
+  );
+
+  assert.equal(
+    blockerPlan.actions[0].actionClass,
     ACTION_CLASS.FOUNDATION_BLOCKER,
   );
 });
@@ -713,17 +774,22 @@ function failedSiteEvidence(status, limitation) {
   };
 }
 
-function modelForSite(siteEvidence, evidenceOverrides = {}, pathValidationEvidence = null) {
+function modelForSite(
+  siteEvidence,
+  evidenceOverrides = {},
+  pathValidationEvidence = null,
+  input = INPUT,
+) {
   const evidence = evidenceWith(siteEvidence, evidenceOverrides);
 
   const capabilityEvidence = buildCapabilityEvidence({
     decisionEvidence: evidence,
-    auditId: INPUT.auditId,
+    auditId: input.auditId,
     generatedAt: FIXED_TS,
     pathValidationEvidence,
   });
 
-  return scoreAudit(INPUT, evidence, {
+  return scoreAudit(input, evidence, {
     capabilityEvidence,
     scoredAt: FIXED_TS,
   });
@@ -1093,7 +1159,7 @@ function foundationMatrix() {
           schemaTypes: ["Organization"],
         },
       }],
-    }],
+    }, null, COMPETITOR_INPUT],
 
     ["proprietary-platform", assessedSite({
       platform: "Wix",
@@ -1210,7 +1276,7 @@ function foundationMatrix() {
         sources: {},
         limitations: ["SERP coverage limited to one locale"],
       },
-    }],
+    }, null, COMPETITOR_INPUT],
 
     ["device-profile-failed", assessedSite(), {
       performance: {
@@ -1460,9 +1526,9 @@ test("CR-38: all three robots branches render exactly the frozen wording", () =>
 
 test("CR-39: no client-rendered foundation field ever claims site behaviour outside the frozen note", () => {
   const models = foundationMatrix().map(
-    ([, site, over, pathEv]) =>
+    ([, site, over, pathEv, input]) =>
       buildFoundationChecklist(
-        modelForSite(site, over, pathEv),
+        modelForSite(site, over, pathEv, input),
       ),
   );
 
@@ -1580,12 +1646,13 @@ const CHECKLIST_GOLDEN = {
 test("CR-40: the complete foundation checklist is frozen for every branch", () => {
   const actual = {};
 
-  for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+  for (const [name, siteEvidence, overrides, pathEv, input] of foundationMatrix()) {
     const checklist = buildFoundationChecklist(
       modelForSite(
         siteEvidence,
         overrides,
         pathEv,
+        input,
       ),
     ).map((i) => ({
       id: i.id,
@@ -1613,12 +1680,13 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
 test("CR-42: the fixture matrix reaches every branch the checklist can produce", () => {
   const reached = new Set();
 
-  for (const [, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+  for (const [, siteEvidence, overrides, pathEv, input] of foundationMatrix()) {
     for (const i of buildFoundationChecklist(
       modelForSite(
         siteEvidence,
         overrides,
         pathEv,
+        input,
       ),
     )) {
       reached.add(`${i.id}:${i.status}`);
@@ -1633,43 +1701,44 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
 });
 
 const RENDER_GOLDEN = {
-  assessed: "ace0e3a19da9042abb2fb311e35e599a9311b52e22e0c172b30bcab16542f450",
-  unassessed: "2639d6c0e1677d0b1d728379a2d881db1e186f5eb3fde26c789d29dee4707bab",
-  "provider-failed": "4cfd5b1f9ca71ad9e7fde142006264086b4ddbe6d95df7ecaaf31182662df7b4",
-  "crawl-blocked": "32cc0c81810ff1361dead4fc40d50b223f63d4821f7b981c7e1cb14fd535ff30",
-  "target-outage": "8884618dbcca8972a35f8193766789c8ed69503effd0c50d67168fbcbd62772d",
-  "outage-with-limitations": "89462b60c9824ee2efdffdc2e96e96d5fc4156b1334e70c55b7edaacb9de83d2",
-  "http-and-noindex": "6ba337cedcc148f0a140df364009818e4c6038b1e37cef7f7d05e6b28850cd76",
-  "robots-retrieved": "7a236087cd69be88b5cd73d668fe97c8a727fe7d45118b00239599958f735db5",
-  "canonical-missing": "d2ab6bf2b895a0bdadf391a94c6f8b8668255324b3ae89bbaca3576c42399afe",
-  "no-conversion-mechanism": "6c57f7b3e56b7c97c89bc6c115175b8be3d6aed3623a160abd971cd07be98a17",
-  "no-contact": "a8a8ffce7247eaf8897963c04a7ad56a874b7baade451510550ccae284985e05",
-  "headers-all-present": "04c12d183bf1bfcf3739900c29ec291247ef64399b037de19924ac277628156c",
-  "ga4-ready": "100f03eb6990668b41274ed099be4e61914565460ee54a6bdc80e5b0db9211d7",
-  "ga4-issues": "ed0a5306eb5016e14ee29920ca56092c4d3222b5f406e3eb3843345ebd8f4c52",
-  "ga4-not-applicable": "b87f899b036bef0405c2c5dd25d3df4d362d8b446192572f401cc96637cb3aab",
-  "slow-mobile": "4bc9ad871225b6af105276759208ed1b194cd5f3204ef8e6531ca0a6a1213a71",
-  "no-performance": "f908058a5e1d1ec06ed1d78b7688d73a21473c5b149204bc8f3962b5c88a1728",
-  "path-validated-blocker": "c0fa16b69c0646de1c9073d4dbcacbec1aabbe2ecd34fe6eb9dfb10c26e55733",
-  "competitor-present": "7d4af50b89d4e930215c5ce429743ff742f17e3243d98cab669fd629e298c8a1",
-  "proprietary-platform": "75116a71c112323eedb956a78b0c472e3e26bfc88be38bb6e38b91bee0a99e5d",
-  "untraced-broken-links": "178cb42c51355c8b502fb741ae36fe270b3c72427224dd8731c7a39159b9502d",
-  "schema-confirmed-absent": "b03552731e5605e3967bbd163f4e8fa920ec7d2f827e2e789d99a193b04835fa",
-  "headings-absent-h1": "8a48c2b44af7d1964c5043863e6a02c8047a5430dbc662313ea4fded533a59e9",
-  "headings-multiple-h1": "42e3d035a2bbd4decbbfee290f41ac43a4ee9ec326f030df3585bc8c968a7ddc",
-  "perf-field-and-multipage": "1e691d642595e3082a6d172ea36f1fcc11540f0529ffccd6312dae2ad925f802",
-  "competitor-with-limitations": "e90a9388402c38ba7d4aa24e2e39c49443b85559bfdd8edc9831a261b1558667",
-  "device-profile-failed": "a76f50c0b39c84fa364d4e584d2a858ca52855ea251511385a4e443a69ae8dbd",
+  assessed: "1a194b1e7b5bef92cd4f26ef4ef19f29e018ff8a363ec9ff1b7bf521aa6175fa",
+  unassessed: "341e706b4b31bf341e447a825917c0c1ad4c455a3bd7e6d4e55892fb54350cc4",
+  "provider-failed": "dd4a8307c0cdae63fb5f58f190a5eb24a349e442bde1f439cbd8f981412f4d3b",
+  "crawl-blocked": "60d019959950dd9610fa4f0084891fe9f55ff4fa064bc29844bca9ad3974b9cd",
+  "target-outage": "14a92bde45a6dd39c016d421f10bb6dc702e1a7aaba53c0bbae7c420ac7e830c",
+  "outage-with-limitations": "3e6cb431ede15882d762ebdddd1cd9947db4f9677cd450fcedd40b0d39d801bb",
+  "http-and-noindex": "6f2a9290e051a0195ef2a6e8fb69c253060b8d71465fc2adf1ffcd59133a7b2b",
+  "robots-retrieved": "b7e945fd2a32955d90c5134af290c358b739dd4af789c39f485fc1272a2bd7f4",
+  "canonical-missing": "1240c5868da2fb87aaa685fb825b26cae63328e64f494d23396b1c4b7939cb31",
+  "no-conversion-mechanism": "c610df629bb54be620a8e4e99ed192f20bb350f661a8de16bcb801b749d3659b",
+  "no-contact": "892c4cf376a38d1a80694f3484c35e2b0ff5e62fcdcf0463b6aef0e0b62e3bfa",
+  "headers-all-present": "86314f90ffd90e40031c82bca8acf699d53631569bcb36875880bdb5cbf9ebdb",
+  "ga4-ready": "3cb00f6e077f56a72fc1af2cb498afa88f8d8b6a3debb2a915cd028abfa42408",
+  "ga4-issues": "46c38ae2b80a2b4ce684581e4d1aa013ceb4cf24c4dda839b12e4dc5836f0cd9",
+  "ga4-not-applicable": "ad4b988be3585c98a969d2010e9ee2f92d5b39b4eaced30f766ae47ca07ca0a7",
+  "slow-mobile": "271c6d34045195450cd1d8fbf169e9141784857b382cff96ce64424b0d29dc46",
+  "no-performance": "ff7562f98942b2f4657539589d0f4afbc880b03ee1149ecd164c0c12be9d82df",
+  "path-validated-blocker": "45e970d7894d9b62a129367c70e32fee5d41eba3eeb10ac38b8241a6327c3446",
+  "competitor-present": "18391084f147ba9ca28825608fb354dc0742396aa65b78d17e1003afbc2274ee",
+  "proprietary-platform": "3ec650836fc84d28e52856bedfc01ff492f81d1d45b0b8cffb16aa1a1e56412f",
+  "untraced-broken-links": "a39a2ba49b1cdbe31f15a4f8a723c2e74eb0bc046d6e5b834f8d85a602831565",
+  "schema-confirmed-absent": "740f11811e091ac6a832444efadaed6c5919c642366ac7a1efecc95bb2e9bbc5",
+  "headings-absent-h1": "40331f5720dc93c24f58e30d46387478ede79b45570646ad81266170ded8dcc9",
+  "headings-multiple-h1": "09b7915e0a505c76343b287073db8dafc29a6b36e20a2b8ac4cdc8ec351b563d",
+  "perf-field-and-multipage": "ca5645baac285c7c7fceea886a88741a14c6ad39e34d98d6b53ea7ed34cb00ba",
+  "competitor-with-limitations": "d2699e9bbd38c182c0da56a21e155c45606b94d74437b3dbde0d152b937ec65f",
+  "device-profile-failed": "428fad51700c147d2f392c18aec124d407a66a17c327b3b828d23e73a9fb2231",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
 
-  for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+  for (const [name, siteEvidence, overrides, pathEv, input] of foundationMatrix()) {
     const html = renderReportV2(
       modelForSite(
         siteEvidence,
         overrides,
         pathEv,
+        input,
       ),
     );
 
@@ -1700,12 +1769,13 @@ const RENDERER_BRANCH_MARKERS = [
 
 test("CR-44: the render matrix exercises every claim-bearing renderer branch", () => {
   const rendered = foundationMatrix().map(
-    ([, site, over, pathEv]) =>
+    ([, site, over, pathEv, input]) =>
       renderReportV2(
         modelForSite(
           site,
           over,
           pathEv,
+          input,
         ),
       ),
   );
@@ -1719,11 +1789,12 @@ test("CR-44: the render matrix exercises every claim-bearing renderer branch", (
 });
 
 test("CR-41: rendered foundation cells reproduce the model verbatim", () => {
-  for (const [name, siteEvidence, overrides, pathEv] of foundationMatrix()) {
+  for (const [name, siteEvidence, overrides, pathEv, input] of foundationMatrix()) {
     const model = modelForSite(
       siteEvidence,
       overrides,
       pathEv,
+      input,
     );
 
     const checklist = buildFoundationChecklist(model);
@@ -2095,10 +2166,11 @@ test("CR-25: no malformed concatenated recommendation headings", () => {
 // COMPETITOR — CR-26 .. CR-27
 // ===========================================================================
 
-test("CR-26: available competitor evidence renders signal comparisons", () => {
-  const model = scoreWith(
+test("CR-26: client competitor comparison uses only usable evidence and governed own-site conversion state", () => {
+  const baseModel = scoreWith(
     assessedSite(),
     {
+      input: COMPETITOR_INPUT,
       evidenceOverrides: {
         competitors: [
           {
@@ -2150,6 +2222,41 @@ test("CR-26: available competitor evidence renders signal comparisons", () => {
     },
   );
 
+  const model = {
+    ...baseModel,
+    conversionPaths: [
+      {
+        name: "Primary conversion path",
+        status: "Clear",
+        steps: [
+          "Entry",
+          "Service understanding",
+          "Trust / proof",
+          "Primary CTA",
+          "Conversion destination",
+        ],
+        blockers: [],
+      },
+    ],
+    competitors: {
+      ...(baseModel.competitors || {}),
+      comparisons: [
+        ...(baseModel.competitors?.comparisons || []),
+        {
+          name: "Unassessed Search Candidate",
+          url: "https://noise.example",
+          status: "INSUFFICIENT_EVIDENCE",
+          note: "Available candidate without enough crawl evidence for comparison.",
+          offerClarity: "Not Assessed",
+          trustProof: "Not Assessed",
+          ctaClarity: "Not Assessed",
+          contentDepth: "Not Assessed",
+          pathClarity: "Not Assessed",
+        },
+      ],
+    },
+  };
+
   const html = renderReportV2(model);
 
   const idx = html.indexOf("Competitive context");
@@ -2161,19 +2268,25 @@ test("CR-26: available competitor evidence renders signal comparisons", () => {
   assert.match(
     comp,
     /rival\.com/,
-    "competitor rendered from evidence",
+    "usable assessed competitor evidence must render",
+  );
+
+  assert.doesNotMatch(
+    comp,
+    /noise\.example/,
+    "insufficient-evidence candidates must not render in the client comparison",
   );
 
   assert.match(
     comp,
-    /Offer|Trust|CTA|Conversion path|Content/i,
-    "per-signal comparison rendered",
+    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Clear<\/td>/,
+    "own-site buyer action clarity must consume governed conversion-path state",
   );
 
   assert.match(
     comp,
-    /This site|Your site/i,
-    "own-site side of the comparison is shown",
+    /<td><strong>Conversion path<\/strong><\/td>\s*<td>Clear<\/td>/,
+    "own-site conversion path must consume the same governed conversion state as the main report",
   );
 });
 

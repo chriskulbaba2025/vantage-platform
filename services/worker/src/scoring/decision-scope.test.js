@@ -48,6 +48,17 @@ function commercialPage() {
       },
     ],
 
+        images: [
+      {
+        src:
+          "https://example.com/hero.jpg",
+        alt:
+          "Business coaching",
+        width: 1200,
+        height: 800,
+      },
+    ],
+
     responseHeaders: {},
   };
 }
@@ -563,6 +574,94 @@ test(
       scoped,
       site,
       "no unnecessary copy should be created when no utility page exists",
+    );
+  },
+);
+
+test(
+  "PF-05: decision scope preserves valid image denominators and neutralizes impossible aggregate claims",
+  () => {
+    const scoped =
+      scopeSiteForDecision(
+        baseSite({
+          pageCount: 2,
+
+          pages: [
+            {
+              ...commercialPage(),
+
+              images: [
+                {
+                  src:
+                    "https://example.com/hero.jpg",
+                  alt:
+                    "Business coaching",
+                  width: 1200,
+                  height: 800,
+                },
+              ],
+            },
+
+            {
+              ...utilityPage(),
+
+              images: [
+                {
+                  src:
+                    "https://example.com/privacy.jpg",
+                  alt: "",
+                  width: 800,
+                  height: 600,
+                },
+              ],
+            },
+          ],
+
+          imageCount: 2,
+          imagesMissingAlt: 1,
+          imagesMissingDimensions: 0,
+        }),
+      );
+
+    assert.equal(
+      scoped.pageCount,
+      1,
+    );
+
+    assert.equal(
+      scoped.imageCount,
+      1,
+    );
+
+    assert.equal(
+      scoped.imagesMissingAlt,
+      0,
+    );
+
+    assert.equal(
+      scoped.imagesMissingDimensions,
+      0,
+    );
+
+    const impossible =
+      scopeSiteForDecision(
+        baseSite({
+          imageCount: null,
+          imagesMissingAlt: 222,
+          imagesMissingDimensions:
+            null,
+        }),
+      );
+
+    assert.equal(
+      impossible.imageCount,
+      null,
+    );
+
+    assert.equal(
+      impossible.imagesMissingAlt,
+      null,
+      "a numerator cannot survive when its observed denominator is unavailable",
     );
   },
 );

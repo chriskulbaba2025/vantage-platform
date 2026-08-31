@@ -165,6 +165,90 @@ test("T-GATE-07: blocks high confidence with low assessed weight", () => {
   assert.ok(err, "Must block high confidence unsupported by assessed weight");
 });
 
+test("T-GATE-IMG-01: schema-coerced zero image denominator does not contradict bounded image issue evidence", () => {
+  const evidence = baseEvidence({
+    site: {
+      imageCount: 0,
+      imagesMissingAlt: 222,
+      imagesMissingDimensions: 0,
+      _contentEvidenceAvailable: false,
+    },
+  });
+
+  const model = baseModel({
+    evidence,
+  });
+
+  const { passed, errors } =
+    runFinalizationGate(
+      model,
+      evidence,
+    );
+
+  const imageErrors =
+    errors.filter(
+      (error) =>
+        error.field ===
+          "site.imagesMissingAlt" ||
+        error.field ===
+          "site.imagesMissingDimensions",
+    );
+
+  assert.equal(
+    imageErrors.length,
+    0,
+    `unknown image denominator must not create a false contradiction: ${JSON.stringify(
+      imageErrors,
+    )}`,
+  );
+
+  assert.equal(
+    passed,
+    true,
+    `gate should pass when image denominator is unavailable: ${JSON.stringify(
+      errors.map((error) => error.message),
+    )}`,
+  );
+});
+
+test("T-GATE-IMG-02: known zero image denominator still rejects a positive image numerator", () => {
+  const evidence = baseEvidence({
+    site: {
+      imageCount: 0,
+      imagesMissingAlt: 1,
+      imagesMissingDimensions: 0,
+      _contentEvidenceAvailable: true,
+    },
+  });
+
+  const model = baseModel({
+    evidence,
+  });
+
+  const { passed, errors } =
+    runFinalizationGate(
+      model,
+      evidence,
+    );
+
+  assert.equal(
+    passed,
+    false,
+  );
+
+  const imageError =
+    errors.find(
+      (error) =>
+        error.field ===
+        "site.imagesMissingAlt",
+    );
+
+  assert.ok(
+    imageError,
+    "known zero denominator with positive numerator must remain blocked",
+  );
+});
+
 // PRYSM-INCIDENT-01 — production incident regression.  The real production
 // v2 audit produced confidence 86 with assessed weight 30%; scoring declared
 // the PRD-governed "Insufficient Evidence for Overall Score" state (numeric
@@ -477,9 +561,9 @@ test("T-GATE-INT-02: consistent report passes and produces all required outputs"
     evidenceConfidenceScore: 65,
     assessedWeight: 85,
     findings: [
-      { ruleId: "VAN-PERF-001", title: "Mobile LCP is slow", severity: "High", scoreBearing: true, key: "lcp", businessImpact: "Slow first impressions increase abandonment.", recommendation: "Optimize the largest above-fold asset." },
-      { ruleId: "VAN-TRUST-001", title: "No visible trust proof", severity: "High", scoreBearing: true, key: "trust", businessImpact: "Visitors cannot verify credibility before deciding.", recommendation: "Add credentials and client proof." },
-      { ruleId: "VAN-TECH-001", title: "Missing meta descriptions", severity: "High", scoreBearing: true, key: "meta", businessImpact: "Search-result messaging is uncontrolled.", recommendation: "Write unique descriptions." },
+     { ruleId: "VAN-TRUST-001", title: "No visible trust proof", severity: "High", scoreBearing: true, key: "trust", businessImpact: "Visitors cannot verify credibility before deciding.", recommendation: "Add credentials and client proof." },
+     { ruleId: "VAN-PERF-001", title: "Mobile LCP is slow", severity: "High", scoreBearing: true, key: "lcp", businessImpact: "Slow first impressions increase abandonment.", recommendation: "Optimize the largest above-fold asset." },
+     { ruleId: "VAN-TECH-001", title: "Missing meta descriptions", severity: "High", scoreBearing: true, key: "meta", businessImpact: "Search-result messaging is uncontrolled.", recommendation: "Write unique descriptions." },
     ],
     evidence,
   });

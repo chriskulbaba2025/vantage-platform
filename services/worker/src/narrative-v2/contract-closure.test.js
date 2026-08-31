@@ -25,6 +25,7 @@ import { createNarrativeV2LiveBinding } from "./live-binding.js";
 const AUDIT_ID = "b4e88569-58ed-4e48-8787-981f66b676ad";
 const GOV_REF = "scoreGovernance:moduleEligibility";
 const CAP_REF = "capability:performance.field";
+const CONVERSION_INFLUENCE_REF = "analysis:conversionInfluence";
 const FIXED_TS = "2026-08-21T11:24:55.251Z";
 
 function productionShapedWriterInput() {
@@ -81,6 +82,11 @@ function productionShapedWriterInput() {
       contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
       competitors: { comparisons: [], opportunities: { topics: [] } },
       renderingDiagnostics: [],
+    },
+        decisionEvidence: {
+      site: {
+        targetUrl: "https://rebootbusinesscoaching.com/",
+      },
     },
     findings: [],
     capabilityEvidence: {
@@ -222,7 +228,12 @@ function rawPassingJudge() {
     maxScore,
     status: "FAIL",
     rationale: `${key} is supported by the governed Writer packet.`,
-    evidenceRefs: key === "nonRepetition" ? [] : [GOV_REF, GOV_REF],
+        evidenceRefs:
+      key === "nonRepetition"
+        ? []
+        : key === "conversionInterpretation"
+          ? [CONVERSION_INFLUENCE_REF]
+          : [GOV_REF, GOV_REF],
     defectIds: ["made-up-id"],
   }]));
   return {
@@ -230,7 +241,7 @@ function rawPassingJudge() {
     auditId: AUDIT_ID,
     passNumber: 1,
     judgeModelId: "judge-structured",
-    judgePromptVersion: "2.0.0",
+    judgePromptVersion: "2.1.0",
     evaluatedAt: FIXED_TS,
     hardGate: { status: "FAIL", violations: [] },
     rubric,

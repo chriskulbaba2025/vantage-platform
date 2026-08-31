@@ -27,14 +27,22 @@ function e(value) {
 }
 
 const UNAVAILABLE = "UNAVAILABLE";
-const AVAILABLE = new Set(["AVAILABLE", "PARTIAL"]);
+const ASSESSED = new Set(["AVAILABLE", "PARTIAL"]);
 
 function capStatus(model, key) {
   return model?.capabilityEvidence?.capabilities?.[key]?.status ?? "NOT_ASSESSED";
 }
 
 function capAvailable(model, key) {
-  return AVAILABLE.has(capStatus(model, key));
+  return capStatus(model, key) === "AVAILABLE";
+}
+
+function capPartial(model, key) {
+  return capStatus(model, key) === "PARTIAL";
+}
+
+function capAssessed(model, key) {
+  return ASSESSED.has(capStatus(model, key));
 }
 
 /** Renders a value, or an explicit unavailable state — never a fabricated 0. */
@@ -74,9 +82,11 @@ function statusChip(status) {
 export function foundationSection(checklist) {
   const rows = checklist
     .map((i) => {
-            const requires = i.status === FOUNDATION_STATUS.NOT_ASSESSED && i.requires
-        ? `<!-- NOT ASSESSED compatibility anchor --><br><span class="small">UNAVAILABLE — requires ${e(i.requires)}</span>`
-        : "";
+      const requires =
+        i.status === FOUNDATION_STATUS.NOT_ASSESSED &&
+        i.requires
+          ? `<!-- NOT ASSESSED compatibility anchor --><br><span class="small">UNAVAILABLE — requires ${e(i.requires)}</span>`
+          : "";
 
       const evidenceNote = i.evidenceNote
         ? `<br><span class="small evidence-note">${e(i.evidenceNote)}</span>`
@@ -151,17 +161,22 @@ const EEAT_DIMENSIONS = [
 
 export function eeatSection(model) {
   const site = model?.evidence?.site || {};
-  const assessed = capAvailable(model, "trust.proof");
+  const trustAssessed = capAssessed(model, "trust.proof");
+  const trustComplete = capAvailable(model, "trust.proof");
+  const trustPartial = capPartial(model, "trust.proof");
   const trust = site.trust || {};
+
   const dimensionCards = EEAT_DIMENSIONS
     .map((dim) => {
-      if (!assessed) {
+      if (!trustAssessed) {
         return `
           <div class="pillar">
             <h4>${e(dim.key)}</h4>
             <!-- Not Assessed compatibility anchor -->
             <p><span class="chip cap-neutral">UNAVAILABLE</span></p>
-            <p class="small">Page content was not extracted, so ${e(dim.key.toLowerCase())} signals could not be evaluated.</p>
+            <p class="small">Page content was not extracted, so ${e(
+              dim.key.toLowerCase(),
+            )} signals could not be evaluated.</p>
           </div>`;
       }
 
@@ -169,15 +184,29 @@ export function eeatSection(model) {
         .filter(([flag]) => trust[flag] === true)
         .map(([, label]) => label);
 
+      const detail = found.length
+        ? trustPartial
+          ? `<strong>Observed in partial assessment:</strong> ${e(
+              found.join("; "),
+            )}`
+          : `<strong>Observed:</strong> ${e(found.join("; "))}`
+        : trustPartial
+          ? "No checked signal was observed in the available partial assessment. Absence is not established."
+          : "No checked signal was observed in this dimension.";
+
       return `
         <div class="pillar">
           <h4>${e(dim.key)}</h4>
-          <p class="small">${found.length
-            ? `<strong>Observed:</strong> ${e(found.join("; "))}`
-            : "No checked signal was observed in this dimension."}</p>
+          ${
+            trustPartial
+              ? '<p><span class="chip cap-neutral">PARTIAL</span></p>'
+              : ""
+          }
+          <p class="small">${detail}</p>
         </div>`;
     })
     .join("");
+
   const findings = (model?.findings || []).filter(
     (finding) =>
       finding.dimension === "trust_eeat" ||
@@ -219,35 +248,62 @@ export function eeatSection(model) {
 
   const questionRows = trustQuestions
     .map(([question, flag, evidenceLabel]) => {
-      if (!assessed) {
+      if (!trustAssessed) {
         return `<tr>
           <td><strong>${e(question)}</strong></td>
           <td><span class="chip cap-neutral">${e(UNAVAILABLE)}</span></td>
-          <td class="small">Page content was not extracted, so ${e(evidenceLabel.toLowerCase())} could not be evaluated.</td>
+          <td class="small">Page content was not extracted, so ${e(
+            evidenceLabel.toLowerCase(),
+          )} could not be evaluated.</td>
         </tr>`;
       }
 
       const present =
         trust[flag] === true ||
-        (question === "What reduces my risk?" && trust.pricing === true);
+        (question === "What reduces my risk?" &&
+          trust.pricing === true);
+
+      const status = trustPartial
+        ? "PARTIAL"
+        : present
+          ? "PASS"
+          : "FINDING";
+
+      const detail = present
+        ? trustPartial
+          ? `${e(
+              evidenceLabel,
+            )} was observed in the available partial assessment.`
+          : `${e(evidenceLabel)} was observed.`
+        : trustPartial
+          ? `${e(
+              evidenceLabel,
+            )} was not observed in the available partial assessment. Whole-site absence is not established.`
+          : `${e(
+              evidenceLabel,
+            )} was not observed in the assessed page content.`;
 
       return `<tr>
         <td><strong>${e(question)}</strong></td>
-        <td><span class="chip ${present ? "cap-ok" : "cap-missing"}">${present ? "PASS" : "FINDING"}</span></td>
-        <td class="small">${present
-          ? `${e(evidenceLabel)} was observed.`
-          : `${e(evidenceLabel)} was not observed in the assessed page content.`}</td>
+        <td><span class="chip ${
+          status === "PASS"
+            ? "cap-ok"
+            : status === "FINDING"
+              ? "cap-missing"
+              : "cap-neutral"
+        }">${e(status)}</span></td>
+        <td class="small">${detail}</td>
       </tr>`;
     })
     .join("");
 
-  const foundSignals = assessed
+  const foundSignals = trustAssessed
     ? Object.entries(trust)
         .filter(([, present]) => present === true)
         .map(([name]) => name)
     : [];
 
-  const missingSignals = assessed
+  const missingSignals = trustComplete
     ? Object.entries({
         credentials: trust.credentials,
         caseStudies: trust.caseStudies,
@@ -264,37 +320,72 @@ export function eeatSection(model) {
     model?.scores?.trustEeatDimension ??
     model?.scores?.trust;
 
-  const verdict = !assessed
+  const verdict = !trustAssessed
     ? "PRYSM could not determine whether the site provides enough visible proof to reduce buyer uncertainty because trust-proof page content was not available."
-    : typeof score === "number"
-      ? score >= 70
-        ? `The site has a useful trust foundation (${score}/100), but important decision points should still be checked for proof, reassurance, and clear next-step expectations.`
-        : `Trust and risk reduction are not yet strong enough at ${score}/100. Buyers may reach important decision points without enough proof or reassurance to feel confident taking the next step.`
-      : "Trust evidence was assessed, but no dimension score was available. The observed proof signals below should be read directly.";
+    : trustPartial
+      ? `Trust-proof evidence was PARTIAL. PRYSM can report proof signals actually observed in the available assessment, but it does not treat unobserved signals as established whole-site gaps${
+          typeof score === "number"
+            ? ` or interpret the ${score}/100 score as complete coverage`
+            : ""
+        }.`
+      : typeof score === "number"
+        ? score >= 70
+          ? `The site has a useful trust foundation (${score}/100), but important decision points should still be checked for proof, reassurance, and clear next-step expectations.`
+          : `Trust and risk reduction are not yet strong enough at ${score}/100. Buyers may reach important decision points without enough proof or reassurance to feel confident taking the next step.`
+        : "Trust evidence was assessed, but no dimension score was available. The observed proof signals below should be read directly.";
 
-  const breakdown = missingSignals.length
-    ? `<ul>${missingSignals
-        .map(
-          (signal) =>
-            `<li><strong>${e(signal)}</strong> — this proof or reassurance signal was not observed in the assessed content.</li>`,
-        )
-        .join("")}</ul>`
-    : assessed
-      ? "<p>No checked trust-proof signal was absent from the assessed content.</p>"
-      : `<p><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Trust-proof content was not available.</p>`;
+  const breakdown = trustPartial
+    ? '<p><span class="chip cap-neutral">PARTIAL</span> Unobserved trust signals are not treated as established gaps because the trust-proof assessment was incomplete.</p>'
+    : missingSignals.length
+      ? `<ul>${missingSignals
+          .map(
+            (signal) =>
+              `<li><strong>${e(
+                signal,
+              )}</strong> — this proof or reassurance signal was not observed in the assessed content.</li>`,
+          )
+          .join("")}</ul>`
+      : trustComplete
+        ? "<p>No checked trust-proof signal was absent from the assessed content.</p>"
+        : `<p><span class="chip cap-neutral">${e(
+            UNAVAILABLE,
+          )}</span> Trust-proof content was not available.</p>`;
 
   const proof = foundSignals.length
-    ? `<ul>${foundSignals.map((signal) => `<li>${e(signal)}</li>`).join("")}</ul>`
-    : assessed
-      ? "<p>No checked proof signal was detected.</p>"
-      : `<p><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Available proof could not be determined.</p>`;
+    ? `<ul>${foundSignals
+        .map(
+          (signal) =>
+            `<li>${e(signal)}${
+              trustPartial
+                ? " — observed within partial coverage"
+                : ""
+            }</li>`,
+        )
+        .join("")}</ul>`
+    : trustPartial
+      ? '<p><span class="chip cap-neutral">PARTIAL</span> No checked proof signal was observed in the available partial assessment; absence is not established.</p>'
+      : trustComplete
+        ? "<p>No checked proof signal was detected.</p>"
+        : `<p><span class="chip cap-neutral">${e(
+            UNAVAILABLE,
+          )}</span> Available proof could not be determined.</p>`;
 
   const findingBlock = findings.length
     ? `<ul class="small">${findings
         .slice(0, 5)
         .map(
           (finding) =>
-            `<li><strong>${e(finding.title || "Trust finding")}</strong> — ${e(finding.businessImpact || "")}${finding.recommendation ? ` <strong>Action:</strong> ${e(finding.recommendation)}` : ""}</li>`,
+            `<li><strong>${e(
+              finding.title || "Trust finding",
+            )}</strong> — ${e(
+              finding.businessImpact || "",
+            )}${
+              finding.recommendation
+                ? ` <strong>Action:</strong> ${e(
+                    finding.recommendation,
+                  )}`
+                : ""
+            }</li>`,
         )
         .join("")}</ul>`
     : '<p class="small">No material governed trust finding was produced from the assessed evidence.</p>';
@@ -304,7 +395,7 @@ export function eeatSection(model) {
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can a buyer find enough proof to feel confident taking the next step?</p>
     <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>
 
-        <h3>Governed E-E-A-T dimensions</h3>
+    <h3>Governed E-E-A-T dimensions</h3>
     <div class="pillar-grid">${dimensionCards}</div>
 
     <h3>Confidence verdict</h3>
@@ -349,9 +440,15 @@ export function eeatSection(model) {
     ${findingBlock}
 
     <h3>Assessment limitations</h3>
-    ${assessed
-      ? '<p class="small">This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources.</p>'
-      : `<p class="small"><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.</p>`}
+    ${
+      trustComplete
+        ? '<p class="small">This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources.</p>'
+        : trustPartial
+          ? '<p class="small"><span class="chip cap-neutral">PARTIAL</span> Trust-proof content coverage was incomplete. Observed proof is retained, but unobserved proof is not treated as established absence.</p>'
+          : `<p class="small"><span class="chip cap-neutral">${e(
+              UNAVAILABLE,
+            )}</span> Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.</p>`
+    }
   </section>`;
 }
 
@@ -362,9 +459,13 @@ export function eeatSection(model) {
 function techRow(label, assessed, value, note = "") {
   return `<tr>
     <td>${e(label)}</td>
-    <td>${assessed
-      ? e(value)
-      : `<span class="chip cap-neutral">${e(UNAVAILABLE)}</span>`}</td>
+    <td>${
+      assessed
+        ? e(value)
+        : `<span class="chip cap-neutral">${e(
+            UNAVAILABLE,
+          )}</span>`
+    }</td>
     <td class="small">${e(note)}</td>
   </tr>`;
 }
@@ -372,15 +473,54 @@ function techRow(label, assessed, value, note = "") {
 export function technicalDetailSection(model) {
   const site = model?.evidence?.site || {};
   const avail = site._metaFieldAvailability || {};
-  const contentOk = capAvailable(model, "content.body");
-  const headersOk = capAvailable(model, "technical.headers");
-  const schemaOk = capAvailable(model, "schema.structured_data");
   const pages = site.pageCount ?? 0;
 
-  const statusFor = (assessed, issue) => {
-    if (!assessed) return "UNAVAILABLE";
-    return issue ? "FINDING" : "PASS";
+  const siteAssessed = ASSESSED.has(site.sourceStatus);
+  const sitePartial = site.sourceStatus === "PARTIAL";
+
+  const contentAssessed = capAssessed(
+    model,
+    "content.body",
+  );
+
+  const contentPartial = capPartial(
+    model,
+    "content.body",
+  );
+
+  const headersAssessed = capAssessed(
+    model,
+    "technical.headers",
+  );
+
+  const headersPartial = capPartial(
+    model,
+    "technical.headers",
+  );
+
+  const schemaAssessed = capAssessed(
+    model,
+    "schema.structured_data",
+  );
+
+  const schemaPartial = capPartial(
+    model,
+    "schema.structured_data",
+  );
+
+  const performanceStatus =
+    model?.evidence?.performance?.sourceStatus ??
+    "NOT_ASSESSED";
+
+  const performancePartial =
+    performanceStatus === "PARTIAL";
+
+  const statusFor = (row) => {
+    if (!row.assessed) return "UNAVAILABLE";
+    if (row.partial) return "PARTIAL";
+    return row.issue ? "FINDING" : "PASS";
   };
+
   const headerNames = [
     "xFrameOptions",
     "xContentTypeOptions",
@@ -390,59 +530,81 @@ export function technicalDetailSection(model) {
 
   const headerRows = headerNames
     .map((name) => {
-      const present = site.securityHeaders?.[name] === true;
+      const present =
+        site.securityHeaders?.[name] === true;
 
       return techRow(
         name,
-        headersOk,
-        present ? "Present" : "Not present in the observed response",
-        headersOk
-          ? ""
-          : "Response headers were not returned by the crawl provider.",
+        headersAssessed,
+        present
+          ? "Present"
+          : "Not present in the observed response",
+        !headersAssessed
+          ? "Response headers were not returned by the crawl provider."
+          : headersPartial
+            ? "Observed within PARTIAL response-header coverage; absence outside the available coverage is not established."
+            : "",
       );
     })
     .join("");
+
   const rows = [
     {
       group: "Reach",
       area: "HTTP status / crawl reachability",
-      assessed: AVAILABLE.has(site.sourceStatus),
-      issue: !AVAILABLE.has(site.sourceStatus),
-      assessedText: AVAILABLE.has(site.sourceStatus)
+      assessed: siteAssessed,
+      partial: sitePartial,
+      issue: false,
+      assessedText: siteAssessed
         ? `${pages} page(s) available to the crawl.`
         : "Crawl reachability was not available.",
-      explanation: AVAILABLE.has(site.sourceStatus)
-        ? "The crawler returned site evidence."
-        : "Search-engine reachability cannot be concluded from unavailable crawl evidence.",
+      explanation: sitePartial
+        ? "The crawler returned partial site evidence. This supports observations within the collected scope, not a complete reachability PASS."
+        : siteAssessed
+          ? "The crawler returned site evidence."
+          : "Search-engine reachability cannot be concluded from unavailable crawl evidence.",
     },
     {
       group: "Reach",
       area: "Broken internal links",
       assessed:
-        AVAILABLE.has(site.sourceStatus) &&
+        siteAssessed &&
         typeof site.internalLinkCount === "number",
-      issue: (site.brokenInternalLinks || []).length > 0,
-      assessedText: `${(site.brokenInternalLinks || []).length} broken internal link(s) observed.`,
-      explanation:
-        "Broken links matter when they interrupt access to important pages or conversion routes.",
+      partial: sitePartial,
+      issue:
+        (site.brokenInternalLinks || []).length > 0,
+      assessedText: `${
+        (site.brokenInternalLinks || []).length
+      } broken internal link(s) observed.`,
+      explanation: sitePartial
+        ? "Broken-link observations are limited to the partial crawl coverage; an empty result is not a complete PASS."
+        : "Broken links matter when they interrupt access to important pages or conversion routes.",
     },
     {
       group: "Index",
       area: "Canonical URLs",
       assessed: avail.canonicals === true,
-      issue: (site.missingCanonicals ?? 0) > 0,
-      assessedText: `${site.missingCanonicals ?? 0} of ${pages} page(s) missing a canonical.`,
+      partial: false,
+      issue:
+        (site.missingCanonicals ?? 0) > 0,
+      assessedText: `${
+        site.missingCanonicals ?? 0
+      } of ${pages} page(s) missing a canonical.`,
       explanation:
         avail.canonicals === true
-          ? "Canonical evidence was collected."
+          ? "Canonical evidence was collected for the governed metadata scope."
           : "Canonical evidence was not collected.",
     },
     {
       group: "Understand",
       area: "Page titles",
       assessed: avail.titles === true,
-      issue: (site.missingTitles ?? 0) > 0,
-      assessedText: `${site.missingTitles ?? 0} of ${pages} page(s) missing a title.`,
+      partial: false,
+      issue:
+        (site.missingTitles ?? 0) > 0,
+      assessedText: `${
+        site.missingTitles ?? 0
+      } of ${pages} page(s) missing a title.`,
       explanation:
         avail.titles === true
           ? "Titles help identify page purpose in search."
@@ -452,8 +614,12 @@ export function technicalDetailSection(model) {
       group: "Understand",
       area: "Meta descriptions",
       assessed: avail.descriptions === true,
-      issue: (site.missingDescriptions ?? 0) > 0,
-      assessedText: `${site.missingDescriptions ?? 0} of ${pages} page(s) missing a description.`,
+      partial: false,
+      issue:
+        (site.missingDescriptions ?? 0) > 0,
+      assessedText: `${
+        site.missingDescriptions ?? 0
+      } of ${pages} page(s) missing a description.`,
       explanation:
         avail.descriptions === true
           ? "Descriptions support search-result messaging but are not direct ranking scores."
@@ -462,90 +628,118 @@ export function technicalDetailSection(model) {
     {
       group: "Understand",
       area: "Structured data",
-      assessed: schemaOk,
+      assessed: schemaAssessed,
+      partial: schemaPartial,
       issue:
-        schemaOk &&
+        !schemaPartial &&
+        schemaAssessed &&
         !(site.schemaTypes || []).length &&
         !(site.microdataTypes || []).length,
-      assessedText: schemaOk
+      assessedText: schemaAssessed
         ? `${[
             ...(site.schemaTypes || []),
             ...(site.microdataTypes || []),
           ].length} structured-data type(s) observed.`
         : "Structured-data evidence was not collected.",
-      explanation:
-        "Structured data supports machine understanding when it accurately describes real entities and content.",
+      explanation: schemaPartial
+        ? "Structured-data coverage was PARTIAL. Observed types are valid evidence, but unobserved types are not treated as established absence."
+        : "Structured data supports machine understanding when it accurately describes real entities and content.",
     },
     {
       group: "Deliver",
       area: "Performance",
-      assessed: typeof model?.scores?.performance === "number",
+      assessed:
+        typeof model?.scores?.performance === "number",
+      partial: performancePartial,
       issue:
-        typeof model?.scores?.performance === "number" &&
+        !performancePartial &&
+        typeof model?.scores?.performance ===
+          "number" &&
         model.scores.performance < 60,
       assessedText:
-        typeof model?.scores?.performance === "number"
+        typeof model?.scores?.performance ===
+        "number"
           ? `Performance module score: ${model.scores.performance}/100.`
           : "No performance module score was produced.",
-      explanation:
-        "Performance matters when delivery friction affects important user and conversion paths.",
+      explanation: performancePartial
+        ? "Performance evidence was PARTIAL. Available measurements remain usable, but they do not establish complete performance coverage."
+        : "Performance matters when delivery friction affects important user and conversion paths.",
     },
     {
       group: "Deliver",
       area: "Server and security headers",
-      assessed: headersOk,
+      assessed: headersAssessed,
+      partial: headersPartial,
       issue:
-        headersOk &&
-        Object.values(site.securityHeaders || {}).some(
-          (present) => present === false,
+        !headersPartial &&
+        headersAssessed &&
+        Object.values(
+          site.securityHeaders ||
+            {},
+        ).some(
+          (present) =>
+            present === false,
         ),
-      assessedText: headersOk
+      assessedText: headersAssessed
         ? "Observed response-header evidence was assessed."
         : "Response-header evidence was not collected.",
-      explanation:
-        "Header observations are technical evidence; they become recommendations only when materially relevant.",
+      explanation: headersPartial
+        ? "Response-header coverage was PARTIAL. Observed headers are reported, but missing headers are not converted into a complete finding."
+        : "Header observations are technical evidence; they become recommendations only when materially relevant.",
     },
     {
       group: "Deliver",
       area: "Page content extraction",
-      assessed: contentOk,
+      assessed: contentAssessed,
+      partial: contentPartial,
       issue: false,
-      assessedText: contentOk
-        ? `Average words per page: ${site.averageWords ?? "Unavailable"}.`
+      assessedText: contentAssessed
+        ? `Average words per page: ${
+            site.averageWords ??
+            "Unavailable"
+          }.`
         : "Body content was not extracted.",
-      explanation: contentOk
-        ? "Content depth supports interpretation of important pages."
-        : "Content conclusions are limited when body text is unavailable.",
+      explanation: contentPartial
+        ? "Body-content coverage was PARTIAL. Content observations apply only to the available assessed pages."
+        : contentAssessed
+          ? "Content depth supports interpretation of important pages."
+          : "Content conclusions are limited when body text is unavailable.",
     },
   ];
 
   const coverageRows = rows
-    .map(
-      (row) => `<tr>
+    .map((row) => {
+      const status = statusFor(row);
+
+      return `<tr>
         <td>${e(row.group)}</td>
         <td><strong>${e(row.area)}</strong></td>
         <td><span class="chip ${
-          row.assessed
-            ? row.issue
+          status === "PASS"
+            ? "cap-ok"
+            : status === "FINDING"
               ? "cap-missing"
-              : "cap-ok"
-            : "cap-neutral"
-        }">${e(statusFor(row.assessed, row.issue))}</span></td>
+              : "cap-neutral"
+        }">${e(status)}</span></td>
         <td class="small">${e(row.assessedText)}</td>
         <td class="small">${e(row.explanation)}</td>
-      </tr>`,
-    )
+      </tr>`;
+    })
     .join("");
 
   const material = rows.filter(
-    (row) => row.assessed && row.issue,
+    (row) =>
+      statusFor(row) === "FINDING",
   );
 
-  const unavailable = rows.filter(
-    (row) => !row.assessed,
+  const limited = rows.filter(
+    (row) =>
+      statusFor(row) === "UNAVAILABLE" ||
+      statusFor(row) === "PARTIAL",
   );
 
-  const priorityPages = (site.pages || []).slice(0, 8);
+  const priorityPages =
+    (site.pages || []).slice(0, 8);
 
   const pageRows = priorityPages
     .map((page, index) => {
@@ -559,13 +753,17 @@ export function technicalDetailSection(model) {
         page?.url ||
         "";
 
-      const h1s = page?.headings?.h1;
+      const h1s =
+        page?.headings?.h1;
 
-      const headingState = Array.isArray(h1s)
-        ? h1s.length === 1
-          ? "PASS"
-          : "FINDING"
-        : "UNAVAILABLE";
+      const headingState =
+        avail.headings !== true
+          ? "UNAVAILABLE"
+          : Array.isArray(h1s)
+            ? h1s.length === 1
+              ? "PASS"
+              : "FINDING"
+            : "UNAVAILABLE";
 
       return `<tr>
         <td>${e(index + 1)}</td>
@@ -583,19 +781,31 @@ export function technicalDetailSection(model) {
     .join("");
 
   const verdict = material.length
-    ? `${material.length} assessed technical area${material.length === 1 ? " is" : "s are"} currently flagged. The table below separates observable issues from evidence that was simply unavailable.`
-    : rows.some((row) => row.assessed)
-      ? "No material technical blocker was established from the assessed coverage shown below."
-      : "PRYSM could not establish a dependable technical SEO verdict because the required crawl and technical evidence was unavailable.";
+    ? `${material.length} fully assessed technical area${
+        material.length === 1 ? " is" : "s are"
+      } currently flagged. Partial rows remain explicitly separated from complete findings.`
+    : rows.some(
+          (row) =>
+            row.assessed &&
+            row.partial,
+        )
+      ? "The available technical evidence is PARTIAL. PRYSM reports observations inside the collected scope but withholds a complete PASS or FINDING for incomplete technical areas."
+      : rows.some(
+            (row) =>
+              row.assessed,
+          )
+        ? "No material technical blocker was established from the fully assessed coverage shown below."
+        : "PRYSM could not establish a dependable technical SEO verdict because the required crawl and technical evidence was unavailable.";
 
   return `
   <section id="technical" class="card">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can search engines reliably discover, understand, and trust your important pages?</p>
-        <p class="muted small">Technical SEO Hygiene · Technical Detail</p>
+    <p class="muted small">Technical SEO Hygiene · Technical Detail</p>
     <!-- Not Assessed compatibility anchor -->
 
     <h3>Direct technical verdict</h3>
     <p>${e(verdict)}</p>
+
     <h3>Server &amp; security headers</h3>
     <div class="table-wrap"><table>
       <thead>
@@ -607,24 +817,37 @@ export function technicalDetailSection(model) {
       </thead>
       <tbody>${headerRows}</tbody>
     </table></div>
+
     <h3>Is anything blocking search performance?</h3>
-    ${material.length
-      ? `<ul>${material
-          .map(
-            (row) =>
-              `<li><strong>${e(row.area)}:</strong> ${e(row.assessedText)} ${e(row.explanation)}</li>`,
-          )
-          .join("")}</ul>`
-      : "<p>No material blocker was established from the technical evidence currently assessed.</p>"}
+    ${
+      material.length
+        ? `<ul>${material
+            .map(
+              (row) =>
+                `<li><strong>${e(
+                  row.area,
+                )}:</strong> ${e(
+                  row.assessedText,
+                )} ${e(
+                  row.explanation,
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>No material blocker was established from the fully assessed technical evidence.</p>"
+    }
 
     <h3>Evaluated-page technical health</h3>
-    ${priorityPages.length
-      ? `<div class="table-wrap"><table>
+    ${
+      priorityPages.length
+        ? `<div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Page</th><th>Observed title</th><th>Heading evidence</th></tr></thead>
           <tbody>${pageRows}</tbody>
         </table></div>
         <p class="muted small">This table uses the page-level evidence carried into the report model. It does not infer page importance where the model does not provide a governed priority label.</p>`
-      : `<p><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> No page-level technical evidence was available.</p>`}
+        : `<p><span class="chip cap-neutral">${e(
+            UNAVAILABLE,
+          )}</span> No page-level technical evidence was available.</p>`
+    }
 
     <h3>SEO Coverage Matrix — Reach → Index → Understand → Deliver</h3>
     <div class="table-wrap"><table>
@@ -641,48 +864,67 @@ export function technicalDetailSection(model) {
     </table></div>
 
     <h3>Material findings</h3>
-    ${material.length
-      ? `<ul>${material
-          .map(
-            (row) =>
-              `<li><strong>${e(row.area)}</strong> — ${e(row.explanation)}</li>`,
-          )
-          .join("")}</ul>`
-      : "<p>No material technical finding was created from the assessed coverage.</p>"}
+    ${
+      material.length
+        ? `<ul>${material
+            .map(
+              (row) =>
+                `<li><strong>${e(
+                  row.area,
+                )}</strong> — ${e(
+                  row.explanation,
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>No material technical finding was created from fully assessed coverage.</p>"
+    }
 
     <h3>Secondary observations</h3>
     <p class="small">Technical metrics and counts are supporting evidence, not conclusions by themselves. Items such as HTTP→HTTPS validation, redirect chains/loops, mixed content, compression diagnostics, material JavaScript errors, and Open Graph metadata are only stated when corresponding evidence exists in the report model.</p>
 
     <h3>Unavailable or partial evidence</h3>
-    ${unavailable.length
-      ? `<ul>${unavailable
-          .map(
-            (row) =>
-              `<li><strong>${e(row.area)}:</strong> ${e(row.assessedText)} ${e(row.explanation)}</li>`,
-          )
-          .join("")}</ul>`
-      : "<p>All coverage rows shown above had assessable evidence.</p>"}
+    ${
+      limited.length
+        ? `<ul>${limited
+            .map(
+              (row) =>
+                `<li><strong>${e(
+                  row.area,
+                )}:</strong> ${e(
+                  row.assessedText,
+                )} ${e(
+                  row.explanation,
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>All coverage rows shown above had complete assessable evidence.</p>"
+    }
   </section>`;
 }
+
 // ---------------------------------------------------------------------------
 // Heading structure
 // ---------------------------------------------------------------------------
 
 export function headingSection(model) {
   const site = model?.evidence?.site || {};
-  const pages = Array.isArray(site.pages)
+
+  const pages = Array.isArray(
+    site.pages,
+  )
     ? site.pages
     : [];
 
   const headingMetaAvailable =
-    site._metaFieldAvailability?.headings === true;
+    site._metaFieldAvailability?.headings ===
+    true;
 
   const relevantPages = pages
     .filter((page) => {
       const url = String(
         page?.crawledUrl ||
-        page?.url ||
-        "",
+          page?.url ||
+          "",
       ).toLowerCase();
 
       if (!url) return true;
@@ -700,9 +942,11 @@ export function headingSection(model) {
     return `
     <section id="headings" class="card">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your important pages structured clearly for visitors and search engines?</p>
-            <p class="muted small">Heading &amp; Semantic Structure · Heading Structure — Evaluated Page</p>
+      <p class="muted small">Heading &amp; Semantic Structure · Heading Structure — Evaluated Page</p>
       <!-- Not Assessed compatibility anchor -->
-      <p><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Heading evidence was not available for the relevant crawled pages. No hierarchy defect is inferred from missing evidence.</p>
+      <p><span class="chip cap-neutral">${e(
+        UNAVAILABLE,
+      )}</span> Heading evidence was not available for the relevant crawled pages. No hierarchy defect is inferred from missing evidence.</p>
     </section>`;
   }
 
@@ -722,15 +966,21 @@ export function headingSection(model) {
         page?.headings ||
         {};
 
-      const h1 = Array.isArray(headings.h1)
+      const h1 = Array.isArray(
+        headings.h1,
+      )
         ? headings.h1
         : [];
 
-      const h2 = Array.isArray(headings.h2)
+      const h2 = Array.isArray(
+        headings.h2,
+      )
         ? headings.h2
         : [];
 
-      const h3 = Array.isArray(headings.h3)
+      const h3 = Array.isArray(
+        headings.h3,
+      )
         ? headings.h3
         : [];
 
@@ -758,36 +1008,76 @@ export function headingSection(model) {
           : "The main page topic may be less clear to visitors and search systems; the count is evidence, not the business conclusion by itself.";
 
       return `<tr>
-        <td class="small">${e(url || "Unavailable")}</td>
-        <td class="small">${e(primaryPurpose)}</td>
-        <td class="small">${e(h1.join(" · ") || "No H1 observed")}<br>${e(h2.length)} H2 · ${e(h3.length)} H3</td>
-        <td><span class="chip ${state === "PASS" ? "cap-ok" : "cap-missing"}">${e(state)}</span><br><span class="small">${e(observation)}</span></td>
-        <td class="small">${e(why)}</td>
+        <td class="small">${e(
+          url || "Unavailable",
+        )}</td>
+        <td class="small">${e(
+          primaryPurpose,
+        )}</td>
+        <td class="small">${e(
+          h1.join(" · ") ||
+            "No H1 observed",
+        )}<br>${e(
+          h2.length,
+        )} H2 · ${e(
+          h3.length,
+        )} H3</td>
+        <td><span class="chip ${
+          state === "PASS"
+            ? "cap-ok"
+            : "cap-missing"
+        }">${e(
+          state,
+        )}</span><br><span class="small">${e(
+          observation,
+        )}</span></td>
+        <td class="small">${e(
+          why,
+        )}</td>
       </tr>`;
     })
     .join("");
 
   const good = relevantPages.filter(
     (page) =>
-      Array.isArray(page?.headings?.h1) &&
+      Array.isArray(
+        page?.headings?.h1,
+      ) &&
       page.headings.h1.length === 1,
   );
 
   const weak = relevantPages.filter(
     (page) =>
-      Array.isArray(page?.headings?.h1) &&
+      Array.isArray(
+        page?.headings?.h1,
+      ) &&
       page.headings.h1.length !== 1,
   );
 
-  const outlinePage = relevantPages[0];
-  const outline = outlinePage?.headings || {};
+  const outlinePage =
+    relevantPages[0];
 
-  const outlineItems = ["h1", "h2", "h3"].flatMap(
+  const outline =
+    outlinePage?.headings ||
+    {};
+
+  const outlineItems = [
+    "h1",
+    "h2",
+    "h3",
+  ].flatMap(
     (level) =>
-      (Array.isArray(outline[level])
-        ? outline[level]
-        : [])
-        .slice(0, level === "h1" ? 2 : 5)
+      (
+        Array.isArray(
+          outline[level],
+        )
+          ? outline[level]
+          : []
+      )
+        .slice(
+          0,
+          level === "h1" ? 2 : 5,
+        )
         .map((text) => [
           level.toUpperCase(),
           text,
@@ -796,31 +1086,69 @@ export function headingSection(model) {
 
   const outlineSvg = outlineItems.length
     ? `<div style="overflow-x:auto;margin:16px 0">
-        <svg viewBox="0 0 720 ${Math.max(120, outlineItems.length * 48 + 24)}" role="img" aria-label="Observed heading outline for one evaluated page" style="width:100%;min-width:620px">
+        <svg viewBox="0 0 720 ${Math.max(
+          120,
+          outlineItems.length * 48 +
+            24,
+        )}" role="img" aria-label="Observed heading outline for one evaluated page" style="width:100%;min-width:620px">
           ${outlineItems
-            .map(([level, text], index) => {
-              const indent =
-                level === "H1"
-                  ? 20
-                  : level === "H2"
-                    ? 70
-                    : 120;
+            .map(
+              (
+                [level, text],
+                index,
+              ) => {
+                const indent =
+                  level === "H1"
+                    ? 20
+                    : level === "H2"
+                      ? 70
+                      : 120;
 
-              const y =
-                28 +
-                index * 48;
+                const y =
+                  28 +
+                  index * 48;
 
-              return `<rect x="${indent}" y="${y - 18}" width="${660 - indent}" height="34" rx="7" fill="none" stroke="currentColor" opacity=".35"/>
-                <text x="${indent + 12}" y="${y + 3}" font-size="12">${e(level)} — ${e(String(text).slice(0, 72))}</text>`;
-            })
+                return `<rect x="${indent}" y="${
+                  y - 18
+                }" width="${
+                  660 - indent
+                }" height="34" rx="7" fill="none" stroke="currentColor" opacity=".35"/>
+                <text x="${
+                  indent + 12
+                }" y="${
+                  y + 3
+                }" font-size="12">${e(
+                  level,
+                )} — ${e(
+                  String(
+                    text,
+                  ).slice(
+                    0,
+                    72,
+                  ),
+                )}</text>`;
+              },
+            )
             .join("")}
         </svg>
       </div>`
     : "";
 
   const verdict = weak.length
-    ? `${weak.length} of ${relevantPages.length} relevant evaluated page${relevantPages.length === 1 ? "" : "s"} has a primary-heading issue that merits review.`
-    : `The ${relevantPages.length} relevant evaluated page${relevantPages.length === 1 ? "" : "s"} shown here each has one observed H1, providing a clear primary semantic signal.`;
+    ? `${weak.length} of ${
+        relevantPages.length
+      } relevant evaluated page${
+        relevantPages.length === 1
+          ? ""
+          : "s"
+      } has a primary-heading issue that merits review.`
+    : `The ${
+        relevantPages.length
+      } relevant evaluated page${
+        relevantPages.length === 1
+          ? ""
+          : "s"
+      } shown here each has one observed H1, providing a clear primary semantic signal.`;
 
   return `
   <section id="headings" class="card">
@@ -844,34 +1172,61 @@ export function headingSection(model) {
       <tbody>${pageRows}</tbody>
     </table></div>
 
-    ${outlineSvg
-      ? `<h3>Observed outline example</h3>
-         <p class="muted small">Example from ${e(outlinePage?.crawledUrl || outlinePage?.url || "the first relevant evaluated page")}.</p>
+    ${
+      outlineSvg
+        ? `<h3>Observed outline example</h3>
+         <p class="muted small">Example from ${e(
+           outlinePage?.crawledUrl ||
+             outlinePage?.url ||
+             "the first relevant evaluated page",
+         )}.</p>
          ${outlineSvg}`
-      : ""}
+        : ""
+    }
 
     <h3>Material hierarchy findings</h3>
-    ${weak.length
-      ? `<ul>${weak
-          .map((page) => {
-            const h1 = Array.isArray(page?.headings?.h1)
-              ? page.headings.h1
-              : [];
+    ${
+      weak.length
+        ? `<ul>${weak
+            .map((page) => {
+              const h1 =
+                Array.isArray(
+                  page?.headings?.h1,
+                )
+                  ? page.headings.h1
+                  : [];
 
-            return `<li><strong>${e(page?.crawledUrl || page?.url || "Evaluated page")}:</strong> ${h1.length === 0 ? "no H1 was observed" : `${e(h1.length)} H1 headings were observed`}.</li>`;
-          })
-          .join("")}</ul>`
-      : "<p>No material H1 hierarchy finding was established on the relevant evaluated pages.</p>"}
+              return `<li><strong>${e(
+                page?.crawledUrl ||
+                  page?.url ||
+                  "Evaluated page",
+              )}:</strong> ${
+                h1.length === 0
+                  ? "no H1 was observed"
+                  : `${e(
+                      h1.length,
+                    )} H1 headings were observed`
+              }.</li>`;
+            })
+            .join("")}</ul>`
+        : "<p>No material H1 hierarchy finding was established on the relevant evaluated pages.</p>"
+    }
 
     <h3>What is already structured well</h3>
-    ${good.length
-      ? `<ul>${good
-          .map(
-            (page) =>
-              `<li>${e(page?.crawledUrl || page?.url || "Evaluated page")} — one primary H1 observed.</li>`,
-          )
-          .join("")}</ul>`
-      : "<p>No relevant page met the simple one-H1 supporting condition.</p>"}
+    ${
+      good.length
+        ? `<ul>${good
+            .map(
+              (page) =>
+                `<li>${e(
+                  page?.crawledUrl ||
+                    page?.url ||
+                    "Evaluated page",
+                )} — one primary H1 observed.</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>No relevant page met the simple one-H1 supporting condition.</p>"
+    }
 
     <h3>Secondary observations</h3>
     <p class="small">Raw H1/H2/H3 counts support the assessment but do not determine page quality on their own. Low-value utility URLs are excluded from this presentation when identifiable from their URL.</p>
@@ -905,16 +1260,70 @@ const RECOMMENDED_SCHEMA = [
 ];
 
 export function schemaSection(model) {
-  const site = model?.evidence?.site || {};
-  const assessed = capAvailable(
-    model,
-    "schema.structured_data",
-  );
+  const site =
+    model?.evidence?.site ||
+    {};
+
+  const schemaAssessed =
+    capAssessed(
+      model,
+      "schema.structured_data",
+    );
+
+  const schemaComplete =
+    capAvailable(
+      model,
+      "schema.structured_data",
+    );
+
+  const schemaPartial =
+    capPartial(
+      model,
+      "schema.structured_data",
+    );
+
+  const contentAssessed =
+    capAssessed(
+      model,
+      "content.body",
+    );
+
+  const contentComplete =
+    capAvailable(
+      model,
+      "content.body",
+    );
+
+  const contentPartial =
+    capPartial(
+      model,
+      "content.body",
+    );
+
+  const trustAssessed =
+    capAssessed(
+      model,
+      "trust.proof",
+    );
+
+  const trustComplete =
+    capAvailable(
+      model,
+      "trust.proof",
+    );
+
+  const trustPartial =
+    capPartial(
+      model,
+      "trust.proof",
+    );
 
   const observed = [
     ...new Set([
-      ...(site.schemaTypes || []),
-      ...(site.microdataTypes || []),
+      ...(site.schemaTypes ||
+        []),
+      ...(site.microdataTypes ||
+        []),
     ]),
   ];
 
@@ -927,13 +1336,37 @@ export function schemaSection(model) {
     "Unavailable";
 
   const expertiseObserved =
-    capAvailable(model, "trust.proof") &&
-    site.trust?.credentials === true;
+    trustAssessed &&
+    site.trust?.credentials ===
+      true;
 
   const supportingPages =
-    Array.isArray(site.pages)
+    Array.isArray(
+      site.pages,
+    )
       ? site.pages.length
       : 0;
+
+  const serviceStatus =
+    services.length &&
+    contentComplete
+      ? "PASS"
+      : services.length &&
+          contentPartial
+        ? "PARTIAL"
+        : contentAssessed
+          ? "PARTIAL"
+          : "UNAVAILABLE";
+
+  const expertiseStatus =
+    expertiseObserved &&
+    trustComplete
+      ? "PASS"
+      : trustPartial
+        ? "PARTIAL"
+        : trustComplete
+          ? "FINDING"
+          : "UNAVAILABLE";
 
   const questionRows = [
     [
@@ -945,10 +1378,30 @@ export function schemaSection(model) {
     ],
     [
       "What does the business offer?",
-      services.length ? "PASS" : "PARTIAL",
+      serviceStatus,
       services.length
-        ? `${services.length} service or offer topic(s) were detected: ${services.slice(0, 6).join(", ")}.`
-        : "Service/entity coverage was not available.",
+        ? contentPartial
+          ? `${services.length} service or offer topic(s) were detected within PARTIAL content coverage: ${services
+              .slice(
+                0,
+                6,
+              )
+              .join(
+                ", ",
+              )}.`
+          : `${services.length} service or offer topic(s) were detected: ${services
+              .slice(
+                0,
+                6,
+              )
+              .join(
+                ", ",
+              )}.`
+        : contentPartial
+          ? "No service or offer topic was detected in the available partial content assessment. Whole-site absence is not established."
+          : contentAssessed
+            ? "Service/entity coverage was assessed, but no service or offer topic was detected."
+            : "Service/entity coverage was not available.",
     ],
     [
       "Where does the business operate?",
@@ -959,57 +1412,83 @@ export function schemaSection(model) {
     ],
     [
       "Who is behind the expertise?",
+      expertiseStatus,
       expertiseObserved
-        ? "PASS"
-        : capAvailable(model, "trust.proof")
-          ? "FINDING"
-          : "UNAVAILABLE",
-      expertiseObserved
-        ? "Credential or expertise proof was observed."
-        : capAvailable(model, "trust.proof")
-          ? "Credential or expertise proof was not observed in assessed page content."
-          : "Trust-proof content was unavailable.",
+        ? trustPartial
+          ? "Credential or expertise proof was observed within PARTIAL trust-proof coverage."
+          : "Credential or expertise proof was observed."
+        : trustPartial
+          ? "Credential or expertise proof was not observed in the available partial trust-proof assessment. Absence is not established."
+          : trustComplete
+            ? "Credential or expertise proof was not observed in assessed page content."
+            : "Trust-proof content was unavailable.",
     ],
     [
       "How are key pages connected?",
-      supportingPages > 1
-        ? "PARTIAL"
-        : "PARTIAL",
+      "PARTIAL",
       supportingPages > 1
         ? `${supportingPages} crawled page(s) provide some relationship context; internal-link interpretation is handled separately.`
         : "Too little page-level evidence was available to describe entity relationships confidently.",
     ],
   ];
 
-  const observedBlock = !assessed
-    ? `<p><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Structured-data evidence was not collected for this audit.</p>`
-    : observed.length
-      ? `<div class="table-wrap"><table>
+  const observedBlock =
+    !schemaAssessed
+      ? `<p><span class="chip cap-neutral">${e(
+          UNAVAILABLE,
+        )}</span> Structured-data evidence was not collected for this audit.</p>`
+      : observed.length
+        ? `<div class="table-wrap"><table>
           <thead><tr><th>Type detected on the site</th></tr></thead>
-          <tbody>${observed.map((t) => `<tr><td>${e(t)}</td></tr>`).join("")}</tbody>
-        </table></div>`
-      : '<p class="small"><span class="chip cap-missing">FINDING</span> No structured-data type was observed in the assessed structured-data evidence.</p>';
+          <tbody>${observed
+            .map(
+              (t) =>
+                `<tr><td>${e(
+                  t,
+                )}</td></tr>`,
+            )
+            .join("")}</tbody>
+        </table></div>
+        ${
+          schemaPartial
+            ? '<p class="small"><span class="chip cap-neutral">PARTIAL</span> These types were observed within partial structured-data coverage. Unobserved types are not treated as established absence.</p>'
+            : ""
+        }`
+        : schemaPartial
+          ? '<p class="small"><span class="chip cap-neutral">PARTIAL</span> No structured-data type was observed in the available partial assessment. Absence is not established.</p>'
+          : '<p class="small"><span class="chip cap-missing">FINDING</span> No structured-data type was observed in the fully assessed structured-data evidence.</p>';
 
-    const weakEntityQuestions = questionRows.filter(
-    ([, status]) => status === "FINDING" || status === "PARTIAL",
-  );
+  const recommendations =
+    schemaComplete
+      ? RECOMMENDED_SCHEMA.filter(
+          ([type]) =>
+            !observed.some(
+              (item) =>
+                String(
+                  item,
+                )
+                  .toLowerCase()
+                  .includes(
+                    type
+                      .split(
+                        " ",
+                      )[0]
+                      .toLowerCase(),
+                  ),
+            ),
+        )
+      : [];
 
-  const recommendations = assessed
-    ? RECOMMENDED_SCHEMA.filter(
-        ([type]) =>
-          !observed.some((item) =>
-            String(item)
-              .toLowerCase()
-              .includes(type.split(" ")[0].toLowerCase()),
-          ),
-      )
-    : [];
-
-  const directAnswer = !assessed
-    ? "PRYSM could not determine the site's structured entity clarity because structured-data evidence was not collected."
-    : observed.length
-      ? `Search systems have ${observed.length} observed structured-data type${observed.length === 1 ? "" : "s"} to help interpret the site, but entity clarity depends on whether those signals accurately connect the business, services, expertise, locations, and supporting content.`
-      : "The assessed pages did not expose structured-data types, so search systems must rely more heavily on ordinary page content and links to understand the business and its offers.";
+  const directAnswer =
+    !schemaAssessed
+      ? "PRYSM could not determine the site's structured entity clarity because structured-data evidence was not collected."
+      : schemaPartial
+        ? observed.length
+          ? `Structured-data evidence was PARTIAL. PRYSM observed ${observed.length} structured-data type${observed.length === 1 ? "" : "s"} within the available coverage, but it does not treat unobserved entity signals as established gaps.`
+          : "Structured-data evidence was PARTIAL and no type was observed in the available coverage. PRYSM does not convert that partial non-detection into a whole-site absence finding."
+        : observed.length
+          ? `Search systems have ${observed.length} observed structured-data type${observed.length === 1 ? "" : "s"} to help interpret the site, but entity clarity depends on whether those signals accurately connect the business, services, expertise, locations, and supporting content.`
+          : "The fully assessed pages did not expose structured-data types, so search systems must rely more heavily on ordinary page content and links to understand the business and its offers.";
 
   return `
   <section id="schema" class="card">
@@ -1017,24 +1496,36 @@ export function schemaSection(model) {
     <p class="muted small">Schema &amp; Entity Clarity · Schema &amp; Entity Signals</p>
 
     <h3>Direct answer</h3>
-    <p>${e(directAnswer)}</p>
+    <p>${e(
+      directAnswer,
+    )}</p>
 
-        <h3>Observed structured data</h3>
+    <h3>Observed structured data</h3>
     ${observedBlock}
 
     <h3>Recommended structured-data candidates</h3>
-    ${assessed && recommendations.length
-      ? `<div class="table-wrap"><table>
+    ${
+      schemaComplete &&
+      recommendations.length
+        ? `<div class="table-wrap"><table>
           <thead><tr><th>Candidate type</th><th>Why it may help</th></tr></thead>
           <tbody>${recommendations
             .map(
               ([type, why]) =>
-                `<tr><td>${e(type)}</td><td class="small">${e(why)}</td></tr>`,
+                `<tr><td>${e(
+                  type,
+                )}</td><td class="small">${e(
+                  why,
+                )}</td></tr>`,
             )
             .join("")}</tbody>
         </table></div>
         <p class="muted small">These are candidates for consideration only. A missing schema type is not automatically a finding or recommendation.</p>`
-      : "<p>No additional structured-data candidate was established from the available evidence.</p>"}
+        : schemaPartial
+          ? '<p><span class="chip cap-neutral">PARTIAL</span> PRYSM does not derive missing-schema candidates from incomplete structured-data coverage.</p>'
+          : "<p>No additional structured-data candidate was established from the available evidence.</p>"
+    }
+
     <h3>Entity-question matrix</h3>
     <div class="table-wrap"><table>
       <thead>
@@ -1046,16 +1537,30 @@ export function schemaSection(model) {
       </thead>
       <tbody>${questionRows
         .map(
-          ([question, status, detail]) => `<tr>
-            <td><strong>${e(question)}</strong></td>
+          (
+            [
+              question,
+              status,
+              detail,
+            ],
+          ) => `<tr>
+            <td><strong>${e(
+              question,
+            )}</strong></td>
             <td><span class="chip ${
-              status === "PASS"
+              status ===
+              "PASS"
                 ? "cap-ok"
-                : status === "FINDING"
+                : status ===
+                    "FINDING"
                   ? "cap-missing"
                   : "cap-neutral"
-            }">${e(status)}</span></td>
-            <td class="small">${e(detail)}</td>
+            }">${e(
+              status,
+            )}</span></td>
+            <td class="small">${e(
+              detail,
+            )}</td>
           </tr>`,
         )
         .join("")}</tbody>
@@ -1092,15 +1597,22 @@ export function schemaSection(model) {
       </svg>
     </div>
 
-        <h3>Material findings only</h3>
+    <h3>Material findings only</h3>
     <p class="small">Schema type counts do not become findings by themselves. A structured-data change should be prioritized only when it materially improves understanding of a real business, service, person, location, or supporting content relationship.</p>
 
     <h3>Unavailable or partial evidence</h3>
-    ${assessed
-      ? '<p class="small">Structured-data evidence was available for the observed types shown above. External knowledge-graph inclusion and actual AI/search retrieval were not assessed.</p>'
-      : `<p class="small"><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Structured-data evidence was unavailable, so no absence was scored as a defect.</p>`}
+    ${
+      schemaComplete
+        ? '<p class="small">Structured-data evidence was available for the observed types shown above. External knowledge-graph inclusion and actual AI/search retrieval were not assessed.</p>'
+        : schemaPartial
+          ? '<p class="small"><span class="chip cap-neutral">PARTIAL</span> Structured-data coverage was incomplete. Observed types are retained, but unobserved types are not treated as established absence.</p>'
+          : `<p class="small"><span class="chip cap-neutral">${e(
+              UNAVAILABLE,
+            )}</span> Structured-data evidence was unavailable, so no absence was scored as a defect.</p>`
+    }
   </section>`;
 }
+
 // ---------------------------------------------------------------------------
 // Performance detail
 // ---------------------------------------------------------------------------
@@ -1109,12 +1621,21 @@ function deviceCard(label, data) {
   if (
     !data ||
     data.status === "FAILED" ||
-    data.status === "UNAVAILABLE"
+    data.status ===
+      "UNAVAILABLE"
   ) {
     return `
       <div class="pillar">
-        <h4>${e(label)}</h4>
-        <p class="small">Result: Unavailable${data?.status ? ` (${e(data.status)})` : ""}.
+        <h4>${e(
+          label,
+        )}</h4>
+        <p class="small">Result: Unavailable${
+          data?.status
+            ? ` (${e(
+                data.status,
+              )})`
+            : ""
+        }.
           No score or metric is inferred for this profile.</p>
       </div>`;
   }
@@ -1134,30 +1655,91 @@ function deviceCard(label, data) {
         ? "Lab data"
         : "Provenance not recorded";
 
+  const scopeNote =
+    data.status === "PARTIAL"
+      ? ' · <span class="chip cap-neutral">PARTIAL</span>'
+      : "";
+
   return `
     <div class="pillar">
-      <h4>${e(label)}</h4>
+      <h4>${e(
+        label,
+      )}</h4>
 
-      <p class="small">Tested URL: ${e(data.url || "Unavailable")}<br>
-        Provider: ${e(data.source || "Unavailable")} · ${e(provenance)}${data.fallbackUsed ? " · fallback used" : ""}</p>
+      <p class="small">Tested URL: ${e(
+        data.url ||
+          "Unavailable",
+      )}<br>
+        Provider: ${e(
+          data.source ||
+            "Unavailable",
+        )} · ${e(
+          provenance,
+        )}${
+          data.fallbackUsed
+            ? " · fallback used"
+            : ""
+        }${scopeNote}</p>
+
+      ${
+        data.status ===
+        "PARTIAL"
+          ? '<p class="small">Available measurements are retained, but this profile does not establish complete performance coverage.</p>'
+          : ""
+      }
 
       <div class="table-wrap"><table>
         <thead><tr><th>Score</th><th>Value</th></tr></thead>
         <tbody>
-          <tr><td>Performance</td><td>${e(orUnavailable(s.performance))}</td></tr>
-          <tr><td>Accessibility</td><td>${e(orUnavailable(s.accessibility))}</td></tr>
-          <tr><td>Best Practices</td><td>${e(orUnavailable(s.bestPractices))}</td></tr>
-          <tr><td>SEO</td><td>${e(orUnavailable(s.seo))}</td></tr>
+          <tr><td>Performance</td><td>${e(
+            orUnavailable(
+              s.performance,
+            ),
+          )}</td></tr>
+          <tr><td>Accessibility</td><td>${e(
+            orUnavailable(
+              s.accessibility,
+            ),
+          )}</td></tr>
+          <tr><td>Best Practices</td><td>${e(
+            orUnavailable(
+              s.bestPractices,
+            ),
+          )}</td></tr>
+          <tr><td>SEO</td><td>${e(
+            orUnavailable(
+              s.seo,
+            ),
+          )}</td></tr>
         </tbody>
       </table></div>
 
       <div class="table-wrap"><table>
         <thead><tr><th>Metric</th><th>Value</th></tr></thead>
         <tbody>
-          <tr><td>FCP</td><td>${e(orUnavailable(m.fcpMs, " ms"))}</td></tr>
-          <tr><td>LCP</td><td>${e(orUnavailable(m.lcpMs, " ms"))}</td></tr>
-          <tr><td>TBT</td><td>${e(orUnavailable(m.tbtMs, " ms"))}</td></tr>
-          <tr><td>CLS</td><td>${e(orUnavailable(m.cls))}</td></tr>
+          <tr><td>FCP</td><td>${e(
+            orUnavailable(
+              m.fcpMs,
+              " ms",
+            ),
+          )}</td></tr>
+          <tr><td>LCP</td><td>${e(
+            orUnavailable(
+              m.lcpMs,
+              " ms",
+            ),
+          )}</td></tr>
+          <tr><td>TBT</td><td>${e(
+            orUnavailable(
+              m.tbtMs,
+              " ms",
+            ),
+          )}</td></tr>
+          <tr><td>CLS</td><td>${e(
+            orUnavailable(
+              m.cls,
+            ),
+          )}</td></tr>
         </tbody>
       </table></div>
     </div>`;
@@ -1180,10 +1762,14 @@ export function performanceDetailSection(model) {
     {};
 
   const fieldKeys =
-    Object.keys(field);
+    Object.keys(
+      field,
+    );
 
   const pageResults =
-    Array.isArray(perf.pageResults)
+    Array.isArray(
+      perf.pageResults,
+    )
       ? perf.pageResults
       : [];
 
@@ -1197,79 +1783,148 @@ export function performanceDetailSection(model) {
     mobileScore,
     desktopScore,
   ].filter(
-    (score) => typeof score === "number",
+    (score) =>
+      typeof score ===
+        "number" &&
+      Number.isFinite(
+        score,
+      ),
   );
 
   const weakest =
     availableScores.length
-      ? Math.min(...availableScores)
+      ? Math.min(
+          ...availableScores,
+        )
       : null;
+
+  const performancePartial =
+    perf.sourceStatus ===
+      "PARTIAL" ||
+    perf.mobile?.status ===
+      "PARTIAL" ||
+    perf.desktop?.status ===
+      "PARTIAL";
 
   const verdict =
     weakest === null
       ? "Performance evidence exists, but no usable mobile or desktop performance score was returned. PRYSM withholds a speed judgment."
-      : weakest >= 90
-        ? "The available performance evidence is strong across the tested profiles."
-        : weakest >= 60
-          ? "The tested experience is usable but leaves measurable performance headroom on at least one profile."
-          : "At least one tested profile shows material performance friction that can affect important visitor and conversion paths.";
+      : performancePartial
+        ? `Performance evidence was PARTIAL. The available tested profile${
+            availableScores.length ===
+            1
+              ? ""
+              : "s"
+          } produced measurable results, including a weakest available performance score of ${weakest}/100, but incomplete coverage prevents a complete site-level PASS or FINDING.`
+        : weakest >= 90
+          ? "The available performance evidence is strong across the tested profiles."
+          : weakest >= 60
+            ? "The tested experience is usable but leaves measurable performance headroom on at least one profile."
+            : "At least one tested profile shows material performance friction that can affect important visitor and conversion paths.";
 
   const priorityRows = [
-    ["Mobile", perf.mobile],
-    ["Desktop", perf.desktop],
+    [
+      "Mobile",
+      perf.mobile,
+    ],
+    [
+      "Desktop",
+      perf.desktop,
+    ],
   ]
-    .map(([label, data]) => {
-      if (
-        !data ||
-        data.status === "FAILED" ||
-        data.status === "UNAVAILABLE"
-      ) {
-        return `<tr>
-          <td>${e(label)}</td>
+    .map(
+      (
+        [
+          label,
+          data,
+        ],
+      ) => {
+        if (
+          !data ||
+          data.status ===
+            "FAILED" ||
+          data.status ===
+            "UNAVAILABLE"
+        ) {
+          return `<tr>
+          <td>${e(
+            label,
+          )}</td>
           <td>Unavailable</td>
           <td>Unavailable</td>
           <td>Unavailable</td>
           <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
         </tr>`;
-      }
+        }
 
-      const metrics =
-        data.metrics ||
-        {};
+        const metrics =
+          data.metrics ||
+          {};
 
-      const performanceScore =
-        data.scores?.performance;
+        const performanceScore =
+          data.scores?.performance;
 
-      const status =
-        typeof performanceScore !== "number"
-          ? "PARTIAL"
-          : performanceScore >= 60
-            ? "PASS"
-            : "FINDING";
+        const status =
+          data.status ===
+          "PARTIAL"
+            ? "PARTIAL"
+            : typeof performanceScore !==
+                "number"
+              ? "PARTIAL"
+              : performanceScore >=
+                  60
+                ? "PASS"
+                : "FINDING";
 
-      return `<tr>
-        <td>${e(label)}</td>
-        <td>${e(orUnavailable(performanceScore))}</td>
-        <td>${e(orUnavailable(metrics.lcpMs, " ms"))}</td>
-        <td>${e(orUnavailable(metrics.cls))}</td>
+        return `<tr>
+        <td>${e(
+          label,
+        )}</td>
+        <td>${e(
+          orUnavailable(
+            performanceScore,
+          ),
+        )}</td>
+        <td>${e(
+          orUnavailable(
+            metrics.lcpMs,
+            " ms",
+          ),
+        )}</td>
+        <td>${e(
+          orUnavailable(
+            metrics.cls,
+          ),
+        )}</td>
         <td><span class="chip ${
           status === "PASS"
             ? "cap-ok"
-            : status === "FINDING"
+            : status ===
+                "FINDING"
               ? "cap-missing"
               : "cap-neutral"
-        }">${e(status)}</span></td>
+        }">${e(
+          status,
+        )}</span></td>
       </tr>`;
-    })
+      },
+    )
     .join("");
 
   const labBlock = `<div class="pillar-grid">
-    ${deviceCard("Mobile", perf.mobile)}
-    ${deviceCard("Desktop", perf.desktop)}
+    ${deviceCard(
+      "Mobile",
+      perf.mobile,
+    )}
+    ${deviceCard(
+      "Desktop",
+      perf.desktop,
+    )}
   </div>`;
 
-  const fieldBlock = fieldKeys.length
-    ? `<div class="table-wrap"><table>
+  const fieldBlock =
+    fieldKeys.length
+      ? `<div class="table-wrap"><table>
         <thead>
           <tr>
             <th>Field profile</th>
@@ -1279,16 +1934,27 @@ export function performanceDetailSection(model) {
         <tbody>${fieldKeys
           .map(
             (key) =>
-              `<tr><td>${e(key)}</td><td class="small">${e(JSON.stringify(field[key]))}</td></tr>`,
+              `<tr><td>${e(
+                key,
+              )}</td><td class="small">${e(
+                JSON.stringify(
+                  field[
+                    key
+                  ],
+                ),
+              )}</td></tr>`,
           )
           .join("")}</tbody>
       </table></div>`
-    : '<p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p>';
+      : '<p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p>';
 
   const strengths = [];
 
   if (
-    typeof mobileScore === "number" &&
+    perf.mobile?.status ===
+      "AVAILABLE" &&
+    typeof mobileScore ===
+      "number" &&
     mobileScore >= 90
   ) {
     strengths.push(
@@ -1297,7 +1963,10 @@ export function performanceDetailSection(model) {
   }
 
   if (
-    typeof desktopScore === "number" &&
+    perf.desktop?.status ===
+      "AVAILABLE" &&
+    typeof desktopScore ===
+      "number" &&
     desktopScore >= 90
   ) {
     strengths.push(
@@ -1306,9 +1975,14 @@ export function performanceDetailSection(model) {
   }
 
   if (
-    perf.mobile?.metrics?.cls !== undefined &&
-    perf.mobile.metrics.cls !== null &&
-    perf.mobile.metrics.cls <= 0.1
+    perf.mobile?.status ===
+      "AVAILABLE" &&
+    perf.mobile?.metrics?.cls !==
+      undefined &&
+    perf.mobile.metrics.cls !==
+      null &&
+    perf.mobile.metrics.cls <=
+      0.1
   ) {
     strengths.push(
       `Mobile CLS was ${perf.mobile.metrics.cls}, indicating stable layout in the tested run.`,
@@ -1316,27 +1990,33 @@ export function performanceDetailSection(model) {
   }
 
   if (
-    perf.desktop?.metrics?.cls !== undefined &&
-    perf.desktop.metrics.cls !== null &&
-    perf.desktop.metrics.cls <= 0.1
+    perf.desktop?.status ===
+      "AVAILABLE" &&
+    perf.desktop?.metrics?.cls !==
+      undefined &&
+    perf.desktop.metrics.cls !==
+      null &&
+    perf.desktop.metrics.cls <=
+      0.1
   ) {
     strengths.push(
       `Desktop CLS was ${perf.desktop.metrics.cls}, indicating stable layout in the tested run.`,
     );
   }
 
-  const findings = (model?.findings || []).filter(
+  const findings = (
+    model?.findings ||
+    []
+  ).filter(
     (finding) =>
-      finding.dimension === "technical_performance" ||
-      finding.module === "performance" ||
-      /performance|LCP|CLS|TBT|render/i.test(
-        finding.title ||
-        "",
-      ),
+      finding.module ===
+      "performance",
   );
 
   const collectedDiagnostics =
-    Array.isArray(model.renderingDiagnostics);
+    Array.isArray(
+      model.renderingDiagnostics,
+    );
 
   const diagnostics =
     collectedDiagnostics
@@ -1349,7 +2029,9 @@ export function performanceDetailSection(model) {
     <p class="muted small">Performance · Performance Detail</p>
 
     <h3>Direct answer</h3>
-    <p>${e(verdict)}</p>
+    <p>${e(
+      verdict,
+    )}</p>
 
     <h3>Priority-page mobile / desktop performance</h3>
     <div class="table-wrap"><table>
@@ -1365,9 +2047,18 @@ export function performanceDetailSection(model) {
       <tbody>${priorityRows}</tbody>
     </table></div>
 
-    ${pageResults.length
-      ? `<p class="muted small">${e(pageResults.length)} page-level performance result${pageResults.length === 1 ? " was" : "s were"} returned. The summary above presents the governed mobile/desktop profiles; raw page-result provenance remains secondary evidence.</p>`
-      : ""}
+    ${
+      pageResults.length
+        ? `<p class="muted small">${e(
+            pageResults.length,
+          )} page-level performance result${
+            pageResults.length ===
+            1
+              ? " was"
+              : "s were"
+          } returned. The summary above presents the governed mobile/desktop profiles; raw page-result provenance remains secondary evidence.</p>`
+        : ""
+    }
 
     <h3>What does the visitor actually experience?</h3>
     <p class="small">LCP, CLS, TBT, response time, and related metrics support the conclusion; they are not the conclusion. PRYSM interprets performance by whether delivery friction is likely to affect important user and conversion paths.</p>
@@ -1379,40 +2070,112 @@ export function performanceDetailSection(model) {
     ${fieldBlock}
 
     <h3>What is already performing well</h3>
-    ${strengths.length
-      ? `<ul>${strengths.map((item) => `<li>${e(item)}</li>`).join("")}</ul>`
-      : "<p>No performance strength met the threshold for a clear positive statement from the available evidence.</p>"}
-
-    <h3>Material performance findings</h3>
-    ${findings.length
-      ? `<ul>${findings
-          .slice(0, 6)
-          .map(
-            (finding) =>
-              `<li><strong>${e(finding.title || "Performance finding")}</strong> — ${e(finding.businessImpact || "")}${finding.recommendation ? ` <strong>Action:</strong> ${e(finding.recommendation)}` : ""}</li>`,
-          )
-          .join("")}</ul>`
-      : "<p>No material governed performance finding was produced from the assessed evidence.</p>"}
-
-    <h3>Rendering integrity</h3>
-    ${!collectedDiagnostics
-      ? `<p><span class="chip cap-neutral">${e(UNAVAILABLE)}</span> Rendering-integrity diagnostics were not carried into this report model.</p>`
-      : diagnostics.length
-        ? `<ul>${diagnostics
-            .slice(0, 10)
+    ${
+      strengths.length
+        ? `<ul>${strengths
             .map(
-              (diagnostic) =>
-                `<li><strong>${e(diagnostic.diagnosticCode || "Diagnostic")}:</strong> ${e(diagnostic.clientExplanation || "")}${diagnostic.affectedUrl ? ` — ${e(diagnostic.affectedUrl)}` : ""}</li>`,
+              (
+                item,
+              ) =>
+                `<li>${e(
+                  item,
+                )}</li>`,
             )
             .join("")}</ul>`
-        : "<p>Rendering integrity was assessed and no diagnostic was raised.</p>"}
+        : performancePartial
+          ? '<p><span class="chip cap-neutral">PARTIAL</span> No complete performance strength statement is made from partial profile coverage.</p>'
+          : "<p>No performance strength met the threshold for a clear positive statement from the available evidence.</p>"
+    }
+
+    <h3>Material performance findings</h3>
+    ${
+      findings.length
+        ? `<ul>${findings
+            .slice(
+              0,
+              6,
+            )
+            .map(
+              (
+                finding,
+              ) =>
+                `<li><strong>${e(
+                  finding.title ||
+                    "Performance finding",
+                )}</strong> — ${e(
+                  finding.businessImpact ||
+                    "",
+                )}${
+                  finding.recommendation
+                    ? ` <strong>Action:</strong> ${e(
+                        finding.recommendation,
+                      )}`
+                    : ""
+                }</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>No material governed performance finding was produced from the assessed evidence.</p>"
+    }
+
+    <h3>Rendering integrity</h3>
+    ${
+      !collectedDiagnostics
+        ? `<p><span class="chip cap-neutral">${e(
+            UNAVAILABLE,
+          )}</span> Rendering-integrity diagnostics were not carried into this report model.</p>`
+        : diagnostics.length
+          ? `<ul>${diagnostics
+              .slice(
+                0,
+                10,
+              )
+              .map(
+                (
+                  diagnostic,
+                ) =>
+                  `<li><strong>${e(
+                    diagnostic.diagnosticCode ||
+                      "Diagnostic",
+                  )}:</strong> ${e(
+                    diagnostic.clientExplanation ||
+                      "",
+                  )}${
+                    diagnostic.affectedUrl
+                      ? ` — ${e(
+                          diagnostic.affectedUrl,
+                        )}`
+                      : ""
+                  }</li>`,
+              )
+              .join("")}</ul>`
+          : "<p>Rendering integrity was assessed and no diagnostic was raised.</p>"
+    }
 
     <h3>Partial or unavailable evidence</h3>
-    ${(perf.limitations || []).length
-      ? `<ul>${perf.limitations.map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>`
-      : fieldKeys.length
-        ? "<p>No additional provider limitation was recorded.</p>"
-        : "<p>Field performance was unavailable. This limits conclusions about real-user experience but does not invalidate the available lab measurements.</p>"}
+    ${
+      (
+        perf.limitations ||
+        []
+      ).length
+        ? `<ul>${(
+            perf.limitations ||
+            []
+          )
+            .map(
+              (
+                limitation,
+              ) =>
+                `<li>${e(
+                  limitation,
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : performancePartial
+          ? '<p><span class="chip cap-neutral">PARTIAL</span> At least one performance source or tested profile had incomplete coverage. Available measurements remain valid within that scope.</p>'
+          : fieldKeys.length
+            ? "<p>No additional provider limitation was recorded.</p>"
+            : "<p>Field performance was unavailable. This limits conclusions about real-user experience but does not invalidate the available lab measurements.</p>"
+    }
   </section>`;
 }
 
@@ -1429,12 +2192,6 @@ export function accessibilityMobileSection(model) {
     model?.evidence?.performance ||
     {};
 
-  const contentOk =
-    capAvailable(
-      model,
-      "content.body",
-    );
-
   const mobileAccessibility =
     perf.mobile?.scores?.accessibility;
 
@@ -1445,107 +2202,208 @@ export function accessibilityMobileSection(model) {
     mobileAccessibility,
     desktopAccessibility,
   ].filter(
-    (score) => typeof score === "number",
+    (score) =>
+      typeof score ===
+        "number" &&
+      Number.isFinite(
+        score,
+      ),
   );
 
   const accessibilityScore =
     accessibilityScores.length
-      ? Math.min(...accessibilityScores)
+      ? Math.min(
+          ...accessibilityScores,
+        )
       : null;
+
+  const accessibilityPartial =
+    perf.sourceStatus ===
+      "PARTIAL" ||
+    perf.mobile?.status ===
+      "PARTIAL" ||
+    perf.desktop?.status ===
+      "PARTIAL";
+
+  const imageEvidenceKnown =
+    typeof site.imageCount ===
+      "number" &&
+    Number.isFinite(
+      site.imageCount,
+    ) &&
+    site.imageCount >= 0 &&
+    typeof site.imagesMissingAlt ===
+      "number" &&
+    Number.isFinite(
+      site.imagesMissingAlt,
+    ) &&
+    site.imagesMissingAlt >=
+      0 &&
+    site.imagesMissingAlt <=
+      site.imageCount;
+
+  const imageEvidencePartial =
+    site.sourceStatus ===
+    "PARTIAL";
 
   const areas = [
     {
-      area: "Mobile viewport",
-      status: "UNAVAILABLE",
+      area:
+        "Mobile viewport",
+      status:
+        "UNAVAILABLE",
       detail:
         "A dedicated viewport configuration result is not carried in the current report model.",
       impact:
         "PRYSM withholds a viewport conclusion rather than treating missing evidence as a failure.",
     },
     {
-      area: "Responsive layout",
-      status: "UNAVAILABLE",
+      area:
+        "Responsive layout",
+      status:
+        "UNAVAILABLE",
       detail:
         "A dedicated responsive-layout result is not carried in the current report model.",
       impact:
         "Layout behavior across breakpoints cannot be determined from the available report evidence.",
     },
     {
-      area: "Font legibility",
-      status: "UNAVAILABLE",
+      area:
+        "Font legibility",
+      status:
+        "UNAVAILABLE",
       detail:
         "A dedicated font-legibility audit result is not carried in the current report model.",
       impact:
         "PRYSM does not infer readability from unrelated performance metrics.",
     },
     {
-      area: "Tap-target sizing",
-      status: "UNAVAILABLE",
+      area:
+        "Tap-target sizing",
+      status:
+        "UNAVAILABLE",
       detail:
         "A dedicated tap-target result is not carried in the current report model.",
       impact:
         "Touch-target usability cannot be concluded from missing evidence.",
     },
     {
-      area: "Accessibility readiness",
+      area:
+        "Accessibility readiness",
       status:
-        accessibilityScore === null
+        accessibilityScore ===
+        null
           ? "UNAVAILABLE"
-          : accessibilityScore >= 90
-            ? "PASS"
-            : "PARTIAL",
+          : accessibilityPartial
+            ? "PARTIAL"
+            : accessibilityScore >=
+                90
+              ? "PASS"
+              : "PARTIAL",
       detail:
-        accessibilityScore === null
+        accessibilityScore ===
+        null
           ? "No Lighthouse accessibility score was available for the tested mobile or desktop profile."
-          : `Lowest available Lighthouse accessibility score: ${accessibilityScore}/100${typeof mobileAccessibility === "number" ? `; mobile ${mobileAccessibility}/100` : ""}${typeof desktopAccessibility === "number" ? `; desktop ${desktopAccessibility}/100` : ""}.`,
+          : accessibilityPartial
+            ? `Lowest available Lighthouse accessibility score: ${accessibilityScore}/100${
+                typeof mobileAccessibility ===
+                "number"
+                  ? `; mobile ${mobileAccessibility}/100`
+                  : ""
+              }${
+                typeof desktopAccessibility ===
+                "number"
+                  ? `; desktop ${desktopAccessibility}/100`
+                  : ""
+              }. Performance/accessibility coverage was PARTIAL, so this is not a complete readiness PASS.`
+            : `Lowest available Lighthouse accessibility score: ${accessibilityScore}/100${
+                typeof mobileAccessibility ===
+                "number"
+                  ? `; mobile ${mobileAccessibility}/100`
+                  : ""
+              }${
+                typeof desktopAccessibility ===
+                "number"
+                  ? `; desktop ${desktopAccessibility}/100`
+                  : ""
+              }.`,
       impact:
-        accessibilityScore === null
+        accessibilityScore ===
+        null
           ? "Automated accessibility readiness could not be summarized."
-          : accessibilityScore >= 90
-            ? "The automated result is a positive readiness signal but does not establish legal or standards compliance."
-            : "The automated score indicates potential accessibility risk that requires issue-level evidence before PRYSM treats it as a material barrier; it does not establish legal or standards compliance.",
+          : accessibilityPartial
+            ? "The automated score is valid within the available tested coverage, but incomplete evidence prevents a complete accessibility readiness conclusion."
+            : accessibilityScore >=
+                90
+              ? "The automated result is a positive readiness signal but does not establish legal or standards compliance."
+              : "The automated score indicates potential accessibility risk that requires issue-level evidence before PRYSM treats it as a material barrier; it does not establish legal or standards compliance.",
     },
     {
-      area: "Image alternative text",
+      area:
+        "Image alternative text",
       status:
-        contentOk &&
-        typeof site.imageCount === "number"
-          ? (site.imagesMissingAlt || 0) > 0
-            ? "FINDING"
-            : "PASS"
-          : "UNAVAILABLE",
+        !imageEvidenceKnown
+          ? "UNAVAILABLE"
+          : imageEvidencePartial
+            ? "PARTIAL"
+            : site.imagesMissingAlt >
+                0
+              ? "FINDING"
+              : "PASS",
       detail:
-        contentOk &&
-        typeof site.imageCount === "number"
-          ? `${site.imagesMissingAlt ?? 0} of ${site.imageCount} observed image(s) were missing alternative text.`
-          : "Image/alt-text evidence was not available.",
+        !imageEvidenceKnown
+          ? "Image/alt-text evidence was not available."
+          : imageEvidencePartial
+            ? `${site.imagesMissingAlt} of ${site.imageCount} observed image(s) were missing alternative text within PARTIAL crawl coverage. This does not establish a whole-site PASS or FINDING.`
+            : `${site.imagesMissingAlt} of ${site.imageCount} observed image(s) were missing alternative text.`,
       impact:
         "Alternative text supports non-visual understanding of meaningful images when correctly written.",
     },
   ];
 
-  const barriers = areas.filter(
-    (item) =>
-      item.status === "FINDING",
-  );
+  const barriers =
+    areas.filter(
+      (item) =>
+        item.status ===
+        "FINDING",
+    );
 
-  const available = areas.filter(
-    (item) =>
-      item.status === "PASS" ||
-      item.status === "FINDING",
-  );
+  const available =
+    areas.filter(
+      (item) =>
+        item.status ===
+          "PASS" ||
+        item.status ===
+          "FINDING",
+    );
 
-  const unavailable = areas.filter(
-    (item) =>
-      item.status === "UNAVAILABLE" ||
-      item.status === "PARTIAL",
-  );
+  const unavailable =
+    areas.filter(
+      (item) =>
+        item.status ===
+          "UNAVAILABLE" ||
+        item.status ===
+          "PARTIAL",
+    );
 
-  const summary = barriers.length
-    ? `${barriers.length} observable accessibility or usability barrier${barriers.length === 1 ? " was" : "s were"} identified in the evidence available to this report. Several deeper mobile-usability checks remain unavailable.`
-    : available.length
-      ? "No material barrier was established from the accessibility evidence that was available, but several deeper mobile-usability checks remain unavailable or partial."
-      : "PRYSM does not have enough accessibility or mobile-usability evidence in the current report model to make a readiness judgment.";
+  const summary =
+    barriers.length
+      ? `${
+          barriers.length
+        } observable accessibility or usability barrier${
+          barriers.length === 1
+            ? " was"
+            : "s were"
+        } identified in fully assessed evidence available to this report. Several deeper mobile-usability checks remain unavailable or partial.`
+      : unavailable.some(
+            (item) =>
+              item.status ===
+              "PARTIAL",
+          )
+        ? "Accessibility and mobile-usability evidence is PARTIAL. PRYSM reports available measurements and observations but withholds a complete PASS or FINDING for incomplete areas."
+        : available.length
+          ? "No material barrier was established from the accessibility evidence that was available, but several deeper mobile-usability checks remain unavailable."
+          : "PRYSM does not have enough accessibility or mobile-usability evidence in the current report model to make a readiness judgment.";
 
   return `
   <section id="accessibility-mobile" class="card">
@@ -1553,17 +2411,29 @@ export function accessibilityMobileSection(model) {
     <p class="muted small">Accessibility &amp; Mobile Usability Readiness</p>
 
     <h3>Readiness summary</h3>
-    <p>${e(summary)}</p>
+    <p>${e(
+      summary,
+    )}</p>
 
     <h3>Material barriers</h3>
-    ${barriers.length
-      ? `<ul>${barriers
-          .map(
-            (item) =>
-              `<li><strong>${e(item.area)}:</strong> ${e(item.detail)} ${e(item.impact)}</li>`,
-          )
-          .join("")}</ul>`
-      : "<p>No material barrier was established from the evidence currently available.</p>"}
+    ${
+      barriers.length
+        ? `<ul>${barriers
+            .map(
+              (
+                item,
+              ) =>
+                `<li><strong>${e(
+                  item.area,
+                )}:</strong> ${e(
+                  item.detail,
+                )} ${e(
+                  item.impact,
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : "<p>No material barrier was established from fully assessed evidence currently available.</p>"
+    }
 
     <h3>Coverage notes</h3>
     <div class="table-wrap"><table>
@@ -1577,29 +2447,55 @@ export function accessibilityMobileSection(model) {
       </thead>
       <tbody>${areas
         .map(
-          (item) => `<tr>
-            <td><strong>${e(item.area)}</strong></td>
+          (
+            item,
+          ) => `<tr>
+            <td><strong>${e(
+              item.area,
+            )}</strong></td>
             <td><span class="chip ${
-              item.status === "PASS"
+              item.status ===
+              "PASS"
                 ? "cap-ok"
-                : item.status === "FINDING"
+                : item.status ===
+                    "FINDING"
                   ? "cap-missing"
                   : "cap-neutral"
-            }">${e(item.status)}</span></td>
-            <td class="small">${e(item.detail)}</td>
-            <td class="small">${e(item.impact)}</td>
+            }">${e(
+              item.status,
+            )}</span></td>
+            <td class="small">${e(
+              item.detail,
+            )}</td>
+            <td class="small">${e(
+              item.impact,
+            )}</td>
           </tr>`,
         )
         .join("")}</tbody>
     </table></div>
 
-    ${unavailable.length
-      ? `<div class="note"><strong>PARTIAL / UNAVAILABLE:</strong> ${e(unavailable.map((item) => item.area).join(", "))} could not be fully assessed from the current report model. These gaps reduce accessibility/mobile coverage but are not treated as negative site findings.</div>`
-      : ""}
+    ${
+      unavailable.length
+        ? `<div class="note"><strong>PARTIAL / UNAVAILABLE:</strong> ${e(
+            unavailable
+              .map(
+                (
+                  item,
+                ) =>
+                  item.area,
+              )
+              .join(
+                ", ",
+              ),
+          )} could not be fully assessed from the current report model. These gaps reduce accessibility/mobile coverage but are not treated as complete negative site findings.</div>`
+        : ""
+    }
 
     <div class="note"><strong>Accessibility disclaimer:</strong> Accessibility Readiness identifies observable barriers and risks. It does not certify legal compliance with AODA, WCAG, or other accessibility standards.</div>
   </section>`;
 }
+
 // ---------------------------------------------------------------------------
 // Machine readiness — structural readability only, never AI visibility
 // ---------------------------------------------------------------------------
@@ -1608,10 +2504,28 @@ export function machineReadinessSection(model) {
   const score =
     model?.scores?.aiReadiness;
 
+  const machinePartial =
+    capPartial(
+      model,
+      "schema.structured_data",
+    ) ||
+    capPartial(
+      model,
+      "content.body",
+    ) ||
+    model?.evidence?.site
+      ?.sourceStatus ===
+      "PARTIAL";
+
   const value =
-    typeof score === "number" &&
-    Number.isFinite(score)
-      ? `${score}/100`
+    typeof score ===
+      "number" &&
+    Number.isFinite(
+      score,
+    )
+      ? machinePartial
+        ? `${score}/100 (PARTIAL evidence coverage)`
+        : `${score}/100`
       : UNAVAILABLE;
 
   return `
@@ -1621,7 +2535,14 @@ export function machineReadinessSection(model) {
       structured data, heading hierarchy, and content depth. It is a structural machine-readability signal
       and is <strong>not</strong> a measurement of whether the site actually appears in, or is retrieved by,
       any AI assistant or AI search product.</p>
-    <p><strong>Structural machine-readability score:</strong> ${e(value)}</p>
+    <p><strong>Structural machine-readability score:</strong> ${e(
+      value,
+    )}</p>
+    ${
+      machinePartial
+        ? '<p class="small"><span class="chip cap-neutral">PARTIAL</span> The score is retained as an assessed signal, but incomplete evidence prevents it from being presented as complete site coverage.</p>'
+        : ""
+    }
   </section>`;
 }
 
@@ -1636,7 +2557,10 @@ export function strengthsSection(model, checklist) {
 
   const strengths = [];
 
-  for (const item of checklist || []) {
+  for (
+    const item of checklist ||
+    []
+  ) {
     if (
       item.status ===
       FOUNDATION_STATUS.PASS
@@ -1653,11 +2577,17 @@ export function strengthsSection(model, checklist) {
       model,
       "schema.structured_data",
     ) &&
-    (site.schemaTypes || []).length
+    (
+      site.schemaTypes ||
+      []
+    ).length
   ) {
     strengths.push([
       "Structured data present",
-      `Detected type(s): ${(site.schemaTypes || []).join(", ")}.`,
+      `Detected type(s): ${(
+        site.schemaTypes ||
+        []
+      ).join(", ")}.`,
     ]);
   }
 
@@ -1667,32 +2597,49 @@ export function strengthsSection(model, checklist) {
       "trust.proof",
     )
   ) {
-    const found = Object.entries(
-      site.trust ||
-      {},
-    )
-      .filter(
-        ([, present]) =>
-          present === true,
+    const found =
+      Object.entries(
+        site.trust ||
+        {},
       )
-      .map(
-        ([name]) =>
-          name,
-      );
+        .filter(
+          (
+            [
+              ,
+              present,
+            ],
+          ) =>
+            present ===
+            true,
+        )
+        .map(
+          (
+            [
+              name,
+            ],
+          ) =>
+            name,
+        );
 
     if (found.length) {
       strengths.push([
         "Trust signals detected",
-        `Detected on crawled pages: ${found.join(", ")}.`,
+        `Detected on crawled pages: ${found.join(
+          ", ",
+        )}.`,
       ]);
     }
   }
 
   const desktop =
-    model?.evidence?.performance?.desktop?.scores?.performance;
+    model?.evidence
+      ?.performance
+      ?.desktop?.scores
+      ?.performance;
 
   if (
-    typeof desktop === "number" &&
+    typeof desktop ===
+      "number" &&
     desktop >= 90
   ) {
     strengths.push([
@@ -1702,10 +2649,16 @@ export function strengthsSection(model, checklist) {
   }
 
   const brokenLinks =
-    (site.brokenInternalLinks || []).length;
+    (
+      site.brokenInternalLinks ||
+      []
+    ).length;
 
   if (
-    (site.internalLinkCount ?? 0) > 0 &&
+    (
+      site.internalLinkCount ??
+      0
+    ) > 0 &&
     brokenLinks === 0
   ) {
     strengths.push([
@@ -1714,14 +2667,24 @@ export function strengthsSection(model, checklist) {
     ]);
   }
 
-  const body = strengths.length
-    ? `<ul class="small">${strengths
-        .map(
-          ([label, detail]) =>
-            `<li><strong>${e(label)}</strong> — ${e(detail)}</li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="small">No strength could be confirmed from the evidence that was collected. This is a limit of the
+  const body =
+    strengths.length
+      ? `<ul class="small">${strengths
+          .map(
+            (
+              [
+                label,
+                detail,
+              ],
+            ) =>
+              `<li><strong>${e(
+                label,
+              )}</strong> — ${e(
+                detail,
+              )}</li>`,
+          )
+          .join("")}</ul>`
+      : `<p class="small">No strength could be confirmed from the evidence that was collected. This is a limit of the
         assessed evidence, not a judgement that the site has no strengths.</p>`;
 
   return `
@@ -1765,12 +2728,30 @@ function actionRows(actions) {
     <tbody>${actions
       .map(
         (a) => `<tr>
-          <td>${e(a.rank)}</td>
-          <td><strong>${e(a.finding.title)}</strong><br><span class="small">${e(a.finding.recommendation || "")}</span></td>
-          <td class="small">${e(a.finding.businessImpact || "")}</td>
-          <td class="small">${e(a.actionClass)}</td>
-          <td class="small">${e(a.effort)}</td>
-          <td class="small">${e(a.verificationMethod)}</td>
+          <td>${e(
+            a.rank,
+          )}</td>
+          <td><strong>${e(
+            a.finding.title,
+          )}</strong><br><span class="small">${e(
+            a.finding
+              .recommendation ||
+              "",
+          )}</span></td>
+          <td class="small">${e(
+            a.finding
+              .businessImpact ||
+              "",
+          )}</td>
+          <td class="small">${e(
+            a.actionClass,
+          )}</td>
+          <td class="small">${e(
+            a.effort,
+          )}</td>
+          <td class="small">${e(
+            a.verificationMethod,
+          )}</td>
         </tr>`,
       )
       .join("")}</tbody>
@@ -1784,9 +2765,17 @@ export function actionPlanSection(plan, checklist) {
     ACTION_GROUP.LATER,
   ]
     .map(
-      (group) => `<h3>${e(group)}</h3>
-        <p class="muted small">${e(GROUP_INTRO[group])}</p>
-        ${actionRows(plan.groups[group] || [])}`,
+      (group) => `<h3>${e(
+        group,
+      )}</h3>
+        <p class="muted small">${e(
+          GROUP_INTRO[group],
+        )}</p>
+        ${actionRows(
+          plan.groups[
+            group
+          ] || [],
+        )}`,
     )
     .join("");
 
@@ -1801,20 +2790,22 @@ export function actionPlanSection(plan, checklist) {
     ),
   ];
 
-  const foundationsToFix = (
-    checklist ||
-    []
-  )
-    .filter(
-      (i) =>
-        i.status ===
-          FOUNDATION_STATUS.ACTION_REQUIRED &&
-        i.foundational === true,
+  const foundationsToFix =
+    (
+      checklist ||
+      []
     )
-    .map(
-      (i) =>
-        i.label,
-    );
+      .filter(
+        (i) =>
+          i.status ===
+            FOUNDATION_STATUS.ACTION_REQUIRED &&
+          i.foundational ===
+            true,
+      )
+      .map(
+        (i) =>
+          i.label,
+      );
 
   return `
   <section id="action-plan" class="card">
@@ -1823,9 +2814,15 @@ export function actionPlanSection(plan, checklist) {
     <p class="muted small">Derived from the same governed priorities as Section E. Sequence only — no business
       outcome, revenue figure, or performance projection is stated.</p>
 
-    ${foundationsToFix.length
-      ? `<p class="small"><strong>Foundations to resolve alongside these actions:</strong> ${e(foundationsToFix.join(", "))}.</p>`
-      : ""}
+    ${
+      foundationsToFix.length
+        ? `<p class="small"><strong>Foundations to resolve alongside these actions:</strong> ${e(
+            foundationsToFix.join(
+              ", ",
+            ),
+          )}.</p>`
+        : ""
+    }
 
     ${groupBlocks}
 
@@ -1833,9 +2830,18 @@ export function actionPlanSection(plan, checklist) {
 
     <p class="muted small">Evidence to compare in the next audit:</p>
 
-    ${measures.length
-      ? `<ul class="small">${measures.map((m) => `<li>${e(m)}</li>`).join("")}</ul>`
-      : '<p class="small">No verification step is available because no score-bearing action was produced.</p>'}
+    ${
+      measures.length
+        ? `<ul class="small">${measures
+            .map(
+              (m) =>
+                `<li>${e(
+                  m,
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : '<p class="small">No verification step is available because no score-bearing action was produced.</p>'
+    }
   </section>`;
 }
 
@@ -1881,10 +2887,19 @@ export function phase2Section() {
 
       <tbody>${PHASE_2_ITEMS
         .map(
-          ([area, req]) =>
+          (
+            [
+              area,
+              req,
+            ],
+          ) =>
             `<tr>
-              <td>${e(area)}</td>
-              <td class="small">${e(req)}</td>
+              <td>${e(
+                area,
+              )}</td>
+              <td class="small">${e(
+                req,
+              )}</td>
               <td><span class="chip cap-neutral">NOT APPLICABLE</span></td>
             </tr>`,
         )

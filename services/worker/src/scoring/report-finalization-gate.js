@@ -11,6 +11,8 @@
 
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 import { DIAGNOSTIC_CATEGORY } from "./diagnostic-contracts.js";
+import { buildFoundationChecklist } from "../report/foundation-readiness.js";
+import { buildActionPlan } from "../report/action-priority.js";
 
 // ---------------------------------------------------------------------------
 // Gate entry point
@@ -186,17 +188,49 @@ function _checkSectionConsistency(model, evidence, errors) {
     }
   }
 
-  // Competitor count consistency — derive from the same evidence source
-  const evidenceCompetitors = Array.isArray(evidence.competitors)
-    ? evidence.competitors.filter(Boolean)
-    : [];
-  const modelCompetitorCount = model._normalizedCompetitorCount != null
-    ? model._normalizedCompetitorCount
-    : (Array.isArray(model.competitors) ? model.competitors.length : 0);
-  if (evidenceCompetitors.length > 0 &&
-      modelCompetitorCount !== evidenceCompetitors.length) {
-    errors.push(_err("competitors.length", "supplied-competitor-benchmark",
-      `Competitor count mismatch: model reports ${modelCompetitorCount} but evidence has ${evidenceCompetitors.length}.`));
+    // PF-18 - client-facing competitor comparisons must remain inside the
+  // authoritative supplied competitor allowlist carried by DecisionEvidence.
+  const suppliedCompetitors =
+    Array.isArray(evidence.suppliedCompetitors)
+      ? evidence.suppliedCompetitors
+      : null;
+
+  const clientCompetitors =
+    Array.isArray(model.competitors?.comparisons)
+      ? model.competitors.comparisons
+      : [];
+
+  if (
+    clientCompetitors.length > 0 &&
+    suppliedCompetitors === null
+  ) {
+    errors.push(_err(
+      "competitors.comparisons",
+      "supplied-competitor-benchmark",
+      "Client-facing competitor comparisons exist but the supplied competitor allowlist is unavailable.",
+    ));
+  } else if (suppliedCompetitors !== null) {
+    const allowedUrls =
+      new Set(
+        suppliedCompetitors.filter(
+          (url) =>
+            typeof url === "string" &&
+            url.length > 0,
+        ),
+      );
+
+    for (const competitor of clientCompetitors) {
+      if (
+        typeof competitor?.url !== "string" ||
+        !allowedUrls.has(competitor.url)
+      ) {
+        errors.push(_err(
+          "competitors.comparisons",
+          "supplied-competitor-benchmark",
+          `Client-facing competitor ${competitor?.url || "<missing-url>"} is outside the supplied competitor allowlist.`,
+        ));
+      }
+    }
   }
 }
 
@@ -266,7 +300,7 @@ function _checkContradictions(model, evidence, errors, warnings) {
       `Performance limitations contain ${allLimits.length - uniqueLimits.size} duplicate entries.`));
   }
 
-  // Null or undefined denominators
+    // Null or undefined top-level denominators
   if (model.assessedWeight == null) {
     errors.push(_err("assessedWeight", "executive-conversion-scorecard",
       "Assessed weight is null or undefined."));
@@ -275,6 +309,83 @@ function _checkContradictions(model, evidence, errors, warnings) {
     errors.push(_err("evidenceConfidenceScore", "evidence-appendix",
       "Evidence confidence score is null or undefined."));
   }
+
+// PF-18 — final release independently rejects impossible image
+// numerator/denominator states.
+//
+// DecisionEvidence v1 must serialize unknown counters as integers, so an
+// unavailable imageCount may appear as 0. DataForSEO can still provide
+// bounded image issue counters while image-array evidence is unavailable.
+// Do not convert that schema placeholder into a false zero denominator.
+const site = evidence.site || {};
+const imageDenominator = site.imageCount;
+
+const imageDenominatorUnavailable =
+  site._metaFieldAvailability?.images === false ||
+  (
+    site._metaFieldAvailability?.images == null &&
+    site._contentEvidenceAvailable === false &&
+    (
+      imageDenominator == null ||
+      imageDenominator === 0
+    )
+  );
+
+if (
+  imageDenominator != null &&
+  (
+    !Number.isFinite(imageDenominator) ||
+    imageDenominator < 0
+  )
+) {
+  errors.push(_err(
+    "site.imageCount",
+    "technical-health",
+    `Image count must be a non-negative finite denominator, got ${String(imageDenominator)}.`,
+  ));
+}
+
+for (
+  const field of [
+    "imagesMissingAlt",
+    "imagesMissingDimensions",
+  ]
+) {
+  const numerator = site[field];
+
+  if (numerator == null) continue;
+
+  if (
+    !Number.isFinite(numerator) ||
+    numerator < 0
+  ) {
+    errors.push(_err(
+      `site.${field}`,
+      "technical-health",
+      `${field} must be a non-negative finite numerator, got ${String(numerator)}.`,
+    ));
+    continue;
+  }
+
+  // A numerator may legitimately exist when the corresponding image
+  // denominator was unavailable and subsequently schema-coerced to 0.
+  // In that state there is no valid ratio to test.
+  if (imageDenominatorUnavailable) {
+    continue;
+  }
+
+  if (
+    !Number.isFinite(imageDenominator) ||
+    imageDenominator < 0 ||
+    numerator > imageDenominator
+  ) {
+    errors.push(_err(
+      `site.${field}`,
+      "technical-health",
+      `${field} (${numerator}) cannot exceed or exist without a valid imageCount denominator (${String(imageDenominator)}).`,
+    ));
+  }
+}
 
   // Undefined values in client-facing text
   for (const f of (model.findings || [])) {
@@ -290,6 +401,76 @@ function _checkContradictions(model, evidence, errors, warnings) {
       warnings.push(_err("findings[].recommendation", "priority-fixes",
         `Finding ${f.ruleId || "unknown"} has null or empty recommendation.`));
     }
+
+    // PF-18 — final release backstop for the proven PARTIAL-to-absence defect.
+    // When every evidence record supporting a finding is PARTIAL, an absence
+    // claim must explicitly preserve the incomplete assessment boundary.
+    const findingEvidence =
+      Array.isArray(f.evidence)
+        ? f.evidence.filter(Boolean)
+        : [];
+
+    const partialOnly =
+      findingEvidence.length > 0 &&
+      findingEvidence.every(
+        (record) =>
+          record.sourceStatus ===
+          SOURCE_STATUS.PARTIAL,
+      );
+
+    if (partialOnly) {
+      const claimText = [
+        f.title,
+        f.evidenceText,
+        f.businessImpact,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const absencePattern =
+        /\b(missing|absent|none|lacks?|without)\b|\bno\b|\bdoes not have\b/i;
+
+      const boundedPartialPattern =
+        /\b(partial|available assessment|available coverage|observed scope|not detected|not observed|does not establish|absence is not established)\b/i;
+
+      if (
+        absencePattern.test(claimText) &&
+        !boundedPartialPattern.test(claimText)
+      ) {
+        errors.push(_err(
+          "findings[].evidence",
+          "priority-fixes",
+          `Finding ${f.ruleId || "unknown"} converts PARTIAL evidence into an unqualified absence claim.`,
+        ));
+      }
+    }
+  }
+
+  // Root cause must agree with the governed Conversion-First action hierarchy.
+  const checklist = buildFoundationChecklist(model);
+  const actionPlan = buildActionPlan(model, checklist);
+  const legacyRootCauseFinding = (model.findings || []).find(
+    (finding) => finding?.scoreBearing === true,
+  );
+
+  const rootCauseRuleId =
+    model.rootCauseRuleId ||
+    legacyRootCauseFinding?.ruleId ||
+    null;
+
+  const primaryActionFinding =
+    actionPlan.actions[0]?.finding;
+
+  if (
+    rootCauseRuleId &&
+    primaryActionFinding &&
+    rootCauseRuleId !== primaryActionFinding.ruleId
+  ) {
+    errors.push(_err(
+      "rootCause",
+      "executive-conversion-scorecard",
+      `Root cause is derived from ${rootCauseRuleId}, but the governed Conversion-First action hierarchy ranks ${primaryActionFinding.ruleId} first.`,
+    ));
   }
 
   // Conflicting scores between sections

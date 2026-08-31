@@ -6,7 +6,8 @@
  * references must resolve against WriterInput.referenceIndex.
  */
 
-export const JUDGE_CONTRACT_VERSION = "1.0.0";
+export const JUDGE_CONTRACT_VERSION = "1.1.0";
+export const JUDGE_PROMPT_VERSION = "2.1.0";
 export const MAX_NARRATIVE_PASSES = 3;
 export const NARRATIVE_PASS_SCORE = 92;
 export const MIN_DIMENSION_RATIO = 0.70;
@@ -49,6 +50,7 @@ export const HARD_GATE_CODES = Object.freeze([
   "SOURCE_STATUS_MUTATION",
   "UNAVAILABLE_AS_ABSENT",
   "CONTRADICTS_FINDING",
+  "CONVERSION_HIERARCHY_CONTRADICTION",
   "UNSUPPORTED_COMPETITOR_CLAIM",
   "OBSERVATION_WITHOUT_EVIDENCE",
   "UNAUTHORIZED_EVIDENCE",
@@ -178,8 +180,47 @@ function validateRubric(rubric, writerInput, errors) {
     }
     if (!nonEmptyString(record.rationale)) errors.push(`rubric.${key}.rationale is required`);
     if (!Array.isArray(record.defectIds)) errors.push(`rubric.${key}.defectIds must be an array`);
-    validateReferenceIds(record.evidenceRefs, writerInput, `rubric.${key}.evidenceRefs`, errors);
+        validateReferenceIds(
+      record.evidenceRefs,
+      writerInput,
+      `rubric.${key}.evidenceRefs`,
+      errors,
+    );
   }
+
+  /*
+   * CF-01:
+   * When the Writer received the governed Conversion-First decision view,
+   * the Judge must explicitly ground conversionInterpretation in that same
+   * view. This adds a consistency requirement without weakening any
+   * evidence-fidelity, score, dimension-floor, or release gate.
+   */
+  const hasConversionHierarchy =
+    Object.hasOwn(
+      writerInput?.deterministicAnalysis || {},
+      "conversionInfluence",
+    );
+
+  if (hasConversionHierarchy) {
+    const hierarchyRef =
+      "analysis:conversionInfluence";
+
+    const conversionRefs =
+      rubric?.conversionInterpretation
+        ?.evidenceRefs;
+
+    if (
+      !Array.isArray(conversionRefs) ||
+      !conversionRefs.includes(
+        hierarchyRef,
+      )
+    ) {
+      errors.push(
+        "rubric.conversionInterpretation.evidenceRefs must include analysis:conversionInfluence when governed conversion hierarchy is present",
+      );
+    }
+  }
+
   return total;
 }
 
@@ -210,12 +251,28 @@ function validateDefects(defects, writerInput, errors) {
       if (!nonEmptyString(defect[field])) errors.push(`${prefix}.${field} is required`);
     }
     validateReferenceIds(defect.evidenceRefs, writerInput, `${prefix}.evidenceRefs`, errors);
-    if (!Array.isArray(defect.allowedFields) || defect.allowedFields.length === 0) {
+        if (!Array.isArray(defect.allowedFields) || defect.allowedFields.length === 0) {
       errors.push(`${prefix}.allowedFields must contain at least one governed Writer field`);
     } else {
+      const defectAllowedFields = new Set();
+
       for (const field of defect.allowedFields) {
-        if (!WRITER_SECTION_SET.has(field)) errors.push(`${prefix}.allowedFields contains unknown Writer field: ${String(field)}`);
-        else allowedFields.add(field);
+        if (!WRITER_SECTION_SET.has(field)) {
+          errors.push(`${prefix}.allowedFields contains unknown Writer field: ${String(field)}`);
+        } else {
+          defectAllowedFields.add(field);
+          allowedFields.add(field);
+        }
+      }
+
+      if (nonEmptyString(defect.section)) {
+        if (!WRITER_SECTION_SET.has(defect.section)) {
+          errors.push(`${prefix}.section must be a governed Writer field`);
+        } else if (!defectAllowedFields.has(defect.section)) {
+          errors.push(
+            `${prefix}.allowedFields must include defect section ${defect.section}`,
+          );
+        }
       }
     }
     if (!Array.isArray(defect.mustPreserve)) errors.push(`${prefix}.mustPreserve must be an array`);
@@ -320,8 +377,10 @@ export function validateJudgeResponse(response, { writerInput, expectedPassNumbe
   if (expectedPassNumber !== undefined && response.passNumber !== expectedPassNumber) {
     errors.push(`passNumber mismatch: ${String(response.passNumber)} vs expected ${String(expectedPassNumber)}`);
   }
-  if (!nonEmptyString(response.judgeModelId)) errors.push("judgeModelId is required");
-  if (!nonEmptyString(response.judgePromptVersion)) errors.push("judgePromptVersion is required");
+    if (!nonEmptyString(response.judgeModelId)) errors.push("judgeModelId is required");
+  if (response.judgePromptVersion !== JUDGE_PROMPT_VERSION) {
+    errors.push(`judgePromptVersion must equal ${JUDGE_PROMPT_VERSION}`);
+  }
   if (!nonEmptyString(response.evaluatedAt)) errors.push("evaluatedAt is required");
 
   validateHardGate(response.hardGate, writerInput, errors);

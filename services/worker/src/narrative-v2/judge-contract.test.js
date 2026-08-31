@@ -55,7 +55,7 @@ function baseResponse(overrides = {}) {
     auditId: AUDIT_ID,
     passNumber: 1,
     judgeModelId: "judge-model",
-    judgePromptVersion: "2.0.0",
+    judgePromptVersion: "2.1.0",
     evaluatedAt: "2026-08-20T03:40:00.000Z",
     hardGate: { status: "PASS", violations: [] },
     rubric,

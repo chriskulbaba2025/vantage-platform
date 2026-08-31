@@ -311,26 +311,156 @@ function robots(model) {
 
 function conversionMechanism(model) {
   const site = model?.evidence?.site || {};
-  const assessed = capAvailable(model, "conversion.cta") || capAvailable(model, "conversion.form");
-  if (!assessed) {
-    return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.NOT_ASSESSED,
+  const capabilities =
+    model?.capabilityEvidence?.capabilities || {};
+
+  const ctaCapability =
+    capabilities["conversion.cta"] || null;
+  const formCapability =
+    capabilities["conversion.form"] || null;
+
+  const ctas =
+    Array.isArray(site.ctas) ? site.ctas.length : 0;
+  const forms =
+    Array.isArray(site.forms) ? site.forms.length : 0;
+
+  const browserCta =
+    ctaCapability?.browserSummary || null;
+  const browserForm =
+    formCapability?.browserSummary || null;
+
+  const browserCtaPresent =
+    (browserCta?.presentPages ?? 0) > 0;
+  const browserFormPresent =
+    (browserForm?.presentPages ?? 0) > 0;
+
+  const ctaPresent =
+    ctas > 0 || browserCtaPresent;
+  const formPresent =
+    forms > 0 || browserFormPresent;
+
+  const anyCapabilityAssessed =
+    capAvailable(model, "conversion.cta") ||
+    capAvailable(model, "conversion.form");
+
+  if (!anyCapabilityAssessed) {
+    return item(
+      "conversion_mechanism",
+      "Conversion mechanism",
+      FOUNDATION_STATUS.NOT_ASSESSED,
       "Buttons and forms were not extracted for this audit, so the presence of a conversion action could not be established.",
       {
-        requires: "interactive page evidence (rendered CTA/form extraction)",
+        requires:
+          "interactive page evidence (rendered CTA/form extraction)",
         foundational: true,
         linkedRuleIds: ["VAN-PATH-001"],
-      });
+      },
+    );
   }
-  const ctas = (site.ctas || []).length;
-  const forms = (site.forms || []).length;
-  if (ctas === 0 && forms === 0) {
-    return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.ACTION_REQUIRED,
+
+  /*
+   * A mechanism proven by either governed source is sufficient for PASS.
+   *
+   * This prevents empty crawl-derived CTA/form arrays from overriding
+   * browser validation that directly observed a conversion mechanism.
+   */
+  if (ctaPresent || formPresent) {
+    if (browserCtaPresent || browserFormPresent) {
+      const browserPages = Math.max(
+        browserCta?.presentPages ?? 0,
+        browserForm?.presentPages ?? 0,
+      );
+
+      return item(
+        "conversion_mechanism",
+        "Conversion mechanism",
+        FOUNDATION_STATUS.PASS,
+        `Browser conversion validation confirmed a conversion mechanism on ${browserPages} selected page(s).`,
+        {
+          foundational: true,
+          linkedRuleIds: ["VAN-PATH-001"],
+        },
+      );
+    }
+
+    return item(
+      "conversion_mechanism",
+      "Conversion mechanism",
+      FOUNDATION_STATUS.PASS,
+      `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
+      {
+        foundational: true,
+        linkedRuleIds: ["VAN-PATH-001"],
+      },
+    );
+  }
+
+  /*
+   * Absence may be asserted only when BOTH mechanism types were fully
+   * assessed. PARTIAL evidence cannot be converted into confirmed absence.
+   */
+  const ctaFullyAssessed =
+    ctaCapability?.status === "AVAILABLE" &&
+    ctaCapability?.requiredFieldsPresent === true;
+
+  const formFullyAssessed =
+    formCapability?.status === "AVAILABLE" &&
+    formCapability?.requiredFieldsPresent === true;
+
+  const siteInteractiveCollected =
+    site._interactiveEvidenceAvailable === true;
+
+  const ctaBrowserAbsenceProven =
+    ctaCapability?.validated === true &&
+    (browserCta?.completed ?? 0) > 0 &&
+    browserCta.completed === browserCta.requested &&
+    (browserCta.presentPages ?? 0) === 0;
+
+  const formBrowserAbsenceProven =
+    formCapability?.validated === true &&
+    (browserForm?.completed ?? 0) > 0 &&
+    browserForm.completed === browserForm.requested &&
+    (browserForm.presentPages ?? 0) === 0;
+
+  const ctaAbsenceProven =
+    ctaFullyAssessed &&
+    (
+      (siteInteractiveCollected && ctas === 0) ||
+      ctaBrowserAbsenceProven
+    );
+
+  const formAbsenceProven =
+    formFullyAssessed &&
+    (
+      (siteInteractiveCollected && forms === 0) ||
+      formBrowserAbsenceProven
+    );
+
+  if (ctaAbsenceProven && formAbsenceProven) {
+    return item(
+      "conversion_mechanism",
+      "Conversion mechanism",
+      FOUNDATION_STATUS.ACTION_REQUIRED,
       "No call-to-action or form was detected on the assessed pages. Visitors have no clear way to convert.",
-      { foundational: true, linkedRuleIds: ["VAN-PATH-001"] });
+      {
+        foundational: true,
+        linkedRuleIds: ["VAN-PATH-001"],
+      },
+    );
   }
-  return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.PASS,
-    `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
-    { foundational: true, linkedRuleIds: ["VAN-PATH-001"] });
+
+  return item(
+    "conversion_mechanism",
+    "Conversion mechanism",
+    FOUNDATION_STATUS.NOT_ASSESSED,
+    "The available interactive evidence does not establish that both calls to action and forms are absent.",
+    {
+      requires:
+        "complete interactive evidence for CTA and form presence or absence",
+      foundational: true,
+      linkedRuleIds: ["VAN-PATH-001"],
+    },
+  );
 }
 
 function conversionMeasurement(model) {

@@ -56,13 +56,12 @@ export function buildWriterScoreContext(scoreSet) {
     context.bands = copyOwnFields(scoreSet.bands, WRITER_BAND_FIELDS);
   }
 
-  for (const field of [
+    for (const field of [
     "assessedWeight",
     "readinessStatus",
     "readinessStatusDetail",
     "showNumericScore",
     "evidenceConfidenceScore",
-    "rootCause",
   ]) {
     if (!Object.hasOwn(scoreSet, field) || scoreSet[field] === undefined) continue;
     context[field] = scoreSet[field];

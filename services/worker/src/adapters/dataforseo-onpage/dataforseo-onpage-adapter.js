@@ -2525,7 +2525,9 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         _contentEvidenceAvailable: envelope._contentEvidenceAvailable || false,
         _responseHeadersAvailable: envelope._responseHeadersAvailable || false,
         _interactiveEvidenceAvailable: envelope._interactiveEvidenceAvailable === true,
-        _metaCountersAvailable: envelope._metaCountersAvailable === true,
+        ...(typeof envelope._metaCountersAvailable === "boolean"
+          ? { _metaCountersAvailable: envelope._metaCountersAvailable }
+          : {}),
         _metaFieldAvailability: envelope._metaFieldAvailability || null,
         rawArtifactRef: envelope.rawArtifactRef || null,
       },

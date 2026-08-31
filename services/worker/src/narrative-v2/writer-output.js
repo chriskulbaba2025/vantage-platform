@@ -8,7 +8,7 @@
 import { governedStatusForWriterReference } from "./writer-reference.js";
 
 export const WRITER_OUTPUT_VERSION = "1.0.0";
-export const WRITER_PROMPT_VERSION = "2.0.0";
+export const WRITER_PROMPT_VERSION = "2.1.0";
 export const WRITER_STATEMENT_CLASS = Object.freeze({
   INTERPRETATION: "INTERPRETATION",
   OPPORTUNITY: "OPPORTUNITY",
@@ -306,6 +306,335 @@ function validateActionPlan(items, writerInput, errors) {
   });
 }
 
+function collectNarrativeAtoms(
+  value,
+  path = "writerOutput",
+  atoms = [],
+) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      collectNarrativeAtoms(
+        item,
+        `${path}[${index}]`,
+        atoms,
+      ),
+    );
+
+    return atoms;
+  }
+
+  if (!isObject(value)) {
+    return atoms;
+  }
+
+  if (
+    nonEmptyString(value.text) &&
+    Array.isArray(value.evidenceRefs)
+  ) {
+    atoms.push({
+      path,
+      atom: value,
+    });
+
+    return atoms;
+  }
+
+  for (
+    const [key, child]
+    of Object.entries(value)
+  ) {
+    collectNarrativeAtoms(
+      child,
+      `${path}.${key}`,
+      atoms,
+    );
+  }
+
+  return atoms;
+}
+
+function referenceSupportsAiSearch(
+  writerInput,
+  ref,
+) {
+  const record =
+    writerInput?.referenceIndex?.[ref];
+
+  const findingId =
+    typeof ref === "string" &&
+    ref.startsWith("finding:")
+      ? ref.slice(
+          "finding:".length,
+        )
+      : null;
+
+  const finding =
+    findingId &&
+    Array.isArray(
+      writerInput?.findings,
+    )
+      ? writerInput.findings.find(
+          (item) =>
+            item?.findingId ===
+            findingId,
+        )
+      : null;
+
+  const searchable =
+    [
+      ref,
+      record?.path,
+      finding?.module,
+      finding?.dimension,
+      finding?.title,
+      finding?.description,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  return /ai[_\s-]?search|schema|structured data|entity|citation/i.test(
+    searchable,
+  );
+}
+
+export function validateWriterSemanticFidelity(
+  output,
+  writerInput,
+  errors = [],
+) {
+  const atoms =
+    collectNarrativeAtoms(
+      output,
+    );
+
+  const absencePattern =
+    /\b(?:no|none|missing|absent|lacks?|without|does not have|do not have|not present|not found|not detected)\b/i;
+
+  const boundedPartialPattern =
+    /not detected.{0,50}(?:available|partial|assessed)|(?:available|partial|assessed|observed).{0,50}(?:assessment|coverage|evidence|pages?|sample)|does not establish|cannot establish/i;
+
+  const commercialOutcomePattern =
+    /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
+
+  const causalCertaintyPattern =
+    /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|decreases?|reduces?|improves?|hurts?|damages?|loses?|costs?)\b/i;
+
+  const boundedOutcomePattern =
+    /\b(?:may|might|could|can|risk|potential|possible|likely|opportunity|suggests?|indicates?)\b/i;
+
+  const negativeAiPattern =
+    /\b(?:limited|limitation|weak|poor|missing|absent|lacks?|insufficient|not ready|cannot|can't)\b/i;
+
+  const boundedAiPattern =
+    /\b(?:may|might|could|potential|opportunity|not assessed|not established|does not establish|cannot establish|requires? (?:separate )?assessment)\b/i;
+
+  for (
+    const { path, atom }
+    of atoms
+  ) {
+    const text =
+      atom.text || "";
+
+    const statuses =
+      new Set(
+        (
+          atom.evidenceRefs ||
+          []
+        )
+          .map((ref) =>
+            governedStatusForReference(
+              writerInput,
+              ref,
+            ),
+          )
+          .filter(Boolean),
+      );
+
+    if (
+      statuses.has("PARTIAL") &&
+      absencePattern.test(text) &&
+      !boundedPartialPattern.test(
+        text,
+      )
+    ) {
+      errors.push(
+        `${path}.text converts PARTIAL evidence into an unqualified absence claim`,
+      );
+    }
+
+    if (
+      atom.statementClass ===
+        WRITER_STATEMENT_CLASS.INTERPRETATION &&
+      commercialOutcomePattern.test(
+        text,
+      ) &&
+      causalCertaintyPattern.test(
+        text,
+      ) &&
+      !boundedOutcomePattern.test(
+        text,
+      )
+    ) {
+      errors.push(
+        `${path}.text states an unmeasured business outcome with causal certainty`,
+      );
+    }
+
+    if (
+      path.startsWith(
+        "writerOutput.aiSearch.",
+      ) &&
+      atom.statementClass ===
+        WRITER_STATEMENT_CLASS.INTERPRETATION &&
+      negativeAiPattern.test(
+        text,
+      )
+    ) {
+      const hasDirectAiSupport =
+        (
+          atom.evidenceRefs ||
+          []
+        ).some((ref) =>
+          referenceSupportsAiSearch(
+            writerInput,
+            ref,
+          ),
+        );
+
+      if (
+        !hasDirectAiSupport &&
+        !boundedAiPattern.test(
+          text,
+        )
+      ) {
+        errors.push(
+          `${path}.text converts non-AI evidence into an established AI-search limitation`,
+        );
+      }
+    }
+  }
+
+  const influence =
+    writerInput
+      ?.deterministicAnalysis
+      ?.conversionInfluence;
+
+  const orderedFindingIds =
+    Array.isArray(
+      influence?.orderedFindingIds,
+    )
+      ? influence.orderedFindingIds
+      : [];
+
+  const byFindingId =
+    isObject(
+      influence?.byFindingId,
+    )
+      ? influence.byFindingId
+      : {};
+
+  if (
+    orderedFindingIds.length > 0 &&
+    Array.isArray(
+      output?.actionPlan,
+    )
+  ) {
+    output.actionPlan.forEach(
+      (item, index) => {
+        const expectedFindingId =
+          orderedFindingIds[
+            index
+          ];
+
+        if (!expectedFindingId) {
+          errors.push(
+            `actionPlan[${index}] exceeds the governed deterministic action order`,
+          );
+
+          return;
+        }
+
+        const expected =
+          byFindingId[
+            expectedFindingId
+          ];
+
+        if (!isObject(expected)) {
+          errors.push(
+            `actionPlan[${index}] is missing governed action data for ${expectedFindingId}`,
+          );
+
+          return;
+        }
+
+        if (
+          Number.isInteger(
+            expected.rank,
+          ) &&
+          item?.priority !==
+            expected.rank
+        ) {
+          errors.push(
+            `actionPlan[${index}].priority must equal governed rank ${expected.rank}`,
+          );
+        }
+
+        if (
+          ["L", "M", "H"].includes(
+            expected.effort,
+          ) &&
+          item?.effort !==
+            expected.effort
+        ) {
+          errors.push(
+            `actionPlan[${index}].effort must equal governed effort ${expected.effort}`,
+          );
+        }
+
+        const actionRefs =
+          [
+            item?.action,
+            item?.whyNow,
+            item
+              ?.expectedBusinessEffect,
+            item?.verification,
+          ]
+            .flatMap(
+              (field) =>
+                field
+                  ?.evidenceRefs ||
+                [],
+            )
+            .filter(
+              (ref) =>
+                typeof ref ===
+                  "string" &&
+                ref.startsWith(
+                  "finding:",
+                ),
+            );
+
+        if (
+          actionRefs.length > 0 &&
+          !actionRefs.includes(
+            `finding:${expectedFindingId}`,
+          )
+        ) {
+          errors.push(
+            `actionPlan[${index}] does not follow governed finding order ${expectedFindingId}`,
+          );
+        }
+      },
+    );
+  }
+
+  return {
+    valid:
+      errors.length === 0,
+    errors,
+  };
+}
+
 function validateExecutiveDecision(value, writerInput, errors) {
   if (!isObject(value)) return errors.push("executiveDecision must be an object");
   for (const field of ["preserve", "change", "doNext"]) {
@@ -391,6 +720,7 @@ export function validateWriterOutput(output, { writerInput, expectedPassNumber, 
   validateLimitations(output.limitations, writerInput, errors);
   validateActionPlan(output.actionPlan, writerInput, errors);
   validateExecutiveDecision(output.executiveDecision, writerInput, errors);
+  validateWriterSemanticFidelity(output, writerInput, errors);
 
   if (output.passNumber > 1) {
     const targeted = validateTargetedWriterRevision({ previousOutput, revisedOutput: output, revisionDirective });

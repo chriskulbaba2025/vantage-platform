@@ -40,8 +40,15 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { runCostPreflight } from "../narrative/cost-preflight.js";
 import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
-import { validateWriterOutput } from "./writer-output.js";
-import { JUDGE_DECISION, validateJudgeResponse } from "./judge-contract.js";
+import {
+  WRITER_PROMPT_VERSION,
+  validateWriterOutput,
+} from "./writer-output.js";
+import {
+  JUDGE_DECISION,
+  JUDGE_PROMPT_VERSION,
+  validateJudgeResponse,
+} from "./judge-contract.js";
 import { buildWriterStructuredResponseFormat } from "./writer-structured-output.js";
 import { buildJudgeStructuredResponseFormat } from "./judge-structured-output.js";
 import {
@@ -502,7 +509,10 @@ function judgePrompt({
     "If the Writer states or implies an outcome more strongly than the governed evidence supports, record an UNSUPPORTED_FACT hard-gate violation and fail evidenceFidelity.",
     "Inferred implications must remain explicitly bounded as risks, possibilities, or opportunities unless the governed evidence directly observes the stated outcome.",
     "The Judge must independently compare WriterOutput claims with WriterInput evidence; do not accept a claim merely because it already appears in an upstream finding, score, root-cause summary, or business-impact field.",
-    "UNKNOWN, UNAVAILABLE, PARTIAL, or not-deeply-parsed evidence must never be interpreted as ABSENT, FALSE, ZERO, or fully assessed.",
+    "When WriterInput.deterministicAnalysis.conversionInfluence is present, evaluate whether the Writer follows that governed Conversion-First hierarchy. rubric.conversionInterpretation.evidenceRefs MUST include the exact reference ID analysis:conversionInfluence.",
+    "UNKNOWN, UNAVAILABLE, PARTIAL, or not-deeply-parsed evidence must never be interpreted as ABSENT, MISSING, FALSE, ZERO, or fully assessed. PARTIAL content evidence supports only not-detected-in-the-available-assessment language, with the partial-coverage qualification preserved.",
+    "Do not treat a content-detection gap as an established AI-search limitation unless WriterInput directly assesses and supports that AI-search condition. Otherwise require opportunity language.",
+    "Before issuing REVISE, perform the evidence-fidelity check across every WriterOutput section and report all material evidence-fidelity defects found in that pass. A field containing an unresolved material defect must not be treated as locked or clean for a subsequent targeted revision.",
     "Return ONLY one JSON object matching JudgeResponse contractVersion 1.0.0.",
     "The decision must follow the supplied deterministic thresholds. No markdown or code fences.",
     `PASS_NUMBER=${passNumber}`,
@@ -1565,10 +1575,9 @@ export function createNarrativeV2LiveBinding({
         promptVersion:
           role === "writer"
             ? parsed?.promptVersion ||
-              "2.0.0"
-            : parsed
-                ?.judgePromptVersion ||
-              "2.0.0",
+              WRITER_PROMPT_VERSION
+            : parsed?.judgePromptVersion ||
+              JUDGE_PROMPT_VERSION,
 
         inputTokens:
           usage.inputTokens,

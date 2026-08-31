@@ -151,7 +151,7 @@ test(
   () => {
     const model = scoreAudit(INPUT, evidenceOf());
 
-    assert.equal(model.assessedWeight, 100);
+    assert.equal(model.assessedWeight, 97);
     assert.equal(model.scores.conversionReadiness, 33);
 
     const partial = scoreAudit(
@@ -163,8 +163,8 @@ test(
       }),
     );
 
-    assert.equal(partial.assessedWeight, 88);
-    assert.equal(partial.scores.conversionReadiness, 30);
+    assert.equal(partial.assessedWeight, 84);
+    assert.equal(partial.scores.conversionReadiness, 29);
 
     assert.ok(
       partial.suppressedModules.some(
@@ -255,7 +255,7 @@ test(
       true,
     );
 
-    assert.equal(model.assessedWeight, 30);
+    assert.equal(model.assessedWeight, 25);
     assert.equal(model.showNumericScore, false);
 
     assert.equal(
@@ -319,7 +319,7 @@ test(
 
     assert.equal(
       model.assessedWeight,
-      20,
+      16,
     );
   },
 );
@@ -1771,3 +1771,549 @@ test("INTERPRETATION-05: measured slow LCP produces bounded business impact, not
     /\b(abandonment|lost revenue|lost conversions?|reduced conversions?|ranking loss)\b/i,
   );
 });
+// ---------------------------------------------------------------------------
+// PF-01 / PF-02 / PF-03 — PARTIAL evidence semantics and report integrity
+// ---------------------------------------------------------------------------
+
+function pfCapability(
+  status,
+  overrides = {},
+) {
+  return {
+    status,
+    requiredFieldsPresent:
+      status ===
+        SOURCE_STATUS.AVAILABLE ||
+      status ===
+        SOURCE_STATUS.PARTIAL,
+    coverage: {
+      requested: null,
+      completed: null,
+      failed: null,
+    },
+    limitations: [],
+    ...overrides,
+  };
+}
+
+test(
+  "PF-01/PF-02: unassessed cross-capability signals are excluded and contribute only fractional assessed weight",
+  () => {
+    const capabilities = {
+      "content.body":
+        pfCapability(
+          SOURCE_STATUS.AVAILABLE,
+        ),
+
+      "offer.clarity":
+        pfCapability(
+          SOURCE_STATUS.AVAILABLE,
+        ),
+
+      "trust.proof":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "conversion.cta":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "conversion.form":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "conversion.path":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.indexability":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.redirects":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.resources":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.headers":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "schema.structured_data":
+        pfCapability(
+          SOURCE_STATUS.AVAILABLE,
+        ),
+
+      "performance.lab":
+        pfCapability(
+          SOURCE_STATUS.AVAILABLE,
+        ),
+
+      "performance.field":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+    };
+
+    const model = scoreAudit(
+      INPUT,
+      evidenceOf(),
+      {
+        capabilityEvidence: {
+          capabilityEvidenceVersion:
+            "2.0.0",
+          summary: {},
+          capabilities,
+        },
+        scoredAt:
+          FIXED_TS,
+      },
+    );
+
+    assert.equal(
+      model.moduleScores
+        .offer_clarity
+        .subWeightAssessed,
+      35,
+      "offer clarity must exclude CTA, form, and pricing signals when their governing capabilities were not assessed",
+    );
+
+    assert.equal(
+      model.moduleScores
+        .content_depth
+        .subWeightAssessed,
+      85,
+      "content depth must exclude FAQ when trust evidence was not assessed",
+    );
+
+    assert.equal(
+      model.moduleScores
+        .technical_hygiene
+        .subWeightAssessed,
+      60,
+      "technical hygiene must count only assessed technical signals",
+    );
+
+    assert.equal(
+      model.assessedWeight,
+      38,
+      "fractional module assessment must survive into overall assessed weight",
+    );
+
+    assert.equal(
+      model.showNumericScore,
+      false,
+      "incomplete assessed coverage must not be presented as a complete numeric readiness result",
+    );
+  },
+);
+
+test(
+  "PF-01: observed PARTIAL technical defects remain score-bearing while clean unassessed remainder cannot grant PASS credit",
+  () => {
+    const unavailable =
+      pfCapability(
+        SOURCE_STATUS.UNAVAILABLE,
+        {
+          requiredFieldsPresent:
+            false,
+        },
+      );
+
+    const observedPartial =
+      MODULES
+        .technical_hygiene
+        .scorer(
+          null,
+          null,
+          {
+            site: site({
+              sourceStatus:
+                SOURCE_STATUS.PARTIAL,
+
+              nonIndexablePages: [
+                {
+                  url:
+                    "https://x.com/private",
+                },
+              ],
+
+              redirectChains: [],
+              pageResources: [],
+            }),
+
+            capabilities: {
+              "technical.indexability":
+                pfCapability(
+                  SOURCE_STATUS.PARTIAL,
+                ),
+
+              "technical.redirects":
+                unavailable,
+
+              "technical.resources":
+                unavailable,
+
+              "technical.headers":
+                unavailable,
+            },
+          },
+        );
+
+    assert.ok(
+      observedPartial.subScores.some(
+        (row) =>
+          row.key ===
+            "indexability" &&
+          row.score === 7,
+      ),
+      "a defect actually observed in PARTIAL evidence must remain score-bearing",
+    );
+
+    const cleanPartial =
+      MODULES
+        .technical_hygiene
+        .scorer(
+          null,
+          null,
+          {
+            site: site({
+              sourceStatus:
+                SOURCE_STATUS.PARTIAL,
+
+              nonIndexablePages: [],
+              redirectChains: [],
+              pageResources: [],
+            }),
+
+            capabilities: {
+              "technical.indexability":
+                pfCapability(
+                  SOURCE_STATUS.PARTIAL,
+                ),
+
+              "technical.redirects":
+                unavailable,
+
+              "technical.resources":
+                unavailable,
+
+              "technical.headers":
+                unavailable,
+            },
+          },
+        );
+
+    assert.ok(
+      !cleanPartial.subScores.some(
+        (row) =>
+          row.key ===
+          "indexability",
+      ),
+      "an empty PARTIAL result must not establish a complete indexability PASS",
+    );
+  },
+);
+
+test(
+  "PF-03: PARTIAL absence findings preserve assessed scope and buyer-question finding requires content evidence",
+  () => {
+    const partialCapabilities = {
+      "content.body":
+        pfCapability(
+          SOURCE_STATUS.PARTIAL,
+        ),
+
+      "trust.proof":
+        pfCapability(
+          SOURCE_STATUS.PARTIAL,
+        ),
+
+      "offer.clarity":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "conversion.cta":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "conversion.form":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "conversion.path":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.indexability":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.redirects":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.resources":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "technical.headers":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "schema.structured_data":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+
+      "performance.lab":
+        pfCapability(
+          SOURCE_STATUS.AVAILABLE,
+        ),
+
+      "performance.field":
+        pfCapability(
+          SOURCE_STATUS.UNAVAILABLE,
+          {
+            requiredFieldsPresent:
+              false,
+          },
+        ),
+    };
+
+    const partialEvidence =
+      evidenceOf({
+        site: site({
+          contentParsing: [
+            {
+              url:
+                "https://x.com/assessed",
+              text:
+                "Observed body content from the assessed representative page.",
+              wordCount: 120,
+              mainContentChars: 700,
+            },
+          ],
+        }),
+      });
+
+    const partialModel =
+      scoreAudit(
+        INPUT,
+        partialEvidence,
+        {
+          capabilityEvidence: {
+            capabilityEvidenceVersion:
+              "2.0.0",
+            summary: {},
+            capabilities:
+              partialCapabilities,
+          },
+          scoredAt:
+            FIXED_TS,
+        },
+      );
+
+    const buyerQuestion =
+      partialModel.findings.find(
+        (finding) =>
+          finding.ruleId ===
+          "VAN-CONTENT-002",
+      );
+
+    assert.ok(
+      buyerQuestion,
+      "buyer-question opportunity must remain visible when usable PARTIAL content evidence exists",
+    );
+
+    assert.equal(
+      buyerQuestion.title,
+      "Buyer-question content was not detected in the available partial assessment",
+    );
+
+    assert.match(
+      buyerQuestion.evidenceText,
+      /available partial assessment/i,
+    );
+
+    assert.equal(
+      buyerQuestion
+        .evidence[0]
+        .sourceStatus,
+      SOURCE_STATUS.PARTIAL,
+    );
+
+    assert.deepEqual(
+      buyerQuestion.affectedUrls,
+      [
+        "https://x.com/assessed",
+      ],
+      "PARTIAL absence language must be bounded to assessed content URLs when they are known",
+    );
+
+    const partialTrust =
+      partialModel.findings.find(
+        (finding) =>
+          finding.ruleId ===
+          "VAN-TRUST-001",
+      );
+
+    assert.ok(partialTrust);
+
+    assert.doesNotMatch(
+      partialTrust.title,
+      /^No\b|\babsent\b|\bmissing\b/i,
+      "PARTIAL trust evidence must not become an unqualified whole-site absence claim",
+    );
+
+    assert.equal(
+      partialTrust
+        .evidence[0]
+        .sourceStatus,
+      SOURCE_STATUS.PARTIAL,
+    );
+
+    const partialPricing =
+      partialModel.findings.find(
+        (finding) =>
+          finding.ruleId ===
+          "VAN-TRUST-002",
+      );
+
+    assert.ok(partialPricing);
+
+    assert.doesNotMatch(
+      partialPricing.title,
+      /^No\b|\babsent\b|\bmissing\b/i,
+      "PARTIAL pricing evidence must not become an unqualified whole-site absence claim",
+    );
+
+    const unavailableContentModel =
+      scoreAudit(
+        INPUT,
+        partialEvidence,
+        {
+          capabilityEvidence: {
+            capabilityEvidenceVersion:
+              "2.0.0",
+            summary: {},
+            capabilities: {
+              ...partialCapabilities,
+
+              "content.body":
+                pfCapability(
+                  SOURCE_STATUS.UNAVAILABLE,
+                  {
+                    requiredFieldsPresent:
+                      false,
+                  },
+                ),
+            },
+          },
+          scoredAt:
+            FIXED_TS,
+        },
+      );
+
+    assert.ok(
+      !unavailableContentModel
+        .findings.some(
+          (finding) =>
+            finding.ruleId ===
+            "VAN-CONTENT-002",
+        ),
+      "trust.proof alone must never authorize the buyer-question absence finding",
+    );
+  },
+);

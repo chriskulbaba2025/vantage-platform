@@ -309,128 +309,428 @@ function businessServices(site, input) {
   return out;
 }
 
-/** v4 trust: same formula; eligibility gates unknown. */
-function scoreTrustV4({ site }) {
+function capabilityUsable(
+  capabilities,
+  key,
+) {
+  const cap =
+    capabilities?.[key];
+
+  return (
+    (
+      cap?.status ===
+        SOURCE_STATUS.AVAILABLE ||
+      cap?.status ===
+        SOURCE_STATUS.PARTIAL
+    ) &&
+    cap?.requiredFieldsPresent !==
+      false
+  );
+}
+
+/**
+ * Score only terms that were actually assessed.
+ *
+ * Full evidence preserves the historical formula exactly. When a term is
+ * governed by an unavailable capability, its maximum points are excluded
+ * rather than becoming an implicit zero. subWeightAssessed/subWeightTotal
+ * carries that incomplete assessment downstream for PF-01.
+ */
+function scoreAssessedTerms(
+  terms,
+) {
+  const totalMax =
+    terms.reduce(
+      (sum, term) =>
+        sum +
+        term.max,
+      0,
+    );
+
+  const assessed =
+    terms.filter(
+      (term) =>
+        term.assessed !== false,
+    );
+
+  const assessedMax =
+    assessed.reduce(
+      (sum, term) =>
+        sum +
+        term.max,
+      0,
+    );
+
+  if (assessedMax <= 0) {
+    return {
+      score: null,
+      subWeightAssessed: 0,
+      subWeightTotal:
+        totalMax,
+      subScores: [],
+    };
+  }
+
+  const points =
+    assessed.reduce(
+      (sum, term) =>
+        sum +
+        clamp(
+          term.points,
+          0,
+          term.max,
+        ),
+      0,
+    );
+
+  const score =
+    clamp(
+      points *
+        (
+          totalMax /
+          assessedMax
+        ),
+    );
+
+  return {
+    score,
+    subWeightAssessed:
+      assessedMax,
+    subWeightTotal:
+      totalMax,
+    subScores:
+      assessed.map(
+        (term) => ({
+          key: term.key,
+          weight: term.max,
+          score: clamp(
+            term.points,
+            0,
+            term.max,
+          ),
+        }),
+      ),
+  };
+}
+
+function interactiveAssessment(
+  site,
+  capabilities,
+  capabilityKey,
+  field,
+) {
+  const cap =
+    capabilities?.[
+      capabilityKey
+    ];
+
+  if (
+    !capabilityUsable(
+      capabilities,
+      capabilityKey,
+    )
+  ) {
+    return {
+      assessed: false,
+      usesSite: false,
+      present: false,
+      browserSummary: null,
+    };
+  }
+
+  const values =
+    Array.isArray(
+      site?.[field],
+    )
+      ? site[field]
+      : [];
+
+  const siteAssessed =
+    site
+      ?._interactiveEvidenceAvailable !==
+      false ||
+    values.length > 0;
+
+  if (siteAssessed) {
+    return {
+      assessed: true,
+      usesSite: true,
+      present:
+        values.length > 0,
+      browserSummary: null,
+    };
+  }
+
+  const browserSummary =
+    cap?.browserSummary;
+
+  if (
+    browserSummary &&
+    browserSummary.completed > 0
+  ) {
+    return {
+      assessed: true,
+      usesSite: false,
+      present:
+        (
+          browserSummary
+            .presentPages ??
+          0
+        ) > 0,
+      browserSummary,
+    };
+  }
+
+  return {
+    assessed: false,
+    usesSite: false,
+    present: false,
+    browserSummary: null,
+  };
+}
+
+/** v4 trust: trust.proof governs the score-bearing signals. */
+function scoreTrustV4({
+  site,
+}) {
   return scoreTrust(site);
 }
 
 /** v4 content: business-context services union (WP-D-05). */
-function scoreContentV4({ site, input }) {
-  const services = businessServices(site, input);
-  const pages = Math.min(30, site.pageCount * 5);
-  const depth = Math.min(25, site.averageWords / 20);
-  const servicesPts = Math.min(20, services.length * 4);
-  const education = (site.trust.faq ? 15 : 0) + (site.pageCount >= 5 ? 10 : 0);
-  return clamp(pages + depth + servicesPts + education);
+function scoreContentV4({
+  site,
+  input,
+  capabilities,
+}) {
+  const services =
+    businessServices(
+      site,
+      input,
+    );
+
+  const trustAssessed =
+    capabilityUsable(
+      capabilities,
+      "trust.proof",
+    );
+
+  return scoreAssessedTerms([
+    {
+      key: "pages",
+      max: 30,
+      points:
+        Math.min(
+          30,
+          site.pageCount * 5,
+        ),
+    },
+    {
+      key: "depth",
+      max: 25,
+      points:
+        Math.min(
+          25,
+          site.averageWords /
+            20,
+        ),
+    },
+    {
+      key: "services",
+      max: 20,
+      points:
+        Math.min(
+          20,
+          services.length * 4,
+        ),
+    },
+    {
+      key: "faq",
+      max: 15,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.faq
+          ? 15
+          : 0,
+    },
+    {
+      key: "page_depth",
+      max: 10,
+      points:
+        site.pageCount >= 5
+          ? 10
+          : 0,
+    },
+  ]);
 }
 
 /**
- * v4.1 conversion: use site interactive evidence when it was actually
- * collected; otherwise use genuine browser-observed CTA/form readiness.
- * Browser-unassessed pages never contribute a negative score.
+ * v4.1 conversion.
  *
- * Validated conversion.path evidence retains the existing bounded
- * bonus/obstruction adjustment.
+ * CTA/form values are scored only from their governing capabilities.
+ * Trust/pricing/reassurance values are scored only when trust.proof was
+ * assessed. Unknown cross-capability fields are excluded, never zeroed.
  */
 function scoreConversionV4({
   site,
   capabilities,
 }) {
-  const ctaCap =
-    capabilities?.["conversion.cta"];
-
-  const formCap =
-    capabilities?.["conversion.form"];
-
-  const ctaBrowser =
-    ctaCap?.browserSummary;
-
-  const formBrowser =
-    formCap?.browserSummary;
-
-  const ctaUsesSite =
-    site._interactiveEvidenceAvailable !== false ||
-    (
-      Array.isArray(site.ctas) &&
-      site.ctas.length > 0
+  const cta =
+    interactiveAssessment(
+      site,
+      capabilities,
+      "conversion.cta",
+      "ctas",
     );
 
-  const formUsesSite =
-    site._interactiveEvidenceAvailable !== false ||
-    (
-      Array.isArray(site.forms) &&
-      site.forms.length > 0
+  const form =
+    interactiveAssessment(
+      site,
+      capabilities,
+      "conversion.form",
+      "forms",
     );
 
-  const ctaScore = ctaUsesSite
-    ? Math.min(
-        25,
-        site.ctas.length * 5,
-      )
-    : ctaBrowser?.completed > 0
-      ? 25 *
+  const trustAssessed =
+    capabilityUsable(
+      capabilities,
+      "trust.proof",
+    );
+
+  const ctaPoints =
+    cta.usesSite
+      ? Math.min(
+          25,
+          site.ctas.length * 5,
+        )
+      : cta.browserSummary
+          ?.completed > 0
+        ? 25 *
+          (
+            (
+              cta.browserSummary
+                .readyPages ??
+              0
+            ) /
+            cta.browserSummary
+              .completed
+          )
+        : 0;
+
+  const formPoints =
+    form.usesSite
+      ? (
+          site.forms.length
+            ? 20
+            : 0
+        )
+      : form.browserSummary
+          ?.completed > 0 &&
         (
-          ctaBrowser.readyPages /
-          ctaBrowser.completed
+          form.browserSummary
+            .readyPages ??
+          0
+        ) > 0
+        ? 20
+        : 0;
+
+  const hierarchyPoints =
+    cta.usesSite
+      ? (
+          site.ctas.length >
+            0 &&
+          site.ctas.length <=
+            8
+            ? 10
+            : 3
         )
       : 0;
 
-  const formScore = formUsesSite
-    ? (
-        site.forms.length
-          ? 20
-          : 0
-      )
-    : (
-        formBrowser?.completed > 0 &&
-        formBrowser.readyPages > 0
-          ? 20
-          : 0
-      );
-
-  const pricing =
-    site.trust.pricing
-      ? 15
-      : 0;
-
-  const reassurance =
-    (site.trust.policies ? 10 : 0) +
-    (site.trust.testimonials ? 10 : 0);
-
-  const contact =
-    site.trust.contact
-      ? 10
-      : 0;
-
-  // CTA-count hierarchy is score-bearing only when the site extractor
-  // actually collected CTA cardinality. Browser validation confirms
-  // readiness on selected pages but does not measure total CTA hierarchy.
-  const hierarchy = ctaUsesSite
-    ? (
-        site.ctas.length > 0 &&
-        site.ctas.length <= 8
-          ? 10
-          : 3
-      )
-    : 0;
-
-  const base = clamp(
-    ctaScore +
-    formScore +
-    pricing +
-    reassurance +
-    contact +
-    hierarchy,
-  );
-
-  const pathCap =
-    capabilities?.["conversion.path"];
-
-  const summary =
-    pathCap?.validationSummary;
+  const baseResult =
+    scoreAssessedTerms([
+      {
+        key: "cta",
+        max: 25,
+        assessed:
+          cta.assessed,
+        points: ctaPoints,
+      },
+      {
+        key: "form",
+        max: 20,
+        assessed:
+          form.assessed,
+        points: formPoints,
+      },
+      {
+        key: "pricing",
+        max: 15,
+        assessed:
+          trustAssessed,
+        points:
+          site.trust.pricing
+            ? 15
+            : 0,
+      },
+      {
+        key: "policies",
+        max: 10,
+        assessed:
+          trustAssessed,
+        points:
+          site.trust.policies
+            ? 10
+            : 0,
+      },
+      {
+        key: "testimonials",
+        max: 10,
+        assessed:
+          trustAssessed,
+        points:
+          site.trust
+            .testimonials
+            ? 10
+            : 0,
+      },
+      {
+        key: "contact",
+        max: 10,
+        assessed:
+          trustAssessed,
+        points:
+          site.trust.contact
+            ? 10
+            : 0,
+      },
+      {
+        key: "cta_hierarchy",
+        max: 10,
+        assessed:
+          cta.usesSite,
+        points:
+          hierarchyPoints,
+      },
+    ]);
 
   if (
-    pathCap?.validated === true &&
+    baseResult.score === null
+  ) {
+    return baseResult;
+  }
+
+  const pathCap =
+    capabilities?.[
+      "conversion.path"
+    ];
+
+  const summary =
+    pathCap
+      ?.validationSummary;
+
+  if (
+    pathCap?.validated ===
+      true &&
     summary
   ) {
     const verified =
@@ -444,57 +744,162 @@ function scoreConversionV4({
       );
 
     const obstructionPenalty =
-      (summary.obstructionCount ?? 0) > 0
+      (
+        summary
+          .obstructionCount ??
+        0
+      ) > 0
         ? 10
         : 0;
 
-    return clamp(
-      base +
-      bonus -
-      obstructionPenalty,
-    );
+    return {
+      ...baseResult,
+      score:
+        clamp(
+          baseResult.score +
+            bonus -
+            obstructionPenalty,
+        ),
+    };
   }
 
-  return base;
+  return baseResult;
 }
 
 /** v4 offer clarity: business-context services union. */
-function scoreOfferClarityV4({ site, input }) {
-  const services = businessServices(site, input);
-  const ctaClarity = Math.min(30, site.ctas.length * 6);
-  const forms = site.forms.length ? 15 : 0;
-  const pricing = site.trust.pricing ? 20 : 0;
-  const servicesPts = Math.min(20, services.length * 4);
-  // CRIT rescore #2 + evidence-audit item 2 — the descCoverage term
-  // contributes only when the description counters were ACTUALLY collected
-  // (adapter marker) and finite.
+function scoreOfferClarityV4({
+  site,
+  input,
+  capabilities,
+}) {
+  const services =
+    businessServices(
+      site,
+      input,
+    );
+
+  const cta =
+    interactiveAssessment(
+      site,
+      capabilities,
+      "conversion.cta",
+      "ctas",
+    );
+
+  const form =
+    interactiveAssessment(
+      site,
+      capabilities,
+      "conversion.form",
+      "forms",
+    );
+
+  const trustAssessed =
+    capabilityUsable(
+      capabilities,
+      "trust.proof",
+    );
+
+  // Browser CTA validation proves action readiness, not CTA wording/count
+  // clarity. This term therefore requires site-level interactive detail.
+  const ctaClarityAssessed =
+    cta.assessed &&
+    cta.usesSite;
+
   const descKnown =
-    site._metaCountersAvailable !== false &&
-    (site._metaFieldAvailability?.descriptions ?? true) !== false &&
-    typeof site.missingDescriptions === "number" &&
-    Number.isFinite(site.missingDescriptions);
-  const descCoverage =
-    descKnown && site.pageCount
-      ? 15 * (1 - site.missingDescriptions / site.pageCount)
-      : 0;
-  return clamp(ctaClarity + forms + pricing + servicesPts + descCoverage);
+    site._metaCountersAvailable !==
+      false &&
+    (
+      site
+        ._metaFieldAvailability
+        ?.descriptions ??
+      true
+    ) !== false &&
+    typeof site
+      .missingDescriptions ===
+      "number" &&
+    Number.isFinite(
+      site.missingDescriptions,
+    );
+
+  return scoreAssessedTerms([
+    {
+      key: "cta_clarity",
+      max: 30,
+      assessed:
+        ctaClarityAssessed,
+      points:
+        Math.min(
+          30,
+          site.ctas.length * 6,
+        ),
+    },
+    {
+      key: "forms",
+      max: 15,
+      assessed:
+        form.assessed,
+      points:
+        form.present
+          ? 15
+          : 0,
+    },
+    {
+      key: "pricing",
+      max: 20,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.pricing
+          ? 20
+          : 0,
+    },
+    {
+      key: "services",
+      max: 20,
+      points:
+        Math.min(
+          20,
+          services.length * 4,
+        ),
+    },
+    {
+      key:
+        "description_coverage",
+      max: 15,
+      assessed:
+        descKnown,
+      points:
+        descKnown &&
+        site.pageCount
+          ? 15 *
+            (
+              1 -
+              site
+                .missingDescriptions /
+                site.pageCount
+            )
+          : 0,
+    },
+  ]);
 }
 
-/** v4 risk reduction: same formula; eligibility gates unknown. */
-/** v4 risk reduction: same formula; eligibility gates unknown. */
+/** v4 risk reduction. */
 function scoreRiskReductionV4({
   site,
   capabilities,
 }) {
-  const policies =
-    site.trust.policies
-      ? 25
-      : 0;
+  const trustAssessed =
+    capabilityUsable(
+      capabilities,
+      "trust.proof",
+    );
 
-  const contact =
-    site.trust.contact
-      ? 20
-      : 0;
+  const headersAssessed =
+    capabilityUsable(
+      capabilities,
+      "technical.headers",
+    );
 
   const headerCapability =
     capabilities?.[
@@ -511,7 +916,7 @@ function scoreRiskReductionV4({
           .observedHeaders
       : site.securityHeaders;
 
-  const security =
+  const securityPoints =
     25 *
     (
       Object.values(
@@ -520,219 +925,831 @@ function scoreRiskReductionV4({
       4
     );
 
-  const https =
-    site.targetUrl &&
-    site.targetUrl.startsWith(
-      "https:",
-    )
-      ? 15
-      : 0;
-
-  const faq =
-    site.trust.faq
-      ? 15
-      : 0;
-
-  return clamp(
-    policies +
-    contact +
-    security +
-    https +
-    faq,
-  );
+  return scoreAssessedTerms([
+    {
+      key: "policies",
+      max: 25,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.policies
+          ? 25
+          : 0,
+    },
+    {
+      key: "contact",
+      max: 20,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.contact
+          ? 20
+          : 0,
+    },
+    {
+      key:
+        "security_headers",
+      max: 25,
+      assessed:
+        headersAssessed,
+      points:
+        securityPoints,
+    },
+    {
+      key: "https",
+      max: 15,
+      assessed:
+        Boolean(
+          site.targetUrl,
+        ),
+      points:
+        site.targetUrl &&
+        site.targetUrl
+          .startsWith(
+            "https:",
+          )
+          ? 15
+          : 0,
+    },
+    {
+      key: "faq",
+      max: 15,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.faq
+          ? 15
+          : 0,
+    },
+  ]);
 }
 
 /** v4 funnel coverage: business-context services union. */
-function scoreFunnelCoverageV4({ site, input }) {
-  const services = businessServices(site, input);
-  const tofu = Math.min(30, site.pageCount * 4 + site.topicKeywords.length * 2);
-  const mofu = (site.trust.faq ? 20 : 0) + (site.trust.caseStudies ? 15 : 0) +
-    (services.length >= 3 ? 10 : 0);
-  const bofu = (site.trust.pricing ? 20 : 0) + (site.trust.contact ? 10 : 0) +
-    (site.forms.length ? 10 : 0) + Math.min(10, site.ctas.length * 2);
-  return clamp(tofu + mofu + bofu);
+function scoreFunnelCoverageV4({
+  site,
+  input,
+  capabilities,
+}) {
+  const services =
+    businessServices(
+      site,
+      input,
+    );
+
+  const contentAssessed =
+    capabilityUsable(
+      capabilities,
+      "content.body",
+    );
+
+  const trustAssessed =
+    capabilityUsable(
+      capabilities,
+      "trust.proof",
+    );
+
+  const cta =
+    interactiveAssessment(
+      site,
+      capabilities,
+      "conversion.cta",
+      "ctas",
+    );
+
+  const form =
+    interactiveAssessment(
+      site,
+      capabilities,
+      "conversion.form",
+      "forms",
+    );
+
+  return scoreAssessedTerms([
+    {
+      key: "tofu",
+      max: 30,
+      assessed:
+        contentAssessed,
+      points:
+        Math.min(
+          30,
+          site.pageCount * 4 +
+            site.topicKeywords
+              .length *
+              2,
+        ),
+    },
+    {
+      key: "faq",
+      max: 20,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.faq
+          ? 20
+          : 0,
+    },
+    {
+      key: "case_studies",
+      max: 15,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.caseStudies
+          ? 15
+          : 0,
+    },
+    {
+      key: "services",
+      max: 10,
+      assessed:
+        contentAssessed,
+      points:
+        services.length >= 3
+          ? 10
+          : 0,
+    },
+    {
+      key: "pricing",
+      max: 20,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.pricing
+          ? 20
+          : 0,
+    },
+    {
+      key: "contact",
+      max: 10,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.contact
+          ? 10
+          : 0,
+    },
+    {
+      key: "forms",
+      max: 10,
+      assessed:
+        form.assessed,
+      points:
+        form.present
+          ? 10
+          : 0,
+    },
+    {
+      key: "ctas",
+      max: 10,
+      assessed:
+        cta.assessed,
+      points:
+        cta.usesSite
+          ? Math.min(
+              10,
+              site.ctas.length *
+                2,
+            )
+          : cta.present
+            ? 10
+            : 0,
+    },
+  ]);
 }
 
-/** v4 schema entity: same formula; eligibility gates unknown. */
-function scoreSchemaEntityV4({ site }) {
-  const validSchema = site.schemaTypes.filter((x) => x !== "InvalidJSONLD");
-  const schemaCount = Math.min(40, validSchema.length * 10);
-  const hasOrg = validSchema.some((t) => /organization|localbusiness/i.test(t)) ? 20 : 0;
-  const hasFaq = validSchema.some((t) => /faq/i.test(t)) ? 15 : 0;
-  const hasService = validSchema.some((t) => /service|product/i.test(t)) ? 15 : 0;
-  const socialProof = site.socialLinks.length ? 10 : 0;
-  return clamp(schemaCount + hasOrg + hasFaq + hasService + socialProof);
+/** v4 schema entity. */
+function scoreSchemaEntityV4({
+  site,
+  capabilities,
+}) {
+  const schemaAssessed =
+    capabilityUsable(
+      capabilities,
+      "schema.structured_data",
+    );
+
+  const contentAssessed =
+    capabilityUsable(
+      capabilities,
+      "content.body",
+    );
+
+  const validSchema =
+    site.schemaTypes.filter(
+      (type) =>
+        type !==
+        "InvalidJSONLD",
+    );
+
+  return scoreAssessedTerms([
+    {
+      key: "schema_count",
+      max: 40,
+      assessed:
+        schemaAssessed,
+      points:
+        Math.min(
+          40,
+          validSchema.length *
+            10,
+        ),
+    },
+    {
+      key: "organization",
+      max: 20,
+      assessed:
+        schemaAssessed,
+      points:
+        validSchema.some(
+          (type) =>
+            /organization|localbusiness/i.test(
+              type,
+            ),
+        )
+          ? 20
+          : 0,
+    },
+    {
+      key: "faq_schema",
+      max: 15,
+      assessed:
+        schemaAssessed,
+      points:
+        validSchema.some(
+          (type) =>
+            /faq/i.test(
+              type,
+            ),
+        )
+          ? 15
+          : 0,
+    },
+    {
+      key: "service_schema",
+      max: 15,
+      assessed:
+        schemaAssessed,
+      points:
+        validSchema.some(
+          (type) =>
+            /service|product/i.test(
+              type,
+            ),
+        )
+          ? 15
+          : 0,
+    },
+    {
+      key: "social_links",
+      max: 10,
+      assessed:
+        contentAssessed,
+      points:
+        site.socialLinks
+          .length
+          ? 10
+          : 0,
+    },
+  ]);
 }
 
 /**
  * v4 AI-readiness: STRUCTURAL machine-readability only (WP-D-07).
- * No floor for unknown evidence; schema points require the structured-data
- * capability to be AVAILABLE (not merely an empty array).
  */
-function scoreAiReadinessV4({ site, capabilities }) {
-  const schemaCap = capabilities?.["schema.structured_data"];
-  const schemaAvailable = schemaCap?.status === "AVAILABLE" || schemaCap?.status === "PARTIAL";
-  const schema = schemaAvailable && site.schemaTypes.length ? 25 : 0;
-  const headings = site.pages?.[0]?.headings?.h1?.length ? 15 : 0;
-  const faq = site.trust.faq ? 20 : 0;
-  const depth = Math.min(20, site.pageCount * 3);
-  const topics = site.topicKeywords.length >= 5 ? 20 : site.topicKeywords.length >= 3 ? 10 : 0;
-  return clamp(schema + headings + faq + depth + topics);
+function scoreAiReadinessV4({
+  site,
+  capabilities,
+}) {
+  const schemaAssessed =
+    capabilityUsable(
+      capabilities,
+      "schema.structured_data",
+    );
+
+  const contentAssessed =
+    capabilityUsable(
+      capabilities,
+      "content.body",
+    );
+
+  const trustAssessed =
+    capabilityUsable(
+      capabilities,
+      "trust.proof",
+    );
+
+  const headingsPresent =
+    Boolean(
+      site.pages?.[0]
+        ?.headings?.h1
+        ?.length,
+    );
+
+  const headingsKnown =
+    headingsPresent ||
+    (
+      site._metaCountersAvailable !==
+        false &&
+      (
+        site
+          ._metaFieldAvailability
+          ?.headings ??
+        true
+      ) !== false
+    );
+
+  return scoreAssessedTerms([
+    {
+      key: "schema",
+      max: 25,
+      assessed:
+        schemaAssessed,
+      points:
+        site.schemaTypes
+          .length
+          ? 25
+          : 0,
+    },
+    {
+      key: "headings",
+      max: 15,
+      assessed:
+        headingsKnown,
+      points:
+        headingsPresent
+          ? 15
+          : 0,
+    },
+    {
+      key: "faq",
+      max: 20,
+      assessed:
+        trustAssessed,
+      points:
+        site.trust.faq
+          ? 20
+          : 0,
+    },
+    {
+      key: "depth",
+      max: 20,
+      assessed:
+        contentAssessed,
+      points:
+        Math.min(
+          20,
+          site.pageCount * 3,
+        ),
+    },
+    {
+      key: "topics",
+      max: 20,
+      assessed:
+        contentAssessed,
+      points:
+        site.topicKeywords
+          .length >= 5
+          ? 20
+          : site.topicKeywords
+                .length >= 3
+            ? 10
+            : 0,
+    },
+  ]);
 }
 
 /**
  * v4 technical hygiene: capability-partitioned sub-rules (WP-D-04).
- * Sub-rule weights are included ONLY when their capability evidence is
- * present; the module score is the weighted mean over INCLUDED sub-weights.
+ *
+ * PF-01: PARTIAL evidence may carry observed defects, but an empty/clean
+ * PARTIAL result cannot establish a complete PASS. AVAILABLE evidence may
+ * establish both positive and negative results.
+ *
  * Returns { score, subWeightAssessed, subWeightTotal, subScores }.
  */
-function scoreTechnicalV4({ site, capabilities }) {
-  const pageCount = Math.max(1, site.pageCount);
+function scoreTechnicalV4({
+  site,
+  capabilities,
+}) {
+  const pageCount =
+    Math.max(
+      1,
+      site.pageCount,
+    );
 
   const subRules = [];
 
-  // Meta rules — crawl pages evidence.  CRIT defect 4b + evidence-audit
-  // item 2: unknown counters (null coerced at hydration) MUST NOT grant
-  // credit — each TERM is included only from a finite collected counter,
-  // and the sub-rule weight reflects exactly the known portion.
-  const finiteNum = (v) => typeof v === "number" && Number.isFinite(v);
-  // Per-field availability (CRIT rescore R1): each term requires ITS field
-  // to have been collected.  Absent map ⇒ legacy extractor semantics.
-  const fieldAvail = site._metaFieldAvailability || {};
-  const fieldCollected = (field) => fieldAvail[field] !== false;
+  const finiteNum =
+    (value) =>
+      typeof value ===
+        "number" &&
+      Number.isFinite(value);
+
+    const fieldAvail =
+    site._metaFieldAvailability ||
+    {};
+
+  const fieldCollected =
+    (field) =>
+      fieldAvail[field] !== false;
+
   {
     const metaTerms = [
       {
         weight: 15,
-        known: fieldCollected("titles") && finiteNum(site.missingTitles),
-        score: 15 * (1 - (site.missingTitles ?? 0) / pageCount),
+        known:
+          fieldCollected(
+            "titles",
+          ) &&
+          finiteNum(
+            site.missingTitles,
+          ),
+        score:
+          15 *
+          (
+            1 -
+            (
+              site.missingTitles ??
+              0
+            ) /
+              pageCount
+          ),
       },
       {
         weight: 15,
-        known: fieldCollected("descriptions") && finiteNum(site.missingDescriptions),
-        score: 15 * (1 - (site.missingDescriptions ?? 0) / pageCount),
-      },
-      {
-        weight: 10,
-        known: fieldCollected("canonicals") && finiteNum(site.missingCanonicals),
-        score: 10 * (1 - (site.missingCanonicals ?? 0) / pageCount),
+        known:
+          fieldCollected(
+            "descriptions",
+          ) &&
+          finiteNum(
+            site.missingDescriptions,
+          ),
+        score:
+          15 *
+          (
+            1 -
+            (
+              site.missingDescriptions ??
+              0
+            ) /
+              pageCount
+          ),
       },
       {
         weight: 10,
         known:
-          fieldCollected("headings") &&
-          finiteNum(site.h1Missing) &&
-          finiteNum(site.h1Multiple),
-        score: 10 * (1 - Math.min(pageCount, (site.h1Missing ?? 0) + (site.h1Multiple ?? 0)) / pageCount),
+          fieldCollected(
+            "canonicals",
+          ) &&
+          finiteNum(
+            site.missingCanonicals,
+          ),
+        score:
+          10 *
+          (
+            1 -
+            (
+              site.missingCanonicals ??
+              0
+            ) /
+              pageCount
+          ),
+      },
+      {
+        weight: 10,
+        known:
+          fieldCollected(
+            "headings",
+          ) &&
+          finiteNum(
+            site.h1Missing,
+          ) &&
+          finiteNum(
+            site.h1Multiple,
+          ),
+        score:
+          10 *
+          (
+            1 -
+            Math.min(
+              pageCount,
+              (
+                site.h1Missing ??
+                0
+              ) +
+                (
+                  site.h1Multiple ??
+                  0
+                ),
+            ) /
+              pageCount
+          ),
       },
     ];
-    const knownTerms = metaTerms.filter((t) => t.known);
-    // Evidence-audit item 2: the frozen decision-evidence schema coerces
-    // counters to integers, so the ADAPTER declares collection truth via
-    // `_metaCountersAvailable`.  Legacy evidence (marker undefined) keeps
-    // its historical semantics (extractor ran).
-    const metaCollected = site._metaCountersAvailable !== false;
-    if (metaCollected && knownTerms.length > 0) {
-      // The meta sub-rule is worth 50 points on the 0-100 module scale.
-      // Collected terms sum their points; the score is normalized to the
-      // KNOWN portion's scale (perfect collected evidence = 50) and the
-      // sub-rule weight is exactly the known portion.
-      const weight = knownTerms.reduce((s, t) => s + t.weight, 0);
-      const points = knownTerms.reduce((s, t) => s + t.score, 0);
-      const score = clamp(points * (50 / weight));
-      subRules.push({ key: "meta", weight, score });
+
+    const knownTerms =
+      metaTerms.filter(
+        (term) =>
+          term.known,
+      );
+
+    const metaCollected =
+      site._metaCountersAvailable !==
+      false;
+
+    if (
+      metaCollected &&
+      knownTerms.length > 0
+    ) {
+      const weight =
+        knownTerms.reduce(
+          (sum, term) =>
+            sum +
+            term.weight,
+          0,
+        );
+
+      const points =
+        knownTerms.reduce(
+          (sum, term) =>
+            sum +
+            term.score,
+          0,
+        );
+
+      const score =
+        clamp(
+          points *
+            (
+              50 /
+              weight
+            ),
+        );
+
+      subRules.push({
+        key: "meta",
+        weight,
+        score,
+      });
     }
   }
 
-  // Image rules — CRIT defect 4a: unknown image evidence (null counts)
-  // MUST NOT grant 10/10; the sub-rule is excluded instead.
+    const sourceComplete =
+    site.sourceStatus ===
+    SOURCE_STATUS.AVAILABLE;
   const imageKnown =
-    typeof site.imageCount === "number" &&
-    Number.isFinite(site.imageCount) &&
+    typeof site.imageCount ===
+      "number" &&
+    Number.isFinite(
+      site.imageCount,
+    ) &&
     site.imageCount > 0 &&
-    typeof site.imagesMissingAlt === "number" &&
-    Number.isFinite(site.imagesMissingAlt);
-  if (imageKnown) {
-    const image = 10 * (1 - Math.min(1, site.imagesMissingAlt / site.imageCount));
-    subRules.push({ key: "images", weight: 10, score: clamp(image) });
-  }
+    typeof site
+      .imagesMissingAlt ===
+      "number" &&
+    Number.isFinite(
+      site.imagesMissingAlt,
+    );
 
-  const capStatus = (key) => capabilities?.[key]?.status;
+  const observedImageDefect =
+    imageKnown &&
+    site.imagesMissingAlt > 0;
 
-  // Indexability — technical.indexability capability.  CRIT rescore #1:
-  // PARTIAL status (endpoint failures / flag-only fallback) with an empty
-  // list must NOT grant full credit — the sub-rule requires collected
-  // evidence (requiredFieldsPresent from the capability derivation).
-  const indexabilityCap = capabilities?.["technical.indexability"];
   if (
-    indexabilityCap?.status === "AVAILABLE" &&
-    indexabilityCap?.requiredFieldsPresent === true
-  ) {
-    const count = (site.nonIndexablePages || []).length;
-    const score = count === 0 ? 10 : count <= 2 ? 7 : count <= 5 ? 4 : 0;
-    subRules.push({ key: "indexability", weight: 10, score });
-  }
-
-  // Redirects — technical.redirects capability.  Evidence-audit item 2:
-  // PARTIAL status without collected evidence must not yield 10/10 from an
-  // empty chain list — the sub-rule requires collected fields.
-  const redirectsCap = capabilities?.["technical.redirects"];
-  if (redirectsCap?.status === "AVAILABLE" && redirectsCap?.requiredFieldsPresent === true) {
-    const chains = site.redirectChains || [];
-    const maxHops = chains.reduce((m, c) => Math.max(m, c?.hops ?? 0), 0);
-    const score = maxHops <= 1 ? 10 : maxHops === 2 ? 5 : 0;
-    subRules.push({ key: "redirects", weight: 10, score });
-  }
-
-  // Resources — technical.resources capability.  CRIT rescore #1: null
-  // total counters must NOT become full credit — the sub-rule requires at
-  // least one page with a finite numeric totalResources.
-  const resourcesCap = capabilities?.["technical.resources"];
-  if (
-    (resourcesCap?.status === "AVAILABLE" || resourcesCap?.status === "PARTIAL") &&
-    (site.pageResources || []).some(
-      (p) => typeof p?.totalResources === "number" && Number.isFinite(p.totalResources),
+    imageKnown &&
+    (
+      sourceComplete ||
+      observedImageDefect
     )
   ) {
-    const pages = site.pageResources || [];
-    const total = pages.reduce(
-      (s, p) => s + (typeof p?.totalResources === "number" ? p.totalResources : 0),
-      0,
-    );
-    const broken = pages.reduce(
-      (s, p) => s + (typeof p?.brokenResources === "number" ? p.brokenResources : 0),
-      0,
-    );
-    const score = total > 0 ? Math.round(10 * (1 - Math.min(1, broken / total))) : 0;
-    subRules.push({ key: "resources", weight: 10, score });
+    const image =
+      10 *
+      (
+        1 -
+        Math.min(
+          1,
+          site.imagesMissingAlt /
+            site.imageCount,
+        )
+      );
+
+    subRules.push({
+      key: "images",
+      weight: 10,
+      score: clamp(image),
+    });
   }
 
-  // Headers — technical.headers capability.
+  const indexabilityCap =
+    capabilities?.[
+      "technical.indexability"
+    ];
+
+  const nonIndexableCount =
+    (
+      site.nonIndexablePages ||
+      []
+    ).length;
+
+  const completeIndexability =
+    indexabilityCap?.status ===
+      SOURCE_STATUS.AVAILABLE &&
+    indexabilityCap
+      ?.requiredFieldsPresent ===
+      true;
+
+  const observedPartialIndexabilityDefect =
+    indexabilityCap?.status ===
+      SOURCE_STATUS.PARTIAL &&
+    nonIndexableCount > 0;
+
   if (
-    capStatus(
-      "technical.headers",
-    ) === "AVAILABLE"
+    completeIndexability ||
+    observedPartialIndexabilityDefect
   ) {
-    const headerCapability =
-      capabilities?.[
-        "technical.headers"
-      ];
+    const score =
+      nonIndexableCount === 0
+        ? 10
+        : nonIndexableCount <= 2
+          ? 7
+          : nonIndexableCount <=
+              5
+            ? 4
+            : 0;
 
-    const securityHeaders =
-      headerCapability
-        ?.observedHeaders &&
-      typeof headerCapability
-        .observedHeaders ===
-        "object"
-        ? headerCapability
-            .observedHeaders
-        : site.securityHeaders;
+    subRules.push({
+      key: "indexability",
+      weight: 10,
+      score,
+    });
+  }
 
-    const headersPresent =
-      Object.values(
-        securityHeaders || {},
-      ).filter(Boolean).length;
+  const redirectsCap =
+    capabilities?.[
+      "technical.redirects"
+    ];
 
+  const chains =
+    site.redirectChains || [];
+
+  const maxHops =
+    chains.reduce(
+      (maximum, chain) =>
+        Math.max(
+          maximum,
+          chain?.hops ?? 0,
+        ),
+      0,
+    );
+
+  const completeRedirects =
+    redirectsCap?.status ===
+      SOURCE_STATUS.AVAILABLE &&
+    redirectsCap
+      ?.requiredFieldsPresent ===
+      true;
+
+  const observedPartialRedirectDefect =
+    redirectsCap?.status ===
+      SOURCE_STATUS.PARTIAL &&
+    maxHops > 1;
+
+  if (
+    completeRedirects ||
+    observedPartialRedirectDefect
+  ) {
+    const score =
+      maxHops <= 1
+        ? 10
+        : maxHops === 2
+          ? 5
+          : 0;
+
+    subRules.push({
+      key: "redirects",
+      weight: 10,
+      score,
+    });
+  }
+
+  const resourcesCap =
+    capabilities?.[
+      "technical.resources"
+    ];
+
+  const resourcePages =
+    (
+      site.pageResources ||
+      []
+    ).filter(
+      (page) =>
+        finiteNum(
+          page?.totalResources,
+        ) &&
+        finiteNum(
+          page?.brokenResources,
+        ),
+    );
+
+  const totalResources =
+    resourcePages.reduce(
+      (sum, page) =>
+        sum +
+        page.totalResources,
+      0,
+    );
+
+  const brokenResources =
+    resourcePages.reduce(
+      (sum, page) =>
+        sum +
+        page.brokenResources,
+      0,
+    );
+
+  const completeResources =
+    resourcesCap?.status ===
+      SOURCE_STATUS.AVAILABLE &&
+    resourcePages.length > 0;
+
+  const observedPartialResourceDefect =
+    resourcesCap?.status ===
+      SOURCE_STATUS.PARTIAL &&
+    resourcePages.length > 0 &&
+    brokenResources > 0;
+
+  if (
+    completeResources ||
+    observedPartialResourceDefect
+  ) {
+    const score =
+      totalResources > 0
+        ? Math.round(
+            10 *
+              (
+                1 -
+                Math.min(
+                  1,
+                  brokenResources /
+                    totalResources,
+                )
+              ),
+          )
+        : 0;
+
+    subRules.push({
+      key: "resources",
+      weight: 10,
+      score,
+    });
+  }
+
+  const headerCapability =
+    capabilities?.[
+      "technical.headers"
+    ];
+
+  const securityHeaders =
+    headerCapability
+      ?.observedHeaders &&
+    typeof headerCapability
+      .observedHeaders ===
+      "object"
+      ? headerCapability
+          .observedHeaders
+      : site.securityHeaders;
+
+  const hasHeaderEvidence =
+    securityHeaders &&
+    typeof securityHeaders ===
+      "object" &&
+    Object.keys(
+      securityHeaders,
+    ).length > 0;
+
+  const headersPresent =
+    hasHeaderEvidence
+      ? Object.values(
+          securityHeaders,
+        ).filter(Boolean).length
+      : 0;
+
+  const completeHeaders =
+    headerCapability?.status ===
+      SOURCE_STATUS.AVAILABLE &&
+    hasHeaderEvidence;
+
+  const observedPartialHeaderDefect =
+    headerCapability?.status ===
+      SOURCE_STATUS.PARTIAL &&
+    hasHeaderEvidence &&
+    headersPresent < 4;
+
+  if (
+    completeHeaders ||
+    observedPartialHeaderDefect
+  ) {
     const score =
       Math.round(
         10 *
@@ -749,13 +1766,35 @@ function scoreTechnicalV4({ site, capabilities }) {
     });
   }
 
-  const totalWeight = subRules.reduce((s, r) => s + r.weight, 0);
-  const weighted = subRules.reduce((s, r) => s + r.score * r.weight, 0);
-  const score = totalWeight > 0 ? clamp(weighted / totalWeight) : null;
+  const totalWeight =
+    subRules.reduce(
+      (sum, rule) =>
+        sum +
+        rule.weight,
+      0,
+    );
+
+  const weighted =
+    subRules.reduce(
+      (sum, rule) =>
+        sum +
+        rule.score *
+          rule.weight,
+      0,
+    );
+
+  const score =
+    totalWeight > 0
+      ? clamp(
+          weighted /
+            totalWeight,
+        )
+      : null;
 
   return {
     score,
-    subWeightAssessed: totalWeight,
+    subWeightAssessed:
+      totalWeight,
     subWeightTotal: 100,
     subScores: subRules,
   };
@@ -1139,78 +2178,305 @@ export function buildFindings(site, performance, gsc, opts = {}) {
   const capabilities = opts.capabilities || {};
   const suppressedReasons = opts.suppressedReasons || [];
 
-  // PRYSM-NEXT-01 WP-D-11 — capability-gated findings.  When body content
-  // was not collected (DataForSEO pages endpoint returns metadata only),
-  // content-dependent findings MUST be suppressed because false/empty/null
-  // values represent "not available" rather than "confirmed absent"
-  // (PRD v3.0 §8.6).  Capability statuses come from the WP-C layer —
-  // unknown is never treated as confirmed absence.
-  const capOk = (key) => {
-    const status = capabilities[key]?.status;
-    return status === SOURCE_STATUS.AVAILABLE || status === SOURCE_STATUS.PARTIAL;
-  };
+    // PRYSM-NEXT-01 WP-D-11 + PF-01/PF-03.
+  //
+  // A capability may remain usable when PARTIAL, but PARTIAL does not
+  // establish whole-scope absence. Findings therefore distinguish:
+  //   - usable evidence;
+  //   - complete versus partial capability coverage;
+  //   - observed defects versus absence conclusions.
+  //
+  // Unknown capability evidence is suppressed. PARTIAL absence findings
+  // remain visible only when the rule supplies evidence-bounded wording.
+
+  const capabilityUsableForFinding =
+    (key) => {
+      const cap =
+        capabilities[key];
+
+      const status =
+        cap?.status;
+
+      return (
+        (
+          status ===
+            SOURCE_STATUS.AVAILABLE ||
+          status ===
+            SOURCE_STATUS.PARTIAL
+        ) &&
+        cap?.requiredFieldsPresent !==
+          false
+      );
+    };
+
+  const assessedContentUrls =
+    (
+      Array.isArray(
+        site.contentParsing,
+      )
+        ? site.contentParsing
+        : []
+    )
+      .filter((record) => {
+        const hasText =
+          typeof record?.text ===
+            "string" &&
+          record.text.trim().length >
+            0;
+
+        const hasWordCount =
+          typeof record?.wordCount ===
+            "number" &&
+          Number.isFinite(
+            record.wordCount,
+          );
+
+        const hasMainContentChars =
+          typeof record
+            ?.mainContentChars ===
+            "number" &&
+          Number.isFinite(
+            record.mainContentChars,
+          );
+
+        return (
+          hasText ||
+          hasWordCount ||
+          hasMainContentChars
+        );
+      })
+      .map(
+        (record) =>
+          record?.url ||
+          record?.crawledUrl,
+      )
+      .filter(Boolean)
+      .slice(0, 10);
 
   const add = (opts) => {
-    // Capability gate: when the finding's evidence capability is not
-    // available, record the suppression and never emit the finding.
-    if (opts.requires) {
-      if (!capOk(opts.requires)) {
+    const requiredCapabilities =
+      opts.requires === undefined ||
+      opts.requires === null
+        ? []
+        : Array.isArray(
+              opts.requires,
+            )
+          ? opts.requires
+          : [opts.requires];
+
+    const unavailableCapabilities =
+      requiredCapabilities.filter(
+        (key) =>
+          !capabilityUsableForFinding(
+            key,
+          ),
+      );
+
+    if (
+      unavailableCapabilities.length >
+      0
+    ) {
+      for (
+        const capability
+        of unavailableCapabilities
+      ) {
         suppressedReasons.push({
           ruleId: opts.ruleId,
           title: opts.title,
-          capability: opts.requires,
-          capabilityStatus: capabilities[opts.requires]?.status ?? "NOT_ASSESSED",
+          capability,
+          capabilityStatus:
+            capabilities[
+              capability
+            ]?.status ??
+            "NOT_ASSESSED",
         });
-        return;
       }
-    }
 
-    const evidenceRecords = (opts.evidence || []).map((er) => ({
-      provider: er.provider || "dataforseo_onpage",
-      sourceStatus:
-        (er.provider || "dataforseo_onpage") === "dataforseo_onpage"
-          ? site?.sourceStatus
-          : er.sourceStatus,
-      field: er.field,
-      observedValue: er.observedValue ?? null,
-      artifactRef: er.artifactRef || site.rawArtifactRef || null,
-    }));
-
-    if (evidenceRecords.some((er) => !isValidSourceStatus(er.sourceStatus))) {
       return;
     }
 
-    // Enforce: no finding without evidence (PRD §16)
-    if (!evidenceRecords.length) return;
+    const partialCapabilities =
+      requiredCapabilities.filter(
+        (key) =>
+          capabilities[key]
+            ?.status ===
+          SOURCE_STATUS.PARTIAL,
+      );
 
-    const affectedUrls = (opts.affectedUrls && opts.affectedUrls.length > 0)
-      ? opts.affectedUrls
-      : [site.targetUrl || site.domain || "https://unknown"].filter(Boolean);
+    const partialAbsence =
+      opts.absenceFinding === true &&
+      partialCapabilities.length > 0;
 
-    const findingId = generateFindingId(
-      opts.ruleId,
-      affectedUrls,
-      evidenceRecords,
-    );
+    if (
+      partialAbsence &&
+      (
+        !opts.partialTitle ||
+        !opts.partialEvidenceText ||
+        !opts.partialBusinessImpact
+      )
+    ) {
+      suppressedReasons.push({
+        ruleId: opts.ruleId,
+        title: opts.title,
+        capability:
+          partialCapabilities.join(
+            ",",
+          ),
+        capabilityStatus:
+          SOURCE_STATUS.PARTIAL,
+        reason:
+          "PARTIAL absence finding lacks evidence-bounded wording",
+      });
 
-    const confidence = opts.confidence || CONFIDENCE_LEVELS.DETERMINISTIC;
+      return;
+    }
 
-    const priority = calculateFindingPriority({
-      conversionImpact: opts.conversionImpact ?? _defaultImpact(opts.severity),
-      gapSeverity: opts.gapSeverity ?? _defaultGapSeverity(opts.severity),
-      businessRelevance: opts.businessRelevance ?? 50,
-      competitiveSignal: opts.competitiveSignal ?? 25,
-      implementationPracticality: opts.implementationPracticality ?? _defaultPracticality(opts.effort),
-      confidence,
-    });
+    const title =
+      partialAbsence
+        ? opts.partialTitle
+        : opts.title;
 
-    const businessImpact = governBusinessImpact(
-  opts.businessImpact || opts.impact || "",
-  {
-    label: `Finding ${opts.ruleId} businessImpact`,
-    basis: opts.businessImpactBasis || BUSINESS_IMPACT_BASIS.INFERRED,
-  },
-);
+    const evidenceText =
+      partialAbsence
+        ? opts.partialEvidenceText
+        : (
+            opts.evidenceText ||
+            ""
+          );
+
+    const businessImpactText =
+      partialAbsence
+        ? opts.partialBusinessImpact
+        : (
+            opts.businessImpact ||
+            opts.impact ||
+            ""
+          );
+
+    const requestedAffectedUrls =
+      partialAbsence &&
+      Array.isArray(
+        opts.partialAffectedUrls,
+      ) &&
+      opts.partialAffectedUrls
+        .length > 0
+        ? opts.partialAffectedUrls
+        : opts.affectedUrls;
+
+    const affectedUrls =
+      requestedAffectedUrls &&
+      requestedAffectedUrls.length >
+        0
+        ? requestedAffectedUrls
+        : [
+            site.targetUrl ||
+              site.domain ||
+              "https://unknown",
+          ].filter(Boolean);
+
+    const dataForSeoStatus =
+      partialCapabilities.length >
+      0
+        ? SOURCE_STATUS.PARTIAL
+        : site?.sourceStatus;
+
+    const evidenceRecords =
+      (opts.evidence || []).map(
+        (er) => {
+          const provider =
+            er.provider ||
+            "dataforseo_onpage";
+
+          return {
+            provider,
+            sourceStatus:
+              provider ===
+              "dataforseo_onpage"
+                ? dataForSeoStatus
+                : er.sourceStatus,
+            field: er.field,
+            observedValue:
+              er.observedValue ??
+              null,
+            artifactRef:
+              er.artifactRef ||
+              site.rawArtifactRef ||
+              null,
+          };
+        },
+      );
+
+    if (
+      evidenceRecords.some(
+        (er) =>
+          !isValidSourceStatus(
+            er.sourceStatus,
+          ),
+      )
+    ) {
+      return;
+    }
+
+    if (!evidenceRecords.length) {
+      return;
+    }
+
+    const findingId =
+      generateFindingId(
+        opts.ruleId,
+        affectedUrls,
+        evidenceRecords,
+      );
+
+    const confidence =
+      partialAbsence
+        ? (
+            opts.partialConfidence ||
+            CONFIDENCE_LEVELS.SUPPORTED
+          )
+        : (
+            opts.confidence ||
+            CONFIDENCE_LEVELS.DETERMINISTIC
+          );
+
+    const priority =
+      calculateFindingPriority({
+        conversionImpact:
+          opts.conversionImpact ??
+          _defaultImpact(
+            opts.severity,
+          ),
+        gapSeverity:
+          opts.gapSeverity ??
+          _defaultGapSeverity(
+            opts.severity,
+          ),
+        businessRelevance:
+          opts.businessRelevance ??
+          50,
+        competitiveSignal:
+          opts.competitiveSignal ??
+          25,
+        implementationPracticality:
+          opts.implementationPracticality ??
+          _defaultPracticality(
+            opts.effort,
+          ),
+        confidence,
+      });
+
+    const businessImpact =
+      governBusinessImpact(
+        businessImpactText,
+        {
+          label:
+            `Finding ${opts.ruleId} businessImpact`,
+          basis:
+            opts.businessImpactBasis ||
+            BUSINESS_IMPACT_BASIS.INFERRED,
+        },
+      );
+
     findings.push({
       contractVersion: "1.0.0",
       findingId,
@@ -1218,26 +2484,37 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       ruleVersion: RULE_VERSION,
       dimension: opts.dimension,
       module: opts.module,
-      title: opts.title,
+      title,
       affectedUrls,
       evidence: evidenceRecords,
       confidence,
       businessImpact,
-      recommendation: opts.recommendation || opts.fix || "",
-      implementationEffort: opts.effort || "M",
-      verificationMethod: opts.verificationMethod || "Re-audit after changes are applied.",
-      scoreBearing: priority.scoreBearing,
+      recommendation:
+        opts.recommendation ||
+        opts.fix ||
+        "",
+      implementationEffort:
+        opts.effort || "M",
+      verificationMethod:
+        opts.verificationMethod ||
+        "Re-audit after changes are applied.",
+      scoreBearing:
+        priority.scoreBearing,
       rawPriority: priority.raw,
-      finalPriority: priority.final,
+      finalPriority:
+        priority.final,
       severity: opts.severity,
-      // Display compatibility aliases — the renderer uses problem/impact/fix/effort
-      // as display keys.  These replicate the canonical fields.
-      problem: opts.title,
+
+      // Display compatibility aliases.
+      problem: title,
       impact: businessImpact,
-      fix: opts.recommendation || opts.fix || "",
+      fix:
+        opts.recommendation ||
+        opts.fix ||
+        "",
       effort: opts.effort || "M",
       key: opts.key || "",
-      evidenceText: opts.evidenceText || "",
+      evidenceText,
     });
   };
 
@@ -1251,31 +2528,76 @@ export function buildFindings(site, performance, gsc, opts = {}) {
 
   // ── Crawl-dependent findings ──────────────────────────────────────
 
-  if (!site.trust.testimonials && !site.trust.caseStudies && !site.trust.credentials) {
+    if (
+    !site.trust.testimonials &&
+    !site.trust.caseStudies &&
+    !site.trust.credentials
+  ) {
     add({
       ruleId: "VAN-TRUST-001",
       requires: "trust.proof",
+      absenceFinding: true,
+      partialTitle:
+        "Visible trust proof was not detected in the available partial assessment",
+      partialEvidenceText:
+        "Testimonials, case studies, or credentials were not detected in the available partial assessment",
+      partialBusinessImpact:
+        "The available partial assessment did not detect visible trust proof on the assessed pages, which may leave some credibility questions unresolved there; unassessed pages remain unknown.",
+      partialConfidence:
+        CONFIDENCE_LEVELS.SUPPORTED,
+      partialAffectedUrls:
+        assessedContentUrls,
       dimension: "trust_eeat",
       module: "trust_signals",
-      title: "No visible trust proof",
+      title:
+        "No visible trust proof",
       severity: "High",
       key: "trust",
-      confidence: trustProofConfidence,
+      confidence:
+        trustProofConfidence,
       evidence: [
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.testimonials", observedValue: false },
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.credentials", observedValue: false },
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.caseStudies", observedValue: false },
+        {
+          provider:
+            "dataforseo_onpage",
+          sourceStatus:
+            SOURCE_STATUS.AVAILABLE,
+          field:
+            "trust.testimonials",
+          observedValue: false,
+        },
+        {
+          provider:
+            "dataforseo_onpage",
+          sourceStatus:
+            SOURCE_STATUS.AVAILABLE,
+          field:
+            "trust.credentials",
+          observedValue: false,
+        },
+        {
+          provider:
+            "dataforseo_onpage",
+          sourceStatus:
+            SOURCE_STATUS.AVAILABLE,
+          field:
+            "trust.caseStudies",
+          observedValue: false,
+        },
       ],
-      evidenceText: "No testimonials, case studies, or credentials detected",
-      businessImpact: "Limited visible trust proof may make credibility harder for visitors to verify before deciding.",
-      recommendation: "Add credentials, client proof, and outcome-based case studies",
+      evidenceText:
+        "No testimonials, case studies, or credentials detected",
+      businessImpact:
+        "Limited visible trust proof may make credibility harder for visitors to verify before deciding.",
+      recommendation:
+        "Add credentials, client proof, and outcome-based case studies",
       effort: "M",
       conversionImpact: 85,
       gapSeverity: 80,
       businessRelevance: 90,
       competitiveSignal: 40,
       implementationPracticality: 50,
-      verificationMethod: "Re-crawl and confirm trust signals are detected on key pages.",
+      verificationMethod:
+        "Re-crawl and confirm trust signals are detected on key pages.",
     });
   }
 
@@ -1284,7 +2606,10 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       ruleId: "VAN-TECH-001",
       dimension: "technical_performance",
       module: "technical_hygiene",
-      title: "Missing meta descriptions",
+      title:
+        site.sourceStatus === SOURCE_STATUS.PARTIAL
+          ? "Meta descriptions were not detected on some assessed pages"
+          : "Missing meta descriptions",
       severity: "High",
       key: "meta",
       confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
@@ -1292,8 +2617,14 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       evidence: [
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "meta_description", observedValue: null },
       ],
-      evidenceText: `${site.missingDescriptions} of ${site.pageCount} crawled pages`,
-      businessImpact: "Missing meta descriptions may reduce control over search-result messaging for these pages.",
+      evidenceText:
+        site.sourceStatus === SOURCE_STATUS.PARTIAL
+          ? `${site.missingDescriptions} of ${site.pageCount} assessed pages did not have a detected meta description; unassessed pages remain unknown`
+          : `${site.missingDescriptions} of ${site.pageCount} crawled pages`,
+      businessImpact:
+        site.sourceStatus === SOURCE_STATUS.PARTIAL
+          ? "Meta descriptions were not detected on some assessed pages, which may reduce control over search-result messaging for those pages; unassessed pages remain unknown."
+          : "Missing meta descriptions may reduce control over search-result messaging for these pages.",
       recommendation: "Write a unique 150–160 character description for each important page",
       effort: "L",
       conversionImpact: 75,
@@ -1305,29 +2636,55 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  if (!site.schemaTypes.length) {
+   if (!site.schemaTypes.length) {
     add({
       ruleId: "VAN-SCHEMA-001",
-      requires: "schema.structured_data",
-      dimension: "entity_schema_ai",
+      requires:
+        "schema.structured_data",
+      absenceFinding: true,
+      partialTitle:
+        "Structured data was not detected in the available partial assessment",
+      partialEvidenceText:
+        "Structured data was not detected in the available partial assessment",
+      partialBusinessImpact:
+        "The available partial assessment did not detect structured data on assessed pages, which may provide less explicit entity context there; unassessed pages remain unknown.",
+      partialConfidence:
+        CONFIDENCE_LEVELS.SUPPORTED,
+      partialAffectedUrls:
+        assessedContentUrls,
+      dimension:
+        "entity_schema_ai",
       module: "schema_entity",
-      title: "No structured data detected",
+      title:
+        "No structured data detected",
       severity: "High",
       key: "schema",
-      confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
+      confidence:
+        CONFIDENCE_LEVELS.DETERMINISTIC,
       evidence: [
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "schema_types", observedValue: [] },
+        {
+          provider:
+            "dataforseo_onpage",
+          sourceStatus:
+            SOURCE_STATUS.AVAILABLE,
+          field: "schema_types",
+          observedValue: [],
+        },
       ],
-      evidenceText: "No JSON-LD schema types found",
-      businessImpact: "Missing structured data may provide search and AI systems with less explicit entity context.",
-      recommendation: "Add Organization or LocalBusiness, Person, Service, and FAQ schema where supported",
+      evidenceText:
+        "No JSON-LD schema types found",
+      businessImpact:
+        "Missing structured data may provide search and AI systems with less explicit entity context.",
+      recommendation:
+        "Add Organization or LocalBusiness, Person, Service, and FAQ schema where supported",
       effort: "M",
       conversionImpact: 60,
       gapSeverity: 65,
       businessRelevance: 70,
       competitiveSignal: 55,
       implementationPracticality: 60,
-      verificationMethod: "Re-crawl and validate structured data with Google's Rich Results Test.",
+      verificationMethod:
+        "Re-crawl and validate structured data with Google's Rich Results Test.",
     });
   }
 
@@ -1405,7 +2762,10 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "h1_missing", observedValue: site.h1Missing },
         { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "h1_multiple", observedValue: site.h1Multiple },
       ],
-      evidenceText: `${site.h1Missing} pages missing H1; ${site.h1Multiple} pages with multiple H1s`,
+      evidenceText:
+        site.sourceStatus === SOURCE_STATUS.PARTIAL
+          ? `${site.h1Missing} assessed pages missing H1; ${site.h1Multiple} assessed pages with multiple H1s; unassessed pages remain unknown`
+          : `${site.h1Missing} pages missing H1; ${site.h1Multiple} pages with multiple H1s`,
       businessImpact: "Inconsistent heading structure may reduce semantic clarity and accessibility.",
       recommendation: "Use one descriptive H1 per page with sequential H2 and H3 sections",
       effort: "M",
@@ -1442,7 +2802,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       )
       .map(([name]) => name);
 
-  if (missingSecurity.length) {
+    if (missingSecurity.length) {
     const browserHeaderEvidence =
       headerCapability
         ?.observedHeaders &&
@@ -1453,6 +2813,15 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     add({
       ruleId: "VAN-TECH-003",
       requires: "technical.headers",
+      absenceFinding: true,
+      partialTitle:
+        "Security headers were incomplete on the assessed browser pages",
+      partialEvidenceText:
+        `The available partial assessment observed these missing response headers: ${missingSecurity.join(", ")}`,
+      partialBusinessImpact:
+        "The partial browser assessment observed missing response protections on assessed pages, which may weaken technical trust there; unassessed pages remain unknown.",
+      partialConfidence:
+        CONFIDENCE_LEVELS.SUPPORTED,
       dimension:
         "technical_performance",
       module:
@@ -1503,29 +2872,56 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  if (!site.trust.faq) {
+    if (!site.trust.faq) {
     add({
       ruleId: "VAN-CONTENT-002",
-      requires: "trust.proof",
+      requires: [
+        "content.body",
+        "trust.proof",
+      ],
+      absenceFinding: true,
+      partialTitle:
+        "Buyer-question content was not detected in the available partial assessment",
+      partialEvidenceText:
+        "FAQ or common-question content was not detected in the available partial assessment",
+      partialBusinessImpact:
+        "The available partial assessment did not detect buyer-question content on the assessed pages, so some buyer questions may remain unsupported there; unassessed pages remain unknown.",
+      partialConfidence:
+        CONFIDENCE_LEVELS.SUPPORTED,
+      partialAffectedUrls:
+        assessedContentUrls,
       dimension: "content_funnel",
       module: "funnel_coverage",
-      title: "No buyer-question content detected",
+      title:
+        "No buyer-question content detected",
       severity: "Medium",
       key: "faq",
-      confidence: CONFIDENCE_LEVELS.SUPPORTED,
+      confidence:
+        CONFIDENCE_LEVELS.SUPPORTED,
       evidence: [
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.faq", observedValue: false },
+        {
+          provider:
+            "dataforseo_onpage",
+          sourceStatus:
+            SOURCE_STATUS.AVAILABLE,
+          field: "trust.faq",
+          observedValue: false,
+        },
       ],
-      evidenceText: "No FAQ or common-question section found",
-      businessImpact: "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
-      recommendation: "Add an FAQ based on the questions prospects ask before booking",
+      evidenceText:
+        "No FAQ or common-question section found",
+      businessImpact:
+        "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
+      recommendation:
+        "Add an FAQ based on the questions prospects ask before booking",
       effort: "M",
       conversionImpact: 55,
       gapSeverity: 45,
       businessRelevance: 60,
       competitiveSignal: 35,
       implementationPracticality: 65,
-      verificationMethod: "Re-crawl and confirm FAQ content is present with structured data where applicable.",
+      verificationMethod:
+        "Re-crawl and confirm FAQ content is present with structured data where applicable.",
     });
   }
 
@@ -1533,25 +2929,49 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     add({
       ruleId: "VAN-TRUST-002",
       requires: "trust.proof",
+      absenceFinding: true,
+      partialTitle:
+        "Pricing or investment context was not detected in the available partial assessment",
+      partialEvidenceText:
+        "Pricing, cost, fee, or investment language was not detected in the available partial assessment",
+      partialBusinessImpact:
+        "The available partial assessment did not detect pricing or investment context on the assessed pages, so commitment expectations may remain unclear there; unassessed pages remain unknown.",
+      partialConfidence:
+        CONFIDENCE_LEVELS.SUPPORTED,
+      partialAffectedUrls:
+        assessedContentUrls,
       dimension: "trust_eeat",
       module: "risk_reduction",
-      title: "Pricing or investment context is absent",
+      title:
+        "Pricing or investment context is absent",
       severity: "Medium",
       key: "pricing",
-      confidence: CONFIDENCE_LEVELS.STRONGLY_SUPPORTED,
+      confidence:
+        CONFIDENCE_LEVELS.STRONGLY_SUPPORTED,
       evidence: [
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "trust.pricing", observedValue: false },
+        {
+          provider:
+            "dataforseo_onpage",
+          sourceStatus:
+            SOURCE_STATUS.AVAILABLE,
+          field: "trust.pricing",
+          observedValue: false,
+        },
       ],
-      evidenceText: "No pricing, cost, fee, or investment language detected",
-      businessImpact: "Missing pricing context may leave commitment expectations unclear before contact.",
-      recommendation: "State pricing, starting price, or the process used to determine cost",
+      evidenceText:
+        "No pricing, cost, fee, or investment language detected",
+      businessImpact:
+        "Missing pricing context may leave commitment expectations unclear before contact.",
+      recommendation:
+        "State pricing, starting price, or the process used to determine cost",
       effort: "L",
       conversionImpact: 65,
       gapSeverity: 55,
       businessRelevance: 70,
       competitiveSignal: 50,
       implementationPracticality: 80,
-      verificationMethod: "Re-crawl and confirm pricing information is visible on relevant pages.",
+      verificationMethod:
+        "Re-crawl and confirm pricing information is visible on relevant pages.",
     });
   }
 

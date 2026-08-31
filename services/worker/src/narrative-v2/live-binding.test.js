@@ -204,7 +204,7 @@ function passingJudgeResponse(passNumber = 1) {
     auditId: AUDIT_ID,
     passNumber,
     judgeModelId: "judge-cheap-structured",
-    judgePromptVersion: "2.0.0",
+    judgePromptVersion: "2.1.0",
     evaluatedAt: FIXED_TS,
     hardGate: { status: "PASS", violations: [] },
     rubric,

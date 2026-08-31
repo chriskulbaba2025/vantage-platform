@@ -27,6 +27,8 @@ import {
 import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { scopeSiteForDecision } from "./decision-scope.js";
+import { buildActionPlan } from "../report/action-priority.js";
+import { buildFoundationChecklist } from "../report/foundation-readiness.js";
 
 // ---------------------------------------------------------------------------
 // Source gate helpers (PRD v3.0 §8.6, §15.2)
@@ -122,12 +124,18 @@ function scoreModules(evidence, capabilities, input) {
       modelDeps,
     );
 
-    // v4 technical hygiene returns
-    // { score, subWeightAssessed, ... }.
-    const score =
+     // PF-01 — scorers may return a structured score with the fraction of
+    // their governed signal weight that was actually assessed. PARTIAL
+    // evidence remains score-bearing, but unassessed signal weight must not
+    // be counted as complete module/dimension coverage.
+    const structuredScore =
       rawScore &&
-      typeof rawScore === "object" &&
-      "score" in rawScore
+      typeof rawScore ===
+        "object" &&
+      "score" in rawScore;
+
+    const score =
+      structuredScore
         ? rawScore.score
         : rawScore;
 
@@ -135,6 +143,43 @@ function scoreModules(evidence, capabilities, input) {
       score === null
         ? null
         : clamp(score);
+
+    const subWeightAssessed =
+      structuredScore &&
+      Number.isFinite(
+        rawScore.subWeightAssessed,
+      )
+        ? Math.max(
+            0,
+            rawScore.subWeightAssessed,
+          )
+        : null;
+
+    const subWeightTotal =
+      structuredScore &&
+      Number.isFinite(
+        rawScore.subWeightTotal,
+      ) &&
+      rawScore.subWeightTotal > 0
+        ? rawScore.subWeightTotal
+        : null;
+
+        const assessedFraction =
+      subWeightAssessed !== null &&
+      subWeightTotal !== null
+        ? Math.min(
+            1,
+            Math.max(
+              0,
+              subWeightAssessed /
+                subWeightTotal,
+            ),
+          )
+        : 1;
+
+    const effectiveModuleWeight =
+      mod.weight *
+      assessedFraction;
 
     const resultEntry = {
       moduleId: mod.id,
@@ -146,18 +191,16 @@ function scoreModules(evidence, capabilities, input) {
       weight: mod.weight,
     };
 
-    if (
-      rawScore &&
-      typeof rawScore === "object"
-    ) {
+    if (structuredScore) {
       resultEntry.subWeightAssessed =
-        rawScore.subWeightAssessed ?? null;
+        subWeightAssessed;
 
       resultEntry.subWeightTotal =
-        rawScore.subWeightTotal ?? null;
+        subWeightTotal;
 
       resultEntry.subScores =
-        rawScore.subScores ?? null;
+        rawScore.subScores ??
+        null;
     }
 
     moduleResults.set(
@@ -172,15 +215,17 @@ function scoreModules(evidence, capabilities, input) {
 
     if (
       dim &&
-      finalScore !== null
+      finalScore !== null &&
+      effectiveModuleWeight > 0
     ) {
       dim.scoredWeight +=
-        mod.weight;
+        effectiveModuleWeight;
 
       dim.moduleScores.push({
         moduleId: mod.id,
         score: finalScore,
-        weight: mod.weight,
+        weight:
+          effectiveModuleWeight,
       });
     }
   }
@@ -755,6 +800,8 @@ function buildNotAssessedModel(
           [],
         evidence
           .competitorOpportunities,
+        input.competitors ||
+          [],
       ),
 
     competitorOpportunities:
@@ -1193,20 +1240,37 @@ export function scoreAudit(
 
   // ── Root cause ─────────────────────────────────────────────────────
 
-  const primaryFinding =
-    findings.find(
-      (f) =>
-        f.scoreBearing,
+  const rootCauseContext = {
+    findings,
+    evidence,
+    capabilityEvidence,
+    scores: legacyScores,
+  };
+
+  const rootCausePlan =
+    buildActionPlan(
+      rootCauseContext,
+      buildFoundationChecklist(
+        rootCauseContext,
+      ),
     );
+
+  const primaryFinding =
+    rootCausePlan.actions[0]?.finding ||
+    null;
+
+  const rootCauseRuleId =
+    primaryFinding?.ruleId ||
+    null;
 
   const rootCause =
     primaryFinding
-      ? `The most impactful opportunity is ${primaryFinding.title.toLowerCase()}. ${
+      ? `${primaryFinding.title || "Primary governed finding"}. ${
           primaryFinding.businessImpact ||
-          "Addressing this will improve visitor confidence and readiness to convert."
+          "Material impact was identified in the assessed evidence."
         }`
       : findings.length > 0
-        ? "Several technical opportunities were identified, but evidence depth was insufficient to isolate a single primary constraint. Strengthening crawl or analytics evidence will produce more targeted recommendations."
+        ? "Several opportunities were identified, but the governed action hierarchy did not establish a single primary constraint."
         : "The site has a functional foundation. The main opportunity is to strengthen evidence depth and make each offer easier to evaluate.";
 
   // ── Module eligibility ─────────────────────────────────────────────
@@ -1437,7 +1501,7 @@ export function scoreAudit(
           ],
         ),
       ),
-
+    rootCauseRuleId,
     rootCause,
     findings,
     suppressedFindingReasons,
@@ -1461,12 +1525,14 @@ export function scoreAudit(
         input,
       ),
 
-    competitors:
+        competitors:
       competitorComparison(
         evidence.competitors ||
           [],
         evidence
           .competitorOpportunities,
+        input.competitors ||
+          [],
       ),
 
     competitorOpportunities:

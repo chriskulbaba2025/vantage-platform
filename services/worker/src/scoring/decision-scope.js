@@ -127,28 +127,130 @@ export function scopeSiteForDecision(site) {
     return site;
   }
 
-  const decisionPages = site.pages.filter(
+    const decisionPages = site.pages.filter(
     (page) => !isUtilityDecisionPage(page),
   );
 
-  // Nothing classified as utility: preserve existing object exactly.
+  const imageMetricsFor =
+    (pages) => {
+      const sourceImages =
+        site.pages.flatMap(
+          (page) =>
+            Array.isArray(
+              page?.images,
+            )
+              ? page.images
+              : [],
+        );
+
+      const pageEvidenceReconciles =
+        finiteNumber(
+          site.imageCount,
+        ) &&
+        site.imageCount >= 0 &&
+        sourceImages.length ===
+          site.imageCount;
+
+      if (!pageEvidenceReconciles) {
+        return {
+          imageCount: null,
+          imagesMissingAlt: null,
+          imagesMissingDimensions:
+            null,
+        };
+      }
+
+      const images =
+        pages.flatMap(
+          (page) =>
+            Array.isArray(
+              page?.images,
+            )
+              ? page.images
+              : [],
+        );
+
+      return {
+        imageCount:
+          images.length,
+
+        imagesMissingAlt:
+          images.filter(
+            (image) =>
+              !String(
+                image?.alt || "",
+              ).trim(),
+          ).length,
+
+        imagesMissingDimensions:
+          images.filter(
+            (image) =>
+              !image?.width ||
+              !image?.height,
+          ).length,
+      };
+    };
+
+  const imageNumerators = [
+    site.imagesMissingAlt,
+    site.imagesMissingDimensions,
+  ].filter(finiteNumber);
+
+  const imageDenominatorInvalid =
+    imageNumerators.some(
+      (value) =>
+        !finiteNumber(
+          site.imageCount,
+        ) ||
+        site.imageCount < 0 ||
+        value < 0 ||
+        value >
+          site.imageCount,
+    );
+
+  // Nothing classified as utility: preserve the object unless
+  // an impossible image numerator/denominator pair must be neutralized.
   if (
-    decisionPages.length === site.pages.length
+    decisionPages.length ===
+    site.pages.length
   ) {
-    return site;
+    if (
+      !imageDenominatorInvalid
+    ) {
+      return site;
+    }
+
+    return {
+      ...site,
+      ...imageMetricsFor(
+        site.pages,
+      ),
+    };
   }
 
   // Conservative fail-safe. If every discovered page is utility-like,
-  // do not fabricate an empty commercial site here. A later governed
-  // boundary can explicitly handle that condition if encountered.
-  if (decisionPages.length === 0) {
-    return site;
+  // do not fabricate an empty commercial site here.
+  if (
+    decisionPages.length === 0
+  ) {
+    return imageDenominatorInvalid
+      ? {
+          ...site,
+          ...imageMetricsFor(
+            site.pages,
+          ),
+        }
+      : site;
   }
 
   const scoped = {
     ...site,
+    ...imageMetricsFor(
+      decisionPages,
+    ),
     pages: decisionPages,
-    pageCount: decisionPages.length,
+    pageCount:
+      decisionPages.length,
   };
 
   // ── Content depth ──────────────────────────────────────────────────

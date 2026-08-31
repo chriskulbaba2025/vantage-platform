@@ -154,9 +154,19 @@ function executiveScorecard(model, pillars) {
   const readiness = model.scores.conversionReadiness;
   const confidence = model.evidenceConfidenceScore;
   const assessedWeight = model.assessedWeight ?? 0;
-  const findings = (model.findings || []).slice(0, 3);
-  const plan = buildActionPlan(model, buildFoundationChecklist(model));
-  const actions = (plan.actions || []).slice(0, 3);
+   const plan =
+    buildActionPlan(
+      model,
+      buildFoundationChecklist(model),
+    );
+
+  const actions =
+    (plan.actions || []).slice(0, 3);
+
+  const findings =
+    actions.map(
+      (action) => action.finding,
+    );
 
   const readinessLine =
     readiness === null
@@ -177,9 +187,16 @@ function executiveScorecard(model, pillars) {
         ? `The site has a measurable conversion-readiness baseline of ${readiness}/100, but the result is provisional because some intended evidence was unavailable.`
         : `The site has a conversion-readiness score of ${readiness}/100. The priority is to address the highest-impact issues that most directly affect clarity, trust, and movement toward action.`;
 
+   const primaryFinding =
+    actions[0]?.finding || null;
+
   const rootCause =
-    model.rootCause ||
-    "No single primary constraint was established from the available evidence.";
+    primaryFinding
+      ? `${primaryFinding.title || "Primary governed finding"}. ${
+          primaryFinding.businessImpact ||
+          "Material impact was identified in the assessed evidence."
+        }`
+      : "No single primary constraint was established from the available evidence.";
 
   const findingsHtml = findings.length
     ? `<ol>${findings.map((f) => `<li><strong>${e(f.title || "Finding")}</strong> — ${e(f.businessImpact || "Material impact identified in the assessed evidence.")}</li>`).join("")}</ol>`
@@ -581,8 +598,11 @@ function conversionPathSection(model) {
 
 function competitorSection(model) {
   const comparisons = model.competitors?.comparisons || [];
-  const opportunityData =
-    model.competitorOpportunities ||
+  const clientComparisons = comparisons.filter(
+    (comparison) => comparison?.status === SOURCE_STATUS.AVAILABLE,
+  );
+
+   const opportunityData =
     model.competitors?.opportunities ||
     {};
 
@@ -593,7 +613,7 @@ function competitorSection(model) {
   const competitorSourceStatus =
     model.sourceStatus?.competitors || SOURCE_STATUS.NOT_APPLICABLE;
 
-  if (comparisons.length === 0) {
+  if (clientComparisons.length === 0) {
     const noComparisonState = {
       [SOURCE_STATUS.FAILED]: {
         label: "UNAVAILABLE",
@@ -653,15 +673,42 @@ function competitorSection(model) {
     </section>`;
   }
 
-  const site = model.evidence?.site || {};
+    const site = model.evidence?.site || {};
   const trustBand = model.bands?.trust;
+  const conversionPaths = Array.isArray(model.conversionPaths)
+    ? model.conversionPaths
+    : [];
+
+  const clearPathCount = conversionPaths.filter(
+    (path) => path?.status === "Clear",
+  ).length;
+
+  const weakPathCount = conversionPaths.filter(
+    (path) => path?.status === "Weak",
+  ).length;
+
+  const governedConversionState =
+    conversionPaths.length === 0
+      ? "Not Assessed"
+      : clearPathCount === conversionPaths.length
+        ? "Clear"
+        : weakPathCount > 0
+          ? "Weak"
+          : "Partial";
 
   const ownSite = {
-    offerClarity: (site.services || []).length ? `${(site.services || []).length} service topic(s)` : "Not Assessed",
-    trustProof: trustBand && trustBand !== "Not Assessed" ? trustBand : "Not Assessed",
-    ctaClarity: (site.ctas || []).length ? `${(site.ctas || []).length} CTA(s)` : "Not Assessed",
-    contentDepth: site.pageCount ? `${site.pageCount} page(s)` : "Not Assessed",
-    pathClarity: (site.forms || []).length || (site.ctas || []).length ? "Detected" : "Not Assessed",
+    offerClarity: (site.services || []).length
+      ? `${(site.services || []).length} service topic(s)`
+      : "Not Assessed",
+    trustProof:
+      trustBand && trustBand !== "Not Assessed"
+        ? trustBand
+        : "Not Assessed",
+    ctaClarity: governedConversionState,
+    contentDepth: site.pageCount
+      ? `${site.pageCount} page(s)`
+      : "Not Assessed",
+    pathClarity: governedConversionState,
   };
 
   const SIGNALS = [
@@ -672,7 +719,7 @@ function competitorSection(model) {
     ["Conversion path", "pathClarity"],
   ];
 
-  const header = comparisons
+  const header = clientComparisons
     .map((c) => `<th>${e(c.name || c.url || "Competitor")}</th>`)
     .join("");
 
@@ -680,10 +727,12 @@ function competitorSection(model) {
     <tr>
       <td><strong>${e(label)}</strong></td>
       <td>${e(ownSite[key])}</td>
-      ${comparisons.map((c) => `<td>${e(c[key] || "Not Assessed")}</td>`).join("")}
+      ${clientComparisons
+        .map((c) => `<td>${e(c[key] || "Not Assessed")}</td>`)
+        .join("")}
     </tr>`).join("");
 
-  const sourceRows = comparisons.map((c) => `
+  const sourceRows = clientComparisons.map((c) => `
     <tr>
       <td class="small">${e(c.name || c.url || "")}</td>
       <td class="small">${e(c.url || "")}</td>
@@ -699,11 +748,19 @@ function competitorSection(model) {
   const ownStrengths = SIGNALS.filter(([, key]) => {
     const own = ownSite[key];
     if (own === "Not Assessed") return false;
-    return comparisons.every((c) => !c[key] || String(c[key]) === String(own));
+
+    return clientComparisons.every(
+      (c) => !c[key] || String(c[key]) === String(own),
+    );
   });
 
   const strongerCompetitorAreas = SIGNALS.filter(([, key]) =>
-    comparisons.some((c) => c[key] && String(c[key]) !== "Not Assessed" && String(c[key]) !== String(ownSite[key]))
+    clientComparisons.some(
+      (c) =>
+        c[key] &&
+        String(c[key]) !== "Not Assessed" &&
+        String(c[key]) !== String(ownSite[key]),
+    ),
   );
 
   return `

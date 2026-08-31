@@ -112,7 +112,7 @@ function validOutput(passNumber = 1) {
     }],
     rootCause: {
       headline: "Proof and conversion do not fully capitalize on existing depth",
-      narrative: atom("The deterministic root-cause assessment points to a disconnect between subject depth and the proof and conversion pathways needed to generate qualified enquiries.", ["score:rootCause", "business:primaryGoal"]),
+      narrative: atom("The deterministic root-cause assessment points to a disconnect between subject depth and the proof and conversion pathways associated with the stated qualified-enquiry goal.", ["score:rootCause", "business:primaryGoal"]),
       businessConsequences: [{
         area: "Conversion",
         narrative: atom("Potential buyers may receive useful information without an equally strong path toward the stated enquiry goal.", ["score:conversionPathwaysDimension", "business:primaryGoal"]),

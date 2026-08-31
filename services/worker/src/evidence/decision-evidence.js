@@ -282,11 +282,19 @@ function deriveInternalLinkOpportunities(site) {
  */
 export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, validateContract }) {
   const errors = [];
-  const evidence = {
+   const evidence = {
     contractVersion: "1.0.0",
     decisionEvidenceVersion: "1.0.0",
 
-    // DQV-005 — admitted source-level states, kept separately from hydrated
+    // PF-18 - preserve the authoritative client-supplied competitor
+    // allowlist so the finalization gate can independently reject
+    // client-facing competitor overflow.
+    suppliedCompetitors:
+      Array.isArray(suppliedCompetitors)
+        ? [...suppliedCompetitors]
+        : [],
+
+    // DQV-005 - admitted source-level states, kept separately from hydrated
     // records so zero returned items never destroy collection-state truth.
     sourceStatus: {},
 

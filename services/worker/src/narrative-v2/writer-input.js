@@ -3,13 +3,17 @@
  *
  * This is the only evidence packet the future Writer v2 may consume.
  * It is assembled from persisted AuditRequest + deterministic ScoreSet +
- * deterministic FindingSet + CapabilityEvidence. Raw provider payloads,
+ * deterministic FindingSet + CapabilityEvidence. Canonical DecisionEvidence
+ * is used only to derive the same governed foundation/action hierarchy as
+ * deterministic rendering. Raw provider payloads,
  * renderer aliases, reconstructed defaults, HTML and debug data are excluded.
  */
 
 import { buildWriterBusinessContext } from "./writer-business-context.js";
 import { buildWriterScoreContext } from "./writer-scores.js";
 import { buildWriterFindings } from "./writer-findings.js";
+import { buildActionPlan } from "../report/action-priority.js";
+import { buildFoundationChecklist } from "../report/foundation-readiness.js";
 
 export const WRITER_INPUT_VERSION = "1.0.0";
 
@@ -425,6 +429,147 @@ function assertFindingIntegrity(
   }
 }
 
+function buildWriterActionModel({
+  auditRequest,
+  scoreSet,
+  findings,
+  capabilityEvidence,
+  decisionEvidence,
+}) {
+  if (
+    !decisionEvidence ||
+    typeof decisionEvidence !==
+      "object" ||
+    Array.isArray(
+      decisionEvidence,
+    )
+  ) {
+    throw new Error(
+      "decisionEvidence is required for governed Writer action-plan parity",
+    );
+  }
+
+  return {
+    ...cloneDefined(
+      scoreSet,
+    ),
+
+    findings,
+    capabilityEvidence,
+
+    evidence:
+      cloneDefined(
+        decisionEvidence,
+      ),
+
+    input: {
+      businessName:
+        auditRequest
+          ?.businessName ||
+        "",
+
+      targetUrl:
+        decisionEvidence
+          ?.site
+          ?.targetUrl ||
+        auditRequest
+          ?.targetUrl ||
+        "",
+    },
+  };
+}
+
+function buildWriterConversionInfluence(
+  model,
+) {
+  const checklist =
+    buildFoundationChecklist(
+      model,
+    );
+
+  const plan =
+    buildActionPlan(
+      model,
+      checklist,
+    );
+
+  const orderedFindingIds = [];
+  const byFindingId = {};
+
+  for (
+    const action
+    of plan.actions || []
+  ) {
+    const findingId =
+      action.finding?.findingId;
+
+    if (!findingId) {
+      throw new Error(
+        "Derived Writer action is missing findingId",
+      );
+    }
+
+    orderedFindingIds.push(
+      findingId,
+    );
+
+    byFindingId[findingId] =
+      Object.freeze({
+        findingId,
+
+        ruleId:
+          action.finding.ruleId,
+
+        rank:
+          action.rank,
+
+        actionClass:
+          action.actionClass,
+
+        foundationDomain:
+          action.foundationDomain,
+
+        conversionInfluence:
+          action.conversionInfluence,
+
+        conversionInfluenceRank:
+          action.conversionInfluenceRank,
+
+        group:
+          action.group,
+
+        effort:
+          action.effort,
+
+        finalPriority:
+          action.priority,
+      });
+  }
+
+  return Object.freeze({
+    hierarchyVersion:
+      "4.2",
+
+    foundationRuleIds:
+      Object.freeze([
+        ...(
+          plan.foundationRuleIds ||
+          []
+        ),
+      ]),
+
+    orderedFindingIds:
+      Object.freeze(
+        orderedFindingIds,
+      ),
+
+    byFindingId:
+      Object.freeze(
+        byFindingId,
+      ),
+  });
+}
+
 function addReference(
   index,
   id,
@@ -643,6 +788,7 @@ export function buildWriterInput({
   scoreSet,
   findings,
   capabilityEvidence,
+  decisionEvidence,
 }) {
   if (
     typeof auditId !==
@@ -696,6 +842,21 @@ export function buildWriterInput({
     copyOwn(
       scoreSet,
       DETERMINISTIC_ANALYSIS_FIELDS,
+    );
+
+  const actionModel =
+    buildWriterActionModel({
+      auditRequest,
+      scoreSet,
+      findings:
+        projectedFindings,
+      capabilityEvidence,
+      decisionEvidence,
+    });
+
+  deterministicAnalysis.conversionInfluence =
+    buildWriterConversionInfluence(
+      actionModel,
     );
 
   const packet = {

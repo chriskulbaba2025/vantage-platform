@@ -153,7 +153,7 @@ test("PC-03/07: persisted SourceResult hydration preserves usable supplied row a
   assert.equal(hydrated.evidence.competitors[0].status, "AVAILABLE",
     "item-level direct evidence availability must survive a PARTIAL composite source");
 
-  const comparison = competitorComparison(hydrated.evidence.competitors, null);
+  const comparison = competitorComparison(hydrated.evidence.competitors, null, [SUPPLIED_URL]);
   assert.equal(comparison.comparisons.length, 1);
   const row = comparison.comparisons[0];
   assert.equal(row.url, SUPPLIED_URL);
