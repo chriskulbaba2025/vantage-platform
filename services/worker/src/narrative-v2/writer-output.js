@@ -428,6 +428,9 @@ export function validateWriterSemanticFidelity(
   const boundedAiPattern =
     /\b(?:may|might|could|potential|opportunity|not assessed|not established|does not establish|cannot establish|requires? (?:separate )?assessment)\b/i;
 
+  const negatedAiEstablishmentPattern =
+    /\bno\b[^.!?]{0,120}\b(?:limitation|constraint|weakness|gap)\b[^.!?]{0,80}\b(?:established|identified|observed|detected)\b/i;
+
   for (
     const { path, atom }
     of atoms
@@ -504,6 +507,9 @@ export function validateWriterSemanticFidelity(
       if (
         !hasDirectAiSupport &&
         !boundedAiPattern.test(
+          text,
+        ) &&
+        !negatedAiEstablishmentPattern.test(
           text,
         )
       ) {

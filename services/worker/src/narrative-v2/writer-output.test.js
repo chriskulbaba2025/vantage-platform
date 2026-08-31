@@ -258,6 +258,25 @@ test("WRITER-OUT-04: generated URLs and markup fail closed", () => {
   assert.match(result.errors.join("\n"), /contains a URL/);
 });
 
+test("PDV1-WRITER-OUT-01: explicit negated AI-search establishment is bounded without weakening fail-closed validation", () => {
+  const bounded = validOutput();
+  bounded.aiSearch.answerability = atom(
+    "No material AI-search limitation was established from the assessed evidence.",
+    ["score:contentFunnelDimension"],
+  );
+  const boundedResult = validateWriterOutput(bounded, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(boundedResult, { valid: true, errors: [] });
+
+  const established = validOutput();
+  established.aiSearch.answerability = atom(
+    "AI-search answerability is limited by the available content.",
+    ["score:contentFunnelDimension"],
+  );
+  const establishedResult = validateWriterOutput(established, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.equal(establishedResult.valid, false);
+  assert.match(establishedResult.errors.join("\n"), /non-AI evidence into an established AI-search limitation/);
+});
+
 test("WRITER-OUT-05: funnel is bounded to at most three ideas per stage", () => {
   const output = validOutput();
   output.funnelOpportunities.awareness = [1, 2, 3, 4].map((n) => ({
