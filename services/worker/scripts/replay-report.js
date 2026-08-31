@@ -84,12 +84,14 @@ const [
   { SOURCE_STATUS, isValidSourceStatus },
   { REPORT_V2_VIEWER_VERSION },
   { validateJudgeResponse },
+  { hydrateCurrentReportModel },
 ] = await Promise.all([
   import("../src/scoring/report-finalization-gate.js"),
   import("../src/report/render-narrative-v2.js"),
   import("../src/scoring/evidence-contracts.js"),
   import("../src/report/render-report-v2.js"),
   import("../src/narrative-v2/judge-contract.js"),
+  import("../src/report-model/current-model.js"),
 ]);
 
 function sha256(value) {
@@ -593,66 +595,15 @@ function buildV2Model({
   capabilityEvidence,
   decisionEvidence,
 }) {
-  return {
-    scoringVersion:
-      scoreSet.scoringVersion || "4.1.0",
-
-    generatedAt: scoreSet.generatedAt,
-
-    scores: scoreSet.scores || {},
-
-    bands: scoreSet.bands || {},
-
-    assessedWeight:
-      scoreSet.assessedWeight ?? 0,
-
-    readinessStatus:
-      scoreSet.readinessStatus || "",
-
-    readinessStatusDetail:
-      scoreSet.readinessStatusDetail ||
-      scoreSet.readinessStatus ||
-      "",
-
-    showNumericScore:
-      scoreSet.showNumericScore ?? false,
-
-    evidenceConfidenceScore:
-      scoreSet.evidenceConfidenceScore ??
-      0,
-
-    evidenceConfidenceFactorAvailability:
-      scoreSet.evidenceConfidenceFactorAvailability ||
-      [],
-
-    rootCause:
-      scoreSet.rootCause || "",
-
+  const current = hydrateCurrentReportModel({
+    scoreSet,
     findings,
-
-    renderingDiagnostics:
-      Array.isArray(
-        scoreSet.renderingDiagnostics,
-      )
-        ? scoreSet.renderingDiagnostics
-        : undefined,
-
-    suppressedFindingReasons:
-      scoreSet.suppressedFindingReasons ||
-      [],
-
-    moduleEligibility:
-      scoreSet.moduleEligibility || {},
-
-    moduleScores:
-      scoreSet.moduleScores || {},
-
-    suppressedModules:
-      scoreSet.suppressedModules || [],
-
+    decisionEvidence,
     capabilityEvidence,
+  });
 
-    evidence: decisionEvidence,
+  return {
+    ...current,
 
     sourceStatus: {
       competitors:
@@ -1023,10 +974,14 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(
-    `Replay failed: ${error.message}`,
-  );
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(
+      `Replay failed: ${error.message}`,
+    );
 
-  process.exitCode = 1;
-});
+    process.exitCode = 1;
+  });
+}
+
+export { buildV2Model };

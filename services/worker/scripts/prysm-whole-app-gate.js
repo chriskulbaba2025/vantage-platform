@@ -12,6 +12,7 @@ const commands = [
   ["scripts/acceptance-prysm.js", "assembled production composition"],
   ["--test", "src/narrative-v2/writer-input.test.js", "persisted hierarchy WriterInput parity"],
   ["--test", "src/application/narrative-v2-production-path.test.js", "current Narrative v2 production path"],
+  ["--test", "scripts/replay-report.test.js", "current replay canonical hydration"],
 ];
 
 for (const args of commands) {
