@@ -1,0 +1,460 @@
+=== PATCHED LOCATIONS ===
+911-
+912-  const model = buildV2Model({
+913-    auditRequest,
+914-    scoreSet: inputs.scoreSet,
+915-    findings: inputs.findings,
+916-    capabilityEvidence: inputs.capabilityEvidence,
+917:    decisionEvidence: inputs.decisionEvidence,
+918-  });
+919-
+920-  const gate = runFinalizationGate(
+921-    {
+922-      ...model,
+923-      findings: inputs.findings,
+--
+1003-    writerInput = buildWriterInput({
+1004-      auditId: auditRequest.auditId,
+1005-      auditRequest,
+1006-      scoreSet: inputs.scoreSet,
+1007-      findings: inputs.findings,
+1008-      capabilityEvidence: inputs.capabilityEvidence,
+1009:      decisionEvidence: inputs.decisionEvidence,
+1010-    });
+1011-
+1012-    await persistJsonArtifact({
+1013-      artifactStore,
+1014-      auditRequest,
+1015-      artifactName: "narrative-v2/writer-input.json",
+--
+1252-
+1253-  const model = buildV2Model({
+1254-    auditRequest,
+1255-    scoreSet: inputs.scoreSet,
+1256-    findings: inputs.findings,
+1257-    capabilityEvidence: inputs.capabilityEvidence,
+1258:    decisionEvidence: inputs.decisionEvidence,
+1259-  });
+1260-
+1261-  const gate = runFinalizationGate({ ...model, findings: inputs.findings }, inputs.decisionEvidence);
+1262-  if (!gate.passed) {
+1263-    const message = (gate.errors || []).map((e) => e.message).join("; ");
+1264-    await transition({
+--
+1692-      writerInput = buildWriterInput({
+1693-        auditId: args.auditRequest.auditId,
+1694-        auditRequest: args.auditRequest,
+1695-        scoreSet: inputs.scoreSet,
+1696-        findings: inputs.findings,
+1697-        capabilityEvidence: inputs.capabilityEvidence,
+1698:        decisionEvidence: inputs.decisionEvidence,
+1699-      });
+1700-      await persistJsonArtifact({
+1701-        artifactStore: args.artifactStore,
+1702-        auditRequest: args.auditRequest,
+1703-        artifactName: "narrative-v2/writer-input.json",
+1704-        value: writerInput,
+
+=== DIFF CHECK ===
+
+=== NARRATIVE V2 TESTS ===
+G£ö CONTRACT-CLOSURE-01: every exposed governance/band evidence class has a canonical reference (4.9674ms)
+G£ö CONTRACT-CLOSURE-02: Writer strict schema binds ordinary atoms to exact referenceIndex IDs (361.5824ms)
+G£ö CONTRACT-CLOSURE-03: deterministic Writer normalization removes duplicate refs and canonicalizes structural IDs (12.5167ms)
+G£ö CONTRACT-CLOSURE-04: Judge strict schema binds evidence and normalization derives deterministic decision wiring (148.973ms)
+G£ö CONTRACT-CLOSURE-05: live binding sends strict schemas for Writer and Judge and preserves raw responses (49.4738ms)
+G£ö JUDGE-V2-01: rubric is frozen to exactly 100 points (2.7366ms)
+G£ö JUDGE-V2-02: perfect governed response passes and releases (3.3939ms)
+G£ö JUDGE-V2-03: evidence fidelity below 20 cannot pass even above total threshold (0.6265ms)
+G£ö JUDGE-V2-04: any hard-gate violation forces revision regardless of score (0.3754ms)
+G£ö JUDGE-V2-05: unknown Writer evidence reference fails closed (0.4277ms)
+G£ö JUDGE-V2-06: targeted revision may rewrite only the union of defect-authorized fields (0.5044ms)
+G£ö JUDGE-V2-07: pass 3 failure routes to human review and forbids a fourth rewrite (0.3724ms)
+G£ö JUDGE-V2-08: Judge cannot falsify the calculated total (0.2357ms)
+G£ö JUDGE-V2-09: unknown hard-gate code fails closed (0.8004ms)
+G£ö JUDGE-V2-10: no rubric dimension may be materially weak behind a high average (0.5047ms)
+G£û CONTRACT-CLOSURE-06: deterministic REVISE can never reach validator without a governed defect target (7.0939ms)
+G£ö LIVE-BIND-01: disabled by default and requires no live configuration (2.3181ms)
+G£ö LIVE-BIND-02: enabling is fail-closed unless PRYSM_LLM_MODE=live (0.7282ms)
+G£ö LIVE-BIND-03: one Writer + one Judge call are validated, cost-ledgered, and capped at two (142.1182ms)
+G£ö LIVE-BIND-04: a reserved failed provider call is never silently retried (20.3641ms)
+G£ö LIVE-BIND-05: token ceiling rejects before reservation and before network (2.9161ms)
+G£ö LIVE-BIND-06: price table and hard budgets are mandatory when enabled (0.394ms)
+G£ö LIVE-BIND-07: Judge cannot execute before a validated Writer result (0.9055ms)
+G£ö LIVE-BIND-08: missing provider token usage fails closed and is not recorded as zero actual cost (9.1805ms)
+G£ö LIVE-BIND-09: same-runtime concurrent duplicate Writer attempts produce only one paid network call (5.0268ms)
+G£ö LIVE-BIND-10: returned Writer model metadata must match the configured model (3.2135ms)
+G£û LIVE-REVISION-01: live binding permits exactly Writer1 Judge1 Writer2 Judge2 (146.9724ms)
+G£û LIVE-REVISION-02: Judge2 REVISE routes to human review with no Writer3 or fifth paid call (8.8513ms)
+G£û LIVE-REVISION-03: explicit human authorization permits exactly Writer3 Judge3 and preserves prior passes (13.8719ms)
+G£û LIVE-REVISION-04: final continuation fails closed before Writer3 when human authorization is absent (11.3357ms)
+G£û LIVE-REVISION-05: restart recovery reuses validated Writer3 and calls only Judge3 (8.4037ms)
+G£ö input boundary rejects a WriterInput packet with the wrong contract version (2.572ms)
+G£û ORCH-01/02/05: Pass 1 uses governed prompt, Judge consumes the same validated object, PASS releases (7.6366ms)
+G£ö ORCH-03: invalid Writer output fails closed before Judge (0.9725ms)
+G£ö ORCH-04: invalid Judge response fails closed before another Writer pass (1.713ms)
+G£û ORCH-06/07: only validated REVISE starts Pass 2 with exact prior output and Judge directive (1.335ms)
+G£û ORCH-08: collateral Pass 2 rewrite fails before the second Judge call (2.6243ms)
+G£û ORCH-09: unsuccessful Pass 3 terminates in human review with no Pass 4 (1.931ms)
+G£ö execution failures fail closed at the owning boundary (1.183ms)
+G£û INTERPRETATION-04: siteFootprint survives ScoreSet into WriterInput and reference index (2.7217ms)
+G£ö LINEAGE-DFS-01: registered DataForSEO On-Page paths retain exact provider terminology (3.2901ms)
+G£ö LINEAGE-DFS-02: compatibility fallbacks are recorded but are not downstream aliases (1.9641ms)
+G£ö LINEAGE-DFS-03: unknown canonical names fail closed (0.8809ms)
+G£ö LINEAGE-DFS-04: unknown source-to-canonical tuples fail closed (0.3237ms)
+G£ö LINEAGE-DFS-05: no duplicate canonical registrations exist (0.2674ms)
+G£ö LINEAGE-DFS-06: core On-Page technical fields required by report interpretation are registered (0.3209ms)
+G£ö LINEAGE-DFS-07: SERP lineage uses exact DataForSEO response names (0.2744ms)
+G£ö LINEAGE-DFS-08: SERP rank fallback is not accepted as a downstream alias (0.1694ms)
+G£ö LINEAGE-DFS-09: backlink lineage uses exact DataForSEO record and summary names (0.2475ms)
+G£ö LINEAGE-DFS-10: backlink fallback fields are adapter-only and fail as downstream references (0.3512ms)
+G£ö TOKEN-PREFLIGHT-01: production-sized revision input is not falsely rejected (3.6075ms)
+G£ö TOKEN-PREFLIGHT-02: genuinely oversized governed input still fails closed (1.3784ms)
+G£ö TOKEN-PREFLIGHT-03: UTF-8 byte length, not JavaScript character count, drives the conservative estimate (0.3396ms)
+G£ö WRITER-CONTEXT-01: exact persisted intake terminology and values are preserved (2.2859ms)
+G£ö WRITER-CONTEXT-02: absent optional context remains absent instead of being defaulted (0.2747ms)
+G£ö WRITER-CONTEXT-03: explicit values are not normalized or rewritten (0.2422ms)
+G£ö WRITER-CONTEXT-04: input arrays are copied, not shared (1.2423ms)
+G£ö WRITER-CONTEXT-05: missing targetUrl fails closed (0.7221ms)
+G£ö WRITER-FINDING-01: canonical finding names and evidence survive unchanged (2.5949ms)
+G£ö WRITER-FINDING-02: display aliases cannot substitute for canonical fields (0.976ms)
+G£ö WRITER-FINDING-03: evidence must retain exact field and observedValue keys (1.386ms)
+G£ö WRITER-FINDING-04: explicit null, zero, and false observed values are preserved (0.3304ms)
+G£ö WRITER-FINDING-05: malformed finding collections fail closed (0.3388ms)
+G£û WRITER-V2-01: packet preserves exact canonical business, scores, findings and capability evidence (5.3802ms)
+G£û WRITER-V2-02: aliases and raw/provider extras do not cross the Writer boundary (0.5469ms)
+G£û WRITER-V2-03: absent optional business context remains absent (0.4496ms)
+G£ö WRITER-V2-04: FindingSet mismatch against ScoreSet fails closed (0.8434ms)
+G£ö WRITER-V2-05: capability evidence missing canonical status fails closed (0.5171ms)
+G£ö WRITER-V2-06: capability evidence from another audit fails closed (0.3547ms)
+G£û WRITER-V2-07: unavailable and failed states remain explicit and are never converted to false or zero (0.474ms)
+G£ö WRITER-V2-08: incomplete canonical ScoreSet fails closed instead of accepting aliases (0.3934ms)
+G£ö WRITER-V2-09: capability evidence without canonical audit identity fails closed (0.663ms)
+G£ö WRITER-OUT-01: complete governed Writer output validates (9.4203ms)
+G£ö WRITER-OUT-02: unknown evidence references and source-status mutations fail closed (3.3765ms)
+G£ö WRITER-OUT-03: Writer cannot emit OBSERVED statements (0.954ms)
+G£ö WRITER-OUT-04: generated URLs and markup fail closed (3.212ms)
+G£ö WRITER-OUT-05: funnel is bounded to at most three ideas per stage (1.3685ms)
+G£ö WRITER-OUT-06: targeted Pass 2 may change only defect-authorized section (3.0391ms)
+G£ö WRITER-OUT-07: targeted revision rejects collateral report rewrites (1.9789ms)
+G£ö WRITER-PROMPT-01: Pass 1 prompt freezes exact terminology and evidence authority (0.9019ms)
+G£ö WRITER-PROMPT-02: revision prompt is surgical and contains exact Judge defects (0.6746ms)
+G£ö WRITER-PROMPT-03: Pass 2 cannot run without governed Judge revision (0.9371ms)
+G£ö WRITER-PROMPT-04: limitation status grounding contract is explicit on initial and revision prompts (3.269ms)
+G£û WRITER-REF-01: reference index exposes only governed packet paths (3.0263ms)
+G£û WRITER-REF-02: reference index cannot expose guessed aliases (0.5056ms)
+G£ö WRITER-REF-01: literal capability IDs containing dots resolve without path corruption (2.0338ms)
+G£ö WRITER-REF-02: finding reference IDs resolve the canonical array item by findingId (0.2814ms)
+G£ö WRITER-REF-03: structured limitation schema uses production dotted capability statuses instead of fallback (5.6372ms)
+G£ö WRITER-SCORE-01: exact canonical score keys survive unchanged (2.0043ms)
+G£ö WRITER-SCORE-02: missing scores remain missing and are never defaulted (0.2601ms)
+G£ö WRITER-SCORE-03: historical or invented aliases cannot satisfy the canonical score contract (0.1606ms)
+G£ö WRITER-SCORE-04: explicit zero and false values are preserved when actually present (0.2811ms)
+G£ö WRITER-SCORE-05: malformed ScoreSet fails closed (0.8122ms)
+G£û WRITER-STRUCT-01: schema fixes deterministic statement classes and metadata (5.3433ms)
+G£ö WRITER-STRUCT-02: limitation status branches bind evidence refs to the same governed status (0.5543ms)
+G£ö WRITER-STRUCT-03: live Writer request sends OpenAI strict json_schema response_format (82.3318ms)
+G£ö WRITER-STRUCT-04: response format wrapper is deterministic (2.3512ms)
+Gä¦ tests 97
+Gä¦ suites 0
+Gä¦ pass 79
+Gä¦ fail 18
+Gä¦ cancelled 0
+Gä¦ skipped 0
+Gä¦ todo 0
+Gä¦ duration_ms 1089.9386
+
+G£û failing tests:
+
+test at src\narrative-v2\judge-normalization-closure.test.js:50:1
+G£û CONTRACT-CLOSURE-06: deterministic REVISE can never reach validator without a governed defect target (7.0939ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   errors: [
+  +     'contractVersion must equal 1.1.0',
+  +     'judgePromptVersion must equal 2.1.0'
+  +   ],
+  +   valid: false
+  -   errors: [],
+  -   valid: true
+    }
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/judge-normalization-closure.test.js:63:10)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { valid: false, errors: [ 'contractVersion must equal 1.1.0', 'judgePromptVersion must equal 2.1.0' ] },
+    expected: { valid: true, errors: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at src\narrative-v2\live-revision-round.test.js:374:1
+G£û LIVE-REVISION-01: live binding permits exactly Writer1 Judge1 Writer2 Judge2 (146.9724ms)
+  Error [NarrativeV2OrchestrationError]: Judge execution failed on pass 1: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:514:13)
+      at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+      ... 2 lines matching cause stack trace ...
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    code: 'JUDGE_EXECUTION_FAILED',
+    passNumber: 1,
+    stage: 'JUDGE_EXECUTION',
+    [cause]: Error: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+        at invoke (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-binding.js:1638:13)
+        at async runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:512:9)
+        at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+        at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:375:53)
+        at async Test.run (node:internal/test_runner/test:1125:7)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+  }
+
+test at src\narrative-v2\live-revision-round.test.js:395:1
+G£û LIVE-REVISION-02: Judge2 REVISE routes to human review with no Writer3 or fifth paid call (8.8513ms)
+  Error [NarrativeV2OrchestrationError]: Judge execution failed on pass 1: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:514:13)
+      at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+      ... 2 lines matching cause stack trace ...
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_EXECUTION_FAILED',
+    passNumber: 1,
+    stage: 'JUDGE_EXECUTION',
+    [cause]: Error: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+        at invoke (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-binding.js:1638:13)
+        at async runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:512:9)
+        at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+        at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:396:29)
+        at async Test.run (node:internal/test_runner/test:1125:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+  }
+
+test at src\narrative-v2\live-revision-round.test.js:403:1
+G£û LIVE-REVISION-03: explicit human authorization permits exactly Writer3 Judge3 and preserves prior passes (13.8719ms)
+  Error [NarrativeV2OrchestrationError]: Judge execution failed on pass 1: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:514:13)
+      at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+      ... 2 lines matching cause stack trace ...
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_EXECUTION_FAILED',
+    passNumber: 1,
+    stage: 'JUDGE_EXECUTION',
+    [cause]: Error: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+        at invoke (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-binding.js:1638:13)
+        at async runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:512:9)
+        at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+        at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:409:7)
+        at async Test.run (node:internal/test_runner/test:1125:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+  }
+
+test at src\narrative-v2\live-revision-round.test.js:496:1
+G£û LIVE-REVISION-04: final continuation fails closed before Writer3 when human authorization is absent (11.3357ms)
+  Error [NarrativeV2OrchestrationError]: Judge execution failed on pass 1: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:514:13)
+      at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+      ... 2 lines matching cause stack trace ...
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_EXECUTION_FAILED',
+    passNumber: 1,
+    stage: 'JUDGE_EXECUTION',
+    [cause]: Error: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+        at invoke (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-binding.js:1638:13)
+        at async runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:512:9)
+        at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+        at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:501:7)
+        at async Test.run (node:internal/test_runner/test:1125:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+  }
+
+test at src\narrative-v2\live-revision-round.test.js:526:1
+G£û LIVE-REVISION-05: restart recovery reuses validated Writer3 and calls only Judge3 (8.4037ms)
+  Error [NarrativeV2OrchestrationError]: Judge execution failed on pass 1: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:514:13)
+      at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+      ... 2 lines matching cause stack trace ...
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_EXECUTION_FAILED',
+    passNumber: 1,
+    stage: 'JUDGE_EXECUTION',
+    [cause]: Error: Narrative v2 judge validation failed: judgePromptVersion must equal 2.1.0
+        at invoke (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-binding.js:1638:13)
+        at async runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:512:9)
+        at async runScenario (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:360:18)
+        at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/live-revision-round.test.js:532:9)
+        at async Test.run (node:internal/test_runner/test:1125:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+  }
+
+test at src\narrative-v2\orchestrator.test.js:292:1
+G£û ORCH-01/02/05: Pass 1 uses governed prompt, Judge consumes the same validated object, PASS releases (7.6366ms)
+  Error [NarrativeV2OrchestrationError]: Judge response validation failed on pass 1: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:534:13)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.test.js:298:18)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_RESPONSE_INVALID',
+    passNumber: 1,
+    stage: 'JUDGE_VALIDATION',
+    validationErrors: [ 'judgePromptVersion must equal 2.1.0' ]
+  }
+
+test at src\narrative-v2\orchestrator.test.js:377:1
+G£û ORCH-06/07: only validated REVISE starts Pass 2 with exact prior output and Judge directive (1.335ms)
+  Error [NarrativeV2OrchestrationError]: Judge response validation failed on pass 1: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:534:13)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.test.js:383:18)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_RESPONSE_INVALID',
+    passNumber: 1,
+    stage: 'JUDGE_VALIDATION',
+    validationErrors: [ 'judgePromptVersion must equal 2.1.0' ]
+  }
+
+test at src\narrative-v2\orchestrator.test.js:411:1
+G£û ORCH-08: collateral Pass 2 rewrite fails before the second Judge call (2.6243ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'JUDGE_RESPONSE_INVALID'
+  - 'WRITER_OUTPUT_INVALID'
+  
+      at Object.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.test.js:430:12)
+      at expectedException (node:assert:578:17)
+      at expectsError (node:assert:703:21)
+      at strict.rejects (node:assert:769:3)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.test.js:428:3)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'JUDGE_RESPONSE_INVALID',
+    expected: 'WRITER_OUTPUT_INVALID',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at src\narrative-v2\orchestrator.test.js:439:1
+G£û ORCH-09: unsuccessful Pass 3 terminates in human review with no Pass 4 (1.931ms)
+  Error [NarrativeV2OrchestrationError]: Judge response validation failed on pass 1: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2Orchestration (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.js:534:13)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/orchestrator.test.js:443:18)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    code: 'JUDGE_RESPONSE_INVALID',
+    passNumber: 1,
+    stage: 'JUDGE_VALIDATION',
+    validationErrors: [ 'judgePromptVersion must equal 2.1.0' ]
+  }
+
+test at src\narrative-v2\site-footprint-propagation.test.js:9:1
+G£û INTERPRETATION-04: siteFootprint survives ScoreSet into WriterInput and reference index (2.7217ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/site-footprint-propagation.test.js:90:23)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+
+test at src\narrative-v2\writer-input.test.js:139:1
+G£û WRITER-V2-01: packet preserves exact canonical business, scores, findings and capability evidence (5.3802ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.test.js:140:18)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+
+test at src\narrative-v2\writer-input.test.js:161:1
+G£û WRITER-V2-02: aliases and raw/provider extras do not cross the Writer boundary (0.5469ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.test.js:169:18)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+
+test at src\narrative-v2\writer-input.test.js:187:1
+G£û WRITER-V2-03: absent optional business context remains absent (0.4496ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.test.js:188:18)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+test at src\narrative-v2\writer-input.test.js:243:1
+G£û WRITER-V2-07: unavailable and failed states remain explicit and are never converted to false or zero (0.474ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.test.js:249:18)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+test at src\narrative-v2\writer-reference-index.test.js:83:1
+G£û WRITER-REF-01: reference index exposes only governed packet paths (3.0263ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-reference-index.test.js:84:18)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+
+test at src\narrative-v2\writer-reference-index.test.js:112:1
+G£û WRITER-REF-02: reference index cannot expose guessed aliases (0.5056ms)
+  Error: decisionEvidence is required for governed Writer action-plan parity
+      at buildWriterActionModel (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:447:11)
+      at buildWriterInput (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-input.js:848:5)
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-reference-index.test.js:118:18)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+
+test at src\narrative-v2\writer-structured-output.test.js:65:1
+G£û WRITER-STRUCT-01: schema fixes deterministic statement classes and metadata (5.3433ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+  +   '2.1.0'
+  -   '2.0.0'
+    ]
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/writer-structured-output.test.js:76:10)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ '2.1.0' ],
+    expected: [ '2.0.0' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

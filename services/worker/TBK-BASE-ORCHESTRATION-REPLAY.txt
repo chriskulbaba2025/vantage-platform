@@ -1,0 +1,6 @@
+PRYSM offline report replay
+Input: C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current
+Fixtures: 1
+Output: C:\Users\kulba\AppData\Local\Temp\prysm-report-replay-5xeJbb
+FAIL audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current | Replay requires a persisted RELEASE_CANDIDATE; got HUMAN_REVIEW_REQUIRED
+Replay result: 0/1 PASS

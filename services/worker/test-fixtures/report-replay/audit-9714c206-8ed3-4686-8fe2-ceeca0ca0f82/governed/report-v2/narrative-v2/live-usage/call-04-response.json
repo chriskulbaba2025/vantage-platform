@@ -1,0 +1,348 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "passNumber": 2,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-27T23:45:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "VIO-01",
+        "code": "UNAVAILABLE_AS_ABSENT",
+        "section": "rootCause.businessConsequences",
+        "explanation": "The narrative describes meta-description values as absent. The underlying null observation has PARTIAL source status, which supports a bounded finding requiring validation but cannot independently establish absence at that level of certainty.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "VIO-02",
+        "code": "SOURCE_STATUS_MUTATION",
+        "section": "executiveDecision.change",
+        "explanation": "Calling all three technical hygiene findings validated overstates the evidence state for the meta-description and heading findings, whose source evidence is PARTIAL. Deterministic finding confidence does not convert PARTIAL source coverage into validated evidence.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "VIO-03",
+        "code": "UNSUPPORTED_COMPETITOR_CLAIM",
+        "section": "competitors",
+        "explanation": "The headline characterizes the comparison as local, but the governed competitor evidence does not establish the geographic locality of the two assessed competitors. The evidence also does not provide an assessment for Northern, so broad wording about all remaining listed competitors is not fully supported.",
+        "evidenceRefs": [
+          "business:market",
+          "business:competitors",
+          "analysis:competitors"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 12,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Most claims are carefully bounded and correctly preserve partial and unavailable evidence states. However, one PARTIAL null observation is stated as absence, two PARTIAL technical findings are collectively called validated, and competitor locality is asserted without governed geographic evidence.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "analysis:competitors",
+        "business:competitors"
+      ],
+      "defectIds": [
+        "DEF-01",
+        "DEF-02",
+        "DEF-03"
+      ]
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects priorities to generating qualified enquiries while avoiding unsupported revenue, traffic, ranking, or conversion-loss claims.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "analysis:conversionPaths",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The preserve, change, and next-step messages are concise and decision-oriented. The unsupported use of validated in the final decision slightly reduces precision.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:conversionPaths",
+        "score:contentDepth"
+      ],
+      "defectIds": [
+        "DEF-02"
+      ]
+    },
+    "rootCauseCoherence": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative accurately centers the governed meta-description opportunity and generally limits its scope to affected pages. The description of PARTIAL null evidence as absence requires correction.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "defectIds": [
+        "DEF-01"
+      ]
+    },
+    "actionability": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "Actions include priorities, effort, verification, and appropriately prospective effects. The plan would remain actionable after correcting the evidence-state wording.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The narrative distinguishes observed visible and unobstructed actions from unproven action wording, complete path sequence, business outcomes, and lost enquiries.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "capability:conversion.path",
+        "capability:conversion.cta",
+        "capability:conversion.form"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are specific, tied to supplied ideas, and explicitly framed as prospective rather than confirmed sitewide gaps.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "capability:content.body"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Experience, expertise, proof, and technical trust are addressed using governed readiness, content-plan, trust-score, and security-header evidence without claiming observed buyer outcomes.",
+      "evidenceRefs": [
+        "analysis:readinessMap",
+        "analysis:contentIdeas",
+        "score:trust",
+        "band:trust",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The narrative covers meta descriptions, heading structure, security headers, lab performance, unavailable field data, and the absence of a specific structured-data defect with generally appropriate qualification.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "capability:performance.lab",
+        "capability:performance.field",
+        "capability:schema.structured_data"
+      ],
+      "defectIds": []
+    },
+    "competitiveUsefulness": {
+      "score": 2,
+      "maxScore": 4,
+      "status": "FAIL",
+      "rationale": "The comparison correctly identifies the two assessed profiles and avoids using insufficient-evidence candidates for broad conclusions, but it adds an unsupported local characterization and does not precisely account for the listed competitor that was not assessed.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors",
+        "business:market"
+      ],
+      "defectIds": [
+        "DEF-03"
+      ]
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The output preserves observed conversion-action strengths and relative content strength while maintaining clear limitations and remediation priorities.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth",
+        "score:contentFunnelDimension",
+        "capability:content.body"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 3,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The narrative is well structured, though the conversion-action and content-base messages recur across several sections more often than necessary.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 86,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "DEF-01",
+      "criterion": "evidenceFidelity",
+      "section": "rootCause",
+      "severity": "MAJOR",
+      "problem": "The business consequence interprets a PARTIAL null meta-description observation as established absence.",
+      "whyItMatters": "PARTIAL evidence cannot be converted into an absent state, even when an upstream finding labels the issue as missing.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "requiredCorrection": "Keep the statement at the level of a partial-source finding or null observation requiring validation; do not characterize the value as independently confirmed absent.",
+      "allowedFields": [
+        "rootCause"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "DEF-02",
+      "criterion": "evidenceFidelity",
+      "section": "executiveDecision",
+      "severity": "MAJOR",
+      "problem": "The phrase validated technical hygiene findings upgrades PARTIAL meta-description and heading evidence to a validated state.",
+      "whyItMatters": "Deterministic confidence in a finding does not change the governed source status or remove the need to validate PARTIAL observations.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "requiredCorrection": "Distinguish the identified PARTIAL-source findings from the available security-header evidence and retain validation as a next action rather than a completed evidence state.",
+      "allowedFields": [
+        "executiveDecision"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan"
+      ]
+    },
+    {
+      "defectId": "DEF-03",
+      "criterion": "competitiveUsefulness",
+      "section": "competitors",
+      "severity": "MAJOR",
+      "problem": "The comparison is called local without evidence establishing competitor geography, and the limitation wording does not precisely distinguish insufficient-evidence candidates from the listed competitor that was not represented in the assessed comparison.",
+      "whyItMatters": "Unsupported competitor geography or assessment status can misstate the competitive frame and produce an unjustified market conclusion.",
+      "evidenceRefs": [
+        "business:market",
+        "business:competitors",
+        "analysis:competitors"
+      ],
+      "requiredCorrection": "Limit the section to the two assessed competitor profiles and their recorded attributes. Do not call the comparison local, and distinguish unassessed listed competitors from comparison candidates explicitly marked Insufficient Evidence.",
+      "allowedFields": [
+        "competitors"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "rootCause",
+      "competitors",
+      "executiveDecision"
+    ],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "limitations",
+      "actionPlan"
+    ],
+    "defectIds": [
+      "DEF-01",
+      "DEF-02",
+      "DEF-03"
+    ]
+  }
+}

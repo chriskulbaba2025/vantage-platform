@@ -1,0 +1,17 @@
+=== EXISTING WRITER/JUDGE OUTPUT ===
+.env not found. Continuing without it.
+.env.local not found. Continuing without it.
+file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/[eval1]:64
+  throw new Error(
+        ^
+System.Management.Automation.RemoteException
+Error: Narrative v2 live mode is not enabled in the current environment.
+    at file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/[eval1]:64:9
+System.Management.Automation.RemoteException
+Node.js v24.14.0
+
+=== LIVE LEDGER FILES ===
+fresh-live-ledger NOT FOUND
+
+=== REFRESH OUTPUT ===
+orchestration-refresh.json NOT FOUND

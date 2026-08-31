@@ -1,0 +1,36 @@
+=== NV2-PROD-02 ===
+G£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (99.6316ms)
+Gä¦ tests 1
+Gä¦ suites 0
+Gä¦ pass 0
+Gä¦ fail 1
+Gä¦ cancelled 0
+Gä¦ skipped 0
+Gä¦ todo 0
+Gä¦ duration_ms 519.407
+
+G£û failing tests:
+
+test at src\application\narrative-v2-production-path.test.js:786:1
+G£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (99.6316ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'narrative_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:809:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'narrative_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+TEST_EXIT=1
+
+=== DIFF CHECK ===
+warning: in the working copy of 'services/worker/src/application/narrative-v2-production-path.test.js', LF will be replaced by CRLF the next time Git touches it
+DIFF_EXIT=0

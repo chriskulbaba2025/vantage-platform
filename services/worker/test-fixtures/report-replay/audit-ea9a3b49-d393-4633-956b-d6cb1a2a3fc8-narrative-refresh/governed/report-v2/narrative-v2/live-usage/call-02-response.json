@@ -1,0 +1,252 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "ea9a3b49-d393-4633-956b-d6cb1a2a3fc8",
+  "passNumber": 1,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-28T00:00:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "VIO-001",
+        "code": "UNSUPPORTED_FACT",
+        "section": "seoSerp.searchImplication",
+        "explanation": "The statement that search snippets are a \"key transition point\" asserts importance not established by the governed evidence. The finding supports only that missing meta descriptions may reduce control over search-result messaging; it does not establish the importance of snippets in the discovery-to-visit journey.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "business:primaryGoal"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 17,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Nearly all claims preserve governed scores, findings, source states, limitations, and appropriately bounded implications. However, seoSerp introduces an unsupported assertion about search snippets being a key transition point, triggering the hard gate.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "business:primaryGoal",
+        "capability:content.body",
+        "capability:performance.field"
+      ],
+      "defectIds": [
+        "DEF-001"
+      ]
+    },
+    "businessRelevance": {
+      "score": 9.5,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to generating qualified enquiries without claiming observed revenue, traffic, ranking, or conversion outcomes.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9.5,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The conclusion, priority sequence, strengths, constraints, and executive decision are concise and internally consistent.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The root-cause discussion coherently distinguishes a validated action path from decision-support opportunities and keeps downstream visitor behaviour framed as a possibility.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "actionability": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "Actions are prioritized, scoped, assigned effort levels, and paired with verification methods. The sequence follows the governed finding order.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The narrative follows the Conversion-First hierarchy, preserves the clear validated action path, and places buyer-question decision support before technical hygiene without claiming observed conversion outcomes.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "capability:conversion.path"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 7.5,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are distinct, tied to governed content concepts, and connected to buyer needs and next actions. Partial body coverage is expressly bounded.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "capability:content.body",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 5.5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Trust is accurately characterized as moderate, and process, experience, and expert-content opportunities are tied to governed analysis without overstating authority.",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust",
+        "analysis:readinessMap",
+        "analysis:contentIdeas",
+        "capability:trust.proof"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 4.5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The technical findings and remediation order are accurately represented, but the search-snippet importance claim exceeds the evidence supplied by the meta-description finding.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:siteFootprint",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "DEF-001"
+      ]
+    },
+    "competitiveUsefulness": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The narrative uses only the two assessed competitor comparisons, distinguishes assessed from unassessed competitors, and avoids unsupported market-wide claims.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The output preserves validated conversion actions and relative content depth as strengths while clearly separating them from improvement opportunities.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentFunnelDimension",
+        "score:technicalPerformanceDimension",
+        "score:entitySchemaAiDimension"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 3.5,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Core priorities recur across sections but are generally adapted to each section's purpose rather than repeated verbatim.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 91,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "DEF-001",
+      "criterion": "evidenceFidelity",
+      "section": "seoSerp.searchImplication",
+      "severity": "MAJOR",
+      "problem": "The narrative labels search snippets a \"key transition point\" even though the governed evidence does not establish their relative importance in the discovery-to-visit journey.",
+      "whyItMatters": "This converts a supported risk about reduced control over search-result messaging into a stronger, unsupported funnel claim.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "business:primaryGoal"
+      ],
+      "requiredCorrection": "Limit the search implication to the supported proposition that missing meta descriptions may reduce control over search-result messaging. Remove or explicitly bound any claim about snippets being a key transition point.",
+      "allowedFields": [
+        "seoSerp"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "seoSerp"
+    ],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "rootCause",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "defectIds": [
+      "DEF-001"
+    ]
+  }
+}

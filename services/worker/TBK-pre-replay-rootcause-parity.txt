@@ -1,0 +1,4 @@
+=== SCORESET ===
+666: "rootCause": "Buyer-question content was not detected in the available partial assessment. The available partial assessment did not detect buyer-question content on the assessed pages, so some buyer questions may remain unsupported there; unassessed pages remain unknown.",
+
+=== REPLAY MODEL ===

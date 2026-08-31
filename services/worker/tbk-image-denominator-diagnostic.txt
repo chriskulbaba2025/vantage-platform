@@ -1,0 +1,12 @@
+AUDIT REQUEST
+competitors=https://red-rhino.com, https://www.northern.co, https://www.zoomedia.ca
+
+DECISION EVIDENCE
+sourceStatus=PARTIAL
+imageCount=0
+imagesMissingAlt=222
+
+NORMALIZED ONPAGE
+status=PARTIAL
+imageCount=
+imagesMissingAlt=222

@@ -1,0 +1,245 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4",
+  "passNumber": 2,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-28T00:00:01Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "HG-001",
+        "code": "UNAVAILABLE_AS_ABSENT",
+        "section": "content.importantGaps",
+        "explanation": "The statement calls buyer-question content the most immediate gap without preserving the partial-coverage qualification. The governed evidence supports only that buyer-question content was not detected in the available partial assessment, not that a whole-site content gap is established.",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:content.body"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 17,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Most claims are carefully bounded and preserve source states, including conversion validation, unavailable field performance data, AI-search limitations, and competitor coverage. However, content.importantGaps converts a partial detection result into an unqualified established gap, triggering the hard gate.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body",
+        "capability:performance.field",
+        "analysis:conversionPaths",
+        "analysis:competitors"
+      ],
+      "defectIds": [
+        "DEF-001"
+      ]
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to generating qualified enquiries and to Tbkcreative's governed service set without claiming observed revenue or enquiry outcomes.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9.5,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The conclusion clearly distinguishes the validated conversion-action layer from the leading decision-support opportunity and supporting technical work.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The root-cause narrative coherently links partial buyer-question detection, unclear next-step entries, and available conversion actions while expressing downstream confidence effects as possibilities rather than observed outcomes.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:readinessMap",
+        "analysis:conversionPaths",
+        "capability:content.body"
+      ],
+      "defectIds": []
+    },
+    "actionability": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The action plan is sequenced, specific, effort-labelled, and paired with governed verification methods.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The Writer follows the governed Conversion-First hierarchy: buyer-question decision support is first, while meta descriptions, headings, and security headers remain supporting optimization work. It also preserves the validated clear conversion path rather than diagnosing action obstruction.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 7,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are well differentiated and grounded in the governed content ideas and readiness map. The unqualified gap wording in content.importantGaps slightly weakens precision but does not undermine the broader funnel plan.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "capability:content.body"
+      ],
+      "defectIds": [
+        "DEF-001"
+      ]
+    },
+    "eeatTrust": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The narrative uses the Moderate trust band and governed process, experience, results, and expert-proof opportunities without asserting unsupported authority or proof absence.",
+      "evidenceRefs": [
+        "band:trust",
+        "analysis:readinessMap",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Meta descriptions, heading structure, security headers, lab evidence, and unavailable field evidence are represented with appropriate scope and causal restraint.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "capability:performance.lab",
+        "capability:performance.field"
+      ],
+      "defectIds": []
+    },
+    "competitiveUsefulness": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Competitive interpretation is limited to the two substantively assessed agency comparisons and explicitly excludes insufficient-evidence results from broader conclusions.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "analysis:conversionPaths"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The Writer clearly identifies the validated, visible, interactable, unobstructed conversion actions as a strength to preserve while recommending decision-support improvements.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Repeated priority themes are used consistently across executive, diagnostic, funnel, and action sections without excessive duplication or conflicting framing.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 94.5,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "DEF-001",
+      "criterion": "evidenceFidelity",
+      "section": "content.importantGaps",
+      "severity": "MAJOR",
+      "problem": "The phrase \"The most immediate gap is buyer-question content\" treats a PARTIAL content-detection result as an established content gap without qualifying its assessed scope.",
+      "whyItMatters": "The governed body-content capability returned usable content for only 25 of 35 requested pages. The evidence therefore supports not-detected-in-the-available-partial-assessment language, not a definitive whole-site absence or gap claim.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ],
+      "requiredCorrection": "Revise content.importantGaps so the priority is explicitly framed as a detection gap or opportunity within the available partial assessment. Preserve the governed FAQ recommendation and do not state or imply whole-site absence.",
+      "allowedFields": [
+        "content"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "content"
+    ],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "rootCause",
+      "conversion",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "defectIds": [
+      "DEF-001"
+    ]
+  }
+}

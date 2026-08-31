@@ -1,0 +1,441 @@
+src/evidence\browser-evidence-bridge.test.js-57-      ],
+src/evidence\browser-evidence-bridge.test.js-58-      totalWords: 800,
+src/evidence\browser-evidence-bridge.test.js-59-      averageWords: 400,
+src/evidence\browser-evidence-bridge.test.js-60-      missingTitles: 0,
+src/evidence\browser-evidence-bridge.test.js-61-      missingDescriptions: 0,
+src/evidence\browser-evidence-bridge.test.js-62-      missingCanonicals: 0,
+src/evidence\browser-evidence-bridge.test.js-63-      h1Missing: 0,
+src/evidence\browser-evidence-bridge.test.js-64-      h1Multiple: 0,
+src/evidence\browser-evidence-bridge.test.js:65:      imageCount: 0,
+src/evidence\browser-evidence-bridge.test.js:66:      imagesMissingAlt: 0,
+src/evidence\browser-evidence-bridge.test.js-67-      imagesMissingDimensions: 0,
+src/evidence\browser-evidence-bridge.test.js-68-      schemaTypes: [
+src/evidence\browser-evidence-bridge.test.js-69-        "Organization",
+src/evidence\browser-evidence-bridge.test.js-70-      ],
+src/evidence\browser-evidence-bridge.test.js-71-      forms: [],
+src/evidence\browser-evidence-bridge.test.js-72-      ctas: [],
+src/evidence\browser-evidence-bridge.test.js-73-      externalCtas: [],
+src/evidence\browser-evidence-bridge.test.js-74-      socialLinks: [],
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-381-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-382-    // Link counts from meta (pages endpoint provides counts, not arrays)
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-383-    internalInlinks: meta.internal_links_count ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-384-    internalOutlinks: null, // Not available from pages endpoint
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-385-    externalOutlinks: meta.external_links_count ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-386-    brokenLinks: null, // Not available from pages endpoint; use links endpoint
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-387-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-388-    // GöÇGöÇ Image evidence GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:389:    imageCount: meta.images_count ?? (images.length || null),
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:390:    imagesMissingAlt: images.length > 0
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-391-      ? images.filter((img) => !img.alt).length
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-392-      : null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-393-    imagesSizeBytes: meta.images_size ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-394-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-395-    // GöÇGöÇ Structured data / microdata GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-396-    schemaTypes,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-397-    hasMicrodata: checks.has_micromarkup === true,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-398-
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-433-    _dataforseo: {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-434-      resourceErrors,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-435-      loadTime: raw.load_time || raw.time_to_interactive || null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-436-      sizeBytes: raw.size || raw.page_size || null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-437-      crawlDepth: raw.click_depth ?? raw.crawl_depth ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-438-      sitemapUrl: raw.sitemap_url || null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-439-      metaInternalLinksCount: meta.internal_links_count ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-440-      metaExternalLinksCount: meta.external_links_count ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:441:      metaImagesCount: meta.images_count ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-442-      imagesSize: meta.images_size ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-443-      fetchDurationMs: fetchTiming.duration_time ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-444-      pageDurationMs: pageTiming.duration_time ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-445-      fromSitemap: checks.from_sitemap === true,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-446-      hasMicromarkup: checks.has_micromarkup === true,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-447-      inboundLinksCount: meta.inbound_links_count ?? null,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-448-    },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-449-    _contentAvailable: contentAvailable,
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1115-  // GöÇGöÇ Aggregate metrics from DataForSEO summary page_metrics GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1116-  // When page_metrics is present it contains authoritative provider-side
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1117-  // counts (links_internal, checks.no_h1_tag, etc.).  These are preferred
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1118-  // over page-derived counts when the pages endpoint doesn't provide
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1119-  // content-level data.
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1120-  const pageMetrics = rawSummary?.page_metrics;
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1121-  const metricChecks = pageMetrics?.checks || {};
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1122-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1123:  // imageCount: use page_metrics-derived estimate when image arrays aren't
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1124-  // available from individual pages.
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1125-  const hasPageImageData = allImages.length > 0;
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1126:  const imageCount = hasPageImageData
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1127-    ? allImages.length
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1128-    : null; // unavailable from DataForSEO GÇö returned as null
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1129-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1130-  // h1Missing: prefer page_metrics.checks.no_h1_tag when page-level
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1131-  // headings were not extracted from body content.
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1132-  const hasPageHeadingData = pages.some((p) => p.headings.h1.length > 0);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1133-  const h1Missing = hasPageHeadingData
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1134-    ? contentPages.filter((p) => p.headings.h1.length === 0).length
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1139-    : null;
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1140-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1141-  // missingDescriptions: prefer page_metrics.checks.no_description
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1142-  const hasPageDescriptionData = pages.some((p) => p.description);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1143-  const missingDescriptions = hasPageDescriptionData
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1144-    ? contentPages.filter((p) => !p.description).length
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1145-    : (metricChecks.no_description ?? null);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1146-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1147:  // imagesMissingAlt: prefer page_metrics.checks.no_image_alt
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1148:  const imagesMissingAlt = hasPageImageData
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1149-    ? allImages.filter((img) => !img.alt).length
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1150-    : (metricChecks.no_image_alt ?? null);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1151-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1152-  const imagesMissingDimensions = hasPageImageData
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1153-    ? allImages.filter((img) => !img.width || !img.height).length
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1154-    : null;
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1155-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1156-  // missingTitles and missingCanonicals: page-level only from DataForSEO
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1290-    statusCounts,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1291-    totalWords,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1292-    averageWords,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1293-    missingTitles,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1294-    missingDescriptions,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1295-    missingCanonicals,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1296-    h1Missing,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1297-    h1Multiple,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1298:    imageCount,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1299:    imagesMissingAlt,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1300-    imagesMissingDimensions,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1301-    schemaTypes: [...allSchema],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1302-    microdataTypes,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1303-    forms: allForms,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1304-    ctas: allCtas,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1305-    externalCtas,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1306-    socialLinks: allSocialLinks,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1307-    internalLinkCount,
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1707-        statusCounts: {},
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1708-        totalWords: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1709-        averageWords: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1710-        missingTitles: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1711-        missingDescriptions: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1712-        missingCanonicals: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1713-        h1Missing: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1714-        h1Multiple: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1715:        imageCount: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:1716:        imagesMissingAlt: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1717-        imagesMissingDimensions: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1718-        schemaTypes: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1719-        forms: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1720-        ctas: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1721-        externalCtas: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1722-        socialLinks: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1723-        internalLinkCount: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-1724-        brokenInternalLinks: [],
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2325-    statusCounts: {},
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2326-    totalWords: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2327-    averageWords: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2328-    missingTitles: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2329-    missingDescriptions: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2330-    missingCanonicals: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2331-    h1Missing: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2332-    h1Multiple: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:2333:    imageCount: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:2334:    imagesMissingAlt: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2335-    imagesMissingDimensions: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2336-    schemaTypes: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2337-    forms: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2338-    ctas: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2339-    externalCtas: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2340-    socialLinks: [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2341-    internalLinkCount: 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2342-    brokenInternalLinks: [],
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2490-        statusCounts: envelope.statusCounts || {},
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2491-        totalWords: envelope.totalWords,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2492-        averageWords: envelope.averageWords,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2493-        missingTitles: envelope.missingTitles,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2494-        missingDescriptions: envelope.missingDescriptions,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2495-        missingCanonicals: envelope.missingCanonicals,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2496-        h1Missing: envelope.h1Missing,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2497-        h1Multiple: envelope.h1Multiple,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:2498:        imageCount: envelope.imageCount,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js:2499:        imagesMissingAlt: envelope.imagesMissingAlt,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2500-        imagesMissingDimensions: envelope.imagesMissingDimensions,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2501-        schemaTypes: envelope.schemaTypes || [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2502-        microdataTypes: envelope.microdataTypes || [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2503-        forms: envelope.forms || [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2504-        ctas: envelope.ctas || [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2505-        externalCtas: envelope.externalCtas || [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2506-        socialLinks: envelope.socialLinks || [],
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.js-2507-        internalLinkCount: envelope.internalLinkCount,
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-785-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-786-  const requiredSiteFields = [
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-787-    "pageCount",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-788-    "missingTitles",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-789-    "missingDescriptions",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-790-    "missingCanonicals",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-791-    "h1Missing",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-792-    "h1Multiple",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:793:    "imageCount",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:794:    "imagesMissingAlt",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-795-    "imagesMissingDimensions",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-796-    "schemaTypes",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-797-    "internalLinkCount",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-798-    "brokenInternalLinks",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-799-    "platform",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-800-    "services",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-801-    "topicKeywords",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-802-    "trust",
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1209-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1210-  assert.equal(typeof result.pageCount, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1211-  assert.ok(Array.isArray(result.pages));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1212-  assert.equal(typeof result.missingTitles, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1213-  assert.equal(typeof result.missingDescriptions, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1214-  assert.equal(typeof result.missingCanonicals, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1215-  assert.equal(typeof result.h1Missing, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1216-  assert.equal(typeof result.h1Multiple, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:1217:  assert.equal(typeof result.imageCount, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:1218:  assert.equal(typeof result.imagesMissingAlt, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1219-  assert.equal(typeof result.imagesMissingDimensions, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1220-  assert.ok(Array.isArray(result.schemaTypes));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1221-  assert.ok(Array.isArray(result.forms));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1222-  assert.ok(Array.isArray(result.ctas));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1223-  assert.ok(Array.isArray(result.socialLinks));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1224-  assert.equal(typeof result.internalLinkCount, "number");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1225-  assert.ok(Array.isArray(result.brokenInternalLinks));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-1226-  assert.equal(typeof result.platform, "string");
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2461-        "_metaCountersAvailable",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2462-      ),
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2463-      false,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2464-      "an absent legacy aggregate marker must remain absent",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2465-    );
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2466-  },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2467-);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2468-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2469:// Regression: imagesMissingAlt from page_metrics.checks.no_image_alt
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2470:test("imagesMissingAlt uses page_metrics.checks.no_image_alt when image arrays unavailable", async () => {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2471-  const pages = [buildRealisticDfPage(0)];
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2472-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2473-  const fixtures = {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2474-    taskPost: { taskId: "imgalt-test", rawTask: { id: "imgalt-test" } },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2475-    pollTask: { status: "ready", taskId: "imgalt-test" },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2476-    summary: buildRealisticDfSummary({
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2477-      pageCount: 1,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2478-      totalSitePages: 1,
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2484-    duplicateContent: { items: [] },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2485-  };
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2486-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2487-  const result = await crawlWithDataforseo(
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2488-    "https://example.com",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2489-    crawlOpts(fixtures, { maxPages: 10 }),
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2490-  );
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2491-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2492:  assert.equal(result.imagesMissingAlt, 26);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2493-});
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2494-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2495-// Regression: 404 pages excluded from content-quality counts
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2496-test("404 pages are excluded from content-quality counts", async () => {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2497-  const pages = [
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2498-    buildRealisticDfPage(0, { status_code: 404, title: "", description: "", h1: [] }),
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2499-    buildRealisticDfPage(0, { status_code: 404, title: "", description: "", h1: [] }),
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2500-    buildRealisticDfPage(0, { status_code: 404, title: "", description: "", h1: [] }),
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2670-  // Required assertions matching production defect report
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2671-  assert.equal(result.pageCount, 30);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2672-  assert.equal(result.internalLinkCount, 584,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2673-    "internalLinkCount must match page_metrics.links_internal");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2674-  assert.equal(result.h1Missing, 21,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2675-    "h1Missing must match page_metrics.checks.no_h1_tag");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2676-  assert.equal(result.missingDescriptions, 16,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2677-    "missingDescriptions must match page_metrics.checks.no_description");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2678:  assert.equal(result.imagesMissingAlt, 26,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2679:    "imagesMissingAlt must match page_metrics.checks.no_image_alt");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2680-  assert.equal(result.brokenLinksCount, 5,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2681-    "brokenLinksCount must match page_metrics.broken_links");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2682-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2683-  // 404 pages excluded from content-quality counts
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2684-  assert.equal(result.missingTitles, 0,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2685-    "404 pages excluded from missingTitles (content pages have titles)");
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2686-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2687-  // Content evidence is unavailable (no body text from DataForSEO)
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2702-    result._sourceStatus.requestId,
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2703-    "07290216-1281-0216-0000-372ec45e2f2a",
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2704-  );
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2705-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2706-  // No false content signals (trust is false, not a confirmed absence)
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2707-  assert.equal(result.trust.testimonials, false);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2708-  assert.equal(result.trust.contact, false);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2709-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2710:  // imageCount is null (not available from pages endpoint)
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2711:  assert.equal(result.imageCount, null);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2712-});
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2713-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2714-// ---------------------------------------------------------------------------
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2715-// T-DT-01 through T-DT-06: pollSubEndpoint / duplicate_tags 20100 behaviour
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2716-// ---------------------------------------------------------------------------
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2717-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2718-// T-DT-01: 20100 on first call, then 20000 GÇö returns populated result with retry metadata
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2719-// getDuplicateTags now returns {results: [{type,items}], metadata: [{...type}]}
+--
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2969-    pages: { items: [], total_count: 0 },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2970-    links: { items: [], total_count: 0 },
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2971-  });
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2972-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2973-  const result = await crawlWithDataforseo("https://example.com", crawlOpts(fixtures));
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2974-  assert.equal(result.sourceStatus, SOURCE_STATUS.BLOCKED);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2975-  assert.equal(result.totalWords, 0);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2976-  assert.equal(result.averageWords, 0);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js:2977:  assert.equal(result.imageCount, 0);
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2978-});
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2979-
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2980-// T-BLOCKED-04: customRobotsTxt is forwarded to client taskPost
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2981-test("T-BLOCKED-04: customRobotsTxt option reaches client taskPost", async () => {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2982-  let capturedBody = null;
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2983-  const fetchImpl = async (url, init) => {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2984-    if (url.includes("task_post")) {
+src/adapters\dataforseo-onpage\dataforseo-onpage-adapter.test.js-2985-      capturedBody = JSON.parse(init.body);
+--
+src/evidence\decision-evidence-contract.test.js-53-    statusCounts: { "200": 1 },
+src/evidence\decision-evidence-contract.test.js-54-    totalWords: 300,
+src/evidence\decision-evidence-contract.test.js-55-    averageWords: 300,
+src/evidence\decision-evidence-contract.test.js-56-    missingTitles: 0,
+src/evidence\decision-evidence-contract.test.js-57-    missingDescriptions: 0,
+src/evidence\decision-evidence-contract.test.js-58-    missingCanonicals: 0,
+src/evidence\decision-evidence-contract.test.js-59-    h1Missing: 0,
+src/evidence\decision-evidence-contract.test.js-60-    h1Multiple: 0,
+src/evidence\decision-evidence-contract.test.js:61:    imageCount: 0,
+src/evidence\decision-evidence-contract.test.js:62:    imagesMissingAlt: 0,
+src/evidence\decision-evidence-contract.test.js-63-    internalLinkCount: 0,
+src/evidence\decision-evidence-contract.test.js-64-    brokenInternalLinks: [],
+src/evidence\decision-evidence-contract.test.js-65-    securityHeaders: {},
+src/evidence\decision-evidence-contract.test.js-66-    _contentEvidenceAvailable: true,
+src/evidence\decision-evidence-contract.test.js-67-    _responseHeadersAvailable: false,
+src/evidence\decision-evidence-contract.test.js-68-    limitations: [],
+src/evidence\decision-evidence-contract.test.js-69-  };
+src/evidence\decision-evidence-contract.test.js-70-  // `overrides.site` REPLACES the site object verbatim so removed-field
+--
+src/evidence\decision-evidence.test.js-225-      schemaTypes: [],
+src/evidence\decision-evidence.test.js-226-      ctas: [],
+src/evidence\decision-evidence.test.js-227-      forms: [],
+src/evidence\decision-evidence.test.js-228-      missingTitles: null,
+src/evidence\decision-evidence.test.js-229-      missingDescriptions: null,
+src/evidence\decision-evidence.test.js-230-      missingCanonicals: null,
+src/evidence\decision-evidence.test.js-231-      h1Missing: null,
+src/evidence\decision-evidence.test.js-232-      h1Multiple: null,
+src/evidence\decision-evidence.test.js:233:      imageCount: null,
+src/evidence\decision-evidence.test.js:234:      imagesMissingAlt: null,
+src/evidence\decision-evidence.test.js-235-      _metaCountersAvailable: false,
+src/evidence\decision-evidence.test.js-236-      _contentEvidenceAvailable: true,
+src/evidence\decision-evidence.test.js-237-      _responseHeadersAvailable: true,
+src/evidence\decision-evidence.test.js-238-      _interactiveEvidenceAvailable: false,
+src/evidence\decision-evidence.test.js-239-      collectedAt: "2026-01-15T12:00:00.000Z",
+src/evidence\decision-evidence.test.js-240-      coverage: { requested: 500, completed: 2, failed: 498 },
+src/evidence\decision-evidence.test.js-241-    },
+src/evidence\decision-evidence.test.js-242-  });
+--
+src/evidence\decision-evidence.test.js-291-    evidence: {
+src/evidence\decision-evidence.test.js-292-      sourceStatus: "AVAILABLE",
+src/evidence\decision-evidence.test.js-293-      domain: "example.com",
+src/evidence\decision-evidence.test.js-294-      targetUrl: "https://example.com/",
+src/evidence\decision-evidence.test.js-295-      platform: "WordPress",
+src/evidence\decision-evidence.test.js-296-      pages: [{ url: "https://example.com/", title: "Home", headings: { h1: ["Home"], h2: [], h3: [], h4: [] }, status: 200 }],
+src/evidence\decision-evidence.test.js-297-      services: [], trust: {}, schemaTypes: [], ctas: [], forms: [],
+src/evidence\decision-evidence.test.js-298-      missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
+src/evidence\decision-evidence.test.js:299:      h1Missing: 0, h1Multiple: 0, imageCount: 2, imagesMissingAlt: 0,
+src/evidence\decision-evidence.test.js-300-      _contentEvidenceAvailable: true, _responseHeadersAvailable: true,
+src/evidence\decision-evidence.test.js-301-      collectedAt: "2026-01-15T12:00:00.000Z",
+src/evidence\decision-evidence.test.js-302-    },
+src/evidence\decision-evidence.test.js-303-  });
+src/evidence\decision-evidence.test.js-304-  const legacyEvidence = buildDecisionEvidence({
+src/evidence\decision-evidence.test.js-305-    allSourceResults: [{ source: "dataforseo-onpage", sourceResult: legacySr }],
+src/evidence\decision-evidence.test.js-306-    validateContract,
+src/evidence\decision-evidence.test.js-307-  }).evidence;
+--
+src/evidence\decision-evidence.js-100-    externalCtas: ev.externalCtas || [],
+src/evidence\decision-evidence.js-101-    socialLinks: ev.socialLinks || [],
+src/evidence\decision-evidence.js-102-    statusCounts: ev.statusCounts || {},
+src/evidence\decision-evidence.js-103-    // The FROZEN decision-evidence v1 schema types every counter as
+src/evidence\decision-evidence.js-104-    // integer GÇö hydration must emit integers.  Unknown-counter honesty is
+src/evidence\decision-evidence.js-105-    // therefore carried by the `_metaCountersAvailable` marker (the
+src/evidence\decision-evidence.js-106-    // adapter declares whether the counters were actually collected);
+src/evidence\decision-evidence.js-107-    // scorers gate credit on the marker, and the images sub-rule requires
+src/evidence\decision-evidence.js:108:    // imageCount > 0 (a fabricated 0 grants no credit).
+src/evidence\decision-evidence.js-109-    totalWords: ev.totalWords ?? 0,
+src/evidence\decision-evidence.js-110-    averageWords: ev.averageWords ?? 0,
+src/evidence\decision-evidence.js-111-    missingTitles: ev.missingTitles ?? 0,
+src/evidence\decision-evidence.js-112-    missingDescriptions: ev.missingDescriptions ?? 0,
+src/evidence\decision-evidence.js-113-    missingCanonicals: ev.missingCanonicals ?? 0,
+src/evidence\decision-evidence.js-114-    h1Missing: ev.h1Missing ?? 0,
+src/evidence\decision-evidence.js-115-    h1Multiple: ev.h1Multiple ?? 0,
+src/evidence\decision-evidence.js:116:    imageCount: ev.imageCount ?? 0,
+src/evidence\decision-evidence.js:117:    imagesMissingAlt: ev.imagesMissingAlt ?? 0,
+src/evidence\decision-evidence.js-118-    internalLinkCount: ev.internalLinkCount ?? 0,
+src/evidence\decision-evidence.js-119-    _metaCountersAvailable: ev._metaCountersAvailable,
+src/evidence\decision-evidence.js-120-    _metaFieldAvailability: ev._metaFieldAvailability,
+src/evidence\decision-evidence.js-121-    brokenInternalLinks: ev.brokenInternalLinks || [],
+src/evidence\decision-evidence.js-122-    securityHeaders: ev.securityHeaders || {},
+src/evidence\decision-evidence.js-123-    // PRYSM-NEXT-01 WP-C GÇö unknown is NOT coerced to false. Absent stays
+src/evidence\decision-evidence.js-124-    // absent (undefined GåÆ stripped); capability derivation treats
+src/evidence\decision-evidence.js-125-    // undefined as "unknown", never "confirmed absent".
+--
+src/evidence\response-header-evidence-bridge.test.js-233-      averageWords: 400,
+src/evidence\response-header-evidence-bridge.test.js-234-
+src/evidence\response-header-evidence-bridge.test.js-235-      missingTitles: 0,
+src/evidence\response-header-evidence-bridge.test.js-236-      missingDescriptions: 0,
+src/evidence\response-header-evidence-bridge.test.js-237-      missingCanonicals: 0,
+src/evidence\response-header-evidence-bridge.test.js-238-      h1Missing: 0,
+src/evidence\response-header-evidence-bridge.test.js-239-      h1Multiple: 0,
+src/evidence\response-header-evidence-bridge.test.js-240-
+src/evidence\response-header-evidence-bridge.test.js:241:      imageCount: 0,
+src/evidence\response-header-evidence-bridge.test.js:242:      imagesMissingAlt: 0,
+src/evidence\response-header-evidence-bridge.test.js-243-      imagesMissingDimensions: 0,
+src/evidence\response-header-evidence-bridge.test.js-244-
+src/evidence\response-header-evidence-bridge.test.js-245-      schemaTypes: [
+src/evidence\response-header-evidence-bridge.test.js-246-        "Organization",
+src/evidence\response-header-evidence-bridge.test.js-247-      ],
+src/evidence\response-header-evidence-bridge.test.js-248-
+src/evidence\response-header-evidence-bridge.test.js-249-      forms: [],
+src/evidence\response-header-evidence-bridge.test.js-250-      ctas: [],
+--
+src/evidence\site-crawler.test.js-29-  return Promise.resolve(new Response(html, { status: 200, headers }));
+src/evidence\site-crawler.test.js-30-}
+src/evidence\site-crawler.test.js-31-
+src/evidence\site-crawler.test.js-32-test("crawlSite captures page, trust, schema, CTA, platform, and technical evidence", async () => {
+src/evidence\site-crawler.test.js-33-  const evidence = await crawlSite("https://example.com", { fetchImpl: mockFetch, browserMode: "never", maxPages: 5 });
+src/evidence\site-crawler.test.js-34-  assert.ok(evidence.pageCount >= 2);
+src/evidence\site-crawler.test.js-35-  assert.equal(evidence.platform, "GoDaddy Website Builder");
+src/evidence\site-crawler.test.js-36-  assert.equal(evidence.missingDescriptions, 0);
+src/evidence\site-crawler.test.js:37:  assert.equal(evidence.imagesMissingAlt, 0);
+src/evidence\site-crawler.test.js-38-  assert.equal(evidence.trust.testimonials, true);
+src/evidence\site-crawler.test.js-39-  assert.equal(evidence.trust.credentials, true);
+src/evidence\site-crawler.test.js-40-  assert.equal(evidence.trust.faq, true);
+src/evidence\site-crawler.test.js-41-  assert.equal(evidence.trust.pricing, true);
+src/evidence\site-crawler.test.js-42-  assert.ok(evidence.schemaTypes.includes("Service"));
+src/evidence\site-crawler.test.js-43-  assert.ok(evidence.ctas.some((cta) => /book/i.test(cta.text)));
+src/evidence\site-crawler.test.js-44-  assert.equal(evidence.securityHeaders.xContentTypeOptions, true);
+src/evidence\site-crawler.test.js-45-});
+--
+src/evidence\site-crawler.js-119-    statusCounts: pages.reduce((acc, p) => { acc[p.status] = (acc[p.status] || 0) + 1; return acc; }, {}),
+src/evidence\site-crawler.js-120-    totalWords: pages.reduce((sum, p) => sum + p.words, 0),
+src/evidence\site-crawler.js-121-    averageWords: pages.length ? Math.round(pages.reduce((sum, p) => sum + p.words, 0) / pages.length) : 0,
+src/evidence\site-crawler.js-122-    missingTitles: pages.filter((p) => !p.title).length,
+src/evidence\site-crawler.js-123-    missingDescriptions: pages.filter((p) => !p.description).length,
+src/evidence\site-crawler.js-124-    missingCanonicals: pages.filter((p) => !p.canonical).length,
+src/evidence\site-crawler.js-125-    h1Missing: pages.filter((p) => p.headings.h1.length === 0).length,
+src/evidence\site-crawler.js-126-    h1Multiple: pages.filter((p) => p.headings.h1.length > 1).length,
+src/evidence\site-crawler.js:127:    imageCount: images.length,
+src/evidence\site-crawler.js:128:    imagesMissingAlt: images.filter((img) => !img.alt).length,
+src/evidence\site-crawler.js-129-    imagesMissingDimensions: images.filter((img) => !img.width || !img.height).length,
+src/evidence\site-crawler.js-130-    schemaTypes: [...allSchema],
+src/evidence\site-crawler.js-131-    forms,
+src/evidence\site-crawler.js-132-    ctas,
+src/evidence\site-crawler.js-133-    externalCtas,
+src/evidence\site-crawler.js-134-    socialLinks: pages.flatMap((p) => p.socialLinks),
+src/evidence\site-crawler.js-135-    internalLinkCount: internalLinks.length,
+src/evidence\site-crawler.js-136-    brokenInternalLinks: pages.filter((p) => p.status >= 400).map((p) => p.url),

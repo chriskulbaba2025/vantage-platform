@@ -1,0 +1,1976 @@
+{
+  "contractVersion": "1.0.0",
+  "orchestrationVersion": "1.0.0",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "status": "RELEASE_CANDIDATE",
+  "passCount": 1,
+  "finalWriterOutput": {
+    "contractVersion": "1.0.0",
+    "writerOutputVersion": "1.0.0",
+    "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+    "passNumber": 1,
+    "modelId": "gpt-5.6-terra",
+    "promptVersion": "2.1.0",
+    "generatedAt": "2026-08-31T00:00:00Z",
+    "executiveConclusion": {
+      "headline": "Preserve the clear conversion foundation; improve decision support and search presentation",
+      "narrative": {
+        "text": "Tbkcreative has a clear, validated path to enquiry action on the assessed pages. The most immediate opportunity is to strengthen buyer-question support, then improve search-result messaging and technical consistency so more qualified prospects can understand the offer, act with confidence, and reach the existing conversion path.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "business:primaryGoal"
+        ]
+      }
+    },
+    "strengths": [
+      {
+        "itemId": "STR-01",
+        "title": "Validated conversion actions",
+        "narrative": {
+          "text": "Conversion actions were observed, visible, interactable, and unobstructed across the assessed conversion pages, providing a sound foundation for qualified-enquiry generation.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "analysis:conversionPaths",
+            "capability:conversion.cta",
+            "capability:conversion.form"
+          ]
+        }
+      },
+      {
+        "itemId": "STR-02",
+        "title": "Strong content-funnel baseline",
+        "narrative": {
+          "text": "The content-funnel assessment indicates a strong baseline across awareness, consideration, and decision stages, with decision-stage readiness particularly well represented in the governed scoring.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "score:contentDepth",
+            "score:awareness",
+            "score:consideration",
+            "score:decision"
+          ]
+        }
+      }
+    ],
+    "rootCause": {
+      "headline": "The conversion path is clearer than the supporting decision and search layer",
+      "narrative": {
+        "text": "The assessed site can present an unobstructed action, but the available partial assessment did not detect buyer-question content on assessed pages, while some assessed pages did not have detected meta descriptions and heading structure was inconsistent. Together, these conditions can reduce support for prospects before they reach the action.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+        ]
+      },
+      "businessConsequences": [
+        {
+          "area": "Qualified enquiries",
+          "narrative": {
+            "text": "Prospects who need answers about fit, process, cost, or common concerns may receive less decision support on the assessed pages before using the validated action path.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "analysis:conversionPaths",
+              "business:primaryGoal"
+            ]
+          }
+        },
+        {
+          "area": "Search messaging",
+          "narrative": {
+            "text": "Where meta descriptions were not detected, control over search-result messaging may be reduced for those assessed pages.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+            ]
+          }
+        }
+      ]
+    },
+    "conversion": {
+      "headline": "Action access is validated; decision reassurance is the next conversion lever",
+      "whatWorks": {
+        "text": "The assessed conversion pages provide visible, interactable, unobstructed actions, with no blockers recorded in the primary conversion path.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "capability:conversion.cta",
+          "capability:conversion.form"
+        ]
+      },
+      "constraints": {
+        "text": "No direct conversion-path blocker was established. The available partial content assessment did not detect buyer-question content on assessed pages, which may leave some pre-enquiry concerns unsupported there.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "capability:content.body"
+        ]
+      },
+      "businessMeaning": {
+        "text": "The priority is not to rebuild the action path; it is to give qualified prospects stronger reasons and clearer expectations for taking the existing next step.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "analysis:readinessMap",
+          "business:primaryGoal"
+        ]
+      },
+      "priority": {
+        "text": "Prioritize buyer-question and expectation-setting content before supporting technical hygiene work, following the governed conversion-influence order.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+        ]
+      }
+    },
+    "content": {
+      "headline": "Strong funnel baseline with an opportunity to answer buyer questions directly",
+      "currentStrength": {
+        "text": "The governed content-funnel score indicates a strong content baseline, including strong decision-stage readiness.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "score:contentDepth",
+          "score:decision"
+        ]
+      },
+      "coverageAssessment": {
+        "text": "Body-content evidence is partial, so conclusions about content apply only to the available assessment and do not establish conditions on unassessed pages.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:content.body"
+        ]
+      },
+      "qualityAssessment": {
+        "text": "The available partial assessment did not detect buyer-question content on assessed pages; this identifies an opportunity to make decision support more explicit rather than establishing a site-wide absence.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "capability:content.body"
+        ]
+      },
+      "topicalArchitecture": {
+        "text": "The governed content ideas provide a coherent progression from educational Custom Websites content through options, process, results, and first-step decision support.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "business:services",
+          "business:primaryGoal"
+        ]
+      },
+      "importantGaps": {
+        "text": "No site-wide material content gap was established. In the available partial assessment, buyer-question content was not detected on assessed pages, creating a focused opportunity for FAQ and expectation-setting content.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "capability:content.body"
+        ]
+      },
+      "businessMeaning": {
+        "text": "Direct answers to prospect questions can help the existing conversion path attract more informed enquiries without changing its validated action mechanics.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "analysis:conversionPaths",
+          "business:primaryGoal"
+        ]
+      }
+    },
+    "funnelOpportunities": {
+      "awareness": [
+        {
+          "itemId": "FUN-A-01",
+          "concept": {
+            "text": "Create an answer-first guide explaining what Custom Websites are and how they relate to generating qualified enquiries.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "business:services",
+              "business:primaryGoal"
+            ]
+          },
+          "userNeed": {
+            "text": "Help early-stage prospects understand whether Custom Websites apply to their situation.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas"
+            ]
+          },
+          "rationale": {
+            "text": "This directly follows the governed high-priority awareness content idea and connects the offer to the stated business goal.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "business:primaryGoal"
+            ]
+          },
+          "businessObjective": {
+            "text": "Create more qualified awareness of the Custom Websites offer.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "business:services",
+              "business:primaryGoal"
+            ]
+          },
+          "nextAction": {
+            "text": "Publish the answer-first guide and connect readers to the established enquiry action.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "analysis:conversionPaths"
+            ]
+          }
+        }
+      ],
+      "consideration": [
+        {
+          "itemId": "FUN-C-01",
+          "concept": {
+            "text": "Develop a Custom Websites options-and-fit comparison page.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "business:services"
+            ]
+          },
+          "userNeed": {
+            "text": "Help prospective buyers decide which Custom Websites option is right for them.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas"
+            ]
+          },
+          "rationale": {
+            "text": "The governed consideration plan identifies comparison and fit as a high-priority buyer question.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas"
+            ]
+          },
+          "businessObjective": {
+            "text": "Move informed prospects toward a qualified enquiry.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "business:primaryGoal",
+              "analysis:conversionPaths"
+            ]
+          },
+          "nextAction": {
+            "text": "Define options, fit criteria, and the next action on one decision-support page.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "analysis:conversionPaths"
+            ]
+          }
+        }
+      ],
+      "decision": [
+        {
+          "itemId": "FUN-D-01",
+          "concept": {
+            "text": "Create a frequently asked questions page with examples focused on common pre-enquiry concerns.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ]
+          },
+          "userNeed": {
+            "text": "Help buyers understand common concerns before they book or enquire.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas"
+            ]
+          },
+          "rationale": {
+            "text": "Buyer-question content was not detected in the available partial assessment, and the governed plan identifies a FAQ with examples as a high-priority decision asset.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "capability:content.body",
+              "analysis:contentIdeas"
+            ]
+          },
+          "businessObjective": {
+            "text": "Reduce uncertainty before the existing enquiry action.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "business:primaryGoal",
+              "analysis:conversionPaths"
+            ]
+          },
+          "nextAction": {
+            "text": "Use questions prospects ask before booking to draft, approve, and publish the FAQ with examples.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "analysis:contentIdeas"
+            ]
+          }
+        }
+      ]
+    },
+    "seoSerp": {
+      "headline": "Search-result control can improve on assessed pages",
+      "whatWorks": {
+        "text": "Search and technical modules were eligible for assessment, and the site footprint was available for governed prioritization.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "scoreGovernance:moduleEligibility",
+          "analysis:siteFootprint"
+        ]
+      },
+      "constraints": {
+        "text": "Meta descriptions were not detected on some assessed pages; unassessed pages remain unknown.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      },
+      "searchImplication": {
+        "text": "Unique descriptions on important pages can improve control over how those pages are represented in search results.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      },
+      "priority": {
+        "text": "Address meta descriptions after buyer-question decision support and before lower-priority technical consistency work, as governed by conversion influence.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      }
+    },
+    "aiSearch": {
+      "headline": "Direct-answer content is an opportunity, not an established AI-search limitation",
+      "answerability": {
+        "text": "The available partial assessment did not detect buyer-question content on assessed pages, creating an opportunity to publish more direct answers; it does not establish an AI-search limitation.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "capability:content.body"
+        ]
+      },
+      "entityStrength": {
+        "text": "The entity and schema dimension was assessed, but the supplied evidence does not establish a specific entity-strength conclusion.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "score:entitySchemaAiDimension",
+          "scoreGovernance:moduleEligibility"
+        ]
+      },
+      "citationReadiness": {
+        "text": "This condition was not assessed sufficiently to establish a citation-readiness limitation.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "scoreGovernance:moduleEligibility",
+          "capability:content.body"
+        ]
+      },
+      "constraints": {
+        "text": "No material AI-search constraint was established from the supplied evidence.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "scoreGovernance:moduleEligibility"
+        ]
+      },
+      "opportunity": {
+        "text": "Use answer-first guides and buyer-question FAQ content to make relevant service information easier for prospects to consume directly.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "business:services"
+        ]
+      }
+    },
+    "eeatTrust": {
+      "headline": "Trust is moderately positioned, with proof assets available to strengthen decisions",
+      "experience": {
+        "text": "The governed readiness map identifies experience proof as a relevant trust asset across the listed service topics.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:readinessMap",
+          "business:services"
+        ]
+      },
+      "expertise": {
+        "text": "The governed content plan includes a founder or expert page to address why a prospect should trust the provider.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:contentIdeas"
+        ]
+      },
+      "authority": {
+        "text": "No specific authority conclusion was established beyond the governed trust assessment.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "score:trust",
+          "band:trust"
+        ]
+      },
+      "trust": {
+        "text": "Trust is assessed in the Moderate band, and trust-proof evidence was available for assessment.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "score:trust",
+          "band:trust",
+          "capability:trust.proof"
+        ]
+      },
+      "proofGaps": {
+        "text": "No material proof gap was established from the assessed evidence. Process proof and experience proof remain governed opportunities to reinforce decision-making.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:trust.proof",
+          "analysis:readinessMap"
+        ]
+      },
+      "businessMeaning": {
+        "text": "Making process and experience proof more prominent can reinforce the decision support around an already validated enquiry action.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:readinessMap",
+          "analysis:conversionPaths",
+          "business:primaryGoal"
+        ]
+      }
+    },
+    "technical": {
+      "headline": "Technical hygiene requires focused follow-through",
+      "assessment": {
+        "text": "Technical performance is eligible for assessment, with findings covering meta descriptions, heading structure, and security headers.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "scoreGovernance:moduleEligibility",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ]
+      },
+      "materialIssues": {
+        "text": "Some assessed pages had no detected meta descriptions, heading structure was inconsistent, and security headers were incomplete on the assessed page. The meta-description and heading findings are based on partial source evidence.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ]
+      },
+      "businessMeaning": {
+        "text": "These are supporting resilience and clarity improvements rather than proven conversion-path blockers, so they should follow the governed conversion-first action order.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "analysis:conversionPaths"
+        ]
+      }
+    },
+    "performanceUx": {
+      "headline": "Laboratory performance was assessed; field experience evidence was unavailable",
+      "assessment": {
+        "text": "Laboratory performance evidence was available, while field performance evidence was unavailable.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.lab",
+          "capability:performance.field",
+          "score:performance"
+        ]
+      },
+      "userImpact": {
+        "text": "The supplied evidence does not establish a specific real-user performance impact because field data was unavailable.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field"
+        ]
+      },
+      "conversionImpact": {
+        "text": "No direct performance-related conversion impact was established from the supplied evidence.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.lab",
+          "capability:performance.field",
+          "analysis:conversionPaths"
+        ]
+      }
+    },
+    "competitors": {
+      "headline": "Available competitor evidence shows strong market presentation among reviewed firms",
+      "advantages": {
+        "text": "Tbkcreative has a validated clear conversion action path, while the two available competitor comparisons describe path clarity as Moderate.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "analysis:competitors"
+        ]
+      },
+      "disadvantages": {
+        "text": "No material competitive disadvantage was established from the available comparison evidence.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:competitors"
+        ]
+      },
+      "marketInterpretation": {
+        "text": "The available competitors are described as strong in offer clarity and content depth; one is also described as strong in trust proof and E-E-A-T, reinforcing the value of clear decision support and proof.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:competitors"
+        ]
+      },
+      "differentiatorToProtect": {
+        "text": "Protect the validated clarity and usability of the existing enquiry action while adding decision-support content around it.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+        ]
+      }
+    },
+    "limitations": [
+      {
+        "itemId": "LIM-01",
+        "area": "Body-content assessment",
+        "status": "PARTIAL",
+        "clientExplanation": {
+          "text": "Body-content evidence was partial.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:content.body"
+          ]
+        },
+        "whatThisMeans": {
+          "text": "Content conclusions apply to the available partial assessment rather than every site page.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:content.body"
+          ]
+        },
+        "whatThisDoesNotMean": {
+          "text": "It does not establish that an undetected content element is absent across the site or on unassessed pages.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:content.body"
+          ]
+        },
+        "impactOnReport": {
+          "text": "Content findings are framed as assessed-page observations and opportunities, not site-wide claims.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:content.body",
+            "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+          ]
+        }
+      },
+      {
+        "itemId": "LIM-02",
+        "area": "Field performance",
+        "status": "UNAVAILABLE",
+        "clientExplanation": {
+          "text": "Field performance evidence was unavailable.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:performance.field"
+          ]
+        },
+        "whatThisMeans": {
+          "text": "The report cannot establish real-user performance conditions from field data.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:performance.field"
+          ]
+        },
+        "whatThisDoesNotMean": {
+          "text": "It does not establish that real-user performance is poor or that no field data could ever be collected.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:performance.field"
+          ]
+        },
+        "impactOnReport": {
+          "text": "Performance interpretation is limited to available laboratory evidence and avoids claims about real-user impact.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "capability:performance.field",
+            "capability:performance.lab"
+          ]
+        }
+      }
+    ],
+    "actionPlan": [
+      {
+        "actionId": "ACT-01",
+        "priority": 1,
+        "title": "Add buyer-question decision support",
+        "action": {
+          "text": "Create a frequently asked questions page with examples based on questions prospects ask before booking, and connect it to the existing enquiry action.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+            "analysis:contentIdeas",
+            "analysis:conversionPaths"
+          ]
+        },
+        "whyNow": {
+          "text": "This is the first governed conversion-influence priority because it can strengthen buyer decision support around the existing action path.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:conversionInfluence",
+            "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+          ]
+        },
+        "expectedBusinessEffect": {
+          "text": "Help prospects resolve common concerns before enquiry, supporting the goal of generating qualified enquiries.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+          ]
+        },
+        "effort": "M",
+        "verification": {
+          "text": "Re-crawl the assessed pages and confirm FAQ content is present, with structured data where applicable.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+          ]
+        }
+      },
+      {
+        "actionId": "ACT-02",
+        "priority": 2,
+        "title": "Improve meta descriptions on important assessed pages",
+        "action": {
+          "text": "Write unique meta descriptions for important assessed pages where descriptions were not detected.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+          ]
+        },
+        "whyNow": {
+          "text": "This is the second governed action and may improve control over search-result messaging for affected assessed pages.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:conversionInfluence",
+            "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+          ]
+        },
+        "expectedBusinessEffect": {
+          "text": "Present more intentional search-result messaging to prospects entering the consideration journey.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+            "business:primaryGoal"
+          ]
+        },
+        "effort": "L",
+        "verification": {
+          "text": "Re-crawl the affected URLs and confirm descriptions are present.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+          ]
+        }
+      },
+      {
+        "actionId": "ACT-03",
+        "priority": 3,
+        "title": "Standardize heading structure",
+        "action": {
+          "text": "Use one descriptive H1 per page with sequential H2 and H3 sections on the assessed page set.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+          ]
+        },
+        "whyNow": {
+          "text": "This is the third governed action and supports semantic clarity and accessibility.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:conversionInfluence",
+            "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+          ]
+        },
+        "expectedBusinessEffect": {
+          "text": "Make page structure clearer for users and search interpretation on the assessed pages.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+          ]
+        },
+        "effort": "M",
+        "verification": {
+          "text": "Re-crawl and verify heading structure on all pages.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+          ]
+        }
+      },
+      {
+        "actionId": "ACT-04",
+        "priority": 4,
+        "title": "Complete security headers",
+        "action": {
+          "text": "Configure the missing response headers at the hosting layer.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+          ]
+        },
+        "whyNow": {
+          "text": "This is the fourth governed action and supports technical trust after higher-priority decision support and search improvements.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:conversionInfluence",
+            "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+          ]
+        },
+        "expectedBusinessEffect": {
+          "text": "Strengthen browser protections and support technical trust.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+          ]
+        },
+        "effort": "L",
+        "verification": {
+          "text": "Re-crawl and confirm security headers are present in the response.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+          ]
+        }
+      }
+    ],
+    "executiveDecision": {
+      "preserve": {
+        "text": "Preserve the validated, visible, unobstructed conversion actions across assessed pages.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "capability:conversion.cta",
+          "capability:conversion.form"
+        ]
+      },
+      "change": {
+        "text": "Improve pre-enquiry decision support with buyer-question content, then address assessed search-message and technical-consistency findings in governed order.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      },
+      "doNext": {
+        "text": "Start with a prospect-informed FAQ with examples and connect it to the existing enquiry action.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "analysis:contentIdeas",
+          "analysis:conversionPaths"
+        ]
+      }
+    }
+  },
+  "finalJudgeResponse": {
+    "contractVersion": "1.1.0",
+    "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+    "passNumber": 1,
+    "judgeModelId": "gpt-5.6-sol",
+    "judgePromptVersion": "2.1.0",
+    "evaluatedAt": "2026-08-31T00:05:00Z",
+    "hardGate": {
+      "status": "PASS",
+      "violations": []
+    },
+    "rubric": {
+      "evidenceFidelity": {
+        "score": 20,
+        "maxScore": 20,
+        "status": "PASS",
+        "rationale": "Claims remain within the governed evidence. Partial content coverage and unavailable field-performance evidence are preserved without being converted into absence, and downstream commercial or conversion outcomes are framed as possibilities or opportunities rather than observed effects.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "analysis:conversionInfluence",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+          "capability:content.body",
+          "capability:performance.field"
+        ],
+        "defectIds": []
+      },
+      "businessRelevance": {
+        "score": 10,
+        "maxScore": 10,
+        "status": "PASS",
+        "rationale": "The narrative consistently connects recommendations to the stated goal of generating qualified enquiries while avoiding invented revenue, traffic, ranking, engagement, or conversion outcomes.",
+        "evidenceRefs": [
+          "business:primaryGoal",
+          "business:services",
+          "analysis:conversionPaths",
+          "analysis:contentIdeas"
+        ],
+        "defectIds": []
+      },
+      "executiveClarity": {
+        "score": 9.5,
+        "maxScore": 10,
+        "status": "PASS",
+        "rationale": "The conclusion, priorities, limitations, and executive decision are clear and decision-oriented. The distinction between preserving the validated action path and improving pre-enquiry support is maintained throughout.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "analysis:conversionInfluence",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+        ],
+        "defectIds": []
+      },
+      "rootCauseCoherence": {
+        "score": 9.5,
+        "maxScore": 10,
+        "status": "PASS",
+        "rationale": "The narrative coherently distinguishes the validated action mechanics from the partially assessed buyer-question opportunity and supporting technical hygiene findings. It does not present those supporting conditions as proven conversion blockers.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+        ],
+        "defectIds": []
+      },
+      "actionability": {
+        "score": 9.5,
+        "maxScore": 10,
+        "status": "PASS",
+        "rationale": "The action plan is ordered, specific, effort-labelled, and paired with governed verification methods. The actions follow the supplied priority order and remain appropriately scoped to assessed evidence.",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "analysis:contentIdeas",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ],
+        "defectIds": []
+      },
+      "conversionInterpretation": {
+        "score": 8,
+        "maxScore": 8,
+        "status": "PASS",
+        "rationale": "The Writer follows the governed Conversion-First hierarchy: it preserves the clear assessed action path, prioritizes buyer-question decision support first, and places search and technical hygiene afterward. It does not infer measured conversion impact.",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "analysis:conversionPaths",
+          "capability:conversion.cta",
+          "capability:conversion.form",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+        ],
+        "defectIds": []
+      },
+      "contentFunnelDepth": {
+        "score": 8,
+        "maxScore": 8,
+        "status": "PASS",
+        "rationale": "The output covers awareness, consideration, and decision opportunities with distinct user needs and next actions. It preserves the partial-content qualification and avoids claiming a site-wide FAQ or buyer-question absence.",
+        "evidenceRefs": [
+          "score:contentDepth",
+          "score:awareness",
+          "score:consideration",
+          "score:decision",
+          "analysis:contentIdeas",
+          "capability:content.body",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+        ],
+        "defectIds": []
+      },
+      "eeatTrust": {
+        "score": 6,
+        "maxScore": 6,
+        "status": "PASS",
+        "rationale": "Trust is accurately reported as Moderate, and process, experience, and expert content are presented as governed opportunities rather than established deficiencies. No unsupported authority or proof claim is introduced.",
+        "evidenceRefs": [
+          "score:trust",
+          "band:trust",
+          "capability:trust.proof",
+          "analysis:readinessMap",
+          "analysis:contentIdeas"
+        ],
+        "defectIds": []
+      },
+      "seoTechnical": {
+        "score": 6,
+        "maxScore": 6,
+        "status": "PASS",
+        "rationale": "The SEO and technical sections accurately preserve assessed-page scope, source partiality, and the distinction between search-message control, semantic clarity, browser protections, and proven conversion effects.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+          "capability:performance.lab",
+          "capability:performance.field"
+        ],
+        "defectIds": []
+      },
+      "competitiveUsefulness": {
+        "score": 4,
+        "maxScore": 4,
+        "status": "PASS",
+        "rationale": "Competitor interpretation is limited to the two available governed comparisons and uses their recorded offer, content, trust, E-E-A-T, and path-clarity attributes without making unsupported claims about the unassessed competitor.",
+        "evidenceRefs": [
+          "analysis:competitors",
+          "analysis:conversionPaths"
+        ],
+        "defectIds": []
+      },
+      "strengthsBalance": {
+        "score": 4,
+        "maxScore": 4,
+        "status": "PASS",
+        "rationale": "The output gives meaningful weight to validated conversion actions and strong governed funnel scores while still identifying bounded opportunities and technical findings.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "score:contentDepth",
+          "score:decision",
+          "score:conversionPathways"
+        ],
+        "defectIds": []
+      },
+      "nonRepetition": {
+        "score": 3.5,
+        "maxScore": 4,
+        "status": "PASS",
+        "rationale": "Some repetition of the validated action path and partial buyer-question finding is present, but it serves distinct executive, conversion, content, limitation, and action-plan functions without materially reducing usability.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+        ],
+        "defectIds": []
+      }
+    },
+    "totalScore": 98,
+    "decision": "PASS",
+    "defects": [],
+    "revisionDirective": {
+      "required": false,
+      "mode": "NONE",
+      "fieldsToRewrite": [],
+      "fieldsLocked": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ],
+      "defectIds": []
+    }
+  },
+  "passes": [
+    {
+      "passNumber": 1,
+      "writerOutput": {
+        "contractVersion": "1.0.0",
+        "writerOutputVersion": "1.0.0",
+        "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+        "passNumber": 1,
+        "modelId": "gpt-5.6-terra",
+        "promptVersion": "2.1.0",
+        "generatedAt": "2026-08-31T00:00:00Z",
+        "executiveConclusion": {
+          "headline": "Preserve the clear conversion foundation; improve decision support and search presentation",
+          "narrative": {
+            "text": "Tbkcreative has a clear, validated path to enquiry action on the assessed pages. The most immediate opportunity is to strengthen buyer-question support, then improve search-result messaging and technical consistency so more qualified prospects can understand the offer, act with confidence, and reach the existing conversion path.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "business:primaryGoal"
+            ]
+          }
+        },
+        "strengths": [
+          {
+            "itemId": "STR-01",
+            "title": "Validated conversion actions",
+            "narrative": {
+              "text": "Conversion actions were observed, visible, interactable, and unobstructed across the assessed conversion pages, providing a sound foundation for qualified-enquiry generation.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "analysis:conversionPaths",
+                "capability:conversion.cta",
+                "capability:conversion.form"
+              ]
+            }
+          },
+          {
+            "itemId": "STR-02",
+            "title": "Strong content-funnel baseline",
+            "narrative": {
+              "text": "The content-funnel assessment indicates a strong baseline across awareness, consideration, and decision stages, with decision-stage readiness particularly well represented in the governed scoring.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "score:contentDepth",
+                "score:awareness",
+                "score:consideration",
+                "score:decision"
+              ]
+            }
+          }
+        ],
+        "rootCause": {
+          "headline": "The conversion path is clearer than the supporting decision and search layer",
+          "narrative": {
+            "text": "The assessed site can present an unobstructed action, but the available partial assessment did not detect buyer-question content on assessed pages, while some assessed pages did not have detected meta descriptions and heading structure was inconsistent. Together, these conditions can reduce support for prospects before they reach the action.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+            ]
+          },
+          "businessConsequences": [
+            {
+              "area": "Qualified enquiries",
+              "narrative": {
+                "text": "Prospects who need answers about fit, process, cost, or common concerns may receive less decision support on the assessed pages before using the validated action path.",
+                "statementClass": "INTERPRETATION",
+                "evidenceRefs": [
+                  "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+                  "analysis:conversionPaths",
+                  "business:primaryGoal"
+                ]
+              }
+            },
+            {
+              "area": "Search messaging",
+              "narrative": {
+                "text": "Where meta descriptions were not detected, control over search-result messaging may be reduced for those assessed pages.",
+                "statementClass": "INTERPRETATION",
+                "evidenceRefs": [
+                  "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+                ]
+              }
+            }
+          ]
+        },
+        "conversion": {
+          "headline": "Action access is validated; decision reassurance is the next conversion lever",
+          "whatWorks": {
+            "text": "The assessed conversion pages provide visible, interactable, unobstructed actions, with no blockers recorded in the primary conversion path.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "capability:conversion.cta",
+              "capability:conversion.form"
+            ]
+          },
+          "constraints": {
+            "text": "No direct conversion-path blocker was established. The available partial content assessment did not detect buyer-question content on assessed pages, which may leave some pre-enquiry concerns unsupported there.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "capability:content.body"
+            ]
+          },
+          "businessMeaning": {
+            "text": "The priority is not to rebuild the action path; it is to give qualified prospects stronger reasons and clearer expectations for taking the existing next step.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "analysis:readinessMap",
+              "business:primaryGoal"
+            ]
+          },
+          "priority": {
+            "text": "Prioritize buyer-question and expectation-setting content before supporting technical hygiene work, following the governed conversion-influence order.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionInfluence",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ]
+          }
+        },
+        "content": {
+          "headline": "Strong funnel baseline with an opportunity to answer buyer questions directly",
+          "currentStrength": {
+            "text": "The governed content-funnel score indicates a strong content baseline, including strong decision-stage readiness.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "score:contentDepth",
+              "score:decision"
+            ]
+          },
+          "coverageAssessment": {
+            "text": "Body-content evidence is partial, so conclusions about content apply only to the available assessment and do not establish conditions on unassessed pages.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "capability:content.body"
+            ]
+          },
+          "qualityAssessment": {
+            "text": "The available partial assessment did not detect buyer-question content on assessed pages; this identifies an opportunity to make decision support more explicit rather than establishing a site-wide absence.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "capability:content.body"
+            ]
+          },
+          "topicalArchitecture": {
+            "text": "The governed content ideas provide a coherent progression from educational Custom Websites content through options, process, results, and first-step decision support.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "business:services",
+              "business:primaryGoal"
+            ]
+          },
+          "importantGaps": {
+            "text": "No site-wide material content gap was established. In the available partial assessment, buyer-question content was not detected on assessed pages, creating a focused opportunity for FAQ and expectation-setting content.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "capability:content.body"
+            ]
+          },
+          "businessMeaning": {
+            "text": "Direct answers to prospect questions can help the existing conversion path attract more informed enquiries without changing its validated action mechanics.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "analysis:conversionPaths",
+              "business:primaryGoal"
+            ]
+          }
+        },
+        "funnelOpportunities": {
+          "awareness": [
+            {
+              "itemId": "FUN-A-01",
+              "concept": {
+                "text": "Create an answer-first guide explaining what Custom Websites are and how they relate to generating qualified enquiries.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas",
+                  "business:services",
+                  "business:primaryGoal"
+                ]
+              },
+              "userNeed": {
+                "text": "Help early-stage prospects understand whether Custom Websites apply to their situation.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas"
+                ]
+              },
+              "rationale": {
+                "text": "This directly follows the governed high-priority awareness content idea and connects the offer to the stated business goal.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas",
+                  "business:primaryGoal"
+                ]
+              },
+              "businessObjective": {
+                "text": "Create more qualified awareness of the Custom Websites offer.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "business:services",
+                  "business:primaryGoal"
+                ]
+              },
+              "nextAction": {
+                "text": "Publish the answer-first guide and connect readers to the established enquiry action.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas",
+                  "analysis:conversionPaths"
+                ]
+              }
+            }
+          ],
+          "consideration": [
+            {
+              "itemId": "FUN-C-01",
+              "concept": {
+                "text": "Develop a Custom Websites options-and-fit comparison page.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas",
+                  "business:services"
+                ]
+              },
+              "userNeed": {
+                "text": "Help prospective buyers decide which Custom Websites option is right for them.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas"
+                ]
+              },
+              "rationale": {
+                "text": "The governed consideration plan identifies comparison and fit as a high-priority buyer question.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas"
+                ]
+              },
+              "businessObjective": {
+                "text": "Move informed prospects toward a qualified enquiry.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "business:primaryGoal",
+                  "analysis:conversionPaths"
+                ]
+              },
+              "nextAction": {
+                "text": "Define options, fit criteria, and the next action on one decision-support page.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas",
+                  "analysis:conversionPaths"
+                ]
+              }
+            }
+          ],
+          "decision": [
+            {
+              "itemId": "FUN-D-01",
+              "concept": {
+                "text": "Create a frequently asked questions page with examples focused on common pre-enquiry concerns.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas",
+                  "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+                ]
+              },
+              "userNeed": {
+                "text": "Help buyers understand common concerns before they book or enquire.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "analysis:contentIdeas"
+                ]
+              },
+              "rationale": {
+                "text": "Buyer-question content was not detected in the available partial assessment, and the governed plan identifies a FAQ with examples as a high-priority decision asset.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+                  "capability:content.body",
+                  "analysis:contentIdeas"
+                ]
+              },
+              "businessObjective": {
+                "text": "Reduce uncertainty before the existing enquiry action.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "business:primaryGoal",
+                  "analysis:conversionPaths"
+                ]
+              },
+              "nextAction": {
+                "text": "Use questions prospects ask before booking to draft, approve, and publish the FAQ with examples.",
+                "statementClass": "OPPORTUNITY",
+                "evidenceRefs": [
+                  "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+                  "analysis:contentIdeas"
+                ]
+              }
+            }
+          ]
+        },
+        "seoSerp": {
+          "headline": "Search-result control can improve on assessed pages",
+          "whatWorks": {
+            "text": "Search and technical modules were eligible for assessment, and the site footprint was available for governed prioritization.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "scoreGovernance:moduleEligibility",
+              "analysis:siteFootprint"
+            ]
+          },
+          "constraints": {
+            "text": "Meta descriptions were not detected on some assessed pages; unassessed pages remain unknown.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+            ]
+          },
+          "searchImplication": {
+            "text": "Unique descriptions on important pages can improve control over how those pages are represented in search results.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+            ]
+          },
+          "priority": {
+            "text": "Address meta descriptions after buyer-question decision support and before lower-priority technical consistency work, as governed by conversion influence.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionInfluence",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+            ]
+          }
+        },
+        "aiSearch": {
+          "headline": "Direct-answer content is an opportunity, not an established AI-search limitation",
+          "answerability": {
+            "text": "The available partial assessment did not detect buyer-question content on assessed pages, creating an opportunity to publish more direct answers; it does not establish an AI-search limitation.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "capability:content.body"
+            ]
+          },
+          "entityStrength": {
+            "text": "The entity and schema dimension was assessed, but the supplied evidence does not establish a specific entity-strength conclusion.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "score:entitySchemaAiDimension",
+              "scoreGovernance:moduleEligibility"
+            ]
+          },
+          "citationReadiness": {
+            "text": "This condition was not assessed sufficiently to establish a citation-readiness limitation.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "scoreGovernance:moduleEligibility",
+              "capability:content.body"
+            ]
+          },
+          "constraints": {
+            "text": "No material AI-search constraint was established from the supplied evidence.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "scoreGovernance:moduleEligibility"
+            ]
+          },
+          "opportunity": {
+            "text": "Use answer-first guides and buyer-question FAQ content to make relevant service information easier for prospects to consume directly.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "analysis:contentIdeas",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "business:services"
+            ]
+          }
+        },
+        "eeatTrust": {
+          "headline": "Trust is moderately positioned, with proof assets available to strengthen decisions",
+          "experience": {
+            "text": "The governed readiness map identifies experience proof as a relevant trust asset across the listed service topics.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:readinessMap",
+              "business:services"
+            ]
+          },
+          "expertise": {
+            "text": "The governed content plan includes a founder or expert page to address why a prospect should trust the provider.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:contentIdeas"
+            ]
+          },
+          "authority": {
+            "text": "No specific authority conclusion was established beyond the governed trust assessment.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "score:trust",
+              "band:trust"
+            ]
+          },
+          "trust": {
+            "text": "Trust is assessed in the Moderate band, and trust-proof evidence was available for assessment.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "score:trust",
+              "band:trust",
+              "capability:trust.proof"
+            ]
+          },
+          "proofGaps": {
+            "text": "No material proof gap was established from the assessed evidence. Process proof and experience proof remain governed opportunities to reinforce decision-making.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "capability:trust.proof",
+              "analysis:readinessMap"
+            ]
+          },
+          "businessMeaning": {
+            "text": "Making process and experience proof more prominent can reinforce the decision support around an already validated enquiry action.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:readinessMap",
+              "analysis:conversionPaths",
+              "business:primaryGoal"
+            ]
+          }
+        },
+        "technical": {
+          "headline": "Technical hygiene requires focused follow-through",
+          "assessment": {
+            "text": "Technical performance is eligible for assessment, with findings covering meta descriptions, heading structure, and security headers.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "scoreGovernance:moduleEligibility",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+              "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+            ]
+          },
+          "materialIssues": {
+            "text": "Some assessed pages had no detected meta descriptions, heading structure was inconsistent, and security headers were incomplete on the assessed page. The meta-description and heading findings are based on partial source evidence.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+              "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+            ]
+          },
+          "businessMeaning": {
+            "text": "These are supporting resilience and clarity improvements rather than proven conversion-path blockers, so they should follow the governed conversion-first action order.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionInfluence",
+              "analysis:conversionPaths"
+            ]
+          }
+        },
+        "performanceUx": {
+          "headline": "Laboratory performance was assessed; field experience evidence was unavailable",
+          "assessment": {
+            "text": "Laboratory performance evidence was available, while field performance evidence was unavailable.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "capability:performance.lab",
+              "capability:performance.field",
+              "score:performance"
+            ]
+          },
+          "userImpact": {
+            "text": "The supplied evidence does not establish a specific real-user performance impact because field data was unavailable.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "capability:performance.field"
+            ]
+          },
+          "conversionImpact": {
+            "text": "No direct performance-related conversion impact was established from the supplied evidence.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "capability:performance.lab",
+              "capability:performance.field",
+              "analysis:conversionPaths"
+            ]
+          }
+        },
+        "competitors": {
+          "headline": "Available competitor evidence shows strong market presentation among reviewed firms",
+          "advantages": {
+            "text": "Tbkcreative has a validated clear conversion action path, while the two available competitor comparisons describe path clarity as Moderate.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "analysis:competitors"
+            ]
+          },
+          "disadvantages": {
+            "text": "No material competitive disadvantage was established from the available comparison evidence.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:competitors"
+            ]
+          },
+          "marketInterpretation": {
+            "text": "The available competitors are described as strong in offer clarity and content depth; one is also described as strong in trust proof and E-E-A-T, reinforcing the value of clear decision support and proof.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:competitors"
+            ]
+          },
+          "differentiatorToProtect": {
+            "text": "Protect the validated clarity and usability of the existing enquiry action while adding decision-support content around it.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ]
+          }
+        },
+        "limitations": [
+          {
+            "itemId": "LIM-01",
+            "area": "Body-content assessment",
+            "status": "PARTIAL",
+            "clientExplanation": {
+              "text": "Body-content evidence was partial.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:content.body"
+              ]
+            },
+            "whatThisMeans": {
+              "text": "Content conclusions apply to the available partial assessment rather than every site page.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:content.body"
+              ]
+            },
+            "whatThisDoesNotMean": {
+              "text": "It does not establish that an undetected content element is absent across the site or on unassessed pages.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:content.body"
+              ]
+            },
+            "impactOnReport": {
+              "text": "Content findings are framed as assessed-page observations and opportunities, not site-wide claims.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:content.body",
+                "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+              ]
+            }
+          },
+          {
+            "itemId": "LIM-02",
+            "area": "Field performance",
+            "status": "UNAVAILABLE",
+            "clientExplanation": {
+              "text": "Field performance evidence was unavailable.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:performance.field"
+              ]
+            },
+            "whatThisMeans": {
+              "text": "The report cannot establish real-user performance conditions from field data.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:performance.field"
+              ]
+            },
+            "whatThisDoesNotMean": {
+              "text": "It does not establish that real-user performance is poor or that no field data could ever be collected.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:performance.field"
+              ]
+            },
+            "impactOnReport": {
+              "text": "Performance interpretation is limited to available laboratory evidence and avoids claims about real-user impact.",
+              "statementClass": "INTERPRETATION",
+              "evidenceRefs": [
+                "capability:performance.field",
+                "capability:performance.lab"
+              ]
+            }
+          }
+        ],
+        "actionPlan": [
+          {
+            "actionId": "ACT-01",
+            "priority": 1,
+            "title": "Add buyer-question decision support",
+            "action": {
+              "text": "Create a frequently asked questions page with examples based on questions prospects ask before booking, and connect it to the existing enquiry action.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+                "analysis:contentIdeas",
+                "analysis:conversionPaths"
+              ]
+            },
+            "whyNow": {
+              "text": "This is the first governed conversion-influence priority because it can strengthen buyer decision support around the existing action path.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "analysis:conversionInfluence",
+                "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+              ]
+            },
+            "expectedBusinessEffect": {
+              "text": "Help prospects resolve common concerns before enquiry, supporting the goal of generating qualified enquiries.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "business:primaryGoal",
+                "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+              ]
+            },
+            "effort": "M",
+            "verification": {
+              "text": "Re-crawl the assessed pages and confirm FAQ content is present, with structured data where applicable.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+              ]
+            }
+          },
+          {
+            "actionId": "ACT-02",
+            "priority": 2,
+            "title": "Improve meta descriptions on important assessed pages",
+            "action": {
+              "text": "Write unique meta descriptions for important assessed pages where descriptions were not detected.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+              ]
+            },
+            "whyNow": {
+              "text": "This is the second governed action and may improve control over search-result messaging for affected assessed pages.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "analysis:conversionInfluence",
+                "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+              ]
+            },
+            "expectedBusinessEffect": {
+              "text": "Present more intentional search-result messaging to prospects entering the consideration journey.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+                "business:primaryGoal"
+              ]
+            },
+            "effort": "L",
+            "verification": {
+              "text": "Re-crawl the affected URLs and confirm descriptions are present.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+              ]
+            }
+          },
+          {
+            "actionId": "ACT-03",
+            "priority": 3,
+            "title": "Standardize heading structure",
+            "action": {
+              "text": "Use one descriptive H1 per page with sequential H2 and H3 sections on the assessed page set.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+              ]
+            },
+            "whyNow": {
+              "text": "This is the third governed action and supports semantic clarity and accessibility.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "analysis:conversionInfluence",
+                "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+              ]
+            },
+            "expectedBusinessEffect": {
+              "text": "Make page structure clearer for users and search interpretation on the assessed pages.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+              ]
+            },
+            "effort": "M",
+            "verification": {
+              "text": "Re-crawl and verify heading structure on all pages.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+              ]
+            }
+          },
+          {
+            "actionId": "ACT-04",
+            "priority": 4,
+            "title": "Complete security headers",
+            "action": {
+              "text": "Configure the missing response headers at the hosting layer.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+              ]
+            },
+            "whyNow": {
+              "text": "This is the fourth governed action and supports technical trust after higher-priority decision support and search improvements.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "analysis:conversionInfluence",
+                "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+              ]
+            },
+            "expectedBusinessEffect": {
+              "text": "Strengthen browser protections and support technical trust.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+              ]
+            },
+            "effort": "L",
+            "verification": {
+              "text": "Re-crawl and confirm security headers are present in the response.",
+              "statementClass": "OPPORTUNITY",
+              "evidenceRefs": [
+                "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+              ]
+            }
+          }
+        ],
+        "executiveDecision": {
+          "preserve": {
+            "text": "Preserve the validated, visible, unobstructed conversion actions across assessed pages.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "capability:conversion.cta",
+              "capability:conversion.form"
+            ]
+          },
+          "change": {
+            "text": "Improve pre-enquiry decision support with buyer-question content, then address assessed search-message and technical-consistency findings in governed order.",
+            "statementClass": "INTERPRETATION",
+            "evidenceRefs": [
+              "analysis:conversionInfluence",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+            ]
+          },
+          "doNext": {
+            "text": "Start with a prospect-informed FAQ with examples and connect it to the existing enquiry action.",
+            "statementClass": "OPPORTUNITY",
+            "evidenceRefs": [
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "analysis:contentIdeas",
+              "analysis:conversionPaths"
+            ]
+          }
+        }
+      },
+      "judgeResponse": {
+        "contractVersion": "1.1.0",
+        "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+        "passNumber": 1,
+        "judgeModelId": "gpt-5.6-sol",
+        "judgePromptVersion": "2.1.0",
+        "evaluatedAt": "2026-08-31T00:05:00Z",
+        "hardGate": {
+          "status": "PASS",
+          "violations": []
+        },
+        "rubric": {
+          "evidenceFidelity": {
+            "score": 20,
+            "maxScore": 20,
+            "status": "PASS",
+            "rationale": "Claims remain within the governed evidence. Partial content coverage and unavailable field-performance evidence are preserved without being converted into absence, and downstream commercial or conversion outcomes are framed as possibilities or opportunities rather than observed effects.",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "analysis:conversionInfluence",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+              "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+              "capability:content.body",
+              "capability:performance.field"
+            ],
+            "defectIds": []
+          },
+          "businessRelevance": {
+            "score": 10,
+            "maxScore": 10,
+            "status": "PASS",
+            "rationale": "The narrative consistently connects recommendations to the stated goal of generating qualified enquiries while avoiding invented revenue, traffic, ranking, engagement, or conversion outcomes.",
+            "evidenceRefs": [
+              "business:primaryGoal",
+              "business:services",
+              "analysis:conversionPaths",
+              "analysis:contentIdeas"
+            ],
+            "defectIds": []
+          },
+          "executiveClarity": {
+            "score": 9.5,
+            "maxScore": 10,
+            "status": "PASS",
+            "rationale": "The conclusion, priorities, limitations, and executive decision are clear and decision-oriented. The distinction between preserving the validated action path and improving pre-enquiry support is maintained throughout.",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "analysis:conversionInfluence",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ],
+            "defectIds": []
+          },
+          "rootCauseCoherence": {
+            "score": 9.5,
+            "maxScore": 10,
+            "status": "PASS",
+            "rationale": "The narrative coherently distinguishes the validated action mechanics from the partially assessed buyer-question opportunity and supporting technical hygiene findings. It does not present those supporting conditions as proven conversion blockers.",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+            ],
+            "defectIds": []
+          },
+          "actionability": {
+            "score": 9.5,
+            "maxScore": 10,
+            "status": "PASS",
+            "rationale": "The action plan is ordered, specific, effort-labelled, and paired with governed verification methods. The actions follow the supplied priority order and remain appropriately scoped to assessed evidence.",
+            "evidenceRefs": [
+              "analysis:conversionInfluence",
+              "analysis:contentIdeas",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45",
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+              "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+            ],
+            "defectIds": []
+          },
+          "conversionInterpretation": {
+            "score": 8,
+            "maxScore": 8,
+            "status": "PASS",
+            "rationale": "The Writer follows the governed Conversion-First hierarchy: it preserves the clear assessed action path, prioritizes buyer-question decision support first, and places search and technical hygiene afterward. It does not infer measured conversion impact.",
+            "evidenceRefs": [
+              "analysis:conversionInfluence",
+              "analysis:conversionPaths",
+              "capability:conversion.cta",
+              "capability:conversion.form",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ],
+            "defectIds": []
+          },
+          "contentFunnelDepth": {
+            "score": 8,
+            "maxScore": 8,
+            "status": "PASS",
+            "rationale": "The output covers awareness, consideration, and decision opportunities with distinct user needs and next actions. It preserves the partial-content qualification and avoids claiming a site-wide FAQ or buyer-question absence.",
+            "evidenceRefs": [
+              "score:contentDepth",
+              "score:awareness",
+              "score:consideration",
+              "score:decision",
+              "analysis:contentIdeas",
+              "capability:content.body",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ],
+            "defectIds": []
+          },
+          "eeatTrust": {
+            "score": 6,
+            "maxScore": 6,
+            "status": "PASS",
+            "rationale": "Trust is accurately reported as Moderate, and process, experience, and expert content are presented as governed opportunities rather than established deficiencies. No unsupported authority or proof claim is introduced.",
+            "evidenceRefs": [
+              "score:trust",
+              "band:trust",
+              "capability:trust.proof",
+              "analysis:readinessMap",
+              "analysis:contentIdeas"
+            ],
+            "defectIds": []
+          },
+          "seoTechnical": {
+            "score": 6,
+            "maxScore": 6,
+            "status": "PASS",
+            "rationale": "The SEO and technical sections accurately preserve assessed-page scope, source partiality, and the distinction between search-message control, semantic clarity, browser protections, and proven conversion effects.",
+            "evidenceRefs": [
+              "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+              "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+              "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+              "capability:performance.lab",
+              "capability:performance.field"
+            ],
+            "defectIds": []
+          },
+          "competitiveUsefulness": {
+            "score": 4,
+            "maxScore": 4,
+            "status": "PASS",
+            "rationale": "Competitor interpretation is limited to the two available governed comparisons and uses their recorded offer, content, trust, E-E-A-T, and path-clarity attributes without making unsupported claims about the unassessed competitor.",
+            "evidenceRefs": [
+              "analysis:competitors",
+              "analysis:conversionPaths"
+            ],
+            "defectIds": []
+          },
+          "strengthsBalance": {
+            "score": 4,
+            "maxScore": 4,
+            "status": "PASS",
+            "rationale": "The output gives meaningful weight to validated conversion actions and strong governed funnel scores while still identifying bounded opportunities and technical findings.",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "score:contentDepth",
+              "score:decision",
+              "score:conversionPathways"
+            ],
+            "defectIds": []
+          },
+          "nonRepetition": {
+            "score": 3.5,
+            "maxScore": 4,
+            "status": "PASS",
+            "rationale": "Some repetition of the validated action path and partial buyer-question finding is present, but it serves distinct executive, conversion, content, limitation, and action-plan functions without materially reducing usability.",
+            "evidenceRefs": [
+              "analysis:conversionPaths",
+              "finding:b2fca59f-8982-43b9-bab0-a8da4080bc45"
+            ],
+            "defectIds": []
+          }
+        },
+        "totalScore": 98,
+        "decision": "PASS",
+        "defects": [],
+        "revisionDirective": {
+          "required": false,
+          "mode": "NONE",
+          "fieldsToRewrite": [],
+          "fieldsLocked": [
+            "executiveConclusion",
+            "strengths",
+            "rootCause",
+            "conversion",
+            "content",
+            "funnelOpportunities.awareness",
+            "funnelOpportunities.consideration",
+            "funnelOpportunities.decision",
+            "seoSerp",
+            "aiSearch",
+            "eeatTrust",
+            "technical",
+            "performanceUx",
+            "competitors",
+            "limitations",
+            "actionPlan",
+            "executiveDecision"
+          ],
+          "defectIds": []
+        }
+      }
+    }
+  ]
+}

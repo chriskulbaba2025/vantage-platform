@@ -1,0 +1,28 @@
+{
+  "contractVersion": "1.0.0",
+  "ledgerVersion": "1.0.0",
+  "auditId": "1e060a5b-2eb4-4800-b8f9-bca52574aa64",
+  "executionId": "1b1402fa-ecd8-43ee-b65b-ac7c04180744",
+  "workflowVersion": "1.0.0",
+  "nodeId": "narrative-v2-judge",
+  "mode": "live",
+  "modelId": "gpt-5.6-sol",
+  "promptVersion": "2.0.0",
+  "inputTokens": 26264,
+  "outputTokens": 5689,
+  "cachedInputTokens": 0,
+  "estimatedCost": 0.582,
+  "actualCost": 0.30199,
+  "retryNumber": 0,
+  "cacheHit": false,
+  "validationResult": "FAIL",
+  "timestamp": "2026-08-28T21:05:19.969Z",
+  "bindingVersion": "1.0.0",
+  "callNumber": 2,
+  "role": "judge",
+  "passNumber": 1,
+  "responseSha256": "34fd5736c03b4dbab44842a23dbfa186211426ab68f1eacc0c14386ea3488734",
+  "validationErrors": [
+    "rubric.conversionInterpretation.evidenceRefs must include analysis:conversionInfluence when governed conversion hierarchy is present"
+  ]
+}

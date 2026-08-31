@@ -1,0 +1,191 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "passNumber": 3,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-27T23:59:00Z",
+  "hardGate": {
+    "status": "PASS",
+    "violations": []
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 20,
+      "maxScore": 20,
+      "status": "PASS",
+      "rationale": "Claims remain within the governed evidence. Partial and unavailable source states are explicitly bounded, observed conversion actions are not inflated into conversion outcomes, and prospective business effects are framed as possibilities or opportunities.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:content.body",
+        "capability:performance.field",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "defectIds": []
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to Tbkcreative's services and stated goal of generating qualified enquiries without claiming measured commercial impact.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The preserve-change-next structure and section headlines provide a clear decision path. Necessary evidence qualifications add some density but do not obscure the priorities.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:conversionPaths",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative preserves the governed root cause, accurately limits it to a partial affected-page assessment, and does not assert resulting traffic, ranking, or enquiry loss.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "defectIds": []
+    },
+    "actionability": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "Actions are prioritized, scoped, assigned governed effort levels, and paired with appropriate verification steps. Validation is correctly required before remediating partial-source observations.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The output distinguishes observed, usable conversion actions from unproven action wording, complete path sequencing, conversion performance, and enquiry outcomes.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "capability:conversion.path"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are developed from the supplied content plan, with explicit buyer needs and next actions. Partial content coverage is not converted into sitewide absence claims.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "capability:content.body",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 5.5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Experience, expertise, proof, and technical trust are addressed using the readiness plan, content ideas, trust score, and security-header finding. Recommendations remain prospective rather than claiming observed confidence gains.",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust",
+        "analysis:readinessMap",
+        "analysis:contentIdeas",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Meta descriptions, heading structure, security headers, structured-data assessment limits, and performance source limits are represented accurately without ranking or real-user impact overclaims.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "capability:schema.structured_data",
+        "capability:performance.field"
+      ],
+      "defectIds": []
+    },
+    "competitiveUsefulness": {
+      "score": 3.5,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The output uses only the two assessed competitor profiles and carefully avoids extrapolating to the broader market or treating insufficient-evidence candidates as assessed competitors.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Validated conversion actions and content depth are preserved as strengths while technical and buyer-guidance opportunities are presented proportionately.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth",
+        "score:contentFunnelDimension"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 3,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Some repetition of validated conversion actions, partial content coverage, and search-message limitations occurs across sections, but each recurrence generally serves a distinct executive, funnel, technical, or limitation context.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:content.body",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 97,
+  "decision": "PASS",
+  "defects": [],
+  "revisionDirective": {
+    "required": false,
+    "mode": "NONE",
+    "fieldsToRewrite": [],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "rootCause",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "defectIds": []
+  }
+}

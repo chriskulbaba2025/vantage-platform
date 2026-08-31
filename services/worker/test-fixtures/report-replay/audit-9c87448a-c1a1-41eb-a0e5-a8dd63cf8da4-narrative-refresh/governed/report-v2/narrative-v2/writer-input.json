@@ -1,0 +1,2595 @@
+{
+  "contractVersion": "1.0.0",
+  "writerInputVersion": "1.0.0",
+  "auditId": "9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4",
+  "business": {
+    "businessName": "Tbkcreative",
+    "targetUrl": "https://www.tbkcreative.com/",
+    "primaryGoal": "Generate qualified enquiries",
+    "market": "London, Ontario, Canada",
+    "language": "en-CA",
+    "services": [
+      "Custom Websites",
+      "Digital Marketing",
+      "SEO",
+      "Branding",
+      "Custom Software"
+    ],
+    "competitors": [
+      "https://red-rhino.com",
+      "https://www.northern.co",
+      "https://www.zoomedia.ca"
+    ]
+  },
+  "score": {
+    "scores": {
+      "trust": 75,
+      "contentDepth": 85,
+      "conversionPathways": 70,
+      "technical": 6,
+      "performance": 71,
+      "conversionReadiness": 65,
+      "awareness": 72,
+      "consideration": 72,
+      "decision": 74,
+      "aiReadiness": 65,
+      "conversionPathwaysDimension": 70,
+      "trustEeatDimension": 75,
+      "contentFunnelDimension": 85,
+      "technicalPerformanceDimension": 39,
+      "entitySchemaAiDimension": 38
+    },
+    "bands": {
+      "conversionReadiness": "Moderate",
+      "trust": "Moderate",
+      "evidenceConfidence": "High"
+    },
+    "assessedWeight": 100,
+    "readinessStatus": "Complete",
+    "readinessStatusDetail": "Complete",
+    "showNumericScore": true,
+    "evidenceConfidenceScore": 95,
+    "rootCause": "The most impactful opportunity is missing meta descriptions. Missing meta descriptions may reduce control over search-result messaging for these pages."
+  },
+  "findings": [
+    {
+      "findingId": "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+      "ruleId": "VAN-TECH-001",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "technical_hygiene",
+      "title": "Missing meta descriptions",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/logout/",
+        "https://www.tbkcreative.com/our-work/old-oak-2/",
+        "https://www.tbkcreative.com/2019/09/03/media-event-2019-women-tech-scholarship/",
+        "https://www.tbkcreative.com/2022/03/25/harnessing-a-i-privacy-settings-as-a-marketing-manager/",
+        "https://www.tbkcreative.com/forms-paging/",
+        "https://www.tbkcreative.com/forms/",
+        "https://www.tbkcreative.com/holiday-card/",
+        "https://www.tbkcreative.com/our-work/",
+        "https://www.tbkcreative.com/services/",
+        "https://www.tbkcreative.com/tbk-welcomes-you/"
+      ],
+      "evidence": [
+        {
+          "field": "meta_description",
+          "observedValue": null,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "PARTIAL",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Missing meta descriptions may reduce control over search-result messaging for these pages.",
+      "recommendation": "Write a unique 150–160 character description for each important page",
+      "implementationEffort": "L",
+      "verificationMethod": "Re-crawl the URLs and confirm descriptions are present.",
+      "scoreBearing": true,
+      "severity": "High",
+      "finalPriority": 76,
+      "rawPriority": 76
+    },
+    {
+      "findingId": "509d1795-9dcb-400e-8242-41f58647b40a",
+      "ruleId": "VAN-TECH-002",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "technical_hygiene",
+      "title": "Heading structure is inconsistent",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/"
+      ],
+      "evidence": [
+        {
+          "field": "h1_missing",
+          "observedValue": 32,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "PARTIAL",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        {
+          "field": "h1_multiple",
+          "observedValue": 4,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "PARTIAL",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Inconsistent heading structure may reduce semantic clarity and accessibility.",
+      "recommendation": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+      "implementationEffort": "M",
+      "verificationMethod": "Re-crawl and verify heading structure on all pages.",
+      "scoreBearing": true,
+      "severity": "Medium",
+      "finalPriority": 54,
+      "rawPriority": 54
+    },
+    {
+      "findingId": "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+      "ruleId": "VAN-TECH-003",
+      "ruleVersion": "4.1.1",
+      "dimension": "technical_performance",
+      "module": "technical_hygiene",
+      "title": "Security headers are incomplete",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/"
+      ],
+      "evidence": [
+        {
+          "field": "security_headers",
+          "observedValue": "xFrameOptions, xContentTypeOptions, referrerPolicy, contentSecurityPolicy",
+          "provider": "playwright-conversion-path",
+          "sourceStatus": "AVAILABLE",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        }
+      ],
+      "confidence": "deterministic",
+      "businessImpact": "Missing browser protections may weaken technical trust.",
+      "recommendation": "Configure the missing response headers at the hosting layer",
+      "implementationEffort": "L",
+      "verificationMethod": "Re-crawl and confirm security headers are present in response.",
+      "scoreBearing": true,
+      "severity": "Medium",
+      "finalPriority": 45,
+      "rawPriority": 45
+    },
+    {
+      "findingId": "df48581f-7375-4863-be49-eb6107647b75",
+      "ruleId": "VAN-CONTENT-002",
+      "ruleVersion": "4.1.1",
+      "dimension": "content_funnel",
+      "module": "funnel_coverage",
+      "title": "No buyer-question content detected",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/"
+      ],
+      "evidence": [
+        {
+          "field": "trust.faq",
+          "observedValue": false,
+          "provider": "dataforseo_onpage",
+          "sourceStatus": "PARTIAL",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        }
+      ],
+      "confidence": "supported",
+      "businessImpact": "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
+      "recommendation": "Add an FAQ based on the questions prospects ask before booking",
+      "implementationEffort": "M",
+      "verificationMethod": "Re-crawl and confirm FAQ content is present with structured data where applicable.",
+      "scoreBearing": true,
+      "severity": "Medium",
+      "finalPriority": 41,
+      "rawPriority": 54
+    }
+  ],
+  "capabilityContext": {
+    "capabilities": {
+      "content.body": {
+        "capability": "content.body",
+        "status": "PARTIAL",
+        "coverage": {
+          "requested": 35,
+          "completed": 25,
+          "failed": 10
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [
+          "Usable body content returned for 25 of 35 requested pages"
+        ],
+        "requiredFieldsPresent": true
+      },
+      "offer.clarity": {
+        "capability": "offer.clarity",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "trust.proof": {
+        "capability": "trust.proof",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "conversion.cta": {
+        "capability": "conversion.cta",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "playwright-conversion-path",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true,
+        "validated": true,
+        "validatedBy": "playwright-conversion-path"
+      },
+      "conversion.form": {
+        "capability": "conversion.form",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "playwright-conversion-path",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true,
+        "validated": true,
+        "validatedBy": "playwright-conversion-path"
+      },
+      "conversion.path": {
+        "capability": "conversion.path",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [
+          "Conversion path evidence was not extracted (parsed text does not prove path absence)"
+        ],
+        "requiredFieldsPresent": true,
+        "kind": "validated",
+        "validated": true,
+        "validatedBy": "playwright-conversion-path",
+        "validationSummary": {
+          "requested": 6,
+          "pass": 0,
+          "partial": 6,
+          "failed": 0,
+          "notAssessed": 0,
+          "obstructionCount": 0
+        }
+      },
+      "technical.indexability": {
+        "capability": "technical.indexability",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 1000,
+          "completed": 1,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.redirects": {
+        "capability": "technical.redirects",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 20,
+          "completed": 20,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.resources": {
+        "capability": "technical.resources",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 10,
+          "completed": 10,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.headers": {
+        "capability": "technical.headers",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "playwright-conversion-path",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true,
+        "validated": true,
+        "validatedBy": "playwright-conversion-path"
+      },
+      "schema.structured_data": {
+        "capability": "schema.structured_data",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 1,
+          "completed": 1,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "performance.lab": {
+        "capability": "performance.lab",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "performance.field": {
+        "capability": "performance.field",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [
+          "CrUX field data was not returned for this site (not populated or not collected)"
+        ],
+        "requiredFieldsPresent": false
+      }
+    },
+    "capabilityEvidenceVersion": "2.0.0",
+    "generatedAt": "2026-08-27T22:32:54.375Z",
+    "summary": {
+      "total": 13,
+      "available": 11,
+      "partial": 1,
+      "unavailable": 1,
+      "failed": 0,
+      "notConnected": 0,
+      "notApplicable": 0,
+      "assessed": 12
+    }
+  },
+  "scoreGovernance": {
+    "scoringVersion": "4.1.1",
+    "dimensionEligibility": {
+      "conversion_pathways": true,
+      "trust_eeat": true,
+      "content_funnel": true,
+      "technical_performance": true,
+      "entity_schema_ai": true
+    },
+    "moduleEligibility": {
+      "conversion_paths": true,
+      "offer_clarity": true,
+      "trust_signals": true,
+      "risk_reduction": true,
+      "content_depth": true,
+      "funnel_coverage": true,
+      "technical_hygiene": true,
+      "performance": true,
+      "schema_entity": true,
+      "ai_readiness": true
+    },
+    "suppressedModules": [],
+    "evidenceConfidenceFactors": {
+      "sourceAvailability": 87,
+      "dataCompleteness": 100,
+      "sourceValidity": 90,
+      "dataFreshness": 100,
+      "urlMatching": 100,
+      "crossSourceAgreement": 100,
+      "competitorRelevance": 100,
+      "ruleCertainty": 91
+    }
+  },
+  "deterministicAnalysis": {
+    "conversionPaths": [
+      {
+        "name": "Primary conversion path",
+        "cta": null,
+        "host": "none",
+        "steps": [
+          "Browser validation assessed conversion actions on 6 of 6 selected page(s).",
+          "A conversion action was observed on 6 assessed page(s).",
+          "A visible, interactable, unobstructed action was confirmed on 6 assessed page(s)."
+        ],
+        "blockers": [],
+        "status": "Clear"
+      }
+    ],
+    "readinessMap": [
+      {
+        "topic": "Custom Websites",
+        "stage": "BOFU",
+        "blocker": "Unclear next step",
+        "trustAsset": "Process proof",
+        "eeat": "Experience proof",
+        "cta": "Form",
+        "path": "Clear",
+        "priority": "H"
+      },
+      {
+        "topic": "Digital Marketing",
+        "stage": "BOFU",
+        "blocker": "Unclear next step",
+        "trustAsset": "Process proof",
+        "eeat": "Experience proof",
+        "cta": "Form",
+        "path": "Clear",
+        "priority": "H"
+      },
+      {
+        "topic": "SEO",
+        "stage": "BOFU",
+        "blocker": "Unclear next step",
+        "trustAsset": "Process proof",
+        "eeat": "Experience proof",
+        "cta": "Form",
+        "path": "Clear",
+        "priority": "H"
+      },
+      {
+        "topic": "Branding",
+        "stage": "BOFU",
+        "blocker": "Unclear next step",
+        "trustAsset": "Process proof",
+        "eeat": "Experience proof",
+        "cta": "Form",
+        "path": "Clear",
+        "priority": "H"
+      },
+      {
+        "topic": "Custom Software",
+        "stage": "TOFU",
+        "blocker": "Unclear next step",
+        "trustAsset": "Process proof",
+        "eeat": "Experience proof",
+        "cta": "Form",
+        "path": "Clear",
+        "priority": "M"
+      }
+    ],
+    "contentIdeas": {
+      "tofu": [
+        {
+          "idea": "What Is Custom Websites?",
+          "frame": "Answer-first",
+          "type": "Guide",
+          "question": "What is this?",
+          "priority": "H"
+        },
+        {
+          "idea": "Signs You May Need Digital Marketing",
+          "frame": "Answer-first",
+          "type": "Article",
+          "question": "Does this apply to me?",
+          "priority": "M"
+        },
+        {
+          "idea": "Can Custom Websites Produce Measurable Change?",
+          "frame": "Objection handler",
+          "type": "Educational page",
+          "question": "Will this work?",
+          "priority": "H"
+        }
+      ],
+      "mofu": [
+        {
+          "idea": "Custom Websites: Options and Fit",
+          "frame": "Comparison/fit",
+          "type": "Comparison page",
+          "question": "Which option is right?",
+          "priority": "H"
+        },
+        {
+          "idea": "What Happens in the Process",
+          "frame": "Process page",
+          "type": "Process page",
+          "question": "What should I expect?",
+          "priority": "H"
+        },
+        {
+          "idea": "Client Results and Outcomes",
+          "frame": "Case study",
+          "type": "Case study",
+          "question": "What results are possible?",
+          "priority": "H"
+        },
+        {
+          "idea": "Who Leads This Work?",
+          "frame": "Founder/expert",
+          "type": "Founder page",
+          "question": "Why trust this provider?",
+          "priority": "H"
+        }
+      ],
+      "bofu": [
+        {
+          "idea": "Pricing and What to Expect",
+          "frame": "Risk-reversal",
+          "type": "Pricing page",
+          "question": "What does it cost?",
+          "priority": "H"
+        },
+        {
+          "idea": "Your First Step Toward generating qualified enquiries",
+          "frame": "Process page",
+          "type": "Start-here",
+          "question": "What happens after I act?",
+          "priority": "H"
+        },
+        {
+          "idea": "Frequently Asked Questions with Examples",
+          "frame": "Testimonial FAQ",
+          "type": "FAQ page",
+          "question": "What concerns are common?",
+          "priority": "H"
+        }
+      ],
+      "leading": [
+        {
+          "query": "Custom Websites for generating qualified enquiries",
+          "rationale": "Connects the offer directly to the stated business goal",
+          "priority": "H"
+        },
+        {
+          "query": "Custom Websites for decision making",
+          "rationale": "Connects the offer to an urgent practical use",
+          "priority": "H"
+        },
+        {
+          "query": "Custom Websites results and process",
+          "rationale": "Combines proof and buyer intent",
+          "priority": "M"
+        }
+      ]
+    },
+    "competitors": {
+      "comparisons": [
+        {
+          "name": "London Marketing & Advertising Agency | RedRhino",
+          "url": "https://red-rhino.com",
+          "topic": "Digital Dreamers & Brand Believers, David Basacco Managing Director, RhinoActive +, Wendy Smith President, RedRhino +, Stephanie Pennacchietti Account Director +",
+          "offerClarity": "Strong",
+          "trustProof": "Limited",
+          "ctaClarity": "Moderate",
+          "contentDepth": "Strong",
+          "eeat": "Limited",
+          "pathClarity": "Moderate"
+        },
+        {
+          "name": "ZOO Media Group - Branding, Website Design & Development",
+          "url": "https://www.zoomedia.ca",
+          "topic": "Creative and Digital Marketing Services, Branding & Visual Identity, Web & Ecommerce Design, SEO & Digital Marketing",
+          "offerClarity": "Strong",
+          "trustProof": "Strong",
+          "ctaClarity": "Moderate",
+          "contentDepth": "Strong",
+          "eeat": "Strong",
+          "pathClarity": "Moderate"
+        },
+        {
+          "name": "www.canva.com",
+          "url": "https://www.canva.com/website-builder/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.godaddy.com",
+          "url": "https://www.godaddy.com/en-ca/websites/website-builder",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.squarespace.com",
+          "url": "https://www.squarespace.com/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "launchthedamnthing.com",
+          "url": "https://launchthedamnthing.com/blog/best-website-builders",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.wix.com",
+          "url": "https://www.wix.com/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "webstudio.is",
+          "url": "https://webstudio.is/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "dribbble.com",
+          "url": "https://dribbble.com/tags/custom-website",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.design.com",
+          "url": "https://www.design.com/website-builder",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.weebly.com",
+          "url": "https://www.weebly.com/ca",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.youtube.com",
+          "url": "https://www.youtube.com/watch?v=tBbsisW3Bg4",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.pcmag.com",
+          "url": "https://www.pcmag.com/picks/the-best-website-builders",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.website.com",
+          "url": "https://www.website.com/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.reddit.com",
+          "url": "https://www.reddit.com/r/smallbusiness/comments/1fhx0gm/what_is_the_best_platform_to_build_a_website_on/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.adobe.com",
+          "url": "https://www.adobe.com/express/create/website-page",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.edgemarketing.ca",
+          "url": "https://www.edgemarketing.ca/blog/creating-custom-websites-edge",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "elementor.com",
+          "url": "https://elementor.com/blog/custom-website-design/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.youtube.com",
+          "url": "https://www.youtube.com/watch?v=y_k8uV_BS0M",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "whc.ca",
+          "url": "https://whc.ca/sitemojo-website-builder/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.en.sitew.com",
+          "url": "https://www.en.sitew.com/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "nicepage.com",
+          "url": "https://nicepage.com/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.salesforce.com",
+          "url": "https://www.salesforce.com/ca/marketing/digital-marketing/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.investopedia.com",
+          "url": "https://www.investopedia.com/terms/d/digital-marketing.asp",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "easterncollege.ca",
+          "url": "https://easterncollege.ca/blog/what-is-digital-marketing/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "blog.hubspot.com",
+          "url": "https://blog.hubspot.com/marketing/what-is-digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.snhu.edu",
+          "url": "https://www.snhu.edu/about-us/newsroom/business/types-of-digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "ca.indeed.com",
+          "url": "https://ca.indeed.com/career-advice/career-development/what-is-digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "business.adobe.com",
+          "url": "https://business.adobe.com/blog/basics/digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.imd.org",
+          "url": "https://www.imd.org/blog/marketing/digital-marketing/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.coursera.org",
+          "url": "https://www.coursera.org/ca/articles/digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.digitalmarketer.com",
+          "url": "https://www.digitalmarketer.com/digital-marketing/?srsltid=AfmBOooUnHvwdy6IAuXkD9-S-UtEUu2wLj0dGYK1R_uhF8mwhxLsRe2B",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.ibm.com",
+          "url": "https://www.ibm.com/think/topics/digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.xero.com",
+          "url": "https://www.xero.com/ca/guides/digital-marketing-for-small-businesses/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.forbes.com",
+          "url": "https://www.forbes.com/advisor/business/what-is-digital-marketing/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "jellyacademy.ca",
+          "url": "https://jellyacademy.ca/blog/what-is-digital-marketing",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "mailchimp.com",
+          "url": "https://mailchimp.com/marketing-glossary/digital-marketing/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.ballamedia.ca",
+          "url": "https://www.ballamedia.ca/what-is-digital-marketing-and-how-it-can-help-your-business-succeed",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.edc.ca",
+          "url": "https://www.edc.ca/en/blog/mastering-digital-marketing.html",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.ucanwest.ca",
+          "url": "https://www.ucanwest.ca/blog/business-management/how-to-create-a-digital-marketing-strategy",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "developers.google.com",
+          "url": "https://developers.google.com/search/docs/fundamentals/seo-starter-guide",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "en.wikipedia.org",
+          "url": "https://en.wikipedia.org/wiki/Search_engine_optimization",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "digitalmarketinginstitute.com",
+          "url": "https://digitalmarketinginstitute.com/blog/what-is-seo",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.mtu.edu",
+          "url": "https://www.mtu.edu/umc/services/websites/seo/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.bdc.ca",
+          "url": "https://www.bdc.ca/en/articles-tools/marketing-sales-export/marketing/seo-small-businesses-10-ways-rank-higher",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "mailchimp.com",
+          "url": "https://mailchimp.com/marketing-glossary/seo/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.reddit.com",
+          "url": "https://www.reddit.com/r/webdev/comments/1b3wowf/can_you_eli5_what_is_seo_is_what_it_does_and_how/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.microsoft.com",
+          "url": "https://www.microsoft.com/en-ca/microsoft-365/business-insights-ideas/resources/seo-for-small-businesses-definition-and-tips",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.utm.utoronto.ca",
+          "url": "https://www.utm.utoronto.ca/communications/web-resources/search-engine-optimization-seo",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "bofu.ca",
+          "url": "https://bofu.ca/en/blogs/the-top-of-the-funnel/introduction-au-seo-importance-strategies-et-lexique-pour-pme?srsltid=AfmBOoqTyDqOhu-wFv0P489Wr9LqM5dVsThgBmYbl5i-Mel56lQJ2eWY",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "onpoint.ca",
+          "url": "https://onpoint.ca/our-blog/what-is-seo-and-why-is-it-important/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "moz.com",
+          "url": "https://moz.com/learn/seo/what-is-seo",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.ovhcloud.com",
+          "url": "https://www.ovhcloud.com/en-ca/learn/what-is-seo/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.youtube.com",
+          "url": "https://www.youtube.com/watch?v=N0lTwy8BliA",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.destinationbc.ca",
+          "url": "https://www.destinationbc.ca/learning-centre/demystifying-search-engine-optimization-seo/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "whc.ca",
+          "url": "https://whc.ca/blog/beginners-guide-seo-3-types-of-seo/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "loomo.ca",
+          "url": "https://loomo.ca/5-effective-seo-strategies-that-marketers-use-to-grow-your-business/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.linkedin.com",
+          "url": "https://www.linkedin.com/pulse/demystifying-seo-beginners-guide-search-engine-arif-hussain-b0rfc",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.ama.org",
+          "url": "https://www.ama.org/marketing-news/what-is-seo-marketing/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.thebrandingjournal.com",
+          "url": "https://www.thebrandingjournal.com/2015/10/what-is-branding-definition/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "en.wikipedia.org",
+          "url": "https://en.wikipedia.org/wiki/Brand",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.behance.net",
+          "url": "https://www.behance.net/galleries/graphic-design/branding",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.reddit.com",
+          "url": "https://www.reddit.com/r/branding/comments/1gsvixx/what_is_branding/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.investopedia.com",
+          "url": "https://www.investopedia.com/terms/b/brand.asp",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "the-brandidentity.com",
+          "url": "https://the-brandidentity.com/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "blog.hubspot.com",
+          "url": "https://blog.hubspot.com/marketing/branding",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.ama.org",
+          "url": "https://www.ama.org/topics/brand-and-branding/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.vistaprint.com",
+          "url": "https://www.vistaprint.com/hub/what-is-branding?srsltid=AfmBOorbxIORewujoAmaOTfou06unP4IktI1_oMbAWKXCO-hBzzp2CJK",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.canva.com",
+          "url": "https://www.canva.com/resources/brand-identity/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.linkedin.com",
+          "url": "https://www.linkedin.com/posts/brandstrategysarah_branding-what-does-it-mean-to-you-what-activity-7351270156276228097-WoZ5",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "foxtrotbranding.com",
+          "url": "https://foxtrotbranding.com/blog/what-is-branding",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "the-brand-digest.medium.com",
+          "url": "https://the-brand-digest.medium.com/branding-101-branding-basics-to-get-started-29ae0ac9bccf",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.shopify.com",
+          "url": "https://www.shopify.com/ca/blog/what-is-branding",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.wix.com",
+          "url": "https://www.wix.com/blog/what-is-branding",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "dictionary.cambridge.org",
+          "url": "https://dictionary.cambridge.org/dictionary/english/branding",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "en.wikipedia.org",
+          "url": "https://en.wikipedia.org/wiki/Custom_software",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.youtube.com",
+          "url": "https://www.youtube.com/watch?v=GSjjVwPKP8Y",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.synergyit.ca",
+          "url": "https://www.synergyit.ca/custom-software-solutions/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.comidor.com",
+          "url": "https://www.comidor.com/custom-software-development/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "webtech.fr",
+          "url": "https://webtech.fr/en/glossary/custom-software/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "catalyst-ca.net",
+          "url": "https://catalyst-ca.net/services/custom-software-development",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.whitecapcanada.com",
+          "url": "https://www.whitecapcanada.com/services/custom-software-development/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "riwers.io",
+          "url": "https://riwers.io/en/blog/custom-software/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.reddit.com",
+          "url": "https://www.reddit.com/r/software/comments/1odi5fj/has_anyone_here_worked_with_a_custom_software/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "softwaredevelopmentontario.ca",
+          "url": "https://softwaredevelopmentontario.ca/what-is-custom-software-development-why-important/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "ca.linkedin.com",
+          "url": "https://ca.linkedin.com/company/custom-software-development-inc.",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.leewayhertz.com",
+          "url": "https://www.leewayhertz.com/what-is-custom-software-development/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "tadabase.io",
+          "url": "https://tadabase.io/blog/custom-software-explained",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.geeksforgeeks.org",
+          "url": "https://www.geeksforgeeks.org/software-engineering/what-is-custom-software-development/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.chetu.com",
+          "url": "https://www.chetu.com/services.php",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.youtube.com",
+          "url": "https://www.youtube.com/watch?v=NuklhWQR_S8",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "community.thermaltake.com",
+          "url": "https://community.thermaltake.com/index.php?/topic/675372-what-does-a-custom-software-development-company-do/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        },
+        {
+          "name": "www.capterra.com",
+          "url": "https://www.capterra.com/resources/custom-software-development/",
+          "status": "Insufficient Evidence",
+          "topic": "",
+          "offerClarity": "Not Assessed",
+          "trustProof": "Not Assessed",
+          "ctaClarity": "Not Assessed",
+          "contentDepth": "Not Assessed",
+          "eeat": "Not Assessed",
+          "pathClarity": "Not Assessed"
+        }
+      ],
+      "opportunities": {
+        "topics": [],
+        "qualifiedCandidates": [],
+        "excludedCandidates": [],
+        "gaps": [],
+        "allGaps": [],
+        "sources": {},
+        "limitations": []
+      }
+    },
+    "renderingDiagnostics": [],
+    "siteFootprint": {
+      "status": "AVAILABLE",
+      "discoveredUrlCount": 418,
+      "retainedUrlCount": 418,
+      "sitemapDocumentCount": 10,
+      "capped": false,
+      "incomplete": false,
+      "clusterCount": 22,
+      "clusters": [
+        {
+          "id": "cluster-8a5edab28263",
+          "pattern": "/",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-979bddc4a8ca",
+          "pattern": "/about",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/about"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-652a3e2e4cfa",
+          "pattern": "/browser-supports/{id}",
+          "discoveredUrlCount": 118,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+            "https://www.tbkcreative.com/browser-supports/browser-support-policy-july-2022",
+            "https://www.tbkcreative.com/browser-supports/browser-support-policy-september-2024"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-c62312670e25",
+          "pattern": "/browser-supports/{number}",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/browser-supports/22847"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-2be952a11700",
+          "pattern": "/careers/{id}",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/careers/b2b-content-strategist-and-creator"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-ca966a528a05",
+          "pattern": "/careers/{segment}",
+          "discoveredUrlCount": 5,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/careers/conversion-automation-lead",
+            "https://www.tbkcreative.com/careers/performance-marketing-manager",
+            "https://www.tbkcreative.com/careers/web-strategist"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-82b4f5be64e8",
+          "pattern": "/category/news-2",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/category/news-2"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-98c9633b81c6",
+          "pattern": "/category/post",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/category/post"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-8aa71f53a16c",
+          "pattern": "/category/uncategorized",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/category/uncategorized"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-8a375f5927ea",
+          "pattern": "/intern-journal/{segment}",
+          "discoveredUrlCount": 8,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/intern-journal/christina-donati",
+            "https://www.tbkcreative.com/intern-journal/george-ridout",
+            "https://www.tbkcreative.com/intern-journal/taylor-ross"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-f46b16ed5a4e",
+          "pattern": "/news",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/news"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-121ea71a255a",
+          "pattern": "/our-work/{id}",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/our-work/lmr-dream-lottery-2"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-c46d37134e1d",
+          "pattern": "/our-work/{segment}",
+          "discoveredUrlCount": 29,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/our-work/anchem",
+            "https://www.tbkcreative.com/our-work/jiffy-lube-skip-the-dealership",
+            "https://www.tbkcreative.com/our-work/william-standen"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-3b1aeccb742d",
+          "pattern": "/services",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/services"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": []
+        },
+        {
+          "id": "cluster-9dc40e13528e",
+          "pattern": "/services/{segment}",
+          "discoveredUrlCount": 11,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/services/branding-design",
+            "https://www.tbkcreative.com/services/develop",
+            "https://www.tbkcreative.com/services/video-strategy"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-0283990f1bc7",
+          "pattern": "/services/{segment}/{id}",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/services/guide/website-security-2"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "DYNAMIC_IDENTIFIER_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-e2d62010cf3b",
+          "pattern": "/services/{segment}/{segment}",
+          "discoveredUrlCount": 34,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+            "https://www.tbkcreative.com/services/create/content-copy",
+            "https://www.tbkcreative.com/services/guide/workshops"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-fa5526c5b748",
+          "pattern": "/tag/{segment}",
+          "discoveredUrlCount": 33,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/tag/andrew-schiestel",
+            "https://www.tbkcreative.com/tag/mobile-website",
+            "https://www.tbkcreative.com/tag/website-project-questions"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-18c10ecf73c8",
+          "pattern": "/{id}",
+          "discoveredUrlCount": 1,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2"
+          ],
+          "requiresRepresentativeAssessment": false,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-6446f72d5d17",
+          "pattern": "/{segment}",
+          "discoveredUrlCount": 29,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/accessibility",
+            "https://www.tbkcreative.com/intern",
+            "https://www.tbkcreative.com/webinar-survey"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-5422f11cfcc9",
+          "pattern": "/{year}/{number}/{number}/{id}",
+          "discoveredUrlCount": 34,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+            "https://www.tbkcreative.com/2019/10/09/tbk-top-web-design-provider-2020",
+            "https://www.tbkcreative.com/2022/12/07/top-marketing-investments-for-2023"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "id": "cluster-f5de095ee413",
+          "pattern": "/{year}/{number}/{number}/{segment}",
+          "discoveredUrlCount": 105,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+            "https://www.tbkcreative.com/2020/01/09/new-tricar-website-goes-live",
+            "https://www.tbkcreative.com/2025/05/29/coming-soon-to-canada-google-ads-in-ai-overviews"
+          ],
+          "requiresRepresentativeAssessment": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "DYNAMIC_IDENTIFIER_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        }
+      ],
+      "priorityUrls": [
+        "https://www.tbkcreative.com/",
+        "https://www.tbkcreative.com/combating-artificial-intelligence-and-privacy-settings-as-a-marketing-manager",
+        "https://www.tbkcreative.com/services",
+        "https://www.tbkcreative.com/about",
+        "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+        "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+        "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+        "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+        "https://www.tbkcreative.com/tag/andrew-schiestel",
+        "https://www.tbkcreative.com/our-work/anchem",
+        "https://www.tbkcreative.com/accessibility",
+        "https://www.tbkcreative.com/services/branding-design",
+        "https://www.tbkcreative.com/intern-journal/christina-donati",
+        "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2",
+        "https://www.tbkcreative.com/how-accessible-websites-improve-user-experience-search-ranking",
+        "https://www.tbkcreative.com/careers/digital-marketing-strategist",
+        "https://www.tbkcreative.com/careers/performance-marketing-manager",
+        "https://www.tbkcreative.com/tag/digital",
+        "https://www.tbkcreative.com/tag/digital-marketing",
+        "https://www.tbkcreative.com/tag/digital-marketing-the-law"
+      ],
+      "prioritySelection": {
+        "strategyVersion": "1.0.0",
+        "priorityUrlCap": 20,
+        "priorityUrls": [
+          "https://www.tbkcreative.com/",
+          "https://www.tbkcreative.com/combating-artificial-intelligence-and-privacy-settings-as-a-marketing-manager",
+          "https://www.tbkcreative.com/services",
+          "https://www.tbkcreative.com/about",
+          "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+          "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+          "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+          "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+          "https://www.tbkcreative.com/tag/andrew-schiestel",
+          "https://www.tbkcreative.com/our-work/anchem",
+          "https://www.tbkcreative.com/accessibility",
+          "https://www.tbkcreative.com/services/branding-design",
+          "https://www.tbkcreative.com/intern-journal/christina-donati",
+          "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2",
+          "https://www.tbkcreative.com/how-accessible-websites-improve-user-experience-search-ranking",
+          "https://www.tbkcreative.com/careers/digital-marketing-strategist",
+          "https://www.tbkcreative.com/careers/performance-marketing-manager",
+          "https://www.tbkcreative.com/tag/digital",
+          "https://www.tbkcreative.com/tag/digital-marketing",
+          "https://www.tbkcreative.com/tag/digital-marketing-the-law"
+        ],
+        "mustHaveUrls": [
+          "https://www.tbkcreative.com/",
+          "https://www.tbkcreative.com/combating-artificial-intelligence-and-privacy-settings-as-a-marketing-manager",
+          "https://www.tbkcreative.com/services",
+          "https://www.tbkcreative.com/about"
+        ],
+        "representativeUrls": [
+          "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+          "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+          "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+          "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+          "https://www.tbkcreative.com/tag/andrew-schiestel",
+          "https://www.tbkcreative.com/our-work/anchem",
+          "https://www.tbkcreative.com/accessibility",
+          "https://www.tbkcreative.com/services/branding-design",
+          "https://www.tbkcreative.com/intern-journal/christina-donati"
+        ],
+        "supplementalUrls": [
+          "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2",
+          "https://www.tbkcreative.com/how-accessible-websites-improve-user-experience-search-ranking",
+          "https://www.tbkcreative.com/careers/digital-marketing-strategist",
+          "https://www.tbkcreative.com/careers/performance-marketing-manager",
+          "https://www.tbkcreative.com/tag/digital",
+          "https://www.tbkcreative.com/tag/digital-marketing",
+          "https://www.tbkcreative.com/tag/digital-marketing-the-law"
+        ],
+        "materialFamilyCount": 9,
+        "representedMaterialFamilyCount": 9,
+        "unrepresentedMaterialFamilyCount": 0,
+        "materialFamilies": [
+          {
+            "clusterId": "cluster-652a3e2e4cfa",
+            "pattern": "/browser-supports/{id}",
+            "discoveredUrlCount": 118,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+              "https://www.tbkcreative.com/browser-supports/browser-support-policy-july-2022",
+              "https://www.tbkcreative.com/browser-supports/browser-support-policy-september-2024"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "DYNAMIC_IDENTIFIER_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-f5de095ee413",
+            "pattern": "/{year}/{number}/{number}/{segment}",
+            "discoveredUrlCount": 105,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+              "https://www.tbkcreative.com/2020/01/09/new-tricar-website-goes-live",
+              "https://www.tbkcreative.com/2025/05/29/coming-soon-to-canada-google-ads-in-ai-overviews"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "DYNAMIC_IDENTIFIER_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-e2d62010cf3b",
+            "pattern": "/services/{segment}/{segment}",
+            "discoveredUrlCount": 34,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+              "https://www.tbkcreative.com/services/create/content-copy",
+              "https://www.tbkcreative.com/services/guide/workshops"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-5422f11cfcc9",
+            "pattern": "/{year}/{number}/{number}/{id}",
+            "discoveredUrlCount": 34,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+              "https://www.tbkcreative.com/2019/10/09/tbk-top-web-design-provider-2020",
+              "https://www.tbkcreative.com/2022/12/07/top-marketing-investments-for-2023"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "DYNAMIC_IDENTIFIER_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-fa5526c5b748",
+            "pattern": "/tag/{segment}",
+            "discoveredUrlCount": 33,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/tag/andrew-schiestel",
+              "https://www.tbkcreative.com/tag/mobile-website",
+              "https://www.tbkcreative.com/tag/website-project-questions"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/tag/andrew-schiestel",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-c46d37134e1d",
+            "pattern": "/our-work/{segment}",
+            "discoveredUrlCount": 29,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/our-work/anchem",
+              "https://www.tbkcreative.com/our-work/jiffy-lube-skip-the-dealership",
+              "https://www.tbkcreative.com/our-work/william-standen"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/our-work/anchem",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-6446f72d5d17",
+            "pattern": "/{segment}",
+            "discoveredUrlCount": 29,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/accessibility",
+              "https://www.tbkcreative.com/intern",
+              "https://www.tbkcreative.com/webinar-survey"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/accessibility",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-9dc40e13528e",
+            "pattern": "/services/{segment}",
+            "discoveredUrlCount": 11,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/services/branding-design",
+              "https://www.tbkcreative.com/services/develop",
+              "https://www.tbkcreative.com/services/video-strategy"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/services/branding-design",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          },
+          {
+            "clusterId": "cluster-8a375f5927ea",
+            "pattern": "/intern-journal/{segment}",
+            "discoveredUrlCount": 8,
+            "representativeUrls": [
+              "https://www.tbkcreative.com/intern-journal/christina-donati",
+              "https://www.tbkcreative.com/intern-journal/george-ridout",
+              "https://www.tbkcreative.com/intern-journal/taylor-ross"
+            ],
+            "selectedPriorityUrl": "https://www.tbkcreative.com/intern-journal/christina-donati",
+            "representedInPrioritySet": true,
+            "reasonCodes": [
+              "VARIABLE_SIBLING_FAMILY",
+              "LARGE_REPEATED_FAMILY"
+            ]
+          }
+        ]
+      },
+      "coverage": {
+        "usableSitemap": true,
+        "complete": true,
+        "parsedSitemapDocumentCount": 10,
+        "failedSitemapDocumentCount": 0,
+        "duplicateUrlCount": 0,
+        "skippedExternalPageUrlCount": 0,
+        "skippedExternalSitemapCount": 0,
+        "cappedByDocuments": false,
+        "cappedByUrls": false,
+        "sitemapDocumentCap": 200,
+        "retainedUrlCap": 100000,
+        "priorityUrlCap": 20
+      },
+      "limitations": []
+    },
+    "conversionInfluence": {
+      "hierarchyVersion": "4.2",
+      "orderedFindingIds": [
+        "df48581f-7375-4863-be49-eb6107647b75",
+        "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "509d1795-9dcb-400e-8242-41f58647b40a",
+        "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "byFindingId": {
+        "df48581f-7375-4863-be49-eb6107647b75": {
+          "findingId": "df48581f-7375-4863-be49-eb6107647b75",
+          "ruleId": "VAN-CONTENT-002",
+          "rank": 1,
+          "actionClass": "OPTIMIZATION",
+          "foundationDomain": null,
+          "conversionInfluence": "buyer_question_decision_support",
+          "conversionInfluenceRank": 4,
+          "group": "DO NEXT",
+          "finalPriority": 41
+        },
+        "13b9521f-8e1b-4d31-bfd6-f3337c54b141": {
+          "findingId": "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "ruleId": "VAN-TECH-001",
+          "rank": 2,
+          "actionClass": "OPTIMIZATION",
+          "foundationDomain": null,
+          "conversionInfluence": "technical_causes_resilience",
+          "conversionInfluenceRank": 6,
+          "group": "DO NEXT",
+          "finalPriority": 76
+        },
+        "509d1795-9dcb-400e-8242-41f58647b40a": {
+          "findingId": "509d1795-9dcb-400e-8242-41f58647b40a",
+          "ruleId": "VAN-TECH-002",
+          "rank": 3,
+          "actionClass": "OPTIMIZATION",
+          "foundationDomain": null,
+          "conversionInfluence": "technical_causes_resilience",
+          "conversionInfluenceRank": 6,
+          "group": "DO NEXT",
+          "finalPriority": 54
+        },
+        "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40": {
+          "findingId": "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+          "ruleId": "VAN-TECH-003",
+          "rank": 4,
+          "actionClass": "OPTIMIZATION",
+          "foundationDomain": null,
+          "conversionInfluence": "technical_causes_resilience",
+          "conversionInfluenceRank": 6,
+          "group": "DO NEXT",
+          "finalPriority": 45
+        }
+      }
+    }
+  },
+  "referenceIndex": {
+    "business:businessName": {
+      "kind": "business",
+      "path": "business.businessName"
+    },
+    "business:targetUrl": {
+      "kind": "business",
+      "path": "business.targetUrl"
+    },
+    "business:primaryGoal": {
+      "kind": "business",
+      "path": "business.primaryGoal"
+    },
+    "business:market": {
+      "kind": "business",
+      "path": "business.market"
+    },
+    "business:language": {
+      "kind": "business",
+      "path": "business.language"
+    },
+    "business:services": {
+      "kind": "business",
+      "path": "business.services"
+    },
+    "business:competitors": {
+      "kind": "business",
+      "path": "business.competitors"
+    },
+    "score:trust": {
+      "kind": "score",
+      "path": "score.scores.trust"
+    },
+    "score:contentDepth": {
+      "kind": "score",
+      "path": "score.scores.contentDepth"
+    },
+    "score:conversionPathways": {
+      "kind": "score",
+      "path": "score.scores.conversionPathways"
+    },
+    "score:technical": {
+      "kind": "score",
+      "path": "score.scores.technical"
+    },
+    "score:performance": {
+      "kind": "score",
+      "path": "score.scores.performance"
+    },
+    "score:conversionReadiness": {
+      "kind": "score",
+      "path": "score.scores.conversionReadiness"
+    },
+    "score:awareness": {
+      "kind": "score",
+      "path": "score.scores.awareness"
+    },
+    "score:consideration": {
+      "kind": "score",
+      "path": "score.scores.consideration"
+    },
+    "score:decision": {
+      "kind": "score",
+      "path": "score.scores.decision"
+    },
+    "score:aiReadiness": {
+      "kind": "score",
+      "path": "score.scores.aiReadiness"
+    },
+    "score:conversionPathwaysDimension": {
+      "kind": "score",
+      "path": "score.scores.conversionPathwaysDimension"
+    },
+    "score:trustEeatDimension": {
+      "kind": "score",
+      "path": "score.scores.trustEeatDimension"
+    },
+    "score:contentFunnelDimension": {
+      "kind": "score",
+      "path": "score.scores.contentFunnelDimension"
+    },
+    "score:technicalPerformanceDimension": {
+      "kind": "score",
+      "path": "score.scores.technicalPerformanceDimension"
+    },
+    "score:entitySchemaAiDimension": {
+      "kind": "score",
+      "path": "score.scores.entitySchemaAiDimension"
+    },
+    "band:conversionReadiness": {
+      "kind": "score-band",
+      "path": "score.bands.conversionReadiness"
+    },
+    "band:trust": {
+      "kind": "score-band",
+      "path": "score.bands.trust"
+    },
+    "band:evidenceConfidence": {
+      "kind": "score-band",
+      "path": "score.bands.evidenceConfidence"
+    },
+    "score:assessedWeight": {
+      "kind": "score",
+      "path": "score.assessedWeight"
+    },
+    "score:readinessStatus": {
+      "kind": "score",
+      "path": "score.readinessStatus"
+    },
+    "score:readinessStatusDetail": {
+      "kind": "score",
+      "path": "score.readinessStatusDetail"
+    },
+    "score:showNumericScore": {
+      "kind": "score",
+      "path": "score.showNumericScore"
+    },
+    "score:evidenceConfidenceScore": {
+      "kind": "score",
+      "path": "score.evidenceConfidenceScore"
+    },
+    "score:rootCause": {
+      "kind": "score",
+      "path": "score.rootCause"
+    },
+    "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141": {
+      "kind": "finding",
+      "path": "findings.13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+    },
+    "finding:509d1795-9dcb-400e-8242-41f58647b40a": {
+      "kind": "finding",
+      "path": "findings.509d1795-9dcb-400e-8242-41f58647b40a"
+    },
+    "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40": {
+      "kind": "finding",
+      "path": "findings.6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+    },
+    "finding:df48581f-7375-4863-be49-eb6107647b75": {
+      "kind": "finding",
+      "path": "findings.df48581f-7375-4863-be49-eb6107647b75"
+    },
+    "capability:content.body": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.content.body"
+    },
+    "capability:offer.clarity": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.offer.clarity"
+    },
+    "capability:trust.proof": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.trust.proof"
+    },
+    "capability:conversion.cta": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.conversion.cta"
+    },
+    "capability:conversion.form": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.conversion.form"
+    },
+    "capability:conversion.path": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.conversion.path"
+    },
+    "capability:technical.indexability": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.indexability"
+    },
+    "capability:technical.redirects": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.redirects"
+    },
+    "capability:technical.resources": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.resources"
+    },
+    "capability:technical.headers": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.technical.headers"
+    },
+    "capability:schema.structured_data": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.schema.structured_data"
+    },
+    "capability:performance.lab": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.performance.lab"
+    },
+    "capability:performance.field": {
+      "kind": "capability",
+      "path": "capabilityContext.capabilities.performance.field"
+    },
+    "capabilityContext:capabilityEvidenceVersion": {
+      "kind": "capability-context",
+      "path": "capabilityContext.capabilityEvidenceVersion"
+    },
+    "capabilityContext:summary": {
+      "kind": "capability-context",
+      "path": "capabilityContext.summary"
+    },
+    "scoreGovernance:scoringVersion": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.scoringVersion"
+    },
+    "scoreGovernance:dimensionEligibility": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.dimensionEligibility"
+    },
+    "scoreGovernance:moduleEligibility": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.moduleEligibility"
+    },
+    "scoreGovernance:suppressedModules": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.suppressedModules"
+    },
+    "scoreGovernance:evidenceConfidenceFactors": {
+      "kind": "score-governance",
+      "path": "scoreGovernance.evidenceConfidenceFactors"
+    },
+    "analysis:conversionPaths": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.conversionPaths"
+    },
+    "analysis:readinessMap": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.readinessMap"
+    },
+    "analysis:contentIdeas": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.contentIdeas"
+    },
+    "analysis:competitors": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.competitors"
+    },
+    "analysis:renderingDiagnostics": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.renderingDiagnostics"
+    },
+    "analysis:siteFootprint": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.siteFootprint"
+    },
+    "analysis:conversionInfluence": {
+      "kind": "deterministic-analysis",
+      "path": "deterministicAnalysis.conversionInfluence"
+    }
+  }
+}

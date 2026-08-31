@@ -1,0 +1,51 @@
+185-    if (!hasUsableMetrics && effectiveCompleted > 0) {
+186-      errors.push(_err("performance.coverage", "experience-and-performance",
+187-        `Performance source is AVAILABLE with ${effectiveCompleted} completed results but no usable FCP/LCP metrics.`));
+188-    }
+189-  }
+190-
+191-    // PF-18 - client-facing competitor comparisons must remain inside the
+192-  // authoritative supplied competitor allowlist carried by DecisionEvidence.
+193-  const suppliedCompetitors =
+194-    Array.isArray(evidence.suppliedCompetitors)
+195-      ? evidence.suppliedCompetitors
+196-      : null;
+197-
+198-  const clientCompetitors =
+199-    Array.isArray(model.competitors?.comparisons)
+200-      ? model.competitors.comparisons
+201-      : [];
+202-
+203-  if (
+204-    clientCompetitors.length > 0 &&
+205-    suppliedCompetitors === null
+206-  ) {
+207-    errors.push(_err(
+208-      "competitors.comparisons",
+209-      "supplied-competitor-benchmark",
+210:      "Client-facing competitor comparisons exist but the supplied competitor allowlist is unavailable.",
+211-    ));
+212-  } else if (suppliedCompetitors !== null) {
+213-    const allowedUrls =
+214-      new Set(
+215-        suppliedCompetitors.filter(
+216-          (url) =>
+217-            typeof url === "string" &&
+218-            url.length > 0,
+219-        ),
+220-      );
+221-
+222-    for (const competitor of clientCompetitors) {
+223-      if (
+224-        typeof competitor?.url !== "string" ||
+225-        !allowedUrls.has(competitor.url)
+226-      ) {
+227-        errors.push(_err(
+228-          "competitors.comparisons",
+229-          "supplied-competitor-benchmark",
+230-          `Client-facing competitor ${competitor?.url || "<missing-url>"} is outside the supplied competitor allowlist.`,
+231-        ));
+232-      }
+233-    }
+234-  }
+235-}

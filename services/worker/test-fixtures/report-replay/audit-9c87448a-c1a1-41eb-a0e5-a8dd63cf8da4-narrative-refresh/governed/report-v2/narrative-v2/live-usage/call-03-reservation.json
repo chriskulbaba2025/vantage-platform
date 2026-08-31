@@ -1,0 +1,17 @@
+{
+  "contractVersion": "1.0.0",
+  "bindingVersion": "1.0.0",
+  "reservationId": "c4bcae05-e76c-439a-b4c9-94fa86da7f93",
+  "auditId": "9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4",
+  "executionId": "8d4bf27f-3643-4ccd-b35e-b405a1d9f911",
+  "callNumber": 3,
+  "role": "writer",
+  "passNumber": 2,
+  "modelId": "gpt-5.6-terra",
+  "promptSha256": "e6745166c1bd6b7b4d95384daa88db88c036577552f0dc5859c14fd8b8889130",
+  "estimatedInputTokens": 101508,
+  "maxOutputTokens": 12000,
+  "estimatedCost": 0.347,
+  "reservedAt": "2026-08-28T21:28:40.628Z",
+  "status": "RESERVED_BEFORE_CALL"
+}

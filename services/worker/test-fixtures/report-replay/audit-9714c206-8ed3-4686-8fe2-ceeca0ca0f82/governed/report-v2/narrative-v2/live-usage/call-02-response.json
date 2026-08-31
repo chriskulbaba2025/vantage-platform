@@ -1,0 +1,533 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "passNumber": 1,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-27T23:15:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "HG-01",
+        "code": "UNAVAILABLE_AS_ABSENT",
+        "section": "executiveConclusion, rootCause, seoSerp, technical, actionPlan, executiveDecision",
+        "explanation": "The narrative repeatedly treats null meta-description observations from a PARTIAL source as proof that descriptions are missing. It also states that this condition reduces message control, whereas the governed impact is only that it may reduce control.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "capability:content.body"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-02",
+        "code": "UNAVAILABLE_AS_ABSENT",
+        "section": "content, funnelOpportunities.awareness, funnelOpportunities.decision, aiSearch, actionPlan",
+        "explanation": "A false FAQ observation from PARTIAL evidence is presented as detected absence of buyer-question content. PARTIAL evidence cannot establish that such content is absent, including on the homepage.",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:content.body"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-03",
+        "code": "UNSUPPORTED_FACT",
+        "section": "conversion, content, funnelOpportunities.awareness, funnelOpportunities.consideration, funnelOpportunities.decision, actionPlan",
+        "explanation": "Observed conversion actions are repeatedly characterized as enquiry actions or an enquiry path. The governed evidence confirms visible, interactable actions on six assessed pages, but the CTA value is null and does not establish that the observed actions submit or initiate enquiries.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "capability:conversion.cta",
+          "capability:conversion.form",
+          "business:primaryGoal"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-04",
+        "code": "UNSUPPORTED_FACT",
+        "section": "technical",
+        "explanation": "The statement that technical performance is the weakest assessed dimension is contradicted by the supplied dimension scores: technical performance is 39 while entity/schema/AI is 38.",
+        "evidenceRefs": [
+          "score:technicalPerformanceDimension",
+          "score:entitySchemaAiDimension"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-05",
+        "code": "OBSERVATION_WITHOUT_EVIDENCE",
+        "section": "performanceUx",
+        "explanation": "The narrative says the assessment confirmed accessible conversion actions. Browser validation established visibility, interactability, and lack of obstruction, but it did not establish accessibility.",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "capability:conversion.cta"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-06",
+        "code": "INVENTED_METRIC",
+        "section": "actionPlan",
+        "explanation": "The action plan assigns high effort to process/outcomes content without governed effort evidence and assigns medium effort to a combined heading-and-security action even though the governed security-header remediation is large effort. These composite effort ratings are not supplied by the evidence.",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "analysis:readinessMap",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 6,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Several central claims convert PARTIAL observations into confirmed absence, strengthen a possible search impact into a definite one, infer enquiry actions from generic conversion actions, add an unassessed accessibility conclusion, and introduce unsupported effort ratings.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "analysis:conversionPaths",
+        "capability:performance.field"
+      ],
+      "defectIds": [
+        "DEF-01",
+        "DEF-02",
+        "DEF-03",
+        "DEF-05",
+        "DEF-06"
+      ]
+    },
+    "businessRelevance": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative remains closely tied to generating qualified enquiries and the supplied services, with commercially relevant priorities and funnel ideas. Its relevance is weakened where generic conversion actions are assumed to be enquiry actions.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:contentIdeas",
+        "analysis:readinessMap"
+      ],
+      "defectIds": [
+        "DEF-03"
+      ]
+    },
+    "executiveClarity": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The structure, priorities, and executive decision are clear and easy to follow, although certainty is not consistently calibrated to source limitations.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:conversionPaths",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": [
+        "DEF-01",
+        "DEF-02"
+      ]
+    },
+    "rootCauseCoherence": {
+      "score": 5.5,
+      "maxScore": 10,
+      "status": "FAIL",
+      "rationale": "The narrative consistently follows the supplied root-cause summary, but independently the underlying null meta-description evidence is PARTIAL. The writer therefore overstates both the confirmed condition and its downstream message-control effect.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "defectIds": [
+        "DEF-01"
+      ]
+    },
+    "actionability": {
+      "score": 6.5,
+      "maxScore": 10,
+      "status": "FAIL",
+      "rationale": "The actions are sequenced and include verification steps, but some priorities rest on unconfirmed absence, some verification language exceeds the affected scope, and two effort ratings are unsupported or conflict with component evidence.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": [
+        "DEF-01",
+        "DEF-02",
+        "DEF-06"
+      ]
+    },
+    "conversionInterpretation": {
+      "score": 5,
+      "maxScore": 8,
+      "status": "FAIL",
+      "rationale": "The writer correctly reports that actions were observed on six assessed pages and that validation found no obstruction. It then repeatedly relabels those actions as enquiry actions without evidence of their destination or function.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "capability:conversion.path"
+      ],
+      "defectIds": [
+        "DEF-03"
+      ]
+    },
+    "contentFunnelDepth": {
+      "score": 7,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are developed with useful user needs, rationales, objectives, and next actions. The main weakness is treating PARTIAL FAQ evidence as confirmed absence.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": [
+        "DEF-02"
+      ]
+    },
+    "eeatTrust": {
+      "score": 4.5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The trust section appropriately uses the readiness map, moderate trust band, content ideas, and available security-header evidence. Some proposed confidence effects remain prospective rather than observed, but are generally bounded with modal language.",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust",
+        "analysis:readinessMap",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 3,
+      "maxScore": 6,
+      "status": "FAIL",
+      "rationale": "The narrative covers the governed technical findings and gives practical remedies, but it treats PARTIAL meta and heading evidence too conclusively and incorrectly labels technical performance as the weakest dimension.",
+      "evidenceRefs": [
+        "score:technicalPerformanceDimension",
+        "score:entitySchemaAiDimension",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+      ],
+      "defectIds": [
+        "DEF-01",
+        "DEF-04"
+      ]
+    },
+    "competitiveUsefulness": {
+      "score": 3.5,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The writer limits comparison to the two assessed competitors, avoids using insufficient-evidence candidates for broad conclusions, and accurately notes that one assessed competitor was rated strong for trust proof and E-E-A-T.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 3.5,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The report preserves supported strengths in observed conversion actions and content depth while acknowledging limitations. The conversion strength should remain described as a generic action foundation rather than an enquiry foundation.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth",
+        "capability:content.body"
+      ],
+      "defectIds": [
+        "DEF-03"
+      ]
+    },
+    "nonRepetition": {
+      "score": 2.5,
+      "maxScore": 4,
+      "status": "FAIL",
+      "rationale": "The same meta-description, buyer-question, process-proof, and enquiry-clarity points recur across the conclusion, root cause, content, SEO, AI, technical, action plan, and executive decision with limited incremental value.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:contentIdeas",
+        "analysis:readinessMap"
+      ],
+      "defectIds": [
+        "DEF-07"
+      ]
+    }
+  },
+  "totalScore": 65,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "DEF-01",
+      "criterion": "evidenceFidelity",
+      "section": "executiveConclusion, rootCause, seoSerp, technical, actionPlan, executiveDecision",
+      "severity": "MAJOR",
+      "problem": "PARTIAL null meta-description evidence is converted into a confirmed missing-state claim, and a governed possible impact is stated as a definite reduction in search-result message control.",
+      "whyItMatters": "This unsupported condition and causal certainty anchor the root cause, executive recommendation, and first action, so the error propagates through the report.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "score:rootCause"
+      ],
+      "requiredCorrection": "Bound all meta-description statements to what the PARTIAL assessment observed and preserve the governed 'may reduce control' level of certainty. Do not state confirmed sitewide or page-level absence without complete evidence.",
+      "allowedFields": [
+        "executiveConclusion",
+        "rootCause",
+        "seoSerp",
+        "technical",
+        "actionPlan",
+        "executiveDecision"
+      ],
+      "mustPreserve": [
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "aiSearch",
+        "eeatTrust",
+        "performanceUx",
+        "competitors",
+        "limitations"
+      ]
+    },
+    {
+      "defectId": "DEF-02",
+      "criterion": "evidenceFidelity",
+      "section": "content, funnelOpportunities.awareness, funnelOpportunities.decision, aiSearch, actionPlan",
+      "severity": "MAJOR",
+      "problem": "The writer treats a false FAQ observation from a PARTIAL source as proof that buyer-question content is absent or was definitively not detected on the homepage.",
+      "whyItMatters": "The absence claim is used to justify multiple funnel and AI-search recommendations even though the evidence cannot establish absence.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ],
+      "requiredCorrection": "Describe buyer-question content as an assessment opportunity or an unresolved evidence area. Do not claim absence, and keep the recommendation explicitly prospective and bounded to partial coverage.",
+      "allowedFields": [
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.decision",
+        "aiSearch",
+        "actionPlan"
+      ],
+      "mustPreserve": [
+        "strengths",
+        "funnelOpportunities.consideration",
+        "eeatTrust",
+        "performanceUx",
+        "competitors",
+        "limitations"
+      ]
+    },
+    {
+      "defectId": "DEF-03",
+      "criterion": "conversionInterpretation",
+      "section": "conversion, content, funnelOpportunities.awareness, funnelOpportunities.consideration, funnelOpportunities.decision, actionPlan",
+      "severity": "MAJOR",
+      "problem": "Generic observed conversion actions are repeatedly called enquiry actions or treated as proven links to the enquiry journey.",
+      "whyItMatters": "The primary goal does not establish the function of the observed actions, and the conversion-path evidence has a null CTA value. Relabelling the actions overstates what browser validation proved.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "business:primaryGoal"
+      ],
+      "requiredCorrection": "Refer only to observed conversion actions unless their enquiry function is directly evidenced. Frame connections to qualified enquiries as intended opportunities rather than observed path behavior.",
+      "allowedFields": [
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "actionPlan"
+      ],
+      "mustPreserve": [
+        "strengths",
+        "rootCause",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "competitors",
+        "limitations"
+      ]
+    },
+    {
+      "defectId": "DEF-04",
+      "criterion": "seoTechnical",
+      "section": "technical",
+      "severity": "MAJOR",
+      "problem": "Technical performance is called the weakest assessed dimension even though entity/schema/AI scores lower.",
+      "whyItMatters": "The incorrect comparison distorts executive prioritization and conflicts with the frozen dimension scores.",
+      "evidenceRefs": [
+        "score:technicalPerformanceDimension",
+        "score:entitySchemaAiDimension"
+      ],
+      "requiredCorrection": "Remove the false weakest-dimension comparison or state the relative scores accurately without changing any score.",
+      "allowedFields": [
+        "technical"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "DEF-05",
+      "criterion": "evidenceFidelity",
+      "section": "performanceUx",
+      "severity": "MAJOR",
+      "problem": "Visible, interactable, unobstructed actions are described as accessible actions even though no accessibility validation is supplied.",
+      "whyItMatters": "Accessibility is a distinct assessed quality and cannot be inferred from browser interactability alone.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta"
+      ],
+      "requiredCorrection": "Limit the statement to the observed visibility, interactability, and obstruction status. Do not claim accessibility.",
+      "allowedFields": [
+        "performanceUx"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "DEF-06",
+      "criterion": "actionability",
+      "section": "actionPlan",
+      "severity": "MAJOR",
+      "problem": "ACT-03 assigns an unsupported high effort, while ACT-04 assigns medium effort to a composite action that includes a governed large-effort security-header recommendation.",
+      "whyItMatters": "Unsupported effort labels can mislead resource allocation and implementation planning.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "requiredCorrection": "Use only governed effort values for directly corresponding actions. Do not invent an effort for content actions, and do not collapse components with different governed efforts into an unsupported composite rating.",
+      "allowedFields": [
+        "actionPlan"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "DEF-07",
+      "criterion": "nonRepetition",
+      "section": "executiveConclusion, rootCause, content, seoSerp, aiSearch, technical, actionPlan, executiveDecision",
+      "severity": "MINOR",
+      "problem": "The report repeats the same meta-description, buyer-question, proof, and next-step themes across numerous sections.",
+      "whyItMatters": "Repetition dilutes executive focus and obscures the distinct purpose of each section.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:contentIdeas",
+        "analysis:readinessMap"
+      ],
+      "requiredCorrection": "After correcting evidence defects, consolidate repeated rationale so each section contributes a distinct decision, implication, limitation, or action without restating the same conclusion.",
+      "allowedFields": [
+        "executiveConclusion",
+        "rootCause",
+        "content",
+        "seoSerp",
+        "aiSearch",
+        "technical",
+        "actionPlan",
+        "executiveDecision"
+      ],
+      "mustPreserve": [
+        "strengths",
+        "conversion",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "eeatTrust",
+        "performanceUx",
+        "competitors",
+        "limitations"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "executiveConclusion",
+      "rootCause",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "technical",
+      "performanceUx",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "fieldsLocked": [
+      "strengths",
+      "eeatTrust",
+      "competitors",
+      "limitations"
+    ],
+    "defectIds": [
+      "DEF-01",
+      "DEF-02",
+      "DEF-03",
+      "DEF-04",
+      "DEF-05",
+      "DEF-06",
+      "DEF-07"
+    ]
+  }
+}

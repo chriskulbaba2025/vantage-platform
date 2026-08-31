@@ -1,0 +1,31 @@
+NV2_DIAG_STATE={"contractVersion":"1.0.0","auditId":"8c0406d0-3541-47ca-9e05-3d3538ecd7d0","tenantId":"narrative-v2-prod-tenant","clientId":"proof.example.com-narrative-v2-production-proof","state":"narrative_failed","version":8,"lastTransitionedAt":"2026-08-31T04:43:21.034Z","lastEvent":"8ab67e65-4150-4d67-bb7d-33d9abd66285"}
+G£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (148.9286ms)
+Gä¦ tests 1
+Gä¦ suites 0
+Gä¦ pass 0
+Gä¦ fail 1
+Gä¦ cancelled 0
+Gä¦ skipped 0
+Gä¦ todo 0
+Gä¦ duration_ms 627.6903
+
+G£û failing tests:
+
+test at src\application\narrative-v2-production-path.diag.test.js:786:1
+G£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (148.9286ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'narrative_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.diag.test.js:810:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'narrative_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

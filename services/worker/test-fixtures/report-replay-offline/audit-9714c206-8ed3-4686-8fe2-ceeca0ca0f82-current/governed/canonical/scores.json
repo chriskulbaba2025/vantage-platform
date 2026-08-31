@@ -1,0 +1,1406 @@
+{
+  "contractVersion": "1.0.0",
+  "scoringVersion": "4.1.1",
+  "generatedAt": "2026-08-27T22:31:21.941Z",
+  "assessedWeight": 85,
+  "readinessStatus": "Complete",
+  "readinessStatusDetail": "Complete",
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 95,
+  "evidenceConfidenceFactors": {
+    "sourceAvailability": 87,
+    "dataCompleteness": 100,
+    "sourceValidity": 90,
+    "dataFreshness": 100,
+    "urlMatching": 100,
+    "crossSourceAgreement": 100,
+    "competitorRelevance": 100,
+    "ruleCertainty": 91
+  },
+  "evidenceConfidenceFactorAvailability": [
+    {
+      "factor": "sourceAvailability",
+      "available": true,
+      "weight": 0.2
+    },
+    {
+      "factor": "dataCompleteness",
+      "available": true,
+      "weight": 0.15
+    },
+    {
+      "factor": "sourceValidity",
+      "available": true,
+      "weight": 0.15
+    },
+    {
+      "factor": "dataFreshness",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "urlMatching",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "crossSourceAgreement",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "competitorRelevance",
+      "available": true,
+      "weight": 0.1
+    },
+    {
+      "factor": "ruleCertainty",
+      "available": true,
+      "weight": 0.1
+    }
+  ],
+  "capabilityEvidence": {
+    "capabilityEvidenceVersion": "2.0.0",
+    "summary": {
+      "total": 13,
+      "available": 11,
+      "partial": 1,
+      "unavailable": 1,
+      "failed": 0,
+      "notConnected": 0,
+      "notApplicable": 0,
+      "assessed": 12
+    },
+    "capabilities": {
+      "content.body": {
+        "capability": "content.body",
+        "status": "PARTIAL",
+        "coverage": {
+          "requested": 35,
+          "completed": 25,
+          "failed": 10
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [
+          "Usable body content returned for 25 of 35 requested pages"
+        ],
+        "requiredFieldsPresent": true
+      },
+      "offer.clarity": {
+        "capability": "offer.clarity",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "trust.proof": {
+        "capability": "trust.proof",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": null,
+          "completed": null,
+          "failed": null
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "conversion.cta": {
+        "capability": "conversion.cta",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "playwright-conversion-path",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true,
+        "validated": true,
+        "validatedBy": "playwright-conversion-path",
+        "browserSummary": {
+          "requested": 6,
+          "completed": 6,
+          "unassessed": 0,
+          "presentPages": 6,
+          "readyPages": 6
+        }
+      },
+      "conversion.form": {
+        "capability": "conversion.form",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "playwright-conversion-path",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true,
+        "validated": true,
+        "validatedBy": "playwright-conversion-path",
+        "browserSummary": {
+          "requested": 6,
+          "completed": 6,
+          "unassessed": 0,
+          "presentPages": 6,
+          "readyPages": 6
+        }
+      },
+      "conversion.path": {
+        "capability": "conversion.path",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [
+          "Conversion path evidence was not extracted (parsed text does not prove path absence)"
+        ],
+        "requiredFieldsPresent": true,
+        "kind": "validated",
+        "validated": true,
+        "validatedBy": "playwright-conversion-path",
+        "validationSummary": {
+          "requested": 6,
+          "pass": 0,
+          "partial": 6,
+          "failed": 0,
+          "notAssessed": 0,
+          "obstructionCount": 0
+        }
+      },
+      "technical.indexability": {
+        "capability": "technical.indexability",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 1000,
+          "completed": 1,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.redirects": {
+        "capability": "technical.redirects",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 20,
+          "completed": 20,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.resources": {
+        "capability": "technical.resources",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 10,
+          "completed": 10,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "technical.headers": {
+        "capability": "technical.headers",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 6,
+          "completed": 6,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "playwright-conversion-path",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true,
+        "validated": true,
+        "validatedBy": "playwright-conversion-path",
+        "observedHeaders": {
+          "xFrameOptions": false,
+          "xContentTypeOptions": false,
+          "referrerPolicy": false,
+          "contentSecurityPolicy": false
+        },
+        "headerCoverage": {
+          "requested": 6,
+          "completed": 6,
+          "unassessed": 0
+        }
+      },
+      "schema.structured_data": {
+        "capability": "schema.structured_data",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 1,
+          "completed": 1,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "dataforseo-onpage",
+          "adapterVersion": "1.4.1",
+          "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "performance.lab": {
+        "capability": "performance.lab",
+        "status": "AVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [],
+        "requiredFieldsPresent": true
+      },
+      "performance.field": {
+        "capability": "performance.field",
+        "status": "UNAVAILABLE",
+        "coverage": {
+          "requested": 2,
+          "completed": 2,
+          "failed": 0
+        },
+        "provenance": {
+          "source": "pagespeed-insights",
+          "adapterVersion": null,
+          "artifactRef": null
+        },
+        "limitations": [
+          "CrUX field data was not returned for this site (not populated or not collected)"
+        ],
+        "requiredFieldsPresent": false
+      }
+    }
+  },
+  "suppressedFindingReasons": [],
+  "aiReadinessBasis": "structural",
+  "moduleScores": {
+    "conversion_paths": {
+      "score": 100,
+      "eligible": true,
+      "weight": 12.5,
+      "reason": null,
+      "subWeightAssessed": 90,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "cta",
+          "weight": 25,
+          "score": 25
+        },
+        {
+          "key": "form",
+          "weight": 20,
+          "score": 20
+        },
+        {
+          "key": "pricing",
+          "weight": 15,
+          "score": 15
+        },
+        {
+          "key": "policies",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "testimonials",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "contact",
+          "weight": 10,
+          "score": 10
+        }
+      ]
+    },
+    "offer_clarity": {
+      "score": 100,
+      "eligible": true,
+      "weight": 12.5,
+      "reason": null,
+      "subWeightAssessed": 55,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "forms",
+          "weight": 15,
+          "score": 15
+        },
+        {
+          "key": "pricing",
+          "weight": 20,
+          "score": 20
+        },
+        {
+          "key": "services",
+          "weight": 20,
+          "score": 20
+        }
+      ]
+    },
+    "trust_signals": {
+      "score": 90,
+      "eligible": true,
+      "weight": 12.5,
+      "reason": null
+    },
+    "risk_reduction": {
+      "score": 60,
+      "eligible": true,
+      "weight": 12.5,
+      "reason": null,
+      "subWeightAssessed": 100,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "policies",
+          "weight": 25,
+          "score": 25
+        },
+        {
+          "key": "contact",
+          "weight": 20,
+          "score": 20
+        },
+        {
+          "key": "security_headers",
+          "weight": 25,
+          "score": 0
+        },
+        {
+          "key": "https",
+          "weight": 15,
+          "score": 15
+        },
+        {
+          "key": "faq",
+          "weight": 15,
+          "score": 0
+        }
+      ]
+    },
+    "content_depth": {
+      "score": 85,
+      "eligible": true,
+      "weight": 10,
+      "reason": null,
+      "subWeightAssessed": 100,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "pages",
+          "weight": 30,
+          "score": 30
+        },
+        {
+          "key": "depth",
+          "weight": 25,
+          "score": 25
+        },
+        {
+          "key": "services",
+          "weight": 20,
+          "score": 20
+        },
+        {
+          "key": "faq",
+          "weight": 15,
+          "score": 0
+        },
+        {
+          "key": "page_depth",
+          "weight": 10,
+          "score": 10
+        }
+      ]
+    },
+    "funnel_coverage": {
+      "score": 100,
+      "eligible": true,
+      "weight": 10,
+      "reason": null,
+      "subWeightAssessed": 125,
+      "subWeightTotal": 125,
+      "subScores": [
+        {
+          "key": "tofu",
+          "weight": 30,
+          "score": 30
+        },
+        {
+          "key": "faq",
+          "weight": 20,
+          "score": 0
+        },
+        {
+          "key": "case_studies",
+          "weight": 15,
+          "score": 15
+        },
+        {
+          "key": "services",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "pricing",
+          "weight": 20,
+          "score": 20
+        },
+        {
+          "key": "contact",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "forms",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "ctas",
+          "weight": 10,
+          "score": 10
+        }
+      ]
+    },
+    "technical_hygiene": {
+      "score": 6,
+      "eligible": true,
+      "weight": 10,
+      "reason": null,
+      "subWeightAssessed": 30,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "indexability",
+          "weight": 10,
+          "score": 7
+        },
+        {
+          "key": "redirects",
+          "weight": 10,
+          "score": 10
+        },
+        {
+          "key": "headers",
+          "weight": 10,
+          "score": 0
+        }
+      ]
+    },
+    "performance": {
+      "score": 71,
+      "eligible": true,
+      "weight": 10,
+      "reason": null
+    },
+    "schema_entity": {
+      "score": 10,
+      "eligible": true,
+      "weight": 5,
+      "reason": null,
+      "subWeightAssessed": 100,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "schema_count",
+          "weight": 40,
+          "score": 10
+        },
+        {
+          "key": "organization",
+          "weight": 20,
+          "score": 0
+        },
+        {
+          "key": "faq_schema",
+          "weight": 15,
+          "score": 0
+        },
+        {
+          "key": "service_schema",
+          "weight": 15,
+          "score": 0
+        },
+        {
+          "key": "social_links",
+          "weight": 10,
+          "score": 0
+        }
+      ]
+    },
+    "ai_readiness": {
+      "score": 76,
+      "eligible": true,
+      "weight": 5,
+      "reason": null,
+      "subWeightAssessed": 85,
+      "subWeightTotal": 100,
+      "subScores": [
+        {
+          "key": "schema",
+          "weight": 25,
+          "score": 25
+        },
+        {
+          "key": "faq",
+          "weight": 20,
+          "score": 0
+        },
+        {
+          "key": "depth",
+          "weight": 20,
+          "score": 20
+        },
+        {
+          "key": "topics",
+          "weight": 20,
+          "score": 20
+        }
+      ]
+    }
+  },
+  "moduleEligibility": {
+    "conversion_paths": true,
+    "offer_clarity": true,
+    "trust_signals": true,
+    "risk_reduction": true,
+    "content_depth": true,
+    "funnel_coverage": true,
+    "technical_hygiene": true,
+    "performance": true,
+    "schema_entity": true,
+    "ai_readiness": true
+  },
+  "suppressedModules": [],
+  "scores": {
+    "trust": 75,
+    "contentDepth": 93,
+    "conversionPathways": 100,
+    "technical": 6,
+    "performance": 71,
+    "conversionReadiness": 78,
+    "awareness": 76,
+    "consideration": 74,
+    "decision": 94,
+    "aiReadiness": 65,
+    "conversionPathwaysDimension": 100,
+    "trustEeatDimension": 75,
+    "contentFunnelDimension": 93,
+    "technicalPerformanceDimension": 56,
+    "entitySchemaAiDimension": 40
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "High"
+  },
+  "dimensionEligibility": {
+    "conversion_pathways": true,
+    "trust_eeat": true,
+    "content_funnel": true,
+    "technical_performance": true,
+    "entity_schema_ai": true
+  },
+  "rootCause": "Buyer-question content was not detected in the available partial assessment. The available partial assessment did not detect buyer-question content on the assessed pages, so some buyer questions may remain unsupported there; unassessed pages remain unknown.",
+  "findingCount": 4,
+  "findingIds": [
+    "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+    "509d1795-9dcb-400e-8242-41f58647b40a",
+    "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+    "b2fca59f-8982-43b9-bab0-a8da4080bc45"
+  ],
+  "conversionPaths": [
+    {
+      "name": "Primary conversion path",
+      "cta": null,
+      "host": "none",
+      "steps": [
+        "Browser validation assessed conversion actions on 6 of 6 selected page(s).",
+        "A conversion action was observed on 6 assessed page(s).",
+        "A visible, interactable, unobstructed action was confirmed on 6 assessed page(s)."
+      ],
+      "blockers": [],
+      "status": "Clear"
+    }
+  ],
+  "readinessMap": [
+    {
+      "topic": "Custom Websites",
+      "stage": "BOFU",
+      "blocker": "Unclear next step",
+      "trustAsset": "Process proof",
+      "eeat": "Experience proof",
+      "cta": "Form",
+      "path": "Clear",
+      "priority": "H"
+    },
+    {
+      "topic": "Digital Marketing",
+      "stage": "BOFU",
+      "blocker": "Unclear next step",
+      "trustAsset": "Process proof",
+      "eeat": "Experience proof",
+      "cta": "Form",
+      "path": "Clear",
+      "priority": "H"
+    },
+    {
+      "topic": "SEO",
+      "stage": "BOFU",
+      "blocker": "Unclear next step",
+      "trustAsset": "Process proof",
+      "eeat": "Experience proof",
+      "cta": "Form",
+      "path": "Clear",
+      "priority": "H"
+    },
+    {
+      "topic": "Branding",
+      "stage": "BOFU",
+      "blocker": "Unclear next step",
+      "trustAsset": "Process proof",
+      "eeat": "Experience proof",
+      "cta": "Form",
+      "path": "Clear",
+      "priority": "H"
+    },
+    {
+      "topic": "Custom Software",
+      "stage": "TOFU",
+      "blocker": "Unclear next step",
+      "trustAsset": "Process proof",
+      "eeat": "Experience proof",
+      "cta": "Form",
+      "path": "Clear",
+      "priority": "M"
+    }
+  ],
+  "contentIdeas": {
+    "tofu": [
+      {
+        "idea": "What Is Custom Websites?",
+        "frame": "Answer-first",
+        "type": "Guide",
+        "question": "What is this?",
+        "priority": "H"
+      },
+      {
+        "idea": "Signs You May Need Digital Marketing",
+        "frame": "Answer-first",
+        "type": "Article",
+        "question": "Does this apply to me?",
+        "priority": "M"
+      },
+      {
+        "idea": "Can Custom Websites Produce Measurable Change?",
+        "frame": "Objection handler",
+        "type": "Educational page",
+        "question": "Will this work?",
+        "priority": "H"
+      }
+    ],
+    "mofu": [
+      {
+        "idea": "Custom Websites: Options and Fit",
+        "frame": "Comparison/fit",
+        "type": "Comparison page",
+        "question": "Which option is right?",
+        "priority": "H"
+      },
+      {
+        "idea": "What Happens in the Process",
+        "frame": "Process page",
+        "type": "Process page",
+        "question": "What should I expect?",
+        "priority": "H"
+      },
+      {
+        "idea": "Client Results and Outcomes",
+        "frame": "Case study",
+        "type": "Case study",
+        "question": "What results are possible?",
+        "priority": "H"
+      },
+      {
+        "idea": "Who Leads This Work?",
+        "frame": "Founder/expert",
+        "type": "Founder page",
+        "question": "Why trust this provider?",
+        "priority": "H"
+      }
+    ],
+    "bofu": [
+      {
+        "idea": "Pricing and What to Expect",
+        "frame": "Risk-reversal",
+        "type": "Pricing page",
+        "question": "What does it cost?",
+        "priority": "H"
+      },
+      {
+        "idea": "Your First Step Toward generating qualified enquiries",
+        "frame": "Process page",
+        "type": "Start-here",
+        "question": "What happens after I act?",
+        "priority": "H"
+      },
+      {
+        "idea": "Frequently Asked Questions with Examples",
+        "frame": "Testimonial FAQ",
+        "type": "FAQ page",
+        "question": "What concerns are common?",
+        "priority": "H"
+      }
+    ],
+    "leading": [
+      {
+        "query": "Custom Websites for generating qualified enquiries",
+        "rationale": "Connects the offer directly to the stated business goal",
+        "priority": "H"
+      },
+      {
+        "query": "Custom Websites for decision making",
+        "rationale": "Connects the offer to an urgent practical use",
+        "priority": "H"
+      },
+      {
+        "query": "Custom Websites results and process",
+        "rationale": "Combines proof and buyer intent",
+        "priority": "M"
+      }
+    ]
+  },
+  "competitors": {
+    "comparisons": [
+      {
+        "name": "London Marketing & Advertising Agency | RedRhino",
+        "url": "https://red-rhino.com",
+        "status": "AVAILABLE",
+        "topic": "Digital Dreamers & Brand Believers, David Basacco Managing Director, RhinoActive +, Wendy Smith President, RedRhino +, Stephanie Pennacchietti Account Director +",
+        "offerClarity": "Strong",
+        "trustProof": "Limited",
+        "ctaClarity": "Moderate",
+        "contentDepth": "Strong",
+        "eeat": "Limited",
+        "pathClarity": "Moderate"
+      },
+      {
+        "name": "ZOO Media Group - Branding, Website Design & Development",
+        "url": "https://www.zoomedia.ca",
+        "status": "AVAILABLE",
+        "topic": "Creative and Digital Marketing Services, Branding & Visual Identity, Web & Ecommerce Design, SEO & Digital Marketing",
+        "offerClarity": "Strong",
+        "trustProof": "Strong",
+        "ctaClarity": "Moderate",
+        "contentDepth": "Strong",
+        "eeat": "Strong",
+        "pathClarity": "Moderate"
+      }
+    ],
+    "opportunities": {
+      "topics": [],
+      "qualifiedCandidates": [],
+      "excludedCandidates": [],
+      "gaps": [],
+      "allGaps": [],
+      "sources": {},
+      "limitations": []
+    }
+  },
+  "renderingDiagnostics": [],
+  "siteFootprint": {
+    "status": "AVAILABLE",
+    "discoveredUrlCount": 418,
+    "retainedUrlCount": 418,
+    "sitemapDocumentCount": 10,
+    "capped": false,
+    "incomplete": false,
+    "clusterCount": 22,
+    "clusters": [
+      {
+        "id": "cluster-8a5edab28263",
+        "pattern": "/",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-979bddc4a8ca",
+        "pattern": "/about",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/about"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-652a3e2e4cfa",
+        "pattern": "/browser-supports/{id}",
+        "discoveredUrlCount": 118,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+          "https://www.tbkcreative.com/browser-supports/browser-support-policy-july-2022",
+          "https://www.tbkcreative.com/browser-supports/browser-support-policy-september-2024"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "DYNAMIC_IDENTIFIER_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-c62312670e25",
+        "pattern": "/browser-supports/{number}",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/browser-supports/22847"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": [
+          "DYNAMIC_IDENTIFIER_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-2be952a11700",
+        "pattern": "/careers/{id}",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/careers/b2b-content-strategist-and-creator"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": [
+          "DYNAMIC_IDENTIFIER_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-ca966a528a05",
+        "pattern": "/careers/{segment}",
+        "discoveredUrlCount": 5,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/careers/conversion-automation-lead",
+          "https://www.tbkcreative.com/careers/performance-marketing-manager",
+          "https://www.tbkcreative.com/careers/web-strategist"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-82b4f5be64e8",
+        "pattern": "/category/news-2",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/category/news-2"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-98c9633b81c6",
+        "pattern": "/category/post",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/category/post"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-8aa71f53a16c",
+        "pattern": "/category/uncategorized",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/category/uncategorized"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-8a375f5927ea",
+        "pattern": "/intern-journal/{segment}",
+        "discoveredUrlCount": 8,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/intern-journal/christina-donati",
+          "https://www.tbkcreative.com/intern-journal/george-ridout",
+          "https://www.tbkcreative.com/intern-journal/taylor-ross"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-f46b16ed5a4e",
+        "pattern": "/news",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/news"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-121ea71a255a",
+        "pattern": "/our-work/{id}",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/our-work/lmr-dream-lottery-2"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": [
+          "DYNAMIC_IDENTIFIER_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-c46d37134e1d",
+        "pattern": "/our-work/{segment}",
+        "discoveredUrlCount": 29,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/our-work/anchem",
+          "https://www.tbkcreative.com/our-work/jiffy-lube-skip-the-dealership",
+          "https://www.tbkcreative.com/our-work/william-standen"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-3b1aeccb742d",
+        "pattern": "/services",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/services"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": []
+      },
+      {
+        "id": "cluster-9dc40e13528e",
+        "pattern": "/services/{segment}",
+        "discoveredUrlCount": 11,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/services/branding-design",
+          "https://www.tbkcreative.com/services/develop",
+          "https://www.tbkcreative.com/services/video-strategy"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-0283990f1bc7",
+        "pattern": "/services/{segment}/{id}",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/services/guide/website-security-2"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "DYNAMIC_IDENTIFIER_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-e2d62010cf3b",
+        "pattern": "/services/{segment}/{segment}",
+        "discoveredUrlCount": 34,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+          "https://www.tbkcreative.com/services/create/content-copy",
+          "https://www.tbkcreative.com/services/guide/workshops"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-fa5526c5b748",
+        "pattern": "/tag/{segment}",
+        "discoveredUrlCount": 33,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/tag/andrew-schiestel",
+          "https://www.tbkcreative.com/tag/mobile-website",
+          "https://www.tbkcreative.com/tag/website-project-questions"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-18c10ecf73c8",
+        "pattern": "/{id}",
+        "discoveredUrlCount": 1,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2"
+        ],
+        "requiresRepresentativeAssessment": false,
+        "reasonCodes": [
+          "DYNAMIC_IDENTIFIER_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-6446f72d5d17",
+        "pattern": "/{segment}",
+        "discoveredUrlCount": 29,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/accessibility",
+          "https://www.tbkcreative.com/intern",
+          "https://www.tbkcreative.com/webinar-survey"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-5422f11cfcc9",
+        "pattern": "/{year}/{number}/{number}/{id}",
+        "discoveredUrlCount": 34,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+          "https://www.tbkcreative.com/2019/10/09/tbk-top-web-design-provider-2020",
+          "https://www.tbkcreative.com/2022/12/07/top-marketing-investments-for-2023"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "DYNAMIC_IDENTIFIER_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      },
+      {
+        "id": "cluster-f5de095ee413",
+        "pattern": "/{year}/{number}/{number}/{segment}",
+        "discoveredUrlCount": 105,
+        "representativeUrls": [
+          "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+          "https://www.tbkcreative.com/2020/01/09/new-tricar-website-goes-live",
+          "https://www.tbkcreative.com/2025/05/29/coming-soon-to-canada-google-ads-in-ai-overviews"
+        ],
+        "requiresRepresentativeAssessment": true,
+        "reasonCodes": [
+          "VARIABLE_SIBLING_FAMILY",
+          "DYNAMIC_IDENTIFIER_FAMILY",
+          "LARGE_REPEATED_FAMILY"
+        ]
+      }
+    ],
+    "priorityUrls": [
+      "https://www.tbkcreative.com/",
+      "https://www.tbkcreative.com/combating-artificial-intelligence-and-privacy-settings-as-a-marketing-manager",
+      "https://www.tbkcreative.com/services",
+      "https://www.tbkcreative.com/about",
+      "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+      "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+      "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+      "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+      "https://www.tbkcreative.com/tag/andrew-schiestel",
+      "https://www.tbkcreative.com/our-work/anchem",
+      "https://www.tbkcreative.com/accessibility",
+      "https://www.tbkcreative.com/services/branding-design",
+      "https://www.tbkcreative.com/intern-journal/christina-donati",
+      "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2",
+      "https://www.tbkcreative.com/how-accessible-websites-improve-user-experience-search-ranking",
+      "https://www.tbkcreative.com/careers/digital-marketing-strategist",
+      "https://www.tbkcreative.com/careers/performance-marketing-manager",
+      "https://www.tbkcreative.com/tag/digital",
+      "https://www.tbkcreative.com/tag/digital-marketing",
+      "https://www.tbkcreative.com/tag/digital-marketing-the-law"
+    ],
+    "prioritySelection": {
+      "strategyVersion": "1.0.0",
+      "priorityUrlCap": 20,
+      "priorityUrls": [
+        "https://www.tbkcreative.com/",
+        "https://www.tbkcreative.com/combating-artificial-intelligence-and-privacy-settings-as-a-marketing-manager",
+        "https://www.tbkcreative.com/services",
+        "https://www.tbkcreative.com/about",
+        "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+        "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+        "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+        "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+        "https://www.tbkcreative.com/tag/andrew-schiestel",
+        "https://www.tbkcreative.com/our-work/anchem",
+        "https://www.tbkcreative.com/accessibility",
+        "https://www.tbkcreative.com/services/branding-design",
+        "https://www.tbkcreative.com/intern-journal/christina-donati",
+        "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2",
+        "https://www.tbkcreative.com/how-accessible-websites-improve-user-experience-search-ranking",
+        "https://www.tbkcreative.com/careers/digital-marketing-strategist",
+        "https://www.tbkcreative.com/careers/performance-marketing-manager",
+        "https://www.tbkcreative.com/tag/digital",
+        "https://www.tbkcreative.com/tag/digital-marketing",
+        "https://www.tbkcreative.com/tag/digital-marketing-the-law"
+      ],
+      "mustHaveUrls": [
+        "https://www.tbkcreative.com/",
+        "https://www.tbkcreative.com/combating-artificial-intelligence-and-privacy-settings-as-a-marketing-manager",
+        "https://www.tbkcreative.com/services",
+        "https://www.tbkcreative.com/about"
+      ],
+      "representativeUrls": [
+        "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+        "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+        "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+        "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+        "https://www.tbkcreative.com/tag/andrew-schiestel",
+        "https://www.tbkcreative.com/our-work/anchem",
+        "https://www.tbkcreative.com/accessibility",
+        "https://www.tbkcreative.com/services/branding-design",
+        "https://www.tbkcreative.com/intern-journal/christina-donati"
+      ],
+      "supplementalUrls": [
+        "https://www.tbkcreative.com/complimentary-marketing-consulting-with-tbks-ceo-2",
+        "https://www.tbkcreative.com/how-accessible-websites-improve-user-experience-search-ranking",
+        "https://www.tbkcreative.com/careers/digital-marketing-strategist",
+        "https://www.tbkcreative.com/careers/performance-marketing-manager",
+        "https://www.tbkcreative.com/tag/digital",
+        "https://www.tbkcreative.com/tag/digital-marketing",
+        "https://www.tbkcreative.com/tag/digital-marketing-the-law"
+      ],
+      "materialFamilyCount": 9,
+      "representedMaterialFamilyCount": 9,
+      "unrepresentedMaterialFamilyCount": 0,
+      "materialFamilies": [
+        {
+          "clusterId": "cluster-652a3e2e4cfa",
+          "pattern": "/browser-supports/{id}",
+          "discoveredUrlCount": 118,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+            "https://www.tbkcreative.com/browser-supports/browser-support-policy-july-2022",
+            "https://www.tbkcreative.com/browser-supports/browser-support-policy-september-2024"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/browser-supports/browser-support-policy-april-2014",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-f5de095ee413",
+          "pattern": "/{year}/{number}/{number}/{segment}",
+          "discoveredUrlCount": 105,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+            "https://www.tbkcreative.com/2020/01/09/new-tricar-website-goes-live",
+            "https://www.tbkcreative.com/2025/05/29/coming-soon-to-canada-google-ads-in-ai-overviews"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/2013/04/10/canadian-anti-spam-act",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "DYNAMIC_IDENTIFIER_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-e2d62010cf3b",
+          "pattern": "/services/{segment}/{segment}",
+          "discoveredUrlCount": 34,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+            "https://www.tbkcreative.com/services/create/content-copy",
+            "https://www.tbkcreative.com/services/guide/workshops"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/services/capture/conversion-rate-optimization",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-5422f11cfcc9",
+          "pattern": "/{year}/{number}/{number}/{id}",
+          "discoveredUrlCount": 34,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+            "https://www.tbkcreative.com/2019/10/09/tbk-top-web-design-provider-2020",
+            "https://www.tbkcreative.com/2022/12/07/top-marketing-investments-for-2023"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/2015/04/15/how-an-online-sweepstakes-can-generate-over-2000-additional-leads",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "DYNAMIC_IDENTIFIER_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-fa5526c5b748",
+          "pattern": "/tag/{segment}",
+          "discoveredUrlCount": 33,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/tag/andrew-schiestel",
+            "https://www.tbkcreative.com/tag/mobile-website",
+            "https://www.tbkcreative.com/tag/website-project-questions"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/tag/andrew-schiestel",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-c46d37134e1d",
+          "pattern": "/our-work/{segment}",
+          "discoveredUrlCount": 29,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/our-work/anchem",
+            "https://www.tbkcreative.com/our-work/jiffy-lube-skip-the-dealership",
+            "https://www.tbkcreative.com/our-work/william-standen"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/our-work/anchem",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-6446f72d5d17",
+          "pattern": "/{segment}",
+          "discoveredUrlCount": 29,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/accessibility",
+            "https://www.tbkcreative.com/intern",
+            "https://www.tbkcreative.com/webinar-survey"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/accessibility",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-9dc40e13528e",
+          "pattern": "/services/{segment}",
+          "discoveredUrlCount": 11,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/services/branding-design",
+            "https://www.tbkcreative.com/services/develop",
+            "https://www.tbkcreative.com/services/video-strategy"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/services/branding-design",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        },
+        {
+          "clusterId": "cluster-8a375f5927ea",
+          "pattern": "/intern-journal/{segment}",
+          "discoveredUrlCount": 8,
+          "representativeUrls": [
+            "https://www.tbkcreative.com/intern-journal/christina-donati",
+            "https://www.tbkcreative.com/intern-journal/george-ridout",
+            "https://www.tbkcreative.com/intern-journal/taylor-ross"
+          ],
+          "selectedPriorityUrl": "https://www.tbkcreative.com/intern-journal/christina-donati",
+          "representedInPrioritySet": true,
+          "reasonCodes": [
+            "VARIABLE_SIBLING_FAMILY",
+            "LARGE_REPEATED_FAMILY"
+          ]
+        }
+      ]
+    },
+    "coverage": {
+      "usableSitemap": true,
+      "complete": true,
+      "parsedSitemapDocumentCount": 10,
+      "failedSitemapDocumentCount": 0,
+      "duplicateUrlCount": 0,
+      "skippedExternalPageUrlCount": 0,
+      "skippedExternalSitemapCount": 0,
+      "cappedByDocuments": false,
+      "cappedByUrls": false,
+      "sitemapDocumentCap": 200,
+      "retainedUrlCap": 100000,
+      "priorityUrlCap": 20
+    },
+    "limitations": []
+  },
+  "findingsArtifact": null,
+  "scoresArtifact": null
+}

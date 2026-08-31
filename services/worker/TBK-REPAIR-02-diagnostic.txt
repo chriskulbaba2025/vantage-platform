@@ -1,0 +1,375 @@
+
+--- TBK-REPAIR-02 fixture and assertions ---
+
+ 250:     limitations: [
+ 251:       "Browser unavailable",
+ 252:     ],
+ 253:   };
+ 254: }
+ 255: 
+ 256: test(
+ 257:   "TBK-REPAIR-02: genuine browser evidence makes Conversion Paths assessable while NOT_ASSESSED stays suppressed",
+ 258:   () => {
+ 259:     const evidence =
+ 260:       decisionEvidence();
+ 261: 
+ 262:     const capabilityEvidence =
+ 263:       buildCapabilityEvidence({
+ 264:         decisionEvidence:
+ 265:           evidence,
+ 266:         auditId:
+ 267:           "tbk-repair-02-assessed",
+ 268:         generatedAt:
+ 269:           FIXED_TS,
+ 270:         pathValidationEvidence:
+ 271:           assessedPathEvidence(),
+ 272:       });
+ 273: 
+ 274:     const cta =
+ 275:       capabilityEvidence
+ 276:         .capabilities[
+ 277:           "conversion.cta"
+ 278:         ];
+ 279: 
+ 280:     const form =
+ 281:       capabilityEvidence
+ 282:         .capabilities[
+ 283:           "conversion.form"
+ 284:         ];
+ 285: 
+ 286:     const path =
+ 287:       capabilityEvidence
+ 288:         .capabilities[
+ 289:           "conversion.path"
+ 290:         ];
+ 291: 
+ 292:     assert.equal(
+ 293:       cta.status,
+ 294:       "AVAILABLE",
+ 295:     );
+ 296: 
+ 297:     assert.equal(
+ 298:       cta.validated,
+ 299:       true,
+ 300:     );
+ 301: 
+ 302:     assert.deepEqual(
+ 303:       cta.browserSummary,
+ 304:       {
+ 305:         requested: 2,
+ 306:         completed: 2,
+ 307:         unassessed: 0,
+ 308:         presentPages: 2,
+ 309:         readyPages: 2,
+ 310:       },
+ 311:     );
+ 312: 
+ 313:     assert.equal(
+ 314:       form.status,
+ 315:       "AVAILABLE",
+ 316:     );
+ 317: 
+ 318:     assert.equal(
+ 319:       form.validated,
+ 320:       true,
+ 321:     );
+ 322: 
+ 323:     assert.deepEqual(
+ 324:       form.browserSummary,
+ 325:       {
+ 326:         requested: 2,
+ 327:         completed: 2,
+ 328:         unassessed: 0,
+ 329:         presentPages: 1,
+ 330:         readyPages: 1,
+ 331:       },
+ 332:     );
+ 333: 
+ 334:     assert.equal(
+ 335:       path.status,
+ 336:       "AVAILABLE",
+ 337:     );
+ 338: 
+ 339:     assert.equal(
+ 340:       path.validated,
+ 341:       true,
+ 342:     );
+ 343: 
+ 344:     const model =
+ 345:       scoreAudit(
+ 346:         {
+ 347:           services: [
+ 348:             "Consulting",
+ 349:           ],
+ 350:           primaryGoal:
+ 351:             "book a consultation",
+ 352:         },
+ 353:         evidence,
+ 354:         {
+ 355:           scoredAt:
+ 356:             FIXED_TS,
+ 357:           capabilityEvidence,
+ 358:         },
+ 359:       );
+ 360: 
+ 361:     assert.equal(
+ 362:       model.moduleEligibility
+ 363:         .conversion_paths,
+ 364:       true,
+ 365:       "Conversion Paths becomes legitimately assessable",
+ 366:     );
+ 367: 
+ 368:     assert.equal(
+ 369:       model.moduleScores
+ 370:         .conversion_paths
+ 371:         .score,
+ 372:       94,
+ 373:       "conversion score uses browser-observed CTA/form readiness rather than stale empty site arrays",
+ 374:     );
+ 375: 
+ 376:     assert.notEqual(
+ 377:       model.conversionPaths[0]
+ 378:         .status,
+ 379:       "Not Assessed",
+ 380:       "report projection reflects the browser-assessed conversion path",
+
+--- conversion scoring path ---
+
+396-    score,
+397-    subWeightAssessed:
+398-      assessedMax,
+399-    subWeightTotal:
+400-      totalMax,
+401-    subScores:
+402-      assessed.map(
+403-        (term) => ({
+404-          key: term.key,
+405-          weight: term.max,
+406-          score: clamp(
+407-            term.points,
+408-            0,
+409-            term.max,
+410-          ),
+411-        }),
+412-      ),
+413-  };
+414-}
+415-
+416:function interactiveAssessment(
+417-  site,
+418-  capabilities,
+419-  capabilityKey,
+420-  field,
+421-) {
+422-  const cap =
+423-    capabilities?.[
+424-      capabilityKey
+425-    ];
+426-
+427-  if (
+428-    !capabilityUsable(
+429-      capabilities,
+430-      capabilityKey,
+431-    )
+432-  ) {
+433-    return {
+434-      assessed: false,
+435-      usesSite: false,
+436-      present: false,
+--
+554-          : 0,
+555-    },
+556-    {
+557-      key: "page_depth",
+558-      max: 10,
+559-      points:
+560-        site.pageCount >= 5
+561-          ? 10
+562-          : 0,
+563-    },
+564-  ]);
+565-}
+566-
+567-/**
+568- * v4.1 conversion.
+569- *
+570- * CTA/form values are scored only from their governing capabilities.
+571- * Trust/pricing/reassurance values are scored only when trust.proof was
+572- * assessed. Unknown cross-capability fields are excluded, never zeroed.
+573- */
+574:function scoreConversionV4({
+575-  site,
+576-  capabilities,
+577-}) {
+578-  const cta =
+579:    interactiveAssessment(
+580-      site,
+581-      capabilities,
+582-      "conversion.cta",
+583-      "ctas",
+584-    );
+585-
+586-  const form =
+587:    interactiveAssessment(
+588-      site,
+589-      capabilities,
+590-      "conversion.form",
+591-      "forms",
+592-    );
+593-
+594-  const trustAssessed =
+595-    capabilityUsable(
+596-      capabilities,
+597-      "trust.proof",
+598-    );
+599-
+600-  const ctaPoints =
+601-    cta.usesSite
+602-      ? Math.min(
+603-          25,
+604-          site.ctas.length * 5,
+605-        )
+606-      : cta.browserSummary
+607-          ?.completed > 0
+--
+687-        max: 10,
+688-        assessed:
+689-          trustAssessed,
+690-        points:
+691-          site.trust
+692-            .testimonials
+693-            ? 10
+694-            : 0,
+695-      },
+696-      {
+697-        key: "contact",
+698-        max: 10,
+699-        assessed:
+700-          trustAssessed,
+701-        points:
+702-          site.trust.contact
+703-            ? 10
+704-            : 0,
+705-      },
+706-      {
+707:        key: "cta_hierarchy",
+708-        max: 10,
+709-        assessed:
+710-          cta.usesSite,
+711-        points:
+712-          hierarchyPoints,
+713-      },
+714-    ]);
+715-
+716-  if (
+717-    baseResult.score === null
+718-  ) {
+719-    return baseResult;
+720-  }
+721-
+722-  const pathCap =
+723-    capabilities?.[
+724-      "conversion.path"
+725-    ];
+726-
+727-  const summary =
+--
+762-        ),
+763-    };
+764-  }
+765-
+766-  return baseResult;
+767-}
+768-
+769-/** v4 offer clarity: business-context services union. */
+770-function scoreOfferClarityV4({
+771-  site,
+772-  input,
+773-  capabilities,
+774-}) {
+775-  const services =
+776-    businessServices(
+777-      site,
+778-      input,
+779-    );
+780-
+781-  const cta =
+782:    interactiveAssessment(
+783-      site,
+784-      capabilities,
+785-      "conversion.cta",
+786-      "ctas",
+787-    );
+788-
+789-  const form =
+790:    interactiveAssessment(
+791-      site,
+792-      capabilities,
+793-      "conversion.form",
+794-      "forms",
+795-    );
+796-
+797-  const trustAssessed =
+798-    capabilityUsable(
+799-      capabilities,
+800-      "trust.proof",
+801-    );
+802-
+803-  // Browser CTA validation proves action readiness, not CTA wording/count
+804-  // clarity. This term therefore requires site-level interactive detail.
+805-  const ctaClarityAssessed =
+806-    cta.assessed &&
+807-    cta.usesSite;
+808-
+809-  const descKnown =
+810-    site._metaCountersAvailable !==
+--
+992-}) {
+993-  const services =
+994-    businessServices(
+995-      site,
+996-      input,
+997-    );
+998-
+999-  const contentAssessed =
+1000-    capabilityUsable(
+1001-      capabilities,
+1002-      "content.body",
+1003-    );
+1004-
+1005-  const trustAssessed =
+1006-    capabilityUsable(
+1007-      capabilities,
+1008-      "trust.proof",
+1009-    );
+1010-
+1011-  const cta =
+1012:    interactiveAssessment(
+1013-      site,
+1014-      capabilities,
+1015-      "conversion.cta",
+1016-      "ctas",
+1017-    );
+1018-
+1019-  const form =
+1020:    interactiveAssessment(
+1021-      site,
+1022-      capabilities,
+1023-      "conversion.form",
+1024-      "forms",
+1025-    );
+1026-
+1027-  return scoreAssessedTerms([
+1028-    {
+1029-      key: "tofu",
+1030-      max: 30,
+1031-      assessed:
+1032-        contentAssessed,
+1033-      points:
+1034-        Math.min(
+1035-          30,
+1036-          site.pageCount * 4 +
+1037-            site.topicKeywords
+1038-              .length *
+1039-              2,
+1040-        ),

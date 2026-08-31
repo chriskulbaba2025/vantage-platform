@@ -1,0 +1,298 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4",
+  "passNumber": 1,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-28T00:00:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "V-001",
+        "code": "UNSUPPORTED_FACT",
+        "section": "rootCause.businessConsequences.Search acquisition",
+        "explanation": "The finding supports only that missing meta descriptions may reduce control over search-result messaging. The added claim that this weakens the relevance of the message visitors see is a downstream search-acquisition effect not directly observed or established by the governed evidence.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "V-002",
+        "code": "UNSUPPORTED_FACT",
+        "section": "technical.businessMeaning",
+        "explanation": "The statement says the technical improvements support discoverability. The governed findings support possible effects on search-result messaging control, semantic clarity, accessibility, and technical trust, but do not establish an effect on discoverability, traffic, indexation, or rankings.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 17,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Most claims accurately preserve partial and unavailable evidence qualifications, avoid asserting conversion outcomes, and follow the governed conversion-first order. Two downstream search-impact claims exceed the evidence: weakened message relevance and support for discoverability.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "capability:content.body",
+        "capability:performance.field",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": [
+        "D-001",
+        "D-002"
+      ]
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to generating qualified enquiries while generally framing expected effects as opportunities rather than observed outcomes.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The conclusion, priorities, preservation decision, and next action are direct and easy to follow.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The root-cause narrative coherently distinguishes a clear action layer from the governed decision-support opportunity and preserves the partial-content qualification. One search-acquisition consequence extends beyond the finding.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ],
+      "defectIds": [
+        "D-001"
+      ]
+    },
+    "actionability": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "Actions are prioritized, scoped, assigned effort, and paired with evidence-aligned verification steps.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The narrative correctly preserves the validated clear conversion path, avoids diagnosing direct conversion friction, and follows the governed hierarchy by placing buyer-question decision support first.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are specific, connected, and grounded in governed content ideas and the readiness map. The partial content-detection qualification is maintained.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "capability:content.body",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The section distinguishes process, experience, expert, results, and buyer-question opportunities without claiming that these assets are absent across the whole site.",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust",
+        "analysis:readinessMap",
+        "analysis:contentIdeas",
+        "capability:content.body"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The technical findings, their qualified effects, and their governed order are otherwise represented accurately. The unsupported discoverability claim requires removal or narrower qualification.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "D-002"
+      ]
+    },
+    "competitiveUsefulness": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Competitive comparisons are confined to the two substantively assessed agencies, and insufficient-evidence results are explicitly excluded from broader conclusions.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The narrative clearly preserves the validated, unobstructed conversion actions and clear path as strengths while distinguishing improvement opportunities.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Repeated themes serve distinct executive, funnel, technical, and action-planning purposes without materially duplicating prose.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 95,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "D-001",
+      "criterion": "evidenceFidelity",
+      "section": "rootCause",
+      "severity": "MAJOR",
+      "problem": "The search-acquisition consequence states that reduced control over search-result presentation weakens message relevance, although message relevance was not assessed or observed.",
+      "whyItMatters": "This converts a supported technical risk about messaging control into an unsupported downstream acquisition effect.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "requiredCorrection": "Restrict the consequence to the governed possibility of reduced control over search-result messaging. Do not claim weakened relevance or another downstream search or visitor outcome unless explicitly framed as an unverified possibility.",
+      "allowedFields": [
+        "rootCause"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "D-002",
+      "criterion": "seoTechnical",
+      "section": "technical",
+      "severity": "MAJOR",
+      "problem": "The technical business meaning says the improvements support discoverability, which is not established by the supplied findings.",
+      "whyItMatters": "Discoverability implies a search visibility, indexation, ranking, or acquisition effect beyond the assessed conditions and qualified finding impacts.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "requiredCorrection": "Remove the discoverability claim. Limit the technical meaning to the supported qualified effects on search-result messaging control, semantic clarity, accessibility, and technical trust while preserving the conversion-first order.",
+      "allowedFields": [
+        "technical"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "rootCause",
+      "technical"
+    ],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "defectIds": [
+      "D-001",
+      "D-002"
+    ]
+  }
+}

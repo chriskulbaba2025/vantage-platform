@@ -1,0 +1,16 @@
+=== DETERMINISTIC REBUILD ===
+DERIVED_FIXTURE=C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current
+FINDINGS=4
+ROOT_CAUSE=Buyer-question content was not detected in the available partial assessment. The available partial assessment did not detect buyer-question content on the assessed pages, so some buyer questions may remain unsupported there; unassessed pages remain unknown.
+VAN-TECH-001 | Meta descriptions were not detected on some assessed pages | 35 of 247 assessed pages did not have a detected meta description; unassessed pages remain unknown
+VAN-TECH-002 | Heading structure is inconsistent | 32 assessed pages missing H1; 4 assessed pages with multiple H1s; unassessed pages remain unknown
+VAN-TECH-003 | Security headers are incomplete | xFrameOptions, xContentTypeOptions, referrerPolicy, contentSecurityPolicy
+VAN-CONTENT-002 | Buyer-question content was not detected in the available partial assessment | FAQ or common-question content was not detected in the available partial assessment
+
+=== OFFLINE REPLAY ===
+PRYSM offline report replay
+Input: C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current
+Fixtures: 1
+Output: C:\Users\kulba\AppData\Local\Temp\prysm-report-replay-ZUducG
+FAIL audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current | Persisted final JudgeResponse is invalid: contractVersion must equal 1.1.0; judgePromptVersion must equal 2.1.0; rubric.executiveClarity.evidenceRefs contains unknown Writer reference: score:rootCause; rubric.rootCauseCoherence.evidenceRefs contains unknown Writer reference: score:rootCause; rubric.contentFunnelDepth.evidenceRefs contains unknown Writer reference: finding:df48581f-7375-4863-be49-eb6107647b75; rubric.conversionInterpretation.evidenceRefs must include analysis:conversionInfluence when governed conversion hierarchy is present
+Replay result: 0/1 PASS

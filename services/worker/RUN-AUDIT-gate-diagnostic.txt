@@ -1,0 +1,404 @@
+
+--- AVAILABLE_SITE fixture ---
+
+1-import test from "node:test";
+2-import assert from "node:assert/strict";
+3-import { mkdtemp, readFile } from "node:fs/promises";
+4-import { tmpdir } from "node:os";
+5-import { join } from "node:path";
+6-import { runAudit } from "./run-audit.js";
+7-import { createLocalReportStore } from "../storage/report-store.js";
+8-import { SOURCE_STATUS, ERROR_CATEGORY } from "../scoring/evidence-contracts.js";
+9-
+10-// ---------------------------------------------------------------------------
+11-// Shared fixtures
+12-// ---------------------------------------------------------------------------
+13-
+14-const now = new Date().toISOString();
+15-
+16:const AVAILABLE_SITE = {
+17-  evidenceVersion: "1.0.0",
+18-  source: "dataforseo-onpage",
+19-  sourceStatus: SOURCE_STATUS.AVAILABLE,
+20-  targetUrl: "https://example.com/",
+21-  domain: "example.com",
+22-  pageCount: 2,
+23-  totalWords: 800,
+24-  averageWords: 400,
+25-  missingTitles: 0,
+26-  missingDescriptions: 0,
+27-  missingCanonicals: 0,
+28-  h1Missing: 0,
+29-  h1Multiple: 0,
+30-  imageCount: 2,
+31-  imagesMissingAlt: 0,
+32-  imagesMissingDimensions: 0,
+33-  schemaTypes: ["WebPage"],
+34-  forms: [],
+35-  ctas: [{ text: "Contact", url: "https://example.com/contact", kind: "link" }],
+36-  externalCtas: [],
+37-  socialLinks: [],
+38-  internalLinkCount: 2,
+39-  brokenInternalLinks: [],
+40-  platform: "WordPress",
+41-  services: ["Consulting"],
+42-  topicKeywords: ["consulting"],
+43-  securityHeaders: {
+44-    xFrameOptions: false,
+45-    xContentTypeOptions: true,
+46-    referrerPolicy: true,
+47-    contentSecurityPolicy: false,
+48-  },
+49-  trust: {
+50-    testimonials: true,
+51-    credentials: true,
+
+--- finalization gate rules ---
+
+1-/**
+2- * Report Finalization Gate
+3- *
+4- * Mandatory validation run after evidence normalization and scoring, but
+5: * before report rendering.  Prevents contradictory, incomplete, or
+6- * commercially weak reports from reaching client-facing output.
+7- *
+8- * When validation fails the audit stays in draft and structured errors
+9- * are attached to the model so the auditor can see exactly what conflicts.
+10- */
+11-
+12-import { SOURCE_STATUS } from "./evidence-contracts.js";
+13-import { DIAGNOSTIC_CATEGORY } from "./diagnostic-contracts.js";
+14-import { buildFoundationChecklist } from "../report/foundation-readiness.js";
+15-import { buildActionPlan } from "../report/action-priority.js";
+16-
+17-// ---------------------------------------------------------------------------
+18-// Gate entry point
+19-// ---------------------------------------------------------------------------
+20-
+21-/**
+22- * Run the report-finalization gate against a scored model.
+23- *
+24- * @param {object} model    - Scored audit model from scoreAudit().
+25- * @param {object} evidence - Normalized evidence envelope.
+26- * @returns {{ passed: boolean, errors: ValidationError[], warnings: ValidationError[], model: object }}
+27- */
+28:export function runFinalizationGate(model, evidence) {
+29-  const errors = [];
+30-  const warnings = [];
+31-
+32-  // GöÇGöÇ 0. Normalize evidence before validation GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+33-  _normalizeEvidenceForGate(model, evidence);
+34-
+35-  // GöÇGöÇ 1. Evidence consistency GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+36-  _checkSectionConsistency(model, evidence, errors);
+37-
+38-  // GöÇGöÇ 2. Contradiction detection GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+39-  _checkContradictions(model, evidence, errors, warnings);
+40-
+--
+156-function _checkSectionConsistency(model, evidence, errors) {
+157-  const perf = evidence.performance || {};
+158-  const site = evidence.site || {};
+159-
+160-  // Use normalized coverage when available (from _normalizeEvidenceForGate)
+161-  const effectiveCoverage = perf._normalizedCoverage || perf.coverage || {};
+162-  const effectiveCompleted = effectiveCoverage.completed || 0;
+163-  const effectiveSourceStatus = perf._effectiveSourceStatus || perf.sourceStatus;
+164-
+165-  // Performance status vs. scorecard GÇö use normalized counts
+166-  const perfAvailable =
+167-    effectiveSourceStatus === SOURCE_STATUS.AVAILABLE ||
+168:    effectiveSourceStatus === SOURCE_STATUS.PARTIAL;
+169-  const hasPerfScore = model.scores.performance !== null;
+170-
+171-  if (perfAvailable && !hasPerfScore && effectiveSourceStatus !== SOURCE_STATUS.FAILED) {
+172-    if (effectiveCompleted > 0) {
+173:      errors.push(_err("scores.performance", "experience-and-performance",
+174-        `Performance source is ${effectiveSourceStatus} with ${effectiveCompleted} completed tests but performance score is null.`));
+175-    }
+176-  }
+177-
+178-  // Source status vs. gate results GÇö use normalized coverage
+179-  if (effectiveSourceStatus === SOURCE_STATUS.AVAILABLE) {
+180-    const mobile = perf.mobile || {};
+181-    const desktop = perf.desktop || {};
+182-    const hasUsableMetrics =
+183-      (mobile.metrics?.fcpMs != null && mobile.metrics?.lcpMs != null) ||
+184-      (desktop.metrics?.fcpMs != null && desktop.metrics?.lcpMs != null);
+185-    if (!hasUsableMetrics && effectiveCompleted > 0) {
+186:      errors.push(_err("performance.coverage", "experience-and-performance",
+187-        `Performance source is AVAILABLE with ${effectiveCompleted} completed results but no usable FCP/LCP metrics.`));
+188-    }
+189-  }
+190-
+191-    // PF-18 - client-facing competitor comparisons must remain inside the
+192-  // authoritative supplied competitor allowlist carried by DecisionEvidence.
+193-  const suppliedCompetitors =
+194-    Array.isArray(evidence.suppliedCompetitors)
+195-      ? evidence.suppliedCompetitors
+196-      : null;
+197-
+198-  const clientCompetitors =
+199-    Array.isArray(model.competitors?.comparisons)
+200-      ? model.competitors.comparisons
+201-      : [];
+202-
+203-  if (
+204-    clientCompetitors.length > 0 &&
+205-    suppliedCompetitors === null
+206-  ) {
+207:    errors.push(_err(
+208-      "competitors.comparisons",
+209-      "supplied-competitor-benchmark",
+210-      "Client-facing competitor comparisons exist but the supplied competitor allowlist is unavailable.",
+211-    ));
+212-  } else if (suppliedCompetitors !== null) {
+213-    const allowedUrls =
+214-      new Set(
+215-        suppliedCompetitors.filter(
+216-          (url) =>
+217-            typeof url === "string" &&
+218-            url.length > 0,
+219-        ),
+220-      );
+221-
+222-    for (const competitor of clientCompetitors) {
+223-      if (
+224-        typeof competitor?.url !== "string" ||
+225-        !allowedUrls.has(competitor.url)
+226-      ) {
+227:        errors.push(_err(
+228-          "competitors.comparisons",
+229-          "supplied-competitor-benchmark",
+230-          `Client-facing competitor ${competitor?.url || "<missing-url>"} is outside the supplied competitor allowlist.`,
+231-        ));
+232-      }
+233-    }
+234-  }
+235-}
+236-
+237-// ---------------------------------------------------------------------------
+238-// 2. Contradiction detection
+239-// ---------------------------------------------------------------------------
+--
+250-    const score = model.scores[key];
+251-    if (score === null && perf.sourceStatus === SOURCE_STATUS.AVAILABLE) {
+252-      warnings.push(_err(`scores.${key}`, "executive-conversion-scorecard",
+253-        `Score "${key}" is null despite performance source being AVAILABLE.`));
+254-    }
+255-  }
+256-
+257-  // PASS paired with UNAVAILABLE evidence
+258-  const perfGate = model.evidence?.performance?.sourceStatus;
+259-  if (perfGate === SOURCE_STATUS.UNAVAILABLE || perfGate === SOURCE_STATUS.FAILED) {
+260-    const perfScores = model.scores;
+261-    if (perfScores.performance !== null) {
+262:      errors.push(_err("scores.performance", "evidence-appendix",
+263-        `Performance score is ${perfScores.performance} but performance source is ${perfGate}.`));
+264-    }
+265-  }
+266-
+267-  // High confidence unsupported by assessed evidence.
+268-  // PRYSM-INCIDENT-01: readiness and confidence are SEPARATE axes
+269-  // (PRD v3 -º3.1).  When assessed weight is below 60% the scoring model
+270-  // already declares "Insufficient Evidence for Overall Score" and
+271-  // suppresses the numeric score (showNumericScore=false) GÇö that is a
+272:  // GOVERNED output state, not a contradiction.  The gate must render
+273-  // that honest state (both report designs render it), not fail the
+274-  // whole pipeline.  The rule only protects against a numeric score
+275-  // being shown with high confidence from thin assessed evidence.
+276-  const confidenceScore = model.evidenceConfidenceScore || 0;
+277-  const assessedWeight = model.assessedWeight || 0;
+278-  if (model.showNumericScore !== false && confidenceScore >= 85 && assessedWeight < 60) {
+279:    errors.push(_err("evidenceConfidenceScore", "evidence-appendix",
+280-      `Evidence confidence is ${confidenceScore} (High) but assessed weight is only ${assessedWeight}%. High confidence requires at least 60% assessed weight.`));
+281-  }
+282-
+283-  // Completed tests that produced unusable results GÇö use normalized coverage
+284-  const rawCompleted = effectiveCompleted;
+285-  const renderingDiags = model.renderingDiagnostics || [];
+286-  const siteDefects = renderingDiags.filter(
+287-    (d) => d.diagnosticCategory === DIAGNOSTIC_CATEGORY.SITE_RENDERING,
+288-  );
+289-  if (rawCompleted > 0 && siteDefects.length > 0) {
+290:    errors.push(_err("performance.coverage", "experience-and-performance",
+291-      `Coverage reports ${rawCompleted} completed tests but ${siteDefects.length} site-rendering defects were detected. Unusable results must not count as completed.`));
+292-  }
+293-
+294-  // Duplicate limitations GÇö already deduped by _normalizeEvidenceForGate,
+295-  // but check again in case normalization was skipped
+296-  const allLimits = perf.limitations || [];
+297-  const uniqueLimits = new Set(allLimits);
+298-  if (uniqueLimits.size < allLimits.length) {
+299:    errors.push(_err("performance.limitations", "evidence-appendix",
+300-      `Performance limitations contain ${allLimits.length - uniqueLimits.size} duplicate entries.`));
+301-  }
+302-
+303-    // Null or undefined top-level denominators
+304-  if (model.assessedWeight == null) {
+305:    errors.push(_err("assessedWeight", "executive-conversion-scorecard",
+306-      "Assessed weight is null or undefined."));
+307-  }
+308-  if (model.evidenceConfidenceScore == null) {
+309:    errors.push(_err("evidenceConfidenceScore", "evidence-appendix",
+310-      "Evidence confidence score is null or undefined."));
+311-  }
+312-
+313-  // PF-18 GÇö final release must independently reject impossible image
+314-  // numerator/denominator states even if an upstream decision-scope repair
+315-  // was expected to neutralize them.
+316-  const site = evidence.site || {};
+317-  const imageDenominator = site.imageCount;
+318-
+319-  if (
+320-    imageDenominator != null &&
+321-    (!Number.isFinite(imageDenominator) || imageDenominator < 0)
+322-  ) {
+323:    errors.push(_err(
+324-      "site.imageCount",
+325-      "technical-health",
+326-      `Image count must be a non-negative finite denominator, got ${String(imageDenominator)}.`,
+327-    ));
+328-  }
+329-
+330-  for (const field of ["imagesMissingAlt", "imagesMissingDimensions"]) {
+331-    const numerator = site[field];
+332-
+333-    if (numerator == null) continue;
+334-
+335-    if (!Number.isFinite(numerator) || numerator < 0) {
+336:      errors.push(_err(
+337-        `site.${field}`,
+338-        "technical-health",
+339-        `${field} must be a non-negative finite numerator, got ${String(numerator)}.`,
+340-      ));
+341-      continue;
+342-    }
+343-
+344-    if (
+345-      !Number.isFinite(imageDenominator) ||
+346-      imageDenominator < 0 ||
+347-      numerator > imageDenominator
+348-    ) {
+349:      errors.push(_err(
+350-        `site.${field}`,
+351-        "technical-health",
+352-        `${field} (${numerator}) cannot exceed or exist without a valid imageCount denominator (${String(imageDenominator)}).`,
+353-      ));
+354-    }
+355-  }
+356-
+357-  // Undefined values in client-facing text
+358-  for (const f of (model.findings || [])) {
+359-    if (f.title == null || f.title === "") {
+360:      errors.push(_err("findings[].title", "priority-fixes",
+361-        `Finding ${f.ruleId || "unknown"} has null or empty title.`));
+362-    }
+363-    if (f.businessImpact == null || f.businessImpact === "") {
+364-      warnings.push(_err("findings[].businessImpact", "priority-fixes",
+365-        `Finding ${f.ruleId || "unknown"} has null or empty businessImpact.`));
+366-    }
+367-    if (f.recommendation == null || f.recommendation === "") {
+368-      warnings.push(_err("findings[].recommendation", "priority-fixes",
+369-        `Finding ${f.ruleId || "unknown"} has null or empty recommendation.`));
+370-    }
+371-
+372:    // PF-18 GÇö final release backstop for the proven PARTIAL-to-absence defect.
+373:    // When every evidence record supporting a finding is PARTIAL, an absence
+374-    // claim must explicitly preserve the incomplete assessment boundary.
+375-    const findingEvidence =
+376-      Array.isArray(f.evidence)
+377-        ? f.evidence.filter(Boolean)
+378-        : [];
+379-
+380-    const partialOnly =
+381-      findingEvidence.length > 0 &&
+382-      findingEvidence.every(
+383-        (record) =>
+384-          record.sourceStatus ===
+385:          SOURCE_STATUS.PARTIAL,
+386-      );
+387-
+388-    if (partialOnly) {
+389-      const claimText = [
+390-        f.title,
+391-        f.evidenceText,
+392-        f.businessImpact,
+393-      ]
+394-        .filter(Boolean)
+395-        .join(" ");
+396-
+397:      const absencePattern =
+398-        /\b(missing|absent|none|lacks?|without)\b|\bno\b|\bdoes not have\b/i;
+399-
+400-      const boundedPartialPattern =
+401:        /\b(partial|available assessment|available coverage|observed scope|not detected|not observed|does not establish|absence is not established)\b/i;
+402-
+403-      if (
+404:        absencePattern.test(claimText) &&
+405-        !boundedPartialPattern.test(claimText)
+406-      ) {
+407:        errors.push(_err(
+408-          "findings[].evidence",
+409-          "priority-fixes",
+410:          `Finding ${f.ruleId || "unknown"} converts PARTIAL evidence into an unqualified absence claim.`,
+411-        ));
+412-      }
+413-    }
+414-  }
+415-
+416-  // Root cause must agree with the governed Conversion-First action hierarchy.
+417-  const checklist = buildFoundationChecklist(model);
+418-  const actionPlan = buildActionPlan(model, checklist);
+419-  const rootCauseFinding = (model.findings || []).find(
+420-    (finding) => finding?.scoreBearing === true,
+421-  );
+422-  const primaryActionFinding = actionPlan.actions[0]?.finding;
+423-
+424-  if (
+425-    rootCauseFinding &&
+426-    primaryActionFinding &&
+427-    rootCauseFinding.ruleId !== primaryActionFinding.ruleId
+428-  ) {
+429:    errors.push(_err(
+430-      "rootCause",
+431-      "executive-conversion-scorecard",
+432-      `Root cause is derived from ${rootCauseFinding.ruleId}, but the governed Conversion-First action hierarchy ranks ${primaryActionFinding.ruleId} first.`,
+433-    ));
+434-  }
+435-
+436-  // Conflicting scores between sections
+437-  const perfScore = model.scores.performance;
+438-  const technicalScore = model.scores.technical;
+439-  if (perfScore !== null && technicalScore !== null && Math.abs(perfScore - technicalScore) > 60) {
+440-    warnings.push(_err("scores", "executive-conversion-scorecard",
+441-      `Performance score (${perfScore}) and technical hygiene score (${technicalScore}) diverge by more than 60 points.`));
+--
+448-
+449-function _recalculateConfidence(evidence, model) {
+450-  const site = evidence.site || {};
+451-  const perf = evidence.performance || {};
+452-  const ga4 = evidence.ga4 || {};
+453-  const gsc = evidence.gsc || {};
+454-  const backlinks = evidence.backlinks || {};
+455-
+456-  // Count how many evidence sources are meaningfully available
+457-  let availableSources = 0;
+458-  let totalSources = 4; // site, performance, ga4, gsc
+459-
+460:  if (site.sourceStatus === SOURCE_STATUS.AVAILABLE || site.sourceStatus === SOURCE_STATUS.PARTIAL) {
+461-    availableSources++;
+462-  }
+463:  if (perf.sourceStatus === SOURCE_STATUS.AVAILABLE || perf.sourceStatus === SOURCE_STATUS.PARTIAL) {
+464-    // Only count if usable results exist
+465-    if ((perf.coverage?.completed || 0) > 0) availableSources++;
+466-    else totalSources--; // Don't penalize for unavailable performance
+467-  }
+468-  if (ga4.sourceStatus === SOURCE_STATUS.AVAILABLE) availableSources++;
+469-  else if (ga4.sourceStatus === SOURCE_STATUS.NOT_CONNECTED) totalSources--;
+470-  if (gsc.sourceStatus === SOURCE_STATUS.AVAILABLE && gsc.sufficiency?.sufficient !== false) availableSources++;
+471-  else if (gsc.sourceStatus === SOURCE_STATUS.NOT_CONNECTED) totalSources--;
+472-
+473-  // Optional backlinks
+474-  if (backlinks.sourceStatus === SOURCE_STATUS.AVAILABLE) availableSources++;
+475-  else totalSources--;

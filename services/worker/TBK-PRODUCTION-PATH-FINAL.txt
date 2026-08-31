@@ -1,0 +1,107 @@
+=== PRODUCTION PATH TEST ===
+G£ö NV2-PROD-01: disabled runtime rejects an explicit Narrative v2 request instead of silently falling back (2.7002ms)
+G£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (89.1767ms)
+G£ö NV2-PROD-03: enabled runtime fails startup when either governed executor seam is missing (0.9183ms)
+Audit 3a8db407-f6fe-4982-9abf-1a538f9001f0 background execution failed: Error: Finalization gate failed: Root cause is derived from VAN-CONTENT-001, but the governed Conversion-First action hierarchy ranks VAN-TRUST-002 first.
+    at runGovernedRendering (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/orchestration/audit-orchestrator.js:1303:13)
+    at async runAuditToReviewableDraft (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/production-runtime.js:260:16)
+G£û NV2-PROD-03A: production runtime forwards the governed final-pass authorization binding (45.5933ms)
+G£û NV2-PROD-04: default report-design v2 remains on the existing narrative/render path when narrativeVersion is not selected (78.434ms)
+G£ö NV2-PROD-05: production v2 model preserves readiness detail and rendering diagnostics from the persisted ScoreSet (1.2693ms)
+G£û DQV-005: canonical FAILED competitor status reaches Viewer v2 and the persisted manifest (44.6129ms)
+G£ö NV2-PROD-06: invalid persisted terminal orchestration fails closed without another Writer/Judge spend (1.3239ms)
+G£û NV2-PROD-07: NARRATIVE_FAILED exposes exact Judge defects and an authorized final pass is additive (6.004ms)
+G£û NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pass 4 (3.2591ms)
+Gä¦ tests 10
+Gä¦ suites 0
+Gä¦ pass 4
+Gä¦ fail 6
+Gä¦ cancelled 0
+Gä¦ skipped 0
+Gä¦ todo 0
+Gä¦ duration_ms 5236.9062
+
+G£û failing tests:
+
+test at src\application\narrative-v2-production-path.test.js:781:1
+G£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (89.1767ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'narrative_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:804:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'narrative_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at src\application\narrative-v2-production-path.test.js:843:1
+G£û NV2-PROD-03A: production runtime forwards the governed final-pass authorization binding (45.5933ms)
+  Error: Narrative v2 final continuation rejected: orchestration result missing; orchestration status must be HUMAN_REVIEW_REQUIRED; orchestration auditId mismatch; human-review continuation requires exactly two completed prior passes; human-review continuation requires exactly two persisted pass records
+      at runNarrativeV2FinalPass (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/production-path.js:626:11)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:944:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+test at src\application\narrative-v2-production-path.test.js:974:1
+G£û NV2-PROD-04: default report-design v2 remains on the existing narrative/render path when narrativeVersion is not selected (78.434ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'render_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:990:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'render_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at src\application\narrative-v2-production-path.test.js:1020:1
+G£û DQV-005: canonical FAILED competitor status reaches Viewer v2 and the persisted manifest (44.6129ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'narrative_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:1103:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'narrative_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at src\application\narrative-v2-production-path.test.js:1227:1
+G£û NV2-PROD-07: NARRATIVE_FAILED exposes exact Judge defects and an authorized final pass is additive (6.004ms)
+  Error: Narrative v2 final continuation rejected: Pass 1 JudgeResponse: judgePromptVersion must equal 2.1.0; Pass 2 JudgeResponse: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2FinalPass (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/production-path.js:626:11)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:1258:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+test at src\application\narrative-v2-production-path.test.js:1335:1
+G£û NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pass 4 (3.2591ms)
+  Error: Narrative v2 final continuation rejected: Pass 1 JudgeResponse: judgePromptVersion must equal 2.1.0; Pass 2 JudgeResponse: judgePromptVersion must equal 2.1.0
+      at runNarrativeV2FinalPass (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/narrative-v2/production-path.js:626:11)
+      at async TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:1347:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+=== DIFF CHECK ===

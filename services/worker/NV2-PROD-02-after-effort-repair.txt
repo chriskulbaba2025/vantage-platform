@@ -1,0 +1,30 @@
+﻿Γ£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (119.2188ms)
+Γä╣ tests 1
+Γä╣ suites 0
+Γä╣ pass 0
+Γä╣ fail 1
+Γä╣ cancelled 0
+Γä╣ skipped 0
+Γä╣ todo 0
+Γä╣ duration_ms 1331.5388
+
+Γ£û failing tests:
+
+test at src\application\narrative-v2-production-path.test.js:793:1
+Γ£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (119.2188ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'narrative_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/narrative-v2-production-path.test.js:816:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'narrative_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

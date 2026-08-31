@@ -1,0 +1,17 @@
+{
+  "contractVersion": "1.0.0",
+  "bindingVersion": "1.0.0",
+  "reservationId": "11e51d9f-2557-4379-998c-a205c9db59dc",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "executionId": "b40b829a-9770-43bb-bb5b-755b53947698",
+  "callNumber": 4,
+  "role": "judge",
+  "passNumber": 2,
+  "modelId": "gpt-5.6-sol",
+  "promptSha256": "90632c0c4d3899fa75f207c658e075d6046b5b66a5d6280200f099b38c8f1da6",
+  "estimatedInputTokens": 68472,
+  "maxOutputTokens": 8000,
+  "estimatedCost": 0.5824,
+  "reservedAt": "2026-08-27T22:35:59.585Z",
+  "status": "RESERVED_BEFORE_CALL"
+}

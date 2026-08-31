@@ -1,0 +1,75 @@
+﻿2588-        "No testimonials, case studies, or credentials detected",
+2589-      businessImpact:
+2590-        "Limited visible trust proof may make credibility harder for visitors to verify before deciding.",
+2591-      recommendation:
+2592-        "Add credentials, client proof, and outcome-based case studies",
+2593-      effort: "M",
+2594-      conversionImpact: 85,
+2595-      gapSeverity: 80,
+2596-      businessRelevance: 90,
+2597-      competitiveSignal: 40,
+2598-      implementationPracticality: 50,
+2599-      verificationMethod:
+2600-        "Re-crawl and confirm trust signals are detected on key pages.",
+2601-    });
+2602-  }
+2603-
+2604-  if (site.missingDescriptions) {
+2605-    add({
+2606:      ruleId: "VAN-TECH-001",
+2607-      dimension: "technical_performance",
+2608-      module: "technical_hygiene",
+2609-      title: "Missing meta descriptions",
+2610-      severity: "High",
+2611-      key: "meta",
+2612-      confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
+2613-      affectedUrls: site.pages?.filter((p) => !p.description).map((p) => p.url).slice(0, 10) || [site.targetUrl],
+2614-      evidence: [
+2615-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "meta_description", observedValue: null },
+2616-      ],
+2617-      evidenceText: `${site.missingDescriptions} of ${site.pageCount} crawled pages`,
+2618-      businessImpact: "Missing meta descriptions may reduce control over search-result messaging for these pages.",
+2619-      recommendation: "Write a unique 150ΓÇô160 character description for each important page",
+2620-      effort: "L",
+2621-      conversionImpact: 75,
+2622-      gapSeverity: 70,
+2623-      businessRelevance: 80,
+2624-      competitiveSignal: 60,
+--
+2727-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "page_count", observedValue: site.pageCount },
+2728-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "services", observedValue: site.services.length },
+2729-      ],
+2730-      evidenceText: `${site.pageCount} crawlable page(s) for ${site.services.length || "multiple"} service topics`,
+2731-      businessImpact: "Limited dedicated page depth may make it harder for individual offers to build relevance and answer buyer questions.",
+2732-      recommendation: "Create one focused page for each primary service",
+2733-      effort: "H",
+2734-      conversionImpact: 70,
+2735-      gapSeverity: 60,
+2736-      businessRelevance: 75,
+2737-      competitiveSignal: 45,
+2738-      implementationPracticality: 30,
+2739-      verificationMethod: "Re-crawl and confirm each primary service has a dedicated page.",
+2740-    });
+2741-  }
+2742-
+2743-  if (site.h1Missing || site.h1Multiple) {
+2744-    add({
+2745:      ruleId: "VAN-TECH-002",
+2746-      dimension: "technical_performance",
+2747-      module: "technical_hygiene",
+2748-      title: "Heading structure is inconsistent",
+2749-      severity: "Medium",
+2750-      key: "headings",
+2751-      confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
+2752-      evidence: [
+2753-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "h1_missing", observedValue: site.h1Missing },
+2754-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "h1_multiple", observedValue: site.h1Multiple },
+2755-      ],
+2756-      evidenceText: `${site.h1Missing} pages missing H1; ${site.h1Multiple} pages with multiple H1s`,
+2757-      businessImpact: "Inconsistent heading structure may reduce semantic clarity and accessibility.",
+2758-      recommendation: "Use one descriptive H1 per page with sequential H2 and H3 sections",
+2759-      effort: "M",
+2760-      conversionImpact: 50,
+2761-      gapSeverity: 55,
+2762-      businessRelevance: 60,
+2763-      competitiveSignal: 30,

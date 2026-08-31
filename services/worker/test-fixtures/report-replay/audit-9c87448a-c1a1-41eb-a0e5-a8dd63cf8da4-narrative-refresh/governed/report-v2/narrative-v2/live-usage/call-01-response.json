@@ -1,0 +1,891 @@
+{
+  "contractVersion": "1.0.0",
+  "writerOutputVersion": "1.0.0",
+  "auditId": "9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4",
+  "passNumber": 1,
+  "modelId": "gpt-5.6-terra",
+  "promptVersion": "2.0.0",
+  "generatedAt": "2026-08-28T00:00:00Z",
+  "executiveConclusion": {
+    "headline": "Make buyer decision support the first improvement, then strengthen search-result control.",
+    "narrative": {
+      "text": "Tbkcreative has validated, unobstructed conversion actions on the assessed pages, but the governed priority is to add buyer-question support that resolves objections before prospects act. Search-result messaging and technical clarity should follow as supporting improvements for generating qualified enquiries.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:conversionInfluence",
+        "business:primaryGoal",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ]
+    }
+  },
+  "strengths": [
+    {
+      "itemId": "STR-01",
+      "title": "Validated conversion actions",
+      "narrative": {
+        "text": "Conversion actions were observed and confirmed visible, interactable, and unobstructed on all selected pages assessed by browser validation. This is a foundation to preserve while improving decision support around the action.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "analysis:conversionPaths",
+          "capability:conversion.cta",
+          "capability:conversion.form"
+        ]
+      }
+    }
+  ],
+  "rootCause": {
+    "headline": "Prospects may reach an action before their common questions are resolved.",
+    "narrative": {
+      "text": "The leading governed opportunity is buyer-question decision support: no buyer-question content was detected in the partial available content assessment, while the readiness map identifies an unclear next step across the listed service topics.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "analysis:readinessMap",
+        "capability:content.body"
+      ]
+    },
+    "businessConsequences": [
+      {
+        "area": "Qualified enquiries",
+        "narrative": {
+          "text": "When common concerns are unresolved before action, visitors may have less confidence to submit an enquiry even where an action is available.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "finding:df48581f-7375-4863-be49-eb6107647b75",
+            "analysis:conversionPaths",
+            "business:primaryGoal"
+          ]
+        }
+      },
+      {
+        "area": "Search acquisition",
+        "narrative": {
+          "text": "Missing meta descriptions may reduce control over how affected pages are presented in search results, weakening the relevance of the message visitors see before they arrive.",
+          "statementClass": "INTERPRETATION",
+          "evidenceRefs": [
+            "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+          ]
+        }
+      }
+    ]
+  },
+  "conversion": {
+    "headline": "The action layer is validated; decision confidence needs reinforcement.",
+    "whatWorks": {
+      "text": "Browser validation confirmed an available, visible, interactable, unobstructed conversion action on each selected assessed page.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form"
+      ]
+    },
+    "constraints": {
+      "text": "The readiness map identifies an unclear next step for Custom Websites, Digital Marketing, SEO, Branding, and Custom Software despite a clear assessed path.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:readinessMap",
+        "analysis:conversionPaths"
+      ]
+    },
+    "businessMeaning": {
+      "text": "For a goal of generating qualified enquiries, the opportunity is not simply to add actions; it is to make the post-action expectation and buyer reassurance clearer around existing actions.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "analysis:readinessMap",
+        "analysis:conversionPaths"
+      ]
+    },
+    "priority": {
+      "text": "Prioritize a start-here and buyer-question layer before technical hygiene work because governed conversion influence ranks buyer-question decision support first.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas"
+      ]
+    }
+  },
+  "content": {
+    "headline": "Build a connected decision-support architecture around service selection.",
+    "currentStrength": {
+      "text": "The content-funnel assessment provides a strong base for extending coverage, and the site footprint shows service, work, and article families that can support connected buyer journeys.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:contentDepth",
+        "analysis:siteFootprint"
+      ]
+    },
+    "coverageAssessment": {
+      "text": "No buyer-question content was detected in the available partial content assessment. This is a qualified detection result, not a conclusion about every page on the site.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ]
+    },
+    "qualityAssessment": {
+      "text": "The available evidence supports prioritizing content that answers what prospects should expect, what options fit, what results are possible, and what happens after enquiry.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap"
+      ]
+    },
+    "topicalArchitecture": {
+      "text": "Organize content from answer-first Custom Websites education through options-and-fit, process, results, and expert proof, then connect it to pricing, start-here, and FAQ decision pages.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "business:services"
+      ]
+    },
+    "importantGaps": {
+      "text": "The most immediate gap is buyer-question content that handles common concerns before booking; the governed recommendation is an FAQ based on questions prospects ask before booking.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "analysis:conversionInfluence"
+      ]
+    },
+    "businessMeaning": {
+      "text": "A decision-support content layer can help turn interest in Tbkcreative's services into more informed enquiries rather than relying on the action itself to carry the full decision.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:readinessMap"
+      ]
+    }
+  },
+  "funnelOpportunities": {
+    "awareness": [
+      {
+        "itemId": "FUN-A-01",
+        "concept": {
+          "text": "Create an answer-first guide explaining what Custom Websites are and when they are appropriate.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:services"
+          ]
+        },
+        "userNeed": {
+          "text": "Help early-stage prospects determine whether a custom website applies to their situation.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "This is a governed high-priority awareness idea linked to Custom Websites and the enquiry-generation goal.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:primaryGoal"
+          ]
+        },
+        "businessObjective": {
+          "text": "Create a relevant first interaction for prospects who may later enquire about Custom Websites.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "business:services"
+          ]
+        },
+        "nextAction": {
+          "text": "Publish the guide with a clear path to options, process, and an enquiry next step.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "analysis:readinessMap"
+          ]
+        }
+      }
+    ],
+    "consideration": [
+      {
+        "itemId": "FUN-C-01",
+        "concept": {
+          "text": "Create a Custom Websites options-and-fit page.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "userNeed": {
+          "text": "Help prospects understand which option is right for their needs.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "Options-and-fit is a governed high-priority consideration concept and supports the identified need for clearer next steps.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "analysis:readinessMap"
+          ]
+        },
+        "businessObjective": {
+          "text": "Move interested visitors toward a more qualified Custom Websites enquiry.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "business:services"
+          ]
+        },
+        "nextAction": {
+          "text": "Connect the page to process and client-results content, then present the existing form as the next step.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "capability:conversion.form"
+          ]
+        }
+      },
+      {
+        "itemId": "FUN-C-02",
+        "concept": {
+          "text": "Develop a process page explaining what happens during the work.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "userNeed": {
+          "text": "Reduce uncertainty about what prospects should expect from engagement.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas"
+          ]
+        },
+        "rationale": {
+          "text": "Process proof is identified as the trust asset needed across the listed service topics.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:readinessMap"
+          ]
+        },
+        "businessObjective": {
+          "text": "Support confidence before prospects submit an enquiry.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:readinessMap"
+          ]
+        },
+        "nextAction": {
+          "text": "Use the process page as a shared destination from priority service pages.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:readinessMap",
+            "business:services"
+          ]
+        }
+      }
+    ],
+    "decision": [
+      {
+        "itemId": "FUN-D-01",
+        "concept": {
+          "text": "Create a frequently asked questions page with examples that addresses common pre-booking concerns.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "finding:df48581f-7375-4863-be49-eb6107647b75"
+          ]
+        },
+        "userNeed": {
+          "text": "Give decision-stage prospects clear answers to common concerns before they act.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:df48581f-7375-4863-be49-eb6107647b75"
+          ]
+        },
+        "rationale": {
+          "text": "Buyer-question decision support is the first governed conversion-influence priority.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:conversionInfluence",
+            "finding:df48581f-7375-4863-be49-eb6107647b75"
+          ]
+        },
+        "businessObjective": {
+          "text": "Increase the confidence and qualification of enquiry submissions.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "analysis:readinessMap"
+          ]
+        },
+        "nextAction": {
+          "text": "Base the FAQ on questions prospects ask before booking and link each answer to the relevant service or enquiry route.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "finding:df48581f-7375-4863-be49-eb6107647b75",
+            "capability:conversion.path"
+          ]
+        }
+      },
+      {
+        "itemId": "FUN-D-02",
+        "concept": {
+          "text": "Create a start-here page explaining the first step toward generating qualified enquiries.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "business:primaryGoal"
+          ]
+        },
+        "userNeed": {
+          "text": "Clarify what happens after a prospect chooses to act.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:contentIdeas",
+            "analysis:readinessMap"
+          ]
+        },
+        "rationale": {
+          "text": "The readiness map identifies unclear next steps while the assessed conversion path is clear.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:readinessMap",
+            "analysis:conversionPaths"
+          ]
+        },
+        "businessObjective": {
+          "text": "Turn available conversion actions into more confident enquiries.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "business:primaryGoal",
+            "capability:conversion.cta"
+          ]
+        },
+        "nextAction": {
+          "text": "Place start-here links beside existing service actions and route visitors to the validated form.",
+          "statementClass": "OPPORTUNITY",
+          "evidenceRefs": [
+            "analysis:readinessMap",
+            "capability:conversion.form"
+          ]
+        }
+      }
+    ]
+  },
+  "seoSerp": {
+    "headline": "Improve control of search-result messaging on affected pages.",
+    "whatWorks": {
+      "text": "The site footprint and indexability capability were available for assessment, providing a basis for prioritizing important page families.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:siteFootprint",
+        "capability:technical.indexability"
+      ]
+    },
+    "constraints": {
+      "text": "Meta descriptions were not detected for the affected pages in partial on-page evidence; this may reduce control over search-result messaging for those pages.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "capability:content.body"
+      ]
+    },
+    "searchImplication": {
+      "text": "Search-result messaging is a supporting acquisition improvement, not a substitute for resolving decision-stage buyer questions on the site.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ]
+    },
+    "priority": {
+      "text": "Write unique descriptions for important affected pages after the buyer-question content work, then re-crawl to confirm their presence.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ]
+    }
+  },
+  "aiSearch": {
+    "headline": "Use direct-answer content as an opportunity, not a diagnosed AI-search deficiency.",
+    "answerability": {
+      "text": "The governed content ideas support answer-first pages that can make service explanations easier for people to consume directly.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "business:services"
+      ]
+    },
+    "entityStrength": {
+      "text": "Structured-data assessment was available, but the supplied evidence does not establish a stronger entity conclusion.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:schema.structured_data"
+      ]
+    },
+    "citationReadiness": {
+      "text": "The supplied evidence does not directly assess citation performance or readiness in AI-search results.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:schema.structured_data",
+        "score:aiReadiness"
+      ]
+    },
+    "constraints": {
+      "text": "The partial content assessment detected no buyer-question content, but that result should not be treated as an established AI-search limitation.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ]
+    },
+    "opportunity": {
+      "text": "Build concise answer-first guides and buyer-question answers for Custom Websites, then connect those answers to process, proof, and an enquiry next step.",
+      "statementClass": "OPPORTUNITY",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "business:primaryGoal"
+      ]
+    }
+  },
+  "eeatTrust": {
+    "headline": "Make process and experience proof easier for buyers to evaluate.",
+    "experience": {
+      "text": "The readiness map identifies experience proof as a needed asset across the listed service topics.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:readinessMap"
+      ]
+    },
+    "expertise": {
+      "text": "A founder or expert page is included in the governed consideration-stage content ideas as a way to answer why a prospect should trust the provider.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas"
+      ]
+    },
+    "authority": {
+      "text": "The supplied evidence supports no broad authority conclusion beyond the assessed trust context.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust"
+      ]
+    },
+    "trust": {
+      "text": "The trust assessment is Moderate, and the readiness map points to process proof as the practical trust asset to prioritize around service decisions.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "band:trust",
+        "analysis:readinessMap"
+      ]
+    },
+    "proofGaps": {
+      "text": "Buyer-question content was not detected in the partial content assessment, leaving a specific opportunity to use examples and process explanations to address pre-enquiry concerns.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body",
+        "analysis:contentIdeas"
+      ]
+    },
+    "businessMeaning": {
+      "text": "Visible process, results, and expert context can help prospects evaluate fit before using the existing enquiry action.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "capability:conversion.cta",
+        "business:primaryGoal"
+      ]
+    }
+  },
+  "technical": {
+    "headline": "Address search clarity first; keep technical work proportionate to business impact.",
+    "assessment": {
+      "text": "The technical assessment identified missing meta descriptions, inconsistent heading structure, and incomplete security headers; none is classified by governed conversion influence as a foundation blocker.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "analysis:conversionInfluence"
+      ]
+    },
+    "materialIssues": {
+      "text": "Meta descriptions may reduce control over search-result messaging; inconsistent headings may reduce semantic clarity and accessibility; incomplete security headers may weaken technical trust.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ]
+    },
+    "businessMeaning": {
+      "text": "These improvements support discoverability, clarity, accessibility, and technical trust, but the governed order places them after buyer-question decision support.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ]
+    }
+  },
+  "performanceUx": {
+    "headline": "Lab performance is assessed; real-user performance is not available.",
+    "assessment": {
+      "text": "Lab performance evidence was available, while field performance evidence was unavailable.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:performance.lab",
+        "capability:performance.field"
+      ]
+    },
+    "userImpact": {
+      "text": "The supplied evidence does not support a conclusion about real-user performance experience because field data was not returned.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "capability:performance.field"
+      ]
+    },
+    "conversionImpact": {
+      "text": "No direct conversion friction or performance-based conversion impact is established by the supplied evidence; assessed conversion actions remained unobstructed.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:performance.field"
+      ]
+    }
+  },
+  "competitors": {
+    "headline": "Protect conversion-path clarity while strengthening proof-led decision content.",
+    "advantages": {
+      "text": "Tbkcreative's assessed conversion path is Clear, whereas the two directly assessed agency comparisons show Moderate path clarity.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:competitors"
+      ]
+    },
+    "disadvantages": {
+      "text": "One directly assessed competitor is rated Strong for trust proof and E-E-A-T, creating a reason to make Tbkcreative's process, results, and expert proof more explicit.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "analysis:contentIdeas"
+      ]
+    },
+    "marketInterpretation": {
+      "text": "Only two agency comparisons have substantive assessment; the other listed comparison results are insufficient evidence and should not inform a broader competitive conclusion.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ]
+    },
+    "differentiatorToProtect": {
+      "text": "Preserve the clear assessed conversion path while adding clearer next-step, process, and buyer-question support around it.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "analysis:contentIdeas"
+      ]
+    }
+  },
+  "limitations": [
+    {
+      "itemId": "LIM-01",
+      "area": "Content body coverage",
+      "status": "PARTIAL",
+      "clientExplanation": {
+        "text": "Usable body content was returned for only part of the requested content assessment.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:content.body"
+        ]
+      },
+      "whatThisMeans": {
+        "text": "Content-detection findings, including buyer-question detection, apply only to the available partial assessment.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:content.body"
+        ]
+      },
+      "whatThisDoesNotMean": {
+        "text": "It does not mean buyer-question content is absent from every page on the site.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:content.body"
+        ]
+      },
+      "impactOnReport": {
+        "text": "Content conclusions are narrowed to the detected result and are treated as a prioritized opportunity rather than a whole-site absence claim.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:content.body",
+          "finding:df48581f-7375-4863-be49-eb6107647b75"
+        ]
+      }
+    },
+    {
+      "itemId": "LIM-02",
+      "area": "Field performance data",
+      "status": "UNAVAILABLE",
+      "clientExplanation": {
+        "text": "Field performance data was not returned for the site.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field"
+        ]
+      },
+      "whatThisMeans": {
+        "text": "The report can discuss available lab assessment but cannot establish how real users experience performance in the field.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field",
+          "capability:performance.field"
+        ]
+      },
+      "whatThisDoesNotMean": {
+        "text": "It does not mean field performance is poor, good, zero, or unmeasured by all possible sources.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field"
+        ]
+      },
+      "impactOnReport": {
+        "text": "No performance-led conversion diagnosis is made from field data.",
+        "statementClass": "INTERPRETATION",
+        "evidenceRefs": [
+          "capability:performance.field",
+          "analysis:conversionPaths"
+        ]
+      }
+    }
+  ],
+  "actionPlan": [
+    {
+      "actionId": "ACT-01",
+      "priority": 1,
+      "title": "Add buyer-question decision support",
+      "action": {
+        "text": "Create a frequently asked questions page with examples and connect answers to relevant services and the enquiry route.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "analysis:contentIdeas",
+          "business:services"
+        ]
+      },
+      "whyNow": {
+        "text": "Buyer-question decision support is the first governed conversion-influence priority.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:df48581f-7375-4863-be49-eb6107647b75"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Help prospects resolve common concerns before submitting a more qualified enquiry.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "business:primaryGoal",
+          "finding:df48581f-7375-4863-be49-eb6107647b75"
+        ]
+      },
+      "effort": "M",
+      "verification": {
+        "text": "Re-crawl the relevant content and confirm FAQ content is present, with structured data where applicable.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:schema.structured_data"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-02",
+      "priority": 2,
+      "title": "Clarify the first step and engagement process",
+      "action": {
+        "text": "Publish a start-here page and process page, then link them from priority service actions.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "analysis:readinessMap"
+        ]
+      },
+      "whyNow": {
+        "text": "The readiness map identifies unclear next steps across the listed service topics despite a clear assessed conversion path.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:readinessMap",
+          "analysis:conversionPaths"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Make the existing enquiry route easier to evaluate and use with confidence.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "business:primaryGoal",
+          "capability:conversion.cta"
+        ]
+      },
+      "effort": "M",
+      "verification": {
+        "text": "Validate that priority service journeys expose the start-here and process guidance alongside an interactable enquiry action.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:readinessMap",
+          "capability:conversion.cta",
+          "capability:conversion.form"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-03",
+      "priority": 3,
+      "title": "Improve search-result messaging",
+      "action": {
+        "text": "Write unique meta descriptions for important affected pages, beginning with service and work pages that support enquiries.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+          "analysis:siteFootprint",
+          "business:primaryGoal"
+        ]
+      },
+      "whyNow": {
+        "text": "Missing meta descriptions are the next ranked governed finding after buyer-question support and may reduce control over search-result messaging.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Improve control over the message searchers see before choosing whether to visit relevant pages.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      },
+      "effort": "L",
+      "verification": {
+        "text": "Re-crawl the affected URLs and confirm descriptions are present.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-04",
+      "priority": 4,
+      "title": "Standardize page heading structure",
+      "action": {
+        "text": "Use one descriptive H1 per page with sequential H2 and H3 sections on priority pages, beginning with the homepage.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+        ]
+      },
+      "whyNow": {
+        "text": "The governed order places heading structure after buyer support and search-result messaging as supporting technical hygiene.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Improve semantic clarity and accessibility on assessed pages.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+        ]
+      },
+      "effort": "M",
+      "verification": {
+        "text": "Re-crawl and verify heading structure on the affected pages.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a"
+        ]
+      }
+    },
+    {
+      "actionId": "ACT-05",
+      "priority": 5,
+      "title": "Complete browser security protections",
+      "action": {
+        "text": "Configure the missing response security headers at the hosting layer.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ]
+      },
+      "whyNow": {
+        "text": "This is a supporting technical-trust improvement and is ranked after the conversion-leading and search-clarity work.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "analysis:conversionInfluence",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ]
+      },
+      "expectedBusinessEffect": {
+        "text": "Strengthen technical trust by addressing missing browser protections.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ]
+      },
+      "effort": "L",
+      "verification": {
+        "text": "Re-crawl and confirm the required security headers are present in the response.",
+        "statementClass": "OPPORTUNITY",
+        "evidenceRefs": [
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+          "capability:technical.headers"
+        ]
+      }
+    }
+  ],
+  "executiveDecision": {
+    "preserve": {
+      "text": "Preserve the validated, unobstructed conversion actions and clear assessed conversion path.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form"
+      ]
+    },
+    "change": {
+      "text": "Change the decision experience by adding buyer-question, process, and clearer next-step support before prioritizing supporting technical hygiene.",
+      "statementClass": "INTERPRETATION",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ]
+    },
+    "doNext": {
+      "text": "Launch the buyer-question FAQ with examples and connect it to the relevant services and enquiry route.",
+      "statementClass": "OPPORTUNITY",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "analysis:contentIdeas",
+        "business:primaryGoal"
+      ]
+    }
+  }
+}

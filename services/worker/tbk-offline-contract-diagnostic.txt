@@ -1,0 +1,144 @@
+src/narrative-v2/writer-input.js-436-  capabilityEvidence,
+src/narrative-v2/writer-input.js-437-  decisionEvidence,
+src/narrative-v2/writer-input.js-438-}) {
+src/narrative-v2/writer-input.js-439-  if (
+src/narrative-v2/writer-input.js-440-    !decisionEvidence ||
+src/narrative-v2/writer-input.js-441-    typeof decisionEvidence !==
+src/narrative-v2/writer-input.js-442-      "object" ||
+src/narrative-v2/writer-input.js-443-    Array.isArray(
+src/narrative-v2/writer-input.js-444-      decisionEvidence,
+src/narrative-v2/writer-input.js-445-    )
+src/narrative-v2/writer-input.js-446-  ) {
+src/narrative-v2/writer-input.js-447-    throw new Error(
+src/narrative-v2/writer-input.js:448:      "decisionEvidence is required for governed Writer action-plan parity",
+src/narrative-v2/writer-input.js-449-    );
+src/narrative-v2/writer-input.js-450-  }
+src/narrative-v2/writer-input.js-451-
+src/narrative-v2/writer-input.js-452-  return {
+src/narrative-v2/writer-input.js-453-    ...cloneDefined(
+src/narrative-v2/writer-input.js-454-      scoreSet,
+src/narrative-v2/writer-input.js-455-    ),
+src/narrative-v2/writer-input.js-456-
+src/narrative-v2/writer-input.js-457-    findings,
+src/narrative-v2/writer-input.js-458-    capabilityEvidence,
+src/narrative-v2/writer-input.js-459-
+src/narrative-v2/writer-input.js-460-    evidence:
+--
+src/narrative-v2/writer-input.js-773-
+src/narrative-v2/writer-input.js-774-  return Object.freeze(
+src/narrative-v2/writer-input.js-775-    index,
+src/narrative-v2/writer-input.js-776-  );
+src/narrative-v2/writer-input.js-777-}
+src/narrative-v2/writer-input.js-778-
+src/narrative-v2/writer-input.js-779-/**
+src/narrative-v2/writer-input.js-780- * Build the fail-closed packet for Writer v2.
+src/narrative-v2/writer-input.js-781- *
+src/narrative-v2/writer-input.js-782- * The function intentionally accepts canonical artifacts, not provider data.
+src/narrative-v2/writer-input.js-783- * No optional value is synthesized when absent.
+src/narrative-v2/writer-input.js-784- */
+src/narrative-v2/writer-input.js:785:export function buildWriterInput({
+src/narrative-v2/writer-input.js-786-  auditId,
+src/narrative-v2/writer-input.js-787-  auditRequest,
+src/narrative-v2/writer-input.js-788-  scoreSet,
+src/narrative-v2/writer-input.js-789-  findings,
+src/narrative-v2/writer-input.js-790-  capabilityEvidence,
+src/narrative-v2/writer-input.js-791-  decisionEvidence,
+src/narrative-v2/writer-input.js-792-}) {
+src/narrative-v2/writer-input.js-793-  if (
+src/narrative-v2/writer-input.js-794-    typeof auditId !==
+src/narrative-v2/writer-input.js-795-      "string" ||
+src/narrative-v2/writer-input.js-796-    auditId.length === 0
+src/narrative-v2/writer-input.js-797-  ) {
+--
+src/narrative-v2/judge-contract.js-355-  } else {
+src/narrative-v2/judge-contract.js-356-    if (directive.required !== false || directive.mode !== "HUMAN_REVIEW") {
+src/narrative-v2/judge-contract.js-357-      errors.push("HUMAN_REVIEW_REQUIRED requires revisionDirective.required=false and mode=HUMAN_REVIEW");
+src/narrative-v2/judge-contract.js-358-    }
+src/narrative-v2/judge-contract.js-359-    if (rewrite.size > 0) errors.push("HUMAN_REVIEW_REQUIRED cannot authorize an automatic fourth rewrite");
+src/narrative-v2/judge-contract.js-360-  }
+src/narrative-v2/judge-contract.js-361-}
+src/narrative-v2/judge-contract.js-362-
+src/narrative-v2/judge-contract.js-363-/**
+src/narrative-v2/judge-contract.js-364- * Deterministically validate a Judge response against the exact Writer packet.
+src/narrative-v2/judge-contract.js-365- * Returns errors; never repairs Judge output.
+src/narrative-v2/judge-contract.js-366- */
+src/narrative-v2/judge-contract.js:367:export function validateJudgeResponse(response, { writerInput, expectedPassNumber } = {}) {
+src/narrative-v2/judge-contract.js-368-  const errors = [];
+src/narrative-v2/judge-contract.js-369-  if (!isObject(response)) return { valid: false, errors: ["Judge response must be an object"] };
+src/narrative-v2/judge-contract.js-370-  if (!isObject(writerInput)) return { valid: false, errors: ["writerInput is required"] };
+src/narrative-v2/judge-contract.js-371-
+src/narrative-v2/judge-contract.js:372:  if (response.contractVersion !== JUDGE_CONTRACT_VERSION) errors.push(`contractVersion must equal ${JUDGE_CONTRACT_VERSION}`);
+src/narrative-v2/judge-contract.js-373-  if (response.auditId !== writerInput.auditId) errors.push(`auditId mismatch: ${String(response.auditId)} vs ${String(writerInput.auditId)}`);
+src/narrative-v2/judge-contract.js-374-  if (!Number.isInteger(response.passNumber) || response.passNumber < 1 || response.passNumber > MAX_NARRATIVE_PASSES) {
+src/narrative-v2/judge-contract.js-375-    errors.push(`passNumber must be an integer from 1 to ${MAX_NARRATIVE_PASSES}`);
+src/narrative-v2/judge-contract.js-376-  }
+src/narrative-v2/judge-contract.js-377-  if (expectedPassNumber !== undefined && response.passNumber !== expectedPassNumber) {
+src/narrative-v2/judge-contract.js-378-    errors.push(`passNumber mismatch: ${String(response.passNumber)} vs expected ${String(expectedPassNumber)}`);
+src/narrative-v2/judge-contract.js-379-  }
+src/narrative-v2/judge-contract.js-380-    if (!nonEmptyString(response.judgeModelId)) errors.push("judgeModelId is required");
+src/narrative-v2/judge-contract.js-381-  if (response.judgePromptVersion !== JUDGE_PROMPT_VERSION) {
+src/narrative-v2/judge-contract.js:382:    errors.push(`judgePromptVersion must equal ${JUDGE_PROMPT_VERSION}`);
+src/narrative-v2/judge-contract.js-383-  }
+src/narrative-v2/judge-contract.js-384-  if (!nonEmptyString(response.evaluatedAt)) errors.push("evaluatedAt is required");
+src/narrative-v2/judge-contract.js-385-
+src/narrative-v2/judge-contract.js-386-  validateHardGate(response.hardGate, writerInput, errors);
+src/narrative-v2/judge-contract.js-387-  const calculatedTotal = validateRubric(response.rubric, writerInput, errors);
+src/narrative-v2/judge-contract.js-388-  if (typeof response.totalScore !== "number" || !Number.isFinite(response.totalScore)) errors.push("totalScore must be a number");
+src/narrative-v2/judge-contract.js-389-  else if (calculatedTotal !== null && response.totalScore !== calculatedTotal) {
+src/narrative-v2/judge-contract.js-390-    errors.push(`totalScore mismatch: ${response.totalScore} vs calculated ${calculatedTotal}`);
+src/narrative-v2/judge-contract.js-391-  }
+src/narrative-v2/judge-contract.js-392-
+src/narrative-v2/judge-contract.js-393-  const defectSummary = validateDefects(response.defects, writerInput, errors);
+src/narrative-v2/judge-contract.js-394-  const derived = deriveJudgeDecision(response);
+--
+scripts/replay-report.js-74-      "PRYSM offline replay blocked an attempted network request",
+scripts/replay-report.js-75-    );
+scripts/replay-report.js-76-  };
+scripts/replay-report.js-77-}
+scripts/replay-report.js-78-
+scripts/replay-report.js-79-installOfflineGuard();
+scripts/replay-report.js-80-
+scripts/replay-report.js-81-const [
+scripts/replay-report.js-82-  { runFinalizationGate },
+scripts/replay-report.js-83-  { renderGovernedNarrativeReportV2 },
+scripts/replay-report.js-84-  { SOURCE_STATUS, isValidSourceStatus },
+scripts/replay-report.js-85-  { REPORT_V2_VIEWER_VERSION },
+scripts/replay-report.js:86:  { validateJudgeResponse },
+scripts/replay-report.js-87-] = await Promise.all([
+scripts/replay-report.js-88-  import("../src/scoring/report-finalization-gate.js"),
+scripts/replay-report.js-89-  import("../src/report/render-narrative-v2.js"),
+scripts/replay-report.js-90-  import("../src/scoring/evidence-contracts.js"),
+scripts/replay-report.js-91-  import("../src/report/render-report-v2.js"),
+scripts/replay-report.js-92-  import("../src/narrative-v2/judge-contract.js"),
+scripts/replay-report.js-93-]);
+scripts/replay-report.js-94-
+scripts/replay-report.js-95-function sha256(value) {
+scripts/replay-report.js-96-  return createHash("sha256").update(value).digest("hex");
+scripts/replay-report.js-97-}
+scripts/replay-report.js-98-
+--
+scripts/replay-report.js-502-  }
+scripts/replay-report.js-503-
+scripts/replay-report.js-504-  if (
+scripts/replay-report.js-505-    orchestration.finalJudgeResponse
+scripts/replay-report.js-506-      ?.decision !== "PASS"
+scripts/replay-report.js-507-  ) {
+scripts/replay-report.js-508-    throw new Error(
+scripts/replay-report.js-509-      "Replay requires a persisted final Judge PASS decision",
+scripts/replay-report.js-510-    );
+scripts/replay-report.js-511-  }
+scripts/replay-report.js-512-
+scripts/replay-report.js-513-  const judgeValidation =
+scripts/replay-report.js:514:    validateJudgeResponse(
+scripts/replay-report.js-515-      orchestration.finalJudgeResponse,
+scripts/replay-report.js-516-      {
+scripts/replay-report.js-517-        writerInput: inputs.writerInput,
+scripts/replay-report.js-518-        expectedPassNumber:
+scripts/replay-report.js-519-          orchestration.passCount,
+scripts/replay-report.js-520-      },
+scripts/replay-report.js-521-    );
+scripts/replay-report.js-522-
+scripts/replay-report.js-523-  if (!judgeValidation.valid) {
+scripts/replay-report.js-524-    throw new Error(
+scripts/replay-report.js-525-      `Persisted final JudgeResponse is invalid: ${judgeValidation.errors.join(
+scripts/replay-report.js-526-        "; ",

@@ -1,0 +1,394 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "1e060a5b-2eb4-4800-b8f9-bca52574aa64",
+  "passNumber": 1,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-28T00:00:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "HG-001",
+        "code": "UNSUPPORTED_FACT",
+        "section": "rootCause",
+        "explanation": "The narrative converts a PARTIAL detection of trust.faq=false into the broader claims that buyer questions are not sufficiently answered, prospect questions are unresolved, and the site is being limited in turning interest into qualified enquiries. The governed evidence supports only a bounded detected FAQ or buyer-question opportunity; it does not directly establish site-wide absence, unresolved objections, or an observed enquiry outcome.",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:content.body",
+          "business:primaryGoal"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-002",
+        "code": "UNSUPPORTED_FACT",
+        "section": "actionPlan",
+        "explanation": "ACT-01 says the action directly addresses unresolved objections before visitors act. The source finding says objections may remain unresolved, while its underlying FAQ evidence is PARTIAL. Unresolved objections were not directly observed.",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:content.body"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-003",
+        "code": "UNSUPPORTED_COMPETITOR_CLAIM",
+        "section": "competitors",
+        "explanation": "The output says one assessed competitor is strong in trust proof and experience. The comparison supports Strong trustProof and Strong EEAT for ZOO Media Group, but it does not provide a separate Strong experience assessment. EEAT cannot be expanded into a directly observed experience rating.",
+        "evidenceRefs": [
+          "analysis:competitors"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-004",
+        "code": "UNSUPPORTED_FACT",
+        "section": "actionPlan",
+        "explanation": "ACT-02 assigns an H effort estimate without governed implementation-effort evidence for the combined process, fit, outcomes, and expert assets. ACT-04 also collapses a Medium heading recommendation and a Large security-header recommendation into an unsupported combined Medium estimate.",
+        "evidenceRefs": [
+          "analysis:contentIdeas",
+          "analysis:readinessMap",
+          "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+          "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 12,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Most scores, capabilities, source limitations, technical findings, and conversion-path statements are faithfully represented. Fidelity fails because PARTIAL FAQ evidence is expanded into site-wide unresolved buyer questions and a current qualified-enquiry limitation, competitor EEAT is expanded into experience, and unsupported effort estimates are supplied.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body",
+        "analysis:competitors",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "D-EF-001"
+      ]
+    },
+    "businessRelevance": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to qualified enquiries, service journeys, decision support, and search presentation without inventing revenue or traffic metrics.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:conversionPaths",
+        "analysis:contentIdeas"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 8.5,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The conclusion, preserve/change/do-next framing, and ordered actions are clear. Clarity is reduced because the narrative does not reconcile the score-level root cause naming missing meta descriptions with the separate conversion-influence order placing buyer-question support first.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:conversionInfluence"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 6.5,
+      "maxScore": 10,
+      "status": "FAIL",
+      "rationale": "The proposed decision-support thesis follows the conversion-influence order, but it overstates PARTIAL FAQ evidence as a demonstrated root cause and does not distinguish that conversion priority from the frozen score root cause, which names missing meta descriptions as the most impactful opportunity.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ],
+      "defectIds": [
+        "D-ROOT-001"
+      ]
+    },
+    "actionability": {
+      "score": 7.5,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "Actions generally include priorities, concrete deliverables, and verification methods aligned with the findings. Unsupported or consolidated effort labels and an overstatement about unresolved objections reduce reliability.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "D-ACT-001"
+      ]
+    },
+    "conversionInterpretation": {
+      "score": 6.5,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The output correctly preserves the validated clear conversion action and avoids claiming a measured conversion-rate outcome. It appropriately emphasizes decision support, though some nearby root-cause language treats possible unresolved objections as observed.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 7,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are distinct, detailed, and traceable to the governed content plan. The output also acknowledges partial body-content coverage instead of making a complete page-by-page inventory claim.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "capability:content.body",
+        "score:contentFunnelDimension"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Experience, expertise, authority, proof, and technical trust are addressed with generally bounded language. Recommendations are tied to the readiness map and moderate trust assessment rather than asserted as existing business outcomes.",
+      "evidenceRefs": [
+        "analysis:readinessMap",
+        "analysis:contentIdeas",
+        "score:trust",
+        "band:trust",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Meta descriptions, heading structure, security headers, lab performance, and unavailable field data are clearly separated. Search and user implications are mostly framed as possibilities, and unavailable field evidence is not treated as proof of good performance.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+        "capability:performance.field"
+      ],
+      "defectIds": []
+    },
+    "competitiveUsefulness": {
+      "score": 2.5,
+      "maxScore": 4,
+      "status": "FAIL",
+      "rationale": "The output correctly limits conclusions to assessed comparisons and notes insufficient evidence among many candidates. Usefulness is reduced by converting a Strong EEAT assessment into a specific Strong experience claim not present in the comparison fields.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ],
+      "defectIds": [
+        "D-COMP-001"
+      ]
+    },
+    "strengthsBalance": {
+      "score": 3.5,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The narrative preserves two meaningful strengths: validated conversion actions and a comparatively strong content foundation. These strengths are balanced against limitations and remediation needs.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth",
+        "score:contentFunnelDimension"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 2.8,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The structure is readable, but the buyer-question, first-step, process-proof, and experience-proof thesis is repeated across the conclusion, root cause, conversion, content, AI, trust, actions, and executive decision with limited new information in several instances.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 75.8,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "D-EF-001",
+      "criterion": "evidenceFidelity",
+      "section": "rootCause and actionPlan",
+      "severity": "MAJOR",
+      "problem": "PARTIAL FAQ detection is presented as proof of insufficiently answered buyer questions, unresolved objections, and a current limitation on qualified enquiries.",
+      "whyItMatters": "This changes a bounded content risk into a demonstrated site-wide condition and downstream business effect that the governed evidence does not observe.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body",
+        "business:primaryGoal"
+      ],
+      "requiredCorrection": "Keep the claim explicitly limited to a detected FAQ or buyer-question opportunity within partial content coverage. Describe unresolved objections and qualified-enquiry effects only as possibilities or intended outcomes, not current facts.",
+      "allowedFields": [
+        "rootCause",
+        "actionPlan"
+      ],
+      "mustPreserve": [
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations"
+      ]
+    },
+    {
+      "defectId": "D-ROOT-001",
+      "criterion": "rootCauseCoherence",
+      "section": "executiveConclusion, rootCause, and executiveDecision",
+      "severity": "MAJOR",
+      "problem": "The narrative treats buyer-question support as the singular root cause without reconciling the frozen score root cause naming missing meta descriptions as the most impactful opportunity. The conversion-influence order and score root cause represent different governed prioritization signals.",
+      "whyItMatters": "Executives cannot tell why decision support should precede the score-level root cause, and the current framing overstates a PARTIAL FAQ signal as causal.",
+      "evidenceRefs": [
+        "score:rootCause",
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "requiredCorrection": "Explicitly distinguish the first conversion-influence opportunity from the score-level technical root cause, preserve both governed statements, and avoid claiming that buyer-question evidence proves a business root cause.",
+      "allowedFields": [
+        "executiveConclusion",
+        "rootCause",
+        "executiveDecision"
+      ],
+      "mustPreserve": [
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan"
+      ]
+    },
+    {
+      "defectId": "D-ACT-001",
+      "criterion": "actionability",
+      "section": "actionPlan",
+      "severity": "MAJOR",
+      "problem": "The plan includes unsupported effort estimates for ACT-02 and the combined ACT-04, and ACT-01 states that unresolved objections are directly established.",
+      "whyItMatters": "Unsupported sizing can distort resource planning, while the objection claim overstates what PARTIAL content evidence proves.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "requiredCorrection": "Remove or explicitly leave unestimated any effort not supplied by governed evidence. If combining findings, preserve their separate governed effort levels rather than assigning a new aggregate. Reframe unresolved objections as a risk the content may address.",
+      "allowedFields": [
+        "actionPlan"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "D-COMP-001",
+      "criterion": "competitiveUsefulness",
+      "section": "competitors",
+      "severity": "MAJOR",
+      "problem": "The competitor narrative labels one competitor strong in experience even though the governed comparison reports Strong trust proof and Strong EEAT, not a separate experience rating.",
+      "whyItMatters": "The added attribute creates an unsupported competitor claim and can misdirect differentiation strategy.",
+      "evidenceRefs": [
+        "analysis:competitors"
+      ],
+      "requiredCorrection": "Use only the supplied comparison attributes and ratings. Do not translate EEAT into a specific experience assessment unless that attribute is directly governed.",
+      "allowedFields": [
+        "competitors"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "executiveConclusion",
+      "rootCause",
+      "competitors",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "fieldsLocked": [
+      "strengths",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "limitations"
+    ],
+    "defectIds": [
+      "D-EF-001",
+      "D-ROOT-001",
+      "D-ACT-001",
+      "D-COMP-001"
+    ]
+  }
+}

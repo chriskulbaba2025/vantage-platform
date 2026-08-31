@@ -1,0 +1,292 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "ea9a3b49-d393-4633-956b-d6cb1a2a3fc8",
+  "passNumber": 2,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-28T00:00:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "VIO-01",
+        "code": "UNSUPPORTED_FACT",
+        "section": "rootCause.businessConsequences",
+        "explanation": "The Writer states that missing meta descriptions reduce control over search-result presentation. The governed finding supports only that they may reduce such control, so the Writer improperly converts a possible effect into an observed or certain effect.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "VIO-02",
+        "code": "CONTRADICTS_FINDING",
+        "section": "actionPlan.ACT-02.whyNow",
+        "explanation": "The Writer calls the meta-description action low effort, while the governed finding records implementationEffort as L. Treating the governed L effort rating as low changes the supplied effort state and can distort prioritization.",
+        "evidenceRefs": [
+          "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 16,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Most claims are carefully bounded and accurately cite governed evidence, including partial content coverage and unavailable field performance. Evidence fidelity nevertheless fails because one possible search-result effect is stated as certain and one governed effort rating is mischaracterized.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "capability:content.body",
+        "capability:performance.field",
+        "analysis:conversionPaths"
+      ],
+      "defectIds": [
+        "DEF-01",
+        "DEF-02"
+      ]
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to the stated objective of generating qualified enquiries without claiming measured revenue, traffic, ranking, or conversion gains.",
+      "evidenceRefs": [
+        "business:primaryGoal",
+        "business:services",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The preserve-change-do-next structure and prioritization are clear, although recurring buyer-question and first-step language creates modest redundancy.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The root-cause account coherently distinguishes a validated action mechanism from incomplete decision support and follows the governed hierarchy. The unbounded meta-description consequence weakens precision within the consequence discussion.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": [
+        "DEF-01"
+      ]
+    },
+    "actionability": {
+      "score": 8,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "Actions are ordered, scoped, and paired with verification methods. The incorrect characterization of the meta-description action as low effort reduces planning reliability.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "DEF-02"
+      ]
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The Writer correctly preserves the distinction between a validated, unobstructed action path and decision-support opportunities, and it follows the exact governed Conversion-First ordering.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration, and decision opportunities are distinct, tied to governed content concepts, and connected to buyer needs and next actions.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The narrative appropriately uses the moderate trust band, process proof, experience proof, and security-header finding while avoiding unsupported authority conclusions.",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust",
+        "analysis:readinessMap",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "seoTechnical": {
+      "score": 5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The technical findings and their governed order are otherwise represented accurately, but one meta-description consequence is stated more strongly than its evidence permits.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "DEF-01"
+      ]
+    },
+    "competitiveUsefulness": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Competitor interpretation is limited to the two assessed comparisons and explicitly avoids conclusions about insufficient-evidence candidates.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The Writer preserves validated conversion actions and comparatively strong content depth rather than presenting an issue-only narrative.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth",
+        "score:contentFunnelDimension"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Core priorities recur for executive consistency, but sections generally add distinct funnel, trust, technical, competitive, or implementation detail.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas",
+        "analysis:readinessMap"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 91,
+  "decision": "REVISE",
+  "defects": [
+    {
+      "defectId": "DEF-01",
+      "criterion": "evidenceFidelity",
+      "section": "rootCause",
+      "severity": "MAJOR",
+      "problem": "The search-result consequence says missing meta descriptions reduce control, omitting the governed finding's uncertainty qualifier.",
+      "whyItMatters": "This turns a supported risk into an asserted causal effect and breaches the required evidence-certainty boundary.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "requiredCorrection": "Bound the consequence to the governed level of certainty by preserving that missing meta descriptions may reduce control over search-result messaging; do not assert an observed search, traffic, or enquiry outcome.",
+      "allowedFields": [
+        "rootCause"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "DEF-02",
+      "criterion": "actionability",
+      "section": "actionPlan",
+      "severity": "MAJOR",
+      "problem": "ACT-02 describes the meta-description remediation as low effort even though the governed finding records implementationEffort as L.",
+      "whyItMatters": "Changing the effort interpretation can mislead sequencing and resource allocation despite displaying the original L value elsewhere.",
+      "evidenceRefs": [
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "requiredCorrection": "Remove the unsupported low-effort characterization and preserve the governed L effort rating without translating it into a conflicting label.",
+      "allowedFields": [
+        "actionPlan"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "TARGETED",
+    "fieldsToRewrite": [
+      "rootCause",
+      "actionPlan"
+    ],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "aiSearch",
+      "eeatTrust",
+      "technical",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "executiveDecision"
+    ],
+    "defectIds": [
+      "DEF-01",
+      "DEF-02"
+    ]
+  }
+}

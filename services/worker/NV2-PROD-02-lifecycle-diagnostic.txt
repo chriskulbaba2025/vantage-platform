@@ -1,0 +1,154 @@
+﻿NV2_PROD_02_LIFECYCLE_HISTORY=[
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "f7564072-381f-4ee0-a103-6a23144efeca",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 0,
+    "priorState": "created",
+    "nextState": "created",
+    "timestamp": "2026-08-31T04:49:24.075Z",
+    "actor": "system",
+    "reason": "Audit created",
+    "codeVersion": "4.0.0"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "7cc23c40-733d-4bf0-986d-21cdbf96fef7",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 1,
+    "priorState": "created",
+    "nextState": "validated",
+    "timestamp": "2026-08-31T04:49:24.127Z",
+    "actor": "system",
+    "reason": "validated",
+    "codeVersion": "4.0.0",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:validated"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "afe1378f-dde8-4d17-898b-6bf7b6b69e27",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 2,
+    "priorState": "validated",
+    "nextState": "collecting",
+    "timestamp": "2026-08-31T04:49:24.127Z",
+    "actor": "system",
+    "reason": "collecting",
+    "codeVersion": "4.0.0",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:collecting"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "f2c15a90-180c-446b-bbcc-c0709331811b",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 3,
+    "priorState": "collecting",
+    "nextState": "evidence_stored",
+    "timestamp": "2026-08-31T04:49:24.135Z",
+    "actor": "system",
+    "reason": "",
+    "codeVersion": "4.0.0",
+    "artifactKey": "tenants/narrative-v2-prod-tenant/clients/proof.example.com-narrative-v2-production-proof/audits/1d0953bf-9a4c-499e-ba6e-54df5b7d5193/manifests/canonical-evidence-record.json",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:evidence-stored"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "159a37c9-b10b-465d-9276-6c9ed8334484",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 4,
+    "priorState": "evidence_stored",
+    "nextState": "evidence_locked",
+    "timestamp": "2026-08-31T04:49:24.135Z",
+    "actor": "system",
+    "reason": "",
+    "codeVersion": "4.0.0",
+    "artifactKey": "tenants/narrative-v2-prod-tenant/clients/proof.example.com-narrative-v2-production-proof/audits/1d0953bf-9a4c-499e-ba6e-54df5b7d5193/manifests/canonical-evidence-record.json",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:evidence-locked"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "28729471-c613-4c0c-aad3-ac0169c2481f",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 5,
+    "priorState": "evidence_locked",
+    "nextState": "scored",
+    "timestamp": "2026-08-31T04:49:24.145Z",
+    "actor": "system",
+    "reason": "governed-scoring-complete",
+    "codeVersion": "4.0.0",
+    "artifactKey": "tenants/narrative-v2-prod-tenant/clients/proof.example.com-narrative-v2-production-proof/audits/1d0953bf-9a4c-499e-ba6e-54df5b7d5193/canonical/scores.json",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:governed-scoring-complete"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "a3fac651-9aa2-46ac-af62-d168c39743a8",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 6,
+    "priorState": "scored",
+    "nextState": "narrative_pending",
+    "timestamp": "2026-08-31T04:49:24.146Z",
+    "actor": "system",
+    "reason": "narrative-v2-execution-start",
+    "codeVersion": "4.0.0",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:narrative-v2-execution-start"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "eventId": "ced8cf8c-78f9-4b72-9529-44182c1ebb8d",
+    "auditId": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193",
+    "tenantId": "narrative-v2-prod-tenant",
+    "clientId": "proof.example.com-narrative-v2-production-proof",
+    "sequence": 7,
+    "priorState": "narrative_pending",
+    "nextState": "narrative_failed",
+    "timestamp": "2026-08-31T04:49:24.153Z",
+    "actor": "system",
+    "reason": "narrative-v2-execution-failed:Writer output validation failed on pass 1: actionPlan[0].effort must equal governed effort L",
+    "codeVersion": "4.0.0",
+    "transitionIdempotencyKey": "1d0953bf-9a4c-499e-ba6e-54df5b7d5193:8bb60849-89bf-4330-a42d-8a51e25e8803:narrative-v2-execution-failed:Writer output validation failed on pass 1: actionPlan[0].effort must equal governed effort L"
+  }
+]
+Γ£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (98.7838ms)
+Γä╣ tests 1
+Γä╣ suites 0
+Γä╣ pass 0
+Γä╣ fail 1
+Γä╣ cancelled 0
+Γä╣ skipped 0
+Γä╣ todo 0
+Γä╣ duration_ms 446.2192
+
+Γ£û failing tests:
+
+test at src\application\.nv2-prod-02-diagnostic.test.js:786:1
+Γ£û NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer (98.7838ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'narrative_failed'
+  - 'draft_rendered'
+  
+      at TestContext.<anonymous> (file:///C:/Users/kulba/Desktop/vantage-platform/services/worker/src/application/.nv2-prod-02-diagnostic.test.js:814:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'narrative_failed',
+    expected: 'draft_rendered',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

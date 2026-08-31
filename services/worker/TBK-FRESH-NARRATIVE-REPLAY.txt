@@ -1,0 +1,38 @@
+=== FRESH WRITER/JUDGE ===
+node.exe : 
+At C:\Users\kulba\AppData\Roaming\npm\railway.ps1:24 char:5
++     & "node$exe"  "$basedir/node_modules/@railway/cli/bin/railway.js" ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+A newer Railway CLI is available: v5.45.10 (current: v5.30.1).
+Run `railway upgrade --yes` to update.
+=== TBK FRESH WRITER/JUDGE ===
+AUDIT_ID=9714c206-8ed3-4686-8fe2-ceeca0ca0f82
+WRITER_MODEL=gpt-5.6-terra
+JUDGE_MODEL=gpt-5.6-sol
+STATUS=RELEASE_CANDIDATE
+PASS_COUNT=1
+JUDGE_DECISION=PASS
+JUDGE_SCORE=98
+DEFECT_COUNT=0
+OUTPUT=C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\orchestration-refresh.json
+
+=== OFFLINE REPLAY ===
+PRYSM offline report replay
+Input: C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current
+Fixtures: 1
+Output: C:\Users\kulba\AppData\Local\Temp\prysm-report-replay-83MoHT
+node : FAIL audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current | Finalization gate failed: Client-facing competitor 
+comparisons exist but the supplied competitor allowlist is unavailable.; imagesMissingAlt (222) cannot exceed or 
+exist without a valid imageCount denominator (0).; Finding VAN-TECH-002 converts PARTIAL evidence into an 
+unqualified absence claim.; Root cause is derived from VAN-TECH-001, but the governed Conversion-First action 
+hierarchy ranks VAN-CONTENT-002 first.
+At line:13 char:9
++         node scripts/replay-report.js $fixture 2>&1 |
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL audit-9714...TENT-002 first.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Replay result: 0/1 PASS

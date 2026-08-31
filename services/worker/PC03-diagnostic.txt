@@ -1,0 +1,69 @@
+ 130:   assert.equal(supplied.source, "prysm-direct-crawl");
+ 131:   assert.equal(supplied._evidenceStatus, "AVAILABLE");
+ 132:   assert.equal(supplied.candidateUrl, SUPPLIED_URL);
+ 133:   assert.equal(supplied.title, "Competitor Alpha Coaching");
+ 134:   assert.ok(supplied.services.includes("Executive Coaching"));
+ 135:   assert.equal(supplied.trust.credentials, true);
+ 136:   assert.ok(supplied.ctas.length > 0);
+ 137:   assert.ok(supplied.forms.length > 0);
+ 138: });
+ 139: 
+ 140: test("PC-03/07: persisted SourceResult hydration preserves usable supplied row and report comparison consumes it", async () => {
+ 141:   const { fetchImpl } = directCrawlFetch();
+ 142:   const result = await withDfsCredentials(null, null, () => executeControlled(auditRequest(fetchImpl)));
+ 143:   const validateContract = createProductionContractValidator();
+ 144: 
+ 145:   const hydrated = buildDecisionEvidence({
+ 146:     allSourceResults: [{ source: "dataforseo-serp", sourceResult: result.sourceResult }],
+ 147:     suppliedCompetitors: [SUPPLIED_URL],
+ 148:     validateContract,
+ 149:   });
+ 150: 
+ 151:   assert.deepEqual(hydrated.errors, []);
+ 152:   assert.equal(hydrated.evidence.competitors.length, 1);
+ 153:   assert.equal(hydrated.evidence.competitors[0].status, "AVAILABLE",
+ 154:     "item-level direct evidence availability must survive a PARTIAL composite source");
+ 155: 
+ 156:   const comparison = competitorComparison(hydrated.evidence.competitors, null);
+ 157:   assert.equal(comparison.comparisons.length, 1);
+ 158:   const row = comparison.comparisons[0];
+ 159:   assert.equal(row.url, SUPPLIED_URL);
+ 160:   assert.equal(row.name, "Competitor Alpha Coaching");
+ 161:   assert.notEqual(row.status, "Unavailable");
+ 162:   assert.notEqual(row.status, "Insufficient Evidence");
+ 163:   assert.equal(row.offerClarity, "Moderate");
+ 164:   assert.equal(row.ctaClarity, "Strong");
+ 165:   assert.equal(row.pathClarity, "Moderate");
+ 166: });
+ 167: 
+ 168: test("PC-03b: mixed supplied crawl stays PARTIAL and preserves the usable competitor row", async () => {
+ 169:   const { fetchImpl: baseFetch } = directCrawlFetch();
+ 170:   const missingUrl = "https://missing.example/";
+
+--- report-model competitorComparison ---
+
+594-            // a preposition takes the gerund, never a bare imperative verb.
+595-            query: `${t0} for ${(goalPhrase.gerund || goalPhrase.raw).toLowerCase()}`,
+596-            rationale: "Connects the offer directly to the stated business goal",
+597-            priority: "H",
+598-          }]
+599-        : []),
+600-      { query: `${t0} for decision making`, rationale: "Connects the offer to an urgent practical use", priority: "H" },
+601-      { query: `${t0} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },
+602-    ],
+603-  };
+604-}
+605-
+606:function competitorComparison(
+607-  competitorResults,
+608-  competitorOpportunities,
+609-  suppliedCompetitors = [],
+610-) {
+611-  /*
+612-   * Client-facing competitor comparison is governed by the
+613-   * explicitly supplied competitor allowlist.
+614-   *
+615-   * SERP-discovered candidates remain available in canonical
+616-   * evidence but do not enter the report or Writer projection.
+617-   */
+618-  const suppliedCompetitorUrls =

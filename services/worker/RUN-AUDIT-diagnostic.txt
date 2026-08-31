@@ -1,0 +1,350 @@
+ 195:     onpagePollTimeoutMs: 600000,
+ 196:     onpagePollIntervalMs: 10000,
+ 197:     onpageIncludePatterns: [],
+ 198:     onpageExcludePatterns: [],
+ 199:     ...overrides,
+ 200:   };
+ 201: }
+ 202: 
+ 203: // ---------------------------------------------------------------------------
+ 204: // 1. Existing: runAudit completes with DI
+ 205: // ---------------------------------------------------------------------------
+ 206: 
+ 207: test("runAudit completes without API secrets and writes the full report artifact set", async () => {
+ 208:   const dir = await mkdtemp(join(tmpdir(), "vantage-test-"));
+ 209:   const store = createLocalReportStore({ baseDir: dir });
+ 210:   const result = await runAudit(
+ 211:     { targetUrl: "example.com", businessName: "Example" },
+ 212:     {
+ 213:       config: baseConfig({ artifactDir: dir }),
+ 214:       crawlSite: async () => AVAILABLE_SITE,
+ 215:       crawlCompetitors: async () => [],
+ 216:       collectPerformance: async () => AVAILABLE_PERF,
+ 217:       collectBacklinks: async () => NOT_CONNECTED_BACKLINKS,
+ 218:       collectGa4: async () => NOT_CONNECTED_GA4,
+ 219:       store,
+ 220:       runId: "20260726-test-001",
+ 221:     },
+ 222:   );
+ 223:   assert.equal(result.status, "draft");
+ 224:   assert.equal(result.lifecycleStatus, "draft");
+ 225:   const html = await readFile(result.storage.indexPath, "utf8");
+ 226:   assert.match(html, /Prysm Phase 1 Audit/);
+ 227:   assert.equal(result.manifest.sources.website, SOURCE_STATUS.AVAILABLE);
+ 228:   assert.equal(result.manifest.sources.backlinks, SOURCE_STATUS.NOT_CONNECTED);
+ 229:   assert.equal(result.manifest.sources.ga4, SOURCE_STATUS.NOT_CONNECTED);
+ 230: });
+ 231: 
+ 232: test("multi-page: full audit pipeline produces draft report with single-section display, Previous/Next, hash navigation, and booking CTA", async () => {
+ 233:   const dir = await mkdtemp(join(tmpdir(), "vantage-test-"));
+ 234:   const store = createLocalReportStore({ baseDir: dir });
+ 235:   const result = await runAudit(
+ 236:     { targetUrl: "example.com", businessName: "Example" },
+ 237:     {
+ 238:       config: baseConfig({ artifactDir: dir }),
+ 239:       crawlSite: async () => AVAILABLE_SITE,
+ 240:       crawlCompetitors: async () => [],
+ 241:       collectPerformance: async () => AVAILABLE_PERF,
+ 242:       collectBacklinks: async () => NOT_CONNECTED_BACKLINKS,
+ 243:       collectGa4: async () => NOT_CONNECTED_GA4,
+ 244:       store,
+ 245:       runId: "20260730-multi-page-001",
+ 246:     },
+ 247:   );
+ 248:   assert.equal(result.status, "draft");
+ 249:   const html = await readFile(result.storage.indexPath, "utf8");
+ 250: 
+ 251:   // Single-section display CSS
+ 252:   assert.match(html, /section\{display:none\}/, "CSS must hide all sections by default");
+ 253:   assert.match(html, /section\.active\{display:block\}/, "CSS must show only .active section");
+ 254: 
+ 255:   // Previous/Next controls in script
+ 256:   const script = (html.match(/<script>[\s\S]*?<\/script>/) || [""])[0];
+ 257:   assert.match(script, /â† Previous/, "Must have Previous button markup");
+ 258:   assert.match(script, /Next â†’/, "Must have Next button markup");
+ 259:   assert.match(script, /Section.*of/, "Must have Section X of Y position indicator");
+ 260: 
+ 261:   // Hash-based navigation in script
+ 262:   assert.match(script, /history\.pushState/, "Must use pushState for URL hash updates");
+ 263:   assert.match(script, /popstate/, "Must handle browser back/forward");
+ 264: 
+ 265:   // Keyboard navigation
+ 266:   assert.match(script, /ArrowLeft/, "Must support Left arrow key");
+ 267:   assert.match(script, /ArrowRight/, "Must support Right arrow key");
+ 268: 
+ 269:   // aria-current for accessibility
+ 270:   assert.match(script, /aria-current/, "Must manage aria-current on nav links");
+ 271: 
+ 272:   // Booking CTA and next action in footer
+ 273:   assert.match(html, /implementation scoping session/, "Must include next action CTA");
+ 274: 
+ 275:   // No old anchor-only navigation
+ 276:   assert.doesNotMatch(html, /nav-toggle/, "Must not have old nav-toggle button");
+ 277: });
+ 278: 
+ 279: test("gate-blocked: manifest omits index.html and status is draft when gate fails", async () => {
+ 280:   const dir = await mkdtemp(join(tmpdir(), "vantage-test-"));
+ 281:   const store = createLocalReportStore({ baseDir: dir });
+ 282: 
+ 283:   const result = await runAudit(
+ 284:     { targetUrl: "example.com", businessName: "Example" },
+ 285:     {
+ 286:       config: baseConfig({ artifactDir: dir }),
+ 287:       crawlSite: async () => AVAILABLE_SITE,
+ 288:       crawlCompetitors: async () => [],
+ 289:       collectPerformance: async () => AVAILABLE_PERF,
+ 290:       collectBacklinks: async () => NOT_CONNECTED_BACKLINKS,
+ 291:       collectGa4: async () => NOT_CONNECTED_GA4,
+ 292:       store,
+ 293:       runId: "20260730-gate-pass-001",
+ 294:     },
+ 295:   );
+ 296: 
+ 297:   // With consistent evidence, gate passes
+ 298:   assert.equal(result._gateBlocked, false, "Gate should pass with consistent evidence");
+ 299:   assert.equal(result.status, "draft");
+ 300:   assert.equal(result.manifest.files.includes("index.html"), true,
+ 301:     "Manifest must include index.html when gate passes");
+ 302:   assert.ok(result.model._gate, "Gate output must be attached to model");
+ 303:   assert.equal(result.model._gate.passed, true);
+ 304: });
+ 305: 
+ 306: // ---------------------------------------------------------------------------
+ 307: // 2. Existing: performance FAILED
+ 308: // ---------------------------------------------------------------------------
+ 309: 
+ 310: test("manifest sources.performance is FAILED when both PageSpeed and Lighthouse are unavailable", async () => {
+
+--- run-audit gate/render path ---
+
+1-import { resolve } from "node:path";
+2-import { crawlSite, crawlCompetitors } from "../evidence/site-crawler.js";
+3-import { crawlWithDataforseo } from "../adapters/dataforseo-onpage/dataforseo-onpage-adapter.js";
+4-import { collectPerformance, collectPerformanceForPages } from "../evidence/pagespeed-client.js";
+5-import { collectBacklinks } from "../evidence/backlinks-provider.js";
+6-import { collectGa4 } from "../evidence/ga4-client.js";
+7-import { collectGsc } from "../evidence/gsc-client.js";
+8-import { collectCompetitorOpportunities } from "../evidence/competitor-opportunity-layer.js";
+9-import { generateInternalLinkOpportunities } from "../evidence/internal-link-opportunity.js";
+10-import { scoreAudit } from "../scoring/vantage-score.js";
+11:import { runFinalizationGate } from "../scoring/report-finalization-gate.js";
+12:import { renderReport } from "../report/render-report.js";
+13-import { createReportStore } from "../storage/report-store.js";
+14-import { createRunId, domainOf, normalizeUrl, slugify } from "../utils.js";
+15-import { loadConfig } from "../config.js";
+16-import {
+17-  SOURCE_STATUS,
+18-  ERROR_CATEGORY,
+19-  buildSourceStatus,
+20-  EVIDENCE_ENVELOPE_VERSION,
+21-  validateEvidenceEnvelope,
+22-  downgradeToFailed,
+23-  normalizeCompetitorApprovalState,
+24-} from "../scoring/evidence-contracts.js";
+25-import {
+26-  LIFECYCLE_STATUS,
+27-  buildReviewRecord,
+28-  buildApprovalRecord,
+29-  validateTransition,
+30-  isReviewComplete,
+31-  validateCompetitorDecisions,
+32-  buildCompetitorOverrides,
+33:} from "./review-gate.js";
+34-import { renderApprovedReport } from "../report/render-approved-report.js";
+35-
+36-// ---------------------------------------------------------------------------
+37-// Input validation
+38-// ---------------------------------------------------------------------------
+39-
+40-function validateInput(raw) {
+41-  if (!raw || typeof raw !== "object") throw new Error("Audit input must be an object");
+42-  if (!raw.targetUrl || typeof raw.targetUrl !== "string") throw new Error("targetUrl is required");
+43-  const targetUrl = normalizeUrl(raw.targetUrl);
+44-  const competitors = Array.isArray(raw.competitors)
+45-    ? raw.competitors.filter(Boolean).slice(0, 3).map(normalizeUrl)
+46-    : [];
+47-
+48-  // GöÇGöÇ GA4 validation (strict allowlist GÇö only propertyId) GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+--
+461-    competitors,
+462-    competitorOpportunities,
+463-    backlinks: validatedBacklinks,
+464-    ga4: validatedGa4,
+465-    gsc: validatedGsc,
+466-    internalLinkOpportunities,
+467-  };
+468-
+469-  // GöÇGöÇ Score GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+470-  const model = scoreAudit(input, evidence);
+471-
+472-  if (model.renderingDiagnostics && model.renderingDiagnostics.length > 0) {
+473-    evidence.performance.renderingDiagnostics = model.renderingDiagnostics;
+474-  }
+475-
+476:  // GöÇGöÇ Finalization gate GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+477-  // Must run after scoring + diagnostics, before rendering.
+478-  // Block renders with contradictory or incomplete evidence.
+479:  const gate = runFinalizationGate(model, evidence);
+480:  const gatedModel = gate.model;
+481-
+482-  // GöÇGöÇ Render GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+483:  if (!gate.passed) {
+484-    // Audit stays in draft; structured errors attached to model for auditor review
+485:    gatedModel._renderBlocked = true;
+486-  }
+487:  const html = gate.passed
+488:    ? await (options.renderReport || renderReport)(gatedModel, { artifactRoot })
+489-    : "";
+490-  const completedAt = new Date().toISOString();
+491-
+492-  const manifest = {
+493-    artifactVersion: "1.0.0",
+494:    reportVersion: gatedModel.reportVersion,
+495-    runId,
+496-    slug,
+497-    targetUrl: input.targetUrl,
+498-    targetDomain: site.domain,
+499-    startedAt,
+500-    completedAt,
+501:    status: gate.passed ? "draft" : "draft",
+502:    scores: gatedModel.scores,
+503-    sources: {
+504-      website: validatedSite.sourceStatus,
+505-      performance: validatedPerformance.sourceStatus,
+506-      competitors: competitors.length
+507-        ? SOURCE_STATUS.AVAILABLE
+508-        : SOURCE_STATUS.NOT_APPLICABLE,
+509-      backlinks: validatedBacklinks.sourceStatus,
+510-      ga4: validatedGa4.sourceStatus,
+511-      gsc: validatedGsc.sourceStatus,
+512-    },
+513-    selectedProperties: {
+514-      ga4PropertyId: effectiveGa4PropertyId,
+515-      gscSiteUrl: effectiveGscSiteUrl,
+516-      competitors: input.competitors,
+517-    },
+518:    files: gate.passed
+519:      ? ["index.html", "audit.json", "evidence.json", "manifest.json"]
+520-      : ["audit.json", "evidence.json", "manifest.json"],
+521-  };
+522-
+523-  const store =
+524-    options.store || createReportStore(config, { s3Client: options.s3Client });
+525-  const storage = await store.writeReport({
+526-    slug,
+527-    runId,
+528:    html: gate.passed ? html : "",
+529:    includeIndexHtml: gate.passed,
+530:    model: gatedModel,
+531-    manifest,
+532-  });
+533-
+534-  return {
+535-    runId,
+536-    slug,
+537-    status: "draft",
+538-    lifecycleStatus: LIFECYCLE_STATUS.DRAFT,
+539:    model: gatedModel,
+540-    manifest,
+541-    storage,
+542-    html: options.includeHtml ? html : undefined,
+543:    _gateBlocked: !gate.passed,
+544:    _gateErrors: gate.errors,
+545-  };
+546-}
+547-
+548-// ---------------------------------------------------------------------------
+549-// Review and approval operations (PRD -º18)
+550-// ---------------------------------------------------------------------------
+551-
+552-/**
+553- * Submit a Principal Auditor review for an audit.
+554- *
+555- * Validates the review payload, persists the review record, and transitions
+556- * the lifecycle from draft GåÆ reviewed (or reviewed GåÆ reviewed for re-review).
+557- *
+558- * Returns the updated lifecycle record.
+559- */
+--
+754-  const evOpp = committed.evidence.competitorOpportunities;
+755-  const mdOpp = model.evidence?.competitorOpportunities;
+756-  if (evOpp || mdOpp) {
+757-    const evNorm = normalizeCompetitorApprovalState(evOpp);
+758-    const mdNorm = normalizeCompetitorApprovalState(mdOpp);
+759-    const evJson = JSON.stringify(evNorm);
+760-    const mdJson = JSON.stringify(mdNorm);
+761-    if (evJson !== mdJson) {
+762-      throw Object.assign(
+763-        new Error("Approval rejected GÇö evidence and model competitor approval states disagree"),
+764-        { statusCode: 422 },
+765-      );
+766-    }
+767-  }
+768-
+769:  // GöÇGöÇ Competitor approval gate (Task 9) GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+770-  const competitorOpps = model.evidence?.competitorOpportunities;
+771-  if (competitorOpps) {
+772-    const gaps = competitorOpps.gaps || [];
+773-    const qualifiedCandidates = competitorOpps.candidates?.qualified || [];
+774-
+775-    // Check 1: no pending/rejected gaps in client-facing output
+776-    for (const gap of gaps) {
+777-      if (gap.approvalStatus !== "approved") {
+778-        throw Object.assign(
+779-          new Error(
+780-            `Approval rejected GÇö client-facing competitor gap for "${gap.competitorPage}" ` +
+781-            `has approval status "${gap.approvalStatus}". All gaps must be approved.`,
+782-          ),
+783-          { statusCode: 422 },
+784-        );
+785-      }
+786-    }
+787-
+788:    // Check 2: every approved gap still passes all gates
+789-    for (const gap of gaps) {
+790-      if (!gap.gapPassed) {
+791-        throw Object.assign(
+792-          new Error(
+793-            `Approval rejected GÇö competitor gap for "${gap.competitorPage}" does not pass all qualified-gap checks.`,
+794-          ),
+795-          { statusCode: 422 },
+796-        );
+797-      }
+798-      if (!gap.qualificationPassed) {
+799-        throw Object.assign(
+800-          new Error(
+801-            `Approval rejected GÇö competitor candidate "${gap.competitorPage}" does not pass all qualification checks.`,
+802-          ),
+803-          { statusCode: 422 },
+--
+822-
+823-    // Check 4: competitor_selections checklist item must be reviewed
+824-    const competitorChecklistItem = lc.review?.checklist?.find(
+825-      (item) => item.id === "competitor_selections",
+826-    );
+827-    if (!competitorChecklistItem || !competitorChecklistItem.reviewed) {
+828-      throw Object.assign(
+829-        new Error(
+830-          "Approval rejected GÇö the \"Competitor selections\" checklist item must be reviewed.",
+831-        ),
+832-        { statusCode: 422 },
+833-      );
+834-    }
+835-  }
+836-
+837:  // GöÇGöÇ Internal-link checklist gate GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
+838-  if (model.evidence?.internalLinkOpportunities) {
+839-    const ilChecklistItem = lc.review?.checklist?.find(
+840-      (item) => item.id === "internal_link_recommendations",
+841-    );
+842-    if (!ilChecklistItem || !ilChecklistItem.reviewed) {
+843-      throw Object.assign(
+844-        new Error(
+845-          "Approval rejected GÇö the \"Internal-link recommendations\" checklist item must be reviewed.",
+846-        ),
+847-        { statusCode: 422 },
+848-      );
+849-    }
+850-  }
+851-
+852-  // Build approval record

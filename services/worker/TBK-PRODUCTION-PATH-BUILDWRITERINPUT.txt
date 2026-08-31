@@ -1,0 +1,53 @@
+16-import { loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
+17-import { loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
+18-import { runFinalizationGate } from "../scoring/report-finalization-gate.js";
+19-import {
+20-  SOURCE_STATUS,
+21-  isValidSourceStatus,
+22-} from "../scoring/evidence-contracts.js";
+23-import { REPORT_DESIGN_V2, isReportDesignV2 } from "../report/report-design.js";
+24:import { buildWriterInput } from "./writer-input.js";
+25-import {
+26-  runNarrativeV2Orchestration,
+27-  NARRATIVE_V2_STATUS,
+28-} from "./orchestrator.js";
+29-import { validateWriterOutput } from "./writer-output.js";
+30-import { validateJudgeResponse } from "./judge-contract.js";
+31-import { renderGovernedNarrativeReportV2 } from "../report/render-narrative-v2.js";
+32-import { REPORT_V2_VIEWER_VERSION } from "../report/render-report-v2.js";
+--
+995-    executionId,
+996-    toState: T.NARRATIVE_PENDING,
+997-    reason: "narrative-v2-execution-start",
+998-  });
+999-
+1000-  let writerInput;
+1001-  let orchestrationResult;
+1002-  try {
+1003:    writerInput = buildWriterInput({
+1004-      auditId: auditRequest.auditId,
+1005-      auditRequest,
+1006-      scoreSet: inputs.scoreSet,
+1007-      findings: inputs.findings,
+1008-      capabilityEvidence: inputs.capabilityEvidence,
+1009-    });
+1010-
+1011-    await persistJsonArtifact({
+--
+1683-        validateContract: args.validateContract,
+1684-      });
+1685-      await ensureReportContentPackage({
+1686-        artifactStore: args.artifactStore,
+1687-        auditRequest: args.auditRequest,
+1688-        validateContract: args.validateContract,
+1689-        inputs,
+1690-      });
+1691:      writerInput = buildWriterInput({
+1692-        auditId: args.auditRequest.auditId,
+1693-        auditRequest: args.auditRequest,
+1694-        scoreSet: inputs.scoreSet,
+1695-        findings: inputs.findings,
+1696-        capabilityEvidence: inputs.capabilityEvidence,
+1697-      });
+1698-      await persistJsonArtifact({
+1699-        artifactStore: args.artifactStore,

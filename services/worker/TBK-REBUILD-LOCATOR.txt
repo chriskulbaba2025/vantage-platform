@@ -1,0 +1,230 @@
+=== GIT STATUS ===
+ M scripts/replay-report.js
+ M src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.js
+ M src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.test.js
+ M src/adapters/dataforseo-serp/supplied-competitor-production-path.test.js
+ M src/evidence/browser-evidence-bridge.test.js
+ M src/evidence/decision-evidence.js
+ M src/narrative-v2/contract-closure.test.js
+ M src/narrative-v2/judge-contract.js
+ M src/narrative-v2/judge-contract.test.js
+ M src/narrative-v2/judge-structured-output.js
+ M src/narrative-v2/live-binding.js
+ M src/narrative-v2/live-binding.test.js
+ M src/narrative-v2/writer-input.js
+ M src/narrative-v2/writer-output.js
+ M src/narrative-v2/writer-output.test.js
+ M src/narrative-v2/writer-prompt.js
+ M src/narrative-v2/writer-scores.js
+ M src/report/action-priority.js
+ M src/report/foundation-readiness.js
+ M src/report/render-narrative-v2.test.js
+ M src/report/render-report-v2-conversion.test.js
+ M src/report/render-report-v2.js
+ M src/report/report-detail-sections.js
+ M src/scoring/decision-scope.js
+ M src/scoring/decision-scope.test.js
+ M src/scoring/report-finalization-gate.js
+ M src/scoring/report-finalization-gate.test.js
+ M src/scoring/report-model.js
+ M src/scoring/score-components.js
+ M src/scoring/score-components.test.js
+ M src/scoring/vantage-score.js
+ M src/scoring/vantage-score.test.js
+?? CR43-review-diff.txt
+?? PC03-diagnostic.txt
+?? PRYSM-PREFLIGHT-LOCAL.diff
+?? ROOT-CAUSE-boundary.txt
+?? RUN-AUDIT-diagnostic.txt
+?? RUN-AUDIT-gate-diagnostic.txt
+?? TBK-REPAIR-02-diagnostic.txt
+?? TBK-REPAIR-02-output.txt
+?? tbk-current-image-aggregation-code.txt
+?? tbk-finalization-gate-image-check.txt
+?? tbk-finalization-image-code.txt
+?? tbk-frozen-narrative-version-diagnostic.txt
+?? tbk-governed-file-list.txt
+?? tbk-image-denominator-diagnostic.txt
+?? tbk-image-meta-diagnostic.txt
+?? tbk-offline-contract-diagnostic.txt
+?? tbk-offline-rebuild-result.txt
+?? tbk-tech-finding-lines.txt
+?? test-fixtures/report-replay-offline/
+?? test-fixtures/report-replay/audit-1e060a5b-2eb4-4800-b8f9-bca52574aa64-narrative-refresh/
+?? test-fixtures/report-replay/audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82/
+?? test-fixtures/report-replay/audit-9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4-narrative-refresh/
+?? test-fixtures/report-replay/audit-ea9a3b49-d393-4633-956b-d6cb1a2a3fc8-narrative-refresh/
+
+=== TBK / REBUILD / REPLAY CANDIDATES ===
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-current-image-aggregation-code.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-finalization-gate-image-check.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-finalization-image-code.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-frozen-narrative-version-diagnostic.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-governed-file-list.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-image-denominator-diagnostic.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-image-meta-diagnostic.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-offline-contract-diagnostic.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-offline-rebuild-result.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\TBK-REPAIR-02-diagnostic.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\TBK-REPAIR-02-output.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\tbk-tech-finding-lines.txt
+C:\Users\kulba\Desktop\vantage-platform\services\worker\node_modules\@sentry\core\build\types\types-hoist\replay.d.ts
+C:\Users\kulba\Desktop\vantage-platform\services\worker\node_modules\@sentry\core\build\types\types-hoist\replay.d.ts.map
+C:\Users\kulba\Desktop\vantage-platform\services\worker\node_modules\@sentry\core\build\types-ts3.8\types-hoist\replay.d.ts
+C:\Users\kulba\Desktop\vantage-platform\services\worker\scripts\replay-report.js
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-1e060a5b-2eb4-4800-b8f9-bca52574aa64-narrative-refresh\TBK-PRYSM-LOCAL.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\TBK-PRYSM-LOCAL.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\audit-request.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\capability-evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\conversion-path-validation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\decision-evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\findings.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\canonical\scores.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\evidence\path-validation-0.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\evidence\path-validation-1.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\evidence\path-validation-2.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\evidence\path-validation-3.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\evidence\path-validation-4.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\evidence\path-validation-5.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\manifests\canonical-evidence-record.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\manifests\source-checkpoint-backlinks.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\manifests\source-checkpoint-dataforseo-onpage.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\manifests\source-checkpoint-dataforseo-serp.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\manifests\source-checkpoint-pagespeed.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\normalized\backlinks.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\normalized\dataforseo-onpage.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\normalized\dataforseo-serp.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\normalized\pagespeed.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\raw\backlinks-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\raw\dataforseo-onpage-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\raw\dataforseo-serp-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\raw\pagespeed-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report\report-content.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\manifest.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\orchestration-final-pass.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\orchestration.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\writer-input.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-01-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-01-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-01-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-02-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-02-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-02-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-03-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-03-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-03-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-04-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-04-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-04-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-05-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-05-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-05-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-06-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-06-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\narrative-v2\live-usage\call-06-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82\governed\report-v2\pages\index.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4-narrative-refresh\TBK-PRYSM-LOCAL.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay\audit-ea9a3b49-d393-4633-956b-d6cb1a2a3fc8-narrative-refresh\TBK-PRYSM-LOCAL.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\TBK-PRYSM-LOCAL.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\audit-request.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\capability-evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\conversion-path-validation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\decision-evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\findings.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\canonical\scores.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\evidence\path-validation-0.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\evidence\path-validation-1.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\evidence\path-validation-2.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\evidence\path-validation-3.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\evidence\path-validation-4.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\evidence\path-validation-5.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\manifests\canonical-evidence-record.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\manifests\source-checkpoint-backlinks.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\manifests\source-checkpoint-dataforseo-onpage.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\manifests\source-checkpoint-dataforseo-serp.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\manifests\source-checkpoint-pagespeed.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\normalized\backlinks.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\normalized\dataforseo-onpage.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\normalized\dataforseo-serp.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\normalized\pagespeed.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\raw\backlinks-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\raw\dataforseo-onpage-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\raw\dataforseo-serp-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\raw\pagespeed-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report\report-content.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\manifest.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\orchestration-final-pass.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\orchestration.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\writer-input.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-01-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-01-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-01-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-02-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-02-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-02-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-03-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-03-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-03-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-04-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-04-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-04-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-05-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-05-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-05-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-06-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-06-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\narrative-v2\live-usage\call-06-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-20260830-123707\governed\report-v2\pages\index.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\TBK-PRYSM-LOCAL.html
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\audit-request.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\capability-evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\conversion-path-validation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\decision-evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\evidence.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\findings.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\canonical\scores.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\evidence\path-validation-0.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\evidence\path-validation-1.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\evidence\path-validation-2.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\evidence\path-validation-3.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\evidence\path-validation-4.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\evidence\path-validation-5.png
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\manifests\canonical-evidence-record.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\manifests\source-checkpoint-backlinks.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\manifests\source-checkpoint-dataforseo-onpage.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\manifests\source-checkpoint-dataforseo-serp.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\manifests\source-checkpoint-pagespeed.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\normalized\backlinks.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\normalized\dataforseo-onpage.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\normalized\dataforseo-serp.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\normalized\pagespeed.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\raw\backlinks-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\raw\dataforseo-onpage-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\raw\dataforseo-serp-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\raw\pagespeed-b40b829a-9770-43bb-bb5b-755b53947698.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report\report-content.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\manifest.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\orchestration-final-pass.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\orchestration.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\writer-input.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-01-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-01-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-01-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-02-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-02-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-02-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-03-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-03-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-03-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-04-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-04-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-04-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-05-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-05-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-05-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-06-reservation.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-06-response.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\narrative-v2\live-usage\call-06-result.json
+C:\Users\kulba\Desktop\vantage-platform\services\worker\test-fixtures\report-replay-offline\audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current\governed\report-v2\pages\index.html

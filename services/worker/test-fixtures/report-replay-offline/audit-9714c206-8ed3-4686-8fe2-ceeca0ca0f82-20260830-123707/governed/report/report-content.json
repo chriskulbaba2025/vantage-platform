@@ -1,0 +1,244 @@
+{
+  "contractVersion": "1.0.0",
+  "packageVersion": "1.0.0",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "business": {
+    "name": "Tbkcreative",
+    "domain": "tbkcreative.com",
+    "platform": "WordPress"
+  },
+  "scores": {
+    "trust": 75,
+    "contentDepth": 85,
+    "conversionPathways": 70,
+    "technical": 6,
+    "performance": 71,
+    "conversionReadiness": 65,
+    "awareness": 72,
+    "consideration": 72,
+    "decision": 74,
+    "aiReadiness": 65,
+    "conversionPathwaysDimension": 70,
+    "trustEeatDimension": 75,
+    "contentFunnelDimension": 85,
+    "technicalPerformanceDimension": 39,
+    "entitySchemaAiDimension": 38
+  },
+  "bands": {
+    "conversionReadiness": "Moderate",
+    "trust": "Moderate",
+    "evidenceConfidence": "High"
+  },
+  "readinessStatus": "Complete",
+  "assessedWeight": 100,
+  "showNumericScore": true,
+  "evidenceConfidenceScore": 95,
+  "rootCause": "The most impactful opportunity is missing meta descriptions. Missing meta descriptions may reduce control over search-result messaging for these pages.",
+  "renderingDiagnostics": [],
+  "sourceStatus": {
+    "website": "PARTIAL",
+    "performance": "AVAILABLE",
+    "competitors": "PARTIAL",
+    "backlinks": "AVAILABLE",
+    "ga4": "NOT_CONNECTED",
+    "gsc": "NOT_CONNECTED"
+  },
+  "competitors": [
+    {
+      "url": "https://red-rhino.com",
+      "domain": "red-rhino.com",
+      "pageCount": 0,
+      "status": "AVAILABLE"
+    },
+    {
+      "url": "https://www.zoomedia.ca",
+      "domain": "zoomedia.ca",
+      "pageCount": 0,
+      "status": "AVAILABLE"
+    },
+    {
+      "url": "https://www.canva.com/website-builder/",
+      "domain": "www.canva.com",
+      "pageCount": 0,
+      "status": "AVAILABLE"
+    },
+    {
+      "url": "https://www.godaddy.com/en-ca/websites/website-builder",
+      "domain": "www.godaddy.com",
+      "pageCount": 0,
+      "status": "AVAILABLE"
+    },
+    {
+      "url": "https://www.squarespace.com/",
+      "domain": "www.squarespace.com",
+      "pageCount": 0,
+      "status": "AVAILABLE"
+    }
+  ],
+  "performanceCoverage": {
+    "requested": 2,
+    "completed": 2,
+    "failed": 0,
+    "pagesTested": 2
+  },
+  "limitations": [
+    "Crawl stopped: limit_exceeded (limit: 250, crawled: 250, queued: 0)",
+    "Page ceiling reached after 250 pages crawled",
+    "Screenshot persistence failed for mobile: runId is required for screenshot persistence",
+    "Screenshot persistence failed for desktop: runId is required for screenshot persistence",
+    "CrUX PHONE failed (403)",
+    "CrUX DESKTOP failed (403)"
+  ],
+  "findings": [
+    {
+      "findingId": "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+      "ruleId": "VAN-TECH-001",
+      "title": "Missing meta descriptions",
+      "severity": "High",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Missing meta descriptions may reduce control over search-result messaging for these pages.",
+      "recommendation": "Write a unique 150–160 character description for each important page",
+      "verificationMethod": "Re-crawl the URLs and confirm descriptions are present.",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/logout/",
+        "https://www.tbkcreative.com/our-work/old-oak-2/",
+        "https://www.tbkcreative.com/2019/09/03/media-event-2019-women-tech-scholarship/",
+        "https://www.tbkcreative.com/2022/03/25/harnessing-a-i-privacy-settings-as-a-marketing-manager/",
+        "https://www.tbkcreative.com/forms-paging/",
+        "https://www.tbkcreative.com/forms/",
+        "https://www.tbkcreative.com/holiday-card/",
+        "https://www.tbkcreative.com/our-work/",
+        "https://www.tbkcreative.com/services/",
+        "https://www.tbkcreative.com/tbk-welcomes-you/"
+      ],
+      "evidence": [
+        {
+          "field": "meta_description",
+          "observedValue": null
+        }
+      ],
+      "implementationEffort": "L"
+    },
+    {
+      "findingId": "509d1795-9dcb-400e-8242-41f58647b40a",
+      "ruleId": "VAN-TECH-002",
+      "title": "Heading structure is inconsistent",
+      "severity": "Medium",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Inconsistent heading structure may reduce semantic clarity and accessibility.",
+      "recommendation": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+      "verificationMethod": "Re-crawl and verify heading structure on all pages.",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/"
+      ],
+      "evidence": [
+        {
+          "field": "h1_missing",
+          "observedValue": 32
+        },
+        {
+          "field": "h1_multiple",
+          "observedValue": 4
+        }
+      ],
+      "implementationEffort": "M"
+    },
+    {
+      "findingId": "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+      "ruleId": "VAN-TECH-003",
+      "title": "Security headers are incomplete",
+      "severity": "Medium",
+      "confidence": "deterministic",
+      "scoreBearing": true,
+      "businessImpact": "Missing browser protections may weaken technical trust.",
+      "recommendation": "Configure the missing response headers at the hosting layer",
+      "verificationMethod": "Re-crawl and confirm security headers are present in response.",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/"
+      ],
+      "evidence": [
+        {
+          "field": "security_headers",
+          "observedValue": "xFrameOptions, xContentTypeOptions, referrerPolicy, contentSecurityPolicy"
+        }
+      ],
+      "implementationEffort": "L"
+    },
+    {
+      "findingId": "df48581f-7375-4863-be49-eb6107647b75",
+      "ruleId": "VAN-CONTENT-002",
+      "title": "No buyer-question content detected",
+      "severity": "Medium",
+      "confidence": "supported",
+      "scoreBearing": true,
+      "businessImpact": "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
+      "recommendation": "Add an FAQ based on the questions prospects ask before booking",
+      "verificationMethod": "Re-crawl and confirm FAQ content is present with structured data where applicable.",
+      "affectedUrls": [
+        "https://www.tbkcreative.com/"
+      ],
+      "evidence": [
+        {
+          "field": "trust.faq",
+          "observedValue": false
+        }
+      ],
+      "implementationEffort": "M"
+    }
+  ],
+  "siteMetrics": {
+    "pageCount": 250,
+    "services": [],
+    "topicKeywords": [
+      "tagged by kindness inc",
+      "apply to work at tbk",
+      "tbk incubates go fog it",
+      "4 0",
+      "create",
+      "home - tbk creative",
+      "make it better",
+      "how seo impacts ux",
+      "what is native advertising",
+      "celebrating women technology",
+      "hiring 12 more employees",
+      "tbk welcomes six new professionals",
+      "hello new logo",
+      "members of parliament visit tbk",
+      "tbk builds new tricar logo",
+      "tbk builds new lbmx website",
+      "a partnership with acumen",
+      "how to create accessible infographics",
+      "why website speed matters",
+      "marketing successfully during uncertain times"
+    ],
+    "platform": "WordPress",
+    "hasHttps": true,
+    "schemaCount": 1,
+    "ctaCount": 0,
+    "formCount": 0
+  },
+  "trustFlags": {
+    "testimonials": true,
+    "credentials": true,
+    "caseStudies": true,
+    "faq": false,
+    "pricing": true,
+    "policies": true,
+    "contact": true
+  },
+  "technical": {
+    "missingTitles": 26,
+    "missingDescriptions": 34,
+    "h1Missing": 31,
+    "h1Multiple": 4,
+    "imagesMissingAlt": 222,
+    "internalLinkCount": 4530
+  },
+  "gateRecommendation": "",
+  "gateNextAction": "",
+  "gateServiceCategories": [],
+  "promptVersion": "1.0.0",
+  "outputSchemaVersion": "1.0.0"
+}

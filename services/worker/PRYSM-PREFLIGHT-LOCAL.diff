@@ -1,0 +1,1217 @@
+﻿=== STATUS ===
+ M src/narrative-v2/contract-closure.test.js
+ M src/narrative-v2/judge-contract.js
+ M src/narrative-v2/live-binding.js
+ M src/narrative-v2/writer-input.js
+ M src/narrative-v2/writer-prompt.js
+ M src/report/action-priority.js
+ M src/report/foundation-readiness.js
+ M src/report/render-report-v2-conversion.test.js
+ M src/report/render-report-v2.js
+ M src/scoring/report-model.js
+?? PRYSM-PREFLIGHT-LOCAL.diff
+?? test-fixtures/report-replay/audit-1e060a5b-2eb4-4800-b8f9-bca52574aa64-narrative-refresh/
+?? test-fixtures/report-replay/audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82/
+?? test-fixtures/report-replay/audit-9c87448a-c1a1-41eb-a0e5-a8dd63cf8da4-narrative-refresh/
+?? test-fixtures/report-replay/audit-ea9a3b49-d393-4633-956b-d6cb1a2a3fc8-narrative-refresh/
+
+=== HEAD ===
+90916e94f6feba73e7e60df54bd641bb2362454c
+
+=== LOCAL DIFF ===
+diff --git a/services/worker/src/narrative-v2/judge-contract.js b/services/worker/src/narrative-v2/judge-contract.js
+index 71f317a..94490d4 100644
+--- a/services/worker/src/narrative-v2/judge-contract.js
++++ b/services/worker/src/narrative-v2/judge-contract.js
+@@ -49,6 +49,7 @@ export const HARD_GATE_CODES = Object.freeze([
+   "SOURCE_STATUS_MUTATION",
+   "UNAVAILABLE_AS_ABSENT",
+   "CONTRADICTS_FINDING",
++  "CONVERSION_HIERARCHY_CONTRADICTION",
+   "UNSUPPORTED_COMPETITOR_CLAIM",
+   "OBSERVATION_WITHOUT_EVIDENCE",
+   "UNAUTHORIZED_EVIDENCE",
+@@ -178,8 +179,47 @@ function validateRubric(rubric, writerInput, errors) {
+     }
+     if (!nonEmptyString(record.rationale)) errors.push(`rubric.${key}.rationale is required`);
+     if (!Array.isArray(record.defectIds)) errors.push(`rubric.${key}.defectIds must be an array`);
+-    validateReferenceIds(record.evidenceRefs, writerInput, `rubric.${key}.evidenceRefs`, errors);
++        validateReferenceIds(
++      record.evidenceRefs,
++      writerInput,
++      `rubric.${key}.evidenceRefs`,
++      errors,
++    );
+   }
++
++  /*
++   * CF-01:
++   * When the Writer received the governed Conversion-First decision view,
++   * the Judge must explicitly ground conversionInterpretation in that same
++   * view. This adds a consistency requirement without weakening any
++   * evidence-fidelity, score, dimension-floor, or release gate.
++   */
++  const hasConversionHierarchy =
++    Object.hasOwn(
++      writerInput?.deterministicAnalysis || {},
++      "conversionInfluence",
++    );
++
++  if (hasConversionHierarchy) {
++    const hierarchyRef =
++      "analysis:conversionInfluence";
++
++    const conversionRefs =
++      rubric?.conversionInterpretation
++        ?.evidenceRefs;
++
++    if (
++      !Array.isArray(conversionRefs) ||
++      !conversionRefs.includes(
++        hierarchyRef,
++      )
++    ) {
++      errors.push(
++        "rubric.conversionInterpretation.evidenceRefs must include analysis:conversionInfluence when governed conversion hierarchy is present",
++      );
++    }
++  }
++
+   return total;
+ }
+ 
+diff --git a/services/worker/src/narrative-v2/live-binding.js b/services/worker/src/narrative-v2/live-binding.js
+index f29da13..058a356 100644
+--- a/services/worker/src/narrative-v2/live-binding.js
++++ b/services/worker/src/narrative-v2/live-binding.js
+@@ -502,7 +502,10 @@ function judgePrompt({
+     "If the Writer states or implies an outcome more strongly than the governed evidence supports, record an UNSUPPORTED_FACT hard-gate violation and fail evidenceFidelity.",
+     "Inferred implications must remain explicitly bounded as risks, possibilities, or opportunities unless the governed evidence directly observes the stated outcome.",
+     "The Judge must independently compare WriterOutput claims with WriterInput evidence; do not accept a claim merely because it already appears in an upstream finding, score, root-cause summary, or business-impact field.",
+-    "UNKNOWN, UNAVAILABLE, PARTIAL, or not-deeply-parsed evidence must never be interpreted as ABSENT, FALSE, ZERO, or fully assessed.",
++    "When WriterInput.deterministicAnalysis.conversionInfluence is present, evaluate whether the Writer follows that governed Conversion-First hierarchy. rubric.conversionInterpretation.evidenceRefs MUST include the exact reference ID analysis:conversionInfluence.",
++    "UNKNOWN, UNAVAILABLE, PARTIAL, or not-deeply-parsed evidence must never be interpreted as ABSENT, MISSING, FALSE, ZERO, or fully assessed. PARTIAL content evidence supports only not-detected-in-the-available-assessment language, with the partial-coverage qualification preserved.",
++    "Do not treat a content-detection gap as an established AI-search limitation unless WriterInput directly assesses and supports that AI-search condition. Otherwise require opportunity language.",
++    "Before issuing REVISE, perform the evidence-fidelity check across every WriterOutput section and report all material evidence-fidelity defects found in that pass. A field containing an unresolved material defect must not be treated as locked or clean for a subsequent targeted revision.",
+     "Return ONLY one JSON object matching JudgeResponse contractVersion 1.0.0.",
+     "The decision must follow the supplied deterministic thresholds. No markdown or code fences.",
+     `PASS_NUMBER=${passNumber}`,
+diff --git a/services/worker/src/narrative-v2/writer-input.js b/services/worker/src/narrative-v2/writer-input.js
+index d31ae1d..d08c7bd 100644
+--- a/services/worker/src/narrative-v2/writer-input.js
++++ b/services/worker/src/narrative-v2/writer-input.js
+@@ -10,6 +10,7 @@
+ import { buildWriterBusinessContext } from "./writer-business-context.js";
+ import { buildWriterScoreContext } from "./writer-scores.js";
+ import { buildWriterFindings } from "./writer-findings.js";
++import { buildActionPlan } from "../report/action-priority.js";
+ 
+ export const WRITER_INPUT_VERSION = "1.0.0";
+ 
+@@ -425,6 +426,79 @@ function assertFindingIntegrity(
+   }
+ }
+ 
++function buildWriterConversionInfluence(
++  findings,
++) {
++  const plan =
++    buildActionPlan({
++      findings,
++    });
++
++  const orderedFindingIds = [];
++  const byFindingId = {};
++
++  for (
++    const action
++    of plan.actions || []
++  ) {
++    const findingId =
++      action.finding?.findingId;
++
++    if (!findingId) {
++      throw new Error(
++        "Derived Writer action is missing findingId",
++      );
++    }
++
++    orderedFindingIds.push(
++      findingId,
++    );
++
++    byFindingId[findingId] =
++      Object.freeze({
++        findingId,
++
++        ruleId:
++          action.finding.ruleId,
++
++        rank:
++          action.rank,
++
++        actionClass:
++          action.actionClass,
++
++        foundationDomain:
++          action.foundationDomain,
++
++        conversionInfluence:
++          action.conversionInfluence,
++
++        conversionInfluenceRank:
++          action.conversionInfluenceRank,
++
++        group:
++          action.group,
++
++        finalPriority:
++          action.priority,
++      });
++  }
++
++  return Object.freeze({
++    hierarchyVersion:
++      "4.2",
++
++    orderedFindingIds:
++      Object.freeze(
++        orderedFindingIds,
++      ),
++
++    byFindingId:
++      Object.freeze(
++        byFindingId,
++      ),
++  });
++}
+ function addReference(
+   index,
+   id,
+@@ -698,6 +772,11 @@ export function buildWriterInput({
+       DETERMINISTIC_ANALYSIS_FIELDS,
+     );
+ 
++      deterministicAnalysis.conversionInfluence =
++    buildWriterConversionInfluence(
++      projectedFindings,
++    );
++
+   const packet = {
+     contractVersion:
+       "1.0.0",
+diff --git a/services/worker/src/narrative-v2/writer-prompt.js b/services/worker/src/narrative-v2/writer-prompt.js
+index 9bcfabf..7cb01ab 100644
+--- a/services/worker/src/narrative-v2/writer-prompt.js
++++ b/services/worker/src/narrative-v2/writer-prompt.js
+@@ -81,13 +81,14 @@ function commonRules() {
+     "2. Use exact canonical terminology and exact reference IDs from WriterInput.referenceIndex. Never guess aliases or substitute similar field names.",
+     "3. You may create INTERPRETATION and OPPORTUNITY prose only. You may not create new OBSERVED facts.",
+     "4. Do not invent, alter, round, restate from memory, or infer any score, metric, URL, source status, capability status, competitor result, finding, or business-context value.",
+-    "5. AVAILABLE/PARTIAL/FAILED/UNAVAILABLE/NOT_CONNECTED/NOT_APPLICABLE are materially different. Never convert unavailable evidence into evidence of absence.",
+-    "6. Every substantive narrative atom must cite one or more exact IDs that exist in WriterInput.referenceIndex.",
+-    "7. If the evidence is insufficient for a strong conclusion, narrow the conclusion and explain the limitation. Do not fill the gap.",
+-    "8. Strengths must be evidence-backed. Do not praise the site generically.",
++    "5. AVAILABLE/PARTIAL/FAILED/UNAVAILABLE/NOT_CONNECTED/NOT_APPLICABLE are materially different. UNKNOWN, UNAVAILABLE, PARTIAL, or not-deeply-parsed evidence must never become ABSENT, MISSING, GAP, LACK, LIMITATION, FALSE, ZERO, or fully assessed. For PARTIAL content evidence, do not describe the condition as a gap, lack, missing item, absence, or established current limitation. State only that it was not detected in the available partial assessment, preserve the partial-coverage qualification, and frame any improvement as an opportunity.",
++    "6. Do not convert a content-detection gap into an AI-search limitation unless WriterInput directly assesses and supports that AI-search condition. When direct AI-search evidence is absent or partial, frame direct-answer content as an opportunity rather than an established current limitation.",
++    "7. Every substantive narrative atom must cite one or more exact IDs that exist in WriterInput.referenceIndex.",
++    "8. If the evidence is insufficient for a strong conclusion, narrow the conclusion and explain the limitation. Do not fill the gap.",
++    "8b. Strengths must be evidence-backed. Do not praise the site generically.",
+     "9. Funnel opportunities must be specific to the supplied business goal, content evidence, findings, and competitor evidence. Do not use generic 'write more blogs' advice.",
+     "10. Produce at most three awareness, three consideration, and three decision opportunities. Produce fewer when the evidence cannot support three distinct ideas.",
+-    "11. Action plan must contain no more than five actions, ordered by business importance, and must not become a technical checklist dump.",
++    "11. Action plan, root cause, executive conclusion, and executive decision must follow Conversion-First v4.2. Use WriterInput.deterministicAnalysis.conversionInfluence as the governed derived decision order. Proven foundation blockers override everything else. Otherwise rank business influence in this exact order: (1) direct conversion-path blocker, (2) major trust/proof weakness affecting action, (3) major offer/audience clarity weakness, (4) material UX/performance friction, (5) buyer-question/content decision gap, (6) material acquisition/search constraint, (7) supporting technical hygiene, (8) low-value or specialist technical optimization. Numeric finalPriority orders findings only within a comparable business-impact class; it must never promote technical hygiene above a stronger conversion-leading class by itself. Technical issues may lead only when the supplied governed evidence establishes a foundation blocker, security/business risk, or direct conversion/discoverability constraint. Action plan must contain no more than five actions and must not become a technical checklist dump.",
+     "12. Write for a non-technical business reader. Explain meaning and consequence, not provider mechanics.",
+     "13. Avoid repetition. A fact may support multiple sections, but do not restate the same conclusion in substantially the same language.",
+     "14. Do not include HTML, Markdown, or URLs in narrative text.",
+diff --git a/services/worker/src/report/action-priority.js b/services/worker/src/report/action-priority.js
+index 15bc0b7..c2d133e 100644
+--- a/services/worker/src/report/action-priority.js
++++ b/services/worker/src/report/action-priority.js
+@@ -3,17 +3,17 @@
+  *
+  * Section E must answer "what should this business actually fix first to
+  * improve conversion?", not "which technical defect has the largest abstract
+- * score". This module derives, at RENDER TIME, a deterministic action class
+- * and implementation group for each governed finding.
++ * score". This module derives, at RENDER TIME, a deterministic action class,
++ * Conversion-First v4.2 influence domain, and implementation group for each
++ * governed finding.
+  *
+  * GOVERNANCE
+  *  - `finding.schema.json` is frozen with `additionalProperties: false`, so
+  *    nothing here is persisted onto a finding. Every value is derived from
+  *    existing governed fields (ruleId, dimension, module, confidence,
+  *    scoreBearing, finalPriority, severity, implementationEffort).
+- *  - No evidence is invented. A finding only exists when its capability was
+- *    available and its evidence was collected, so classification cannot
+- *    manufacture a claim.
++ *  - No evidence is invented. Classification does not upgrade unknown,
++ *    partial, or insufficient evidence into a confirmed claim.
+  *  - Classification never changes a score. Ordering changes; scores do not.
+  */
+ 
+@@ -32,28 +32,39 @@ export const ACTION_GROUP = Object.freeze({
+ });
+ 
+ /**
+- * Client-facing decision order.
++ * Shared derived Conversion-First v4.2 client-influence contract.
+  *
+- * This is deliberately separate from score priority. A technically severe
+- * hygiene issue must not outrank a materially relevant conversion, trust, or
+- * user-experience issue merely because its numeric finding priority is higher.
++ * This is deliberately separate from canonical finding priority and scoring.
++ * It is a render-time decision view that downstream report/narrative consumers
++ * can reuse without mutating the persisted FindingSet.
++ *
++ * For action ranking, the v4.2 action-ordering rule is:
++ * direct conversion path/action -> trust/proof -> offer/audience clarity ->
++ * friction/experience -> buyer decision support -> acquisition/discoverability
++ * -> technical causes/resilience.
++ *
++ * Proven foundation blockers still override this order.
+  */
+-const IMPACT_DOMAIN = Object.freeze({
+-  CONVERSION: "conversion",
+-  TRUST: "trust",
+-  PERFORMANCE_UX: "performance_ux",
+-  ACQUISITION: "acquisition",
+-  TECHNICAL: "technical",
++export const CONVERSION_INFLUENCE = Object.freeze({
++  CONVERSION_PATH_ACTION: "conversion_path_action",
++  TRUST_PROOF: "trust_proof",
++  OFFER_AUDIENCE_CLARITY: "offer_audience_clarity",
++  FRICTION_EXPERIENCE: "friction_experience",
++  BUYER_DECISION_SUPPORT: "buyer_question_decision_support",
++  ACQUISITION_DISCOVERABILITY: "acquisition_discoverability",
++  TECHNICAL_CAUSES_RESILIENCE: "technical_causes_resilience",
+   OTHER: "other",
+ });
+ 
+-const IMPACT_DOMAIN_RANK = Object.freeze({
+-  [IMPACT_DOMAIN.CONVERSION]: 0,
+-  [IMPACT_DOMAIN.TRUST]: 1,
+-  [IMPACT_DOMAIN.PERFORMANCE_UX]: 2,
+-  [IMPACT_DOMAIN.ACQUISITION]: 3,
+-  [IMPACT_DOMAIN.TECHNICAL]: 4,
+-  [IMPACT_DOMAIN.OTHER]: 5,
++export const CONVERSION_INFLUENCE_RANK = Object.freeze({
++  [CONVERSION_INFLUENCE.CONVERSION_PATH_ACTION]: 0,
++  [CONVERSION_INFLUENCE.TRUST_PROOF]: 1,
++  [CONVERSION_INFLUENCE.OFFER_AUDIENCE_CLARITY]: 2,
++  [CONVERSION_INFLUENCE.FRICTION_EXPERIENCE]: 3,
++  [CONVERSION_INFLUENCE.BUYER_DECISION_SUPPORT]: 4,
++  [CONVERSION_INFLUENCE.ACQUISITION_DISCOVERABILITY]: 5,
++  [CONVERSION_INFLUENCE.TECHNICAL_CAUSES_RESILIENCE]: 6,
++  [CONVERSION_INFLUENCE.OTHER]: 7,
+ });
+ 
+ /**
+@@ -70,12 +81,22 @@ export const FOUNDATION_RULE_DOMAINS = Object.freeze({
+   "VAN-PATH-001": "conversion_completion",
+ });
+ 
++/** Confidence floor for the foundation class. */
++const FOUNDATION_CONFIDENCE = Object.freeze([
++  "deterministic",
++  "strongly_supported",
++]);
++
+ /**
+- * Confidence floor for the foundation class.
++ * Minimum confidence allowed to lead the client-facing hierarchy.
++ *
++ * Directional evidence remains visible but cannot outrank a supported finding
++ * merely because it belongs to a higher business-impact domain.
+  */
+-const FOUNDATION_CONFIDENCE = Object.freeze([
++const CLIENT_LEAD_CONFIDENCE = Object.freeze([
+   "deterministic",
+   "strongly_supported",
++  "supported",
+ ]);
+ 
+ /** Final-priority floor for high-conversion work. */
+@@ -96,14 +117,24 @@ function priorityOf(finding) {
+   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+ }
+ 
++function hasLeadConfidence(finding) {
++  return CLIENT_LEAD_CONFIDENCE.includes(finding?.confidence);
++}
++
+ /**
+- * Determine the client-facing impact domain from governed finding identity.
++ * Determine the shared client-facing Conversion-First influence domain from
++ * governed finding identity.
+  *
+- * Matching order is intentional. Performance findings may live inside a
+- * broader technical dimension, so performance/UX is detected before generic
+- * technical classification.
++ * Matching order is intentional:
++ *  - direct path/action rules are separated from offer clarity even though
++ *    both can live in the conversion_pathways scoring dimension;
++ *  - GSC/SEO/SERP/schema identities are acquisition/discoverability even when
++ *    their scoring module lives under content;
++ *  - buyer-question/content findings remain decision-support findings rather
++ *    than being collapsed into generic acquisition;
++ *  - technical hygiene is last unless separately proven foundational.
+  */
+-function impactDomainOf(finding) {
++export function conversionInfluenceOf(finding) {
+   const ruleId = String(finding?.ruleId || "").toUpperCase();
+   const dimension = String(finding?.dimension || "").toLowerCase();
+   const module = String(finding?.module || "").toLowerCase();
+@@ -111,44 +142,69 @@ function impactDomainOf(finding) {
+   if (
+     ruleId.startsWith("VAN-PATH-") ||
+     ruleId.startsWith("VAN-CONV-") ||
+-    dimension.includes("conversion") ||
+-    module.includes("conversion")
++    module === "conversion_paths"
+   ) {
+-    return IMPACT_DOMAIN.CONVERSION;
++    return CONVERSION_INFLUENCE.CONVERSION_PATH_ACTION;
+   }
+ 
+   if (
+     ruleId.startsWith("VAN-TRUST-") ||
+     ruleId.startsWith("VAN-EEAT-") ||
+-    dimension.includes("trust") ||
+-    dimension.includes("authority") ||
++    dimension === "trust_eeat" ||
++    module === "trust_signals" ||
++    module === "risk_reduction" ||
+     module.includes("trust") ||
+     module.includes("eeat")
+   ) {
+-    return IMPACT_DOMAIN.TRUST;
++    return CONVERSION_INFLUENCE.TRUST_PROOF;
++  }
++
++  if (
++    ruleId.startsWith("VAN-OFFER-") ||
++    ruleId.startsWith("VAN-AUDIENCE-") ||
++    module === "offer_clarity" ||
++    module.includes("offer") ||
++    module.includes("audience")
++  ) {
++    return CONVERSION_INFLUENCE.OFFER_AUDIENCE_CLARITY;
+   }
+ 
+   if (
+     ruleId.startsWith("VAN-PERF-") ||
+     ruleId.startsWith("VAN-UX-") ||
+     ruleId.startsWith("VAN-A11Y-") ||
+-    module.includes("performance") ||
++    module === "performance" ||
+     module.includes("usability") ||
+     module.includes("accessibility")
+   ) {
+-    return IMPACT_DOMAIN.PERFORMANCE_UX;
++    return CONVERSION_INFLUENCE.FRICTION_EXPERIENCE;
+   }
+ 
+   if (
+     ruleId.startsWith("VAN-SEO-") ||
+     ruleId.startsWith("VAN-SERP-") ||
+-    ruleId.startsWith("VAN-CONTENT-") ||
++    ruleId.startsWith("VAN-GSC-") ||
++    ruleId.startsWith("VAN-SCHEMA-") ||
+     dimension.includes("search") ||
++    dimension.includes("schema") ||
++    dimension.includes("entity") ||
+     module.includes("search") ||
+     module.includes("serp") ||
+-    module.includes("content")
++    module.includes("schema") ||
++    module.includes("ai_readiness")
++  ) {
++    return CONVERSION_INFLUENCE.ACQUISITION_DISCOVERABILITY;
++  }
++
++  if (
++    ruleId.startsWith("VAN-CONTENT-") ||
++    dimension === "content_funnel" ||
++    module === "content_depth" ||
++    module === "funnel_coverage" ||
++    module.includes("content") ||
++    module.includes("funnel")
+   ) {
+-    return IMPACT_DOMAIN.ACQUISITION;
++    return CONVERSION_INFLUENCE.BUYER_DECISION_SUPPORT;
+   }
+ 
+   if (
+@@ -156,17 +212,16 @@ function impactDomainOf(finding) {
+     dimension.includes("technical") ||
+     module.includes("technical")
+   ) {
+-    return IMPACT_DOMAIN.TECHNICAL;
++    return CONVERSION_INFLUENCE.TECHNICAL_CAUSES_RESILIENCE;
+   }
+ 
+-  return IMPACT_DOMAIN.OTHER;
++  return CONVERSION_INFLUENCE.OTHER;
+ }
+ 
+-function isConversionFacingDomain(domain) {
++function isConversionLeadingInfluence(influence) {
+   return (
+-    domain === IMPACT_DOMAIN.CONVERSION ||
+-    domain === IMPACT_DOMAIN.TRUST ||
+-    domain === IMPACT_DOMAIN.PERFORMANCE_UX
++    influence !== CONVERSION_INFLUENCE.TECHNICAL_CAUSES_RESILIENCE &&
++    influence !== CONVERSION_INFLUENCE.OTHER
+   );
+ }
+ 
+@@ -176,7 +231,13 @@ function isConversionFacingDomain(domain) {
+  * @param {object} finding ΓÇö governed finding (finding.schema.json shape)
+  * @param {Set<string>|Array<string>} [foundationRuleIds] ΓÇö additional rule IDs
+  *        proven foundational by the First Things First checklist.
+- * @returns {{actionClass: string, foundationDomain: string|null, group: string}}
++ * @returns {{
++ *   actionClass: string,
++ *   foundationDomain: string|null,
++ *   conversionInfluence: string,
++ *   conversionInfluenceRank: number,
++ *   group: string
++ * }}
+  */
+ export function classifyFinding(finding, foundationRuleIds = []) {
+   const linked =
+@@ -191,7 +252,9 @@ export function classifyFinding(finding, foundationRuleIds = []) {
+   const inFoundationScope =
+     domain !== null || linked.has(finding?.ruleId);
+ 
+-  const impactDomain = impactDomainOf(finding);
++  const conversionInfluence = conversionInfluenceOf(finding);
++  const conversionInfluenceRank =
++    CONVERSION_INFLUENCE_RANK[conversionInfluence];
+ 
+   let actionClass;
+   let foundationDomain = null;
+@@ -200,7 +263,9 @@ export function classifyFinding(finding, foundationRuleIds = []) {
+     actionClass = ACTION_CLASS.FOUNDATION_BLOCKER;
+     foundationDomain = domain ?? "first_things_first";
+   } else if (
+-    isConversionFacingDomain(impactDomain) &&
++    scoreBearing &&
++    hasLeadConfidence(finding) &&
++    isConversionLeadingInfluence(conversionInfluence) &&
+     priorityOf(finding) >= HIGH_CONVERSION_FLOOR
+   ) {
+     actionClass = ACTION_CLASS.HIGH_CONVERSION;
+@@ -211,13 +276,13 @@ export function classifyFinding(finding, foundationRuleIds = []) {
+   return {
+     actionClass,
+     foundationDomain,
++    conversionInfluence,
++    conversionInfluenceRank,
+     group: groupFor(actionClass, finding),
+   };
+ }
+ 
+-/**
+- * Deterministic implementation grouping.
+- */
++/** Deterministic implementation grouping. */
+ function groupFor(actionClass, finding) {
+   if (actionClass === ACTION_CLASS.FOUNDATION_BLOCKER) {
+     return ACTION_GROUP.DO_NOW;
+@@ -249,16 +314,20 @@ const CLASS_RANK = Object.freeze({
+  * Ranking contract:
+  *
+  * 1. Proven foundation blockers.
+- * 2. Conversion.
+- * 3. Trust.
+- * 4. Performance / UX.
+- * 5. Acquisition / SEO.
+- * 6. Technical hygiene.
+- * 7. Other.
++ * 2. Direct conversion path / action.
++ * 3. Trust / proof.
++ * 4. Offer / audience clarity.
++ * 5. Friction / experience.
++ * 6. Buyer-question / decision support.
++ * 7. Acquisition / discoverability.
++ * 8. Technical causes / resilience.
++ * 9. Other.
+  *
+- * Numeric finalPriority ranks findings only inside the same client-impact
+- * domain. It can no longer promote a technical hygiene item above a more
+- * material conversion-facing category.
++ * Evidence confidence is a lead-eligibility gate, not a ranking tier:
++ * supported, strongly-supported, and deterministic findings may all lead,
++ * while directional evidence remains visible but cannot displace them.
++ * Among lead-eligible findings, conversion influence determines business-impact
++ * class before action class and numeric finalPriority resolve comparable work.
+  *
+  * @param {object} model ΓÇö scored audit model
+  * @param {Array<object>} [checklist] ΓÇö First Things First items
+@@ -282,6 +351,8 @@ export function buildActionPlan(model, checklist = []) {
+       const {
+         actionClass,
+         foundationDomain,
++        conversionInfluence,
++        conversionInfluenceRank,
+         group,
+       } = classifyFinding(finding, foundationRuleIds);
+ 
+@@ -289,6 +360,8 @@ export function buildActionPlan(model, checklist = []) {
+         finding,
+         actionClass,
+         foundationDomain,
++        conversionInfluence,
++        conversionInfluenceRank,
+         group,
+         priority: priorityOf(finding),
+         effort: effortOf(finding),
+@@ -305,22 +378,17 @@ export function buildActionPlan(model, checklist = []) {
+         return aFoundation ? -1 : 1;
+       }
+ 
+-      const aPriorityConfidence = FOUNDATION_CONFIDENCE.includes(
+-        a.finding?.confidence,
+-      );
+-      const bPriorityConfidence = FOUNDATION_CONFIDENCE.includes(
+-        b.finding?.confidence,
+-      );
++                 const aLeadEligible = hasLeadConfidence(a.finding);
++      const bLeadEligible = hasLeadConfidence(b.finding);
+ 
+-      if (aPriorityConfidence !== bPriorityConfidence) {
+-        return aPriorityConfidence ? -1 : 1;
++      if (aLeadEligible !== bLeadEligible) {
++        return aLeadEligible ? -1 : 1;
+       }
+ 
+-      const byDomain =
+-        IMPACT_DOMAIN_RANK[impactDomainOf(a.finding)] -
+-        IMPACT_DOMAIN_RANK[impactDomainOf(b.finding)];
++      const byInfluence =
++        a.conversionInfluenceRank - b.conversionInfluenceRank;
+ 
+-      if (byDomain !== 0) return byDomain;
++      if (byInfluence !== 0) return byInfluence;
+ 
+       const byClass =
+         CLASS_RANK[a.actionClass] - CLASS_RANK[b.actionClass];
+@@ -362,7 +430,10 @@ export function buildActionPlan(model, checklist = []) {
+ export default {
+   ACTION_CLASS,
+   ACTION_GROUP,
++  CONVERSION_INFLUENCE,
++  CONVERSION_INFLUENCE_RANK,
+   FOUNDATION_RULE_DOMAINS,
++  conversionInfluenceOf,
+   classifyFinding,
+   buildActionPlan,
+ };
+diff --git a/services/worker/src/report/foundation-readiness.js b/services/worker/src/report/foundation-readiness.js
+index 18190ba..b48c049 100644
+--- a/services/worker/src/report/foundation-readiness.js
++++ b/services/worker/src/report/foundation-readiness.js
+@@ -311,26 +311,156 @@ function robots(model) {
+ 
+ function conversionMechanism(model) {
+   const site = model?.evidence?.site || {};
+-  const assessed = capAvailable(model, "conversion.cta") || capAvailable(model, "conversion.form");
+-  if (!assessed) {
+-    return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.NOT_ASSESSED,
++  const capabilities =
++    model?.capabilityEvidence?.capabilities || {};
++
++  const ctaCapability =
++    capabilities["conversion.cta"] || null;
++  const formCapability =
++    capabilities["conversion.form"] || null;
++
++  const ctas =
++    Array.isArray(site.ctas) ? site.ctas.length : 0;
++  const forms =
++    Array.isArray(site.forms) ? site.forms.length : 0;
++
++  const browserCta =
++    ctaCapability?.browserSummary || null;
++  const browserForm =
++    formCapability?.browserSummary || null;
++
++  const browserCtaPresent =
++    (browserCta?.presentPages ?? 0) > 0;
++  const browserFormPresent =
++    (browserForm?.presentPages ?? 0) > 0;
++
++  const ctaPresent =
++    ctas > 0 || browserCtaPresent;
++  const formPresent =
++    forms > 0 || browserFormPresent;
++
++  const anyCapabilityAssessed =
++    capAvailable(model, "conversion.cta") ||
++    capAvailable(model, "conversion.form");
++
++  if (!anyCapabilityAssessed) {
++    return item(
++      "conversion_mechanism",
++      "Conversion mechanism",
++      FOUNDATION_STATUS.NOT_ASSESSED,
+       "Buttons and forms were not extracted for this audit, so the presence of a conversion action could not be established.",
+       {
+-        requires: "interactive page evidence (rendered CTA/form extraction)",
++        requires:
++          "interactive page evidence (rendered CTA/form extraction)",
+         foundational: true,
+         linkedRuleIds: ["VAN-PATH-001"],
+-      });
++      },
++    );
+   }
+-  const ctas = (site.ctas || []).length;
+-  const forms = (site.forms || []).length;
+-  if (ctas === 0 && forms === 0) {
+-    return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.ACTION_REQUIRED,
++
++  /*
++   * A mechanism proven by either governed source is sufficient for PASS.
++   *
++   * This prevents empty crawl-derived CTA/form arrays from overriding
++   * browser validation that directly observed a conversion mechanism.
++   */
++  if (ctaPresent || formPresent) {
++    if (browserCtaPresent || browserFormPresent) {
++      const browserPages = Math.max(
++        browserCta?.presentPages ?? 0,
++        browserForm?.presentPages ?? 0,
++      );
++
++      return item(
++        "conversion_mechanism",
++        "Conversion mechanism",
++        FOUNDATION_STATUS.PASS,
++        `Browser conversion validation confirmed a conversion mechanism on ${browserPages} selected page(s).`,
++        {
++          foundational: true,
++          linkedRuleIds: ["VAN-PATH-001"],
++        },
++      );
++    }
++
++    return item(
++      "conversion_mechanism",
++      "Conversion mechanism",
++      FOUNDATION_STATUS.PASS,
++      `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
++      {
++        foundational: true,
++        linkedRuleIds: ["VAN-PATH-001"],
++      },
++    );
++  }
++
++  /*
++   * Absence may be asserted only when BOTH mechanism types were fully
++   * assessed. PARTIAL evidence cannot be converted into confirmed absence.
++   */
++  const ctaFullyAssessed =
++    ctaCapability?.status === "AVAILABLE" &&
++    ctaCapability?.requiredFieldsPresent === true;
++
++  const formFullyAssessed =
++    formCapability?.status === "AVAILABLE" &&
++    formCapability?.requiredFieldsPresent === true;
++
++  const siteInteractiveCollected =
++    site._interactiveEvidenceAvailable === true;
++
++  const ctaBrowserAbsenceProven =
++    ctaCapability?.validated === true &&
++    (browserCta?.completed ?? 0) > 0 &&
++    browserCta.completed === browserCta.requested &&
++    (browserCta.presentPages ?? 0) === 0;
++
++  const formBrowserAbsenceProven =
++    formCapability?.validated === true &&
++    (browserForm?.completed ?? 0) > 0 &&
++    browserForm.completed === browserForm.requested &&
++    (browserForm.presentPages ?? 0) === 0;
++
++  const ctaAbsenceProven =
++    ctaFullyAssessed &&
++    (
++      (siteInteractiveCollected && ctas === 0) ||
++      ctaBrowserAbsenceProven
++    );
++
++  const formAbsenceProven =
++    formFullyAssessed &&
++    (
++      (siteInteractiveCollected && forms === 0) ||
++      formBrowserAbsenceProven
++    );
++
++  if (ctaAbsenceProven && formAbsenceProven) {
++    return item(
++      "conversion_mechanism",
++      "Conversion mechanism",
++      FOUNDATION_STATUS.ACTION_REQUIRED,
+       "No call-to-action or form was detected on the assessed pages. Visitors have no clear way to convert.",
+-      { foundational: true, linkedRuleIds: ["VAN-PATH-001"] });
++      {
++        foundational: true,
++        linkedRuleIds: ["VAN-PATH-001"],
++      },
++    );
+   }
+-  return item("conversion_mechanism", "Conversion mechanism", FOUNDATION_STATUS.PASS,
+-    `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
+-    { foundational: true, linkedRuleIds: ["VAN-PATH-001"] });
++
++  return item(
++    "conversion_mechanism",
++    "Conversion mechanism",
++    FOUNDATION_STATUS.NOT_ASSESSED,
++    "The available interactive evidence does not establish that both calls to action and forms are absent.",
++    {
++      requires:
++        "complete interactive evidence for CTA and form presence or absence",
++      foundational: true,
++      linkedRuleIds: ["VAN-PATH-001"],
++    },
++  );
+ }
+ 
+ function conversionMeasurement(model) {
+diff --git a/services/worker/src/report/render-report-v2.js b/services/worker/src/report/render-report-v2.js
+index 15fb897..746f127 100644
+--- a/services/worker/src/report/render-report-v2.js
++++ b/services/worker/src/report/render-report-v2.js
+@@ -154,9 +154,19 @@ function executiveScorecard(model, pillars) {
+   const readiness = model.scores.conversionReadiness;
+   const confidence = model.evidenceConfidenceScore;
+   const assessedWeight = model.assessedWeight ?? 0;
+-  const findings = (model.findings || []).slice(0, 3);
+-  const plan = buildActionPlan(model, buildFoundationChecklist(model));
+-  const actions = (plan.actions || []).slice(0, 3);
++   const plan =
++    buildActionPlan(
++      model,
++      buildFoundationChecklist(model),
++    );
++
++  const actions =
++    (plan.actions || []).slice(0, 3);
++
++  const findings =
++    actions.map(
++      (action) => action.finding,
++    );
+ 
+   const readinessLine =
+     readiness === null
+@@ -177,9 +187,16 @@ function executiveScorecard(model, pillars) {
+         ? `The site has a measurable conversion-readiness baseline of ${readiness}/100, but the result is provisional because some intended evidence was unavailable.`
+         : `The site has a conversion-readiness score of ${readiness}/100. The priority is to address the highest-impact issues that most directly affect clarity, trust, and movement toward action.`;
+ 
++   const primaryFinding =
++    actions[0]?.finding || null;
++
+   const rootCause =
+-    model.rootCause ||
+-    "No single primary constraint was established from the available evidence.";
++    primaryFinding
++      ? `${primaryFinding.title || "Primary governed finding"}. ${
++          primaryFinding.businessImpact ||
++          "Material impact was identified in the assessed evidence."
++        }`
++      : "No single primary constraint was established from the available evidence.";
+ 
+   const findingsHtml = findings.length
+     ? `<ol>${findings.map((f) => `<li><strong>${e(f.title || "Finding")}</strong> ΓÇö ${e(f.businessImpact || "Material impact identified in the assessed evidence.")}</li>`).join("")}</ol>`
+@@ -581,6 +598,10 @@ function conversionPathSection(model) {
+ 
+ function competitorSection(model) {
+   const comparisons = model.competitors?.comparisons || [];
++  const clientComparisons = comparisons.filter(
++    (comparison) => comparison?.status === SOURCE_STATUS.AVAILABLE,
++  );
++
+   const opportunityData =
+     model.competitorOpportunities ||
+     model.competitors?.opportunities ||
+@@ -593,7 +614,7 @@ function competitorSection(model) {
+   const competitorSourceStatus =
+     model.sourceStatus?.competitors || SOURCE_STATUS.NOT_APPLICABLE;
+ 
+-  if (comparisons.length === 0) {
++  if (clientComparisons.length === 0) {
+     const noComparisonState = {
+       [SOURCE_STATUS.FAILED]: {
+         label: "UNAVAILABLE",
+@@ -653,15 +674,42 @@ function competitorSection(model) {
+     </section>`;
+   }
+ 
+-  const site = model.evidence?.site || {};
++    const site = model.evidence?.site || {};
+   const trustBand = model.bands?.trust;
++  const conversionPaths = Array.isArray(model.conversionPaths)
++    ? model.conversionPaths
++    : [];
++
++  const clearPathCount = conversionPaths.filter(
++    (path) => path?.status === "Clear",
++  ).length;
++
++  const weakPathCount = conversionPaths.filter(
++    (path) => path?.status === "Weak",
++  ).length;
++
++  const governedConversionState =
++    conversionPaths.length === 0
++      ? "Not Assessed"
++      : clearPathCount === conversionPaths.length
++        ? "Clear"
++        : weakPathCount > 0
++          ? "Weak"
++          : "Partial";
+ 
+   const ownSite = {
+-    offerClarity: (site.services || []).length ? `${(site.services || []).length} service topic(s)` : "Not Assessed",
+-    trustProof: trustBand && trustBand !== "Not Assessed" ? trustBand : "Not Assessed",
+-    ctaClarity: (site.ctas || []).length ? `${(site.ctas || []).length} CTA(s)` : "Not Assessed",
+-    contentDepth: site.pageCount ? `${site.pageCount} page(s)` : "Not Assessed",
+-    pathClarity: (site.forms || []).length || (site.ctas || []).length ? "Detected" : "Not Assessed",
++    offerClarity: (site.services || []).length
++      ? `${(site.services || []).length} service topic(s)`
++      : "Not Assessed",
++    trustProof:
++      trustBand && trustBand !== "Not Assessed"
++        ? trustBand
++        : "Not Assessed",
++    ctaClarity: governedConversionState,
++    contentDepth: site.pageCount
++      ? `${site.pageCount} page(s)`
++      : "Not Assessed",
++    pathClarity: governedConversionState,
+   };
+ 
+   const SIGNALS = [
+@@ -672,7 +720,7 @@ function competitorSection(model) {
+     ["Conversion path", "pathClarity"],
+   ];
+ 
+-  const header = comparisons
++  const header = clientComparisons
+     .map((c) => `<th>${e(c.name || c.url || "Competitor")}</th>`)
+     .join("");
+ 
+@@ -680,10 +728,12 @@ function competitorSection(model) {
+     <tr>
+       <td><strong>${e(label)}</strong></td>
+       <td>${e(ownSite[key])}</td>
+-      ${comparisons.map((c) => `<td>${e(c[key] || "Not Assessed")}</td>`).join("")}
++      ${clientComparisons
++        .map((c) => `<td>${e(c[key] || "Not Assessed")}</td>`)
++        .join("")}
+     </tr>`).join("");
+ 
+-  const sourceRows = comparisons.map((c) => `
++  const sourceRows = clientComparisons.map((c) => `
+     <tr>
+       <td class="small">${e(c.name || c.url || "")}</td>
+       <td class="small">${e(c.url || "")}</td>
+@@ -699,11 +749,19 @@ function competitorSection(model) {
+   const ownStrengths = SIGNALS.filter(([, key]) => {
+     const own = ownSite[key];
+     if (own === "Not Assessed") return false;
+-    return comparisons.every((c) => !c[key] || String(c[key]) === String(own));
++
++    return clientComparisons.every(
++      (c) => !c[key] || String(c[key]) === String(own),
++    );
+   });
+ 
+   const strongerCompetitorAreas = SIGNALS.filter(([, key]) =>
+-    comparisons.some((c) => c[key] && String(c[key]) !== "Not Assessed" && String(c[key]) !== String(ownSite[key]))
++    clientComparisons.some(
++      (c) =>
++        c[key] &&
++        String(c[key]) !== "Not Assessed" &&
++        String(c[key]) !== String(ownSite[key]),
++    ),
+   );
+ 
+   return `
+diff --git a/services/worker/src/scoring/report-model.js b/services/worker/src/scoring/report-model.js
+index 5dc2bf2..d8932ee 100644
+--- a/services/worker/src/scoring/report-model.js
++++ b/services/worker/src/scoring/report-model.js
+@@ -332,20 +332,29 @@ function topicRows(site, input = {}, capabilities = {}) {
+       ),
+     );
+ 
+-  const browserCta =
++  const ctaCapability =
+     capabilities[
+       "conversion.cta"
+-    ]?.browserSummary;
++    ];
+ 
+-  const browserForm =
++  const formCapability =
+     capabilities[
+       "conversion.form"
+-    ]?.browserSummary;
++    ];
++
++  const browserCta =
++    ctaCapability?.browserSummary;
++
++  const browserForm =
++    formCapability?.browserSummary;
+ 
+   const browserInteractiveAssessed =
+-    site._interactiveEvidenceAvailable === false &&
+     (
+-      (browserCta?.completed ?? 0) > 0 ||
++      ctaCapability?.validated === true &&
++      (browserCta?.completed ?? 0) > 0
++    ) ||
++    (
++      formCapability?.validated === true &&
+       (browserForm?.completed ?? 0) > 0
+     );
+ 
+@@ -423,17 +432,22 @@ function topicRows(site, input = {}, capabilities = {}) {
+               ? "Clear"
+               : "Weak";
+ 
+-      const interactiveRan =
+-        site._interactiveEvidenceAvailable !== false;
++            const siteInteractiveAssessed =
++        site._interactiveEvidenceAvailable ===
++        true;
++
++      const siteMechanismPresent =
++        (site.ctas || []).length > 0 ||
++        (site.forms || []).length > 0;
+ 
+       const path =
+-        site.ctas.length
++        siteMechanismPresent
+           ? stage === "BOFU"
+             ? "Clear"
+             : "Weak"
+           : browserInteractiveAssessed
+             ? browserPath
+-            : interactiveRan
++            : siteInteractiveAssessed
+               ? "Missing"
+               : "Not Assessed";
+     return {
+@@ -589,44 +603,169 @@ function contentIdeas(site, input = {}) {
+   };
+ }
+ 
+-function competitorComparison(competitorResults, competitorOpportunities) {
+-  // Backward-compatible: build basic crawl comparison
+-  const comparisons = competitorResults.map((item) => {
+-    if (item.status !== SOURCE_STATUS.AVAILABLE) return { name: item.url, url: item.url, status: "Unavailable", note: item.error };
+-    const site = item.evidence || {};
+-    // Guard against thin/hollow evidence from decision-evidence hydration.
+-    // Some competitor items may have SERP-only metadata without crawl content.
+-    if (!site.pages && !site.services && !site.pageCount) {
+-      return { name: item.domain || item.url, url: item.url, status: "Insufficient Evidence", topic: "", offerClarity: "Not Assessed", trustProof: "Not Assessed", ctaClarity: "Not Assessed", contentDepth: "Not Assessed", eeat: "Not Assessed", pathClarity: "Not Assessed" };
+-    }
+-    return {
+-      name: (site.pages || [])[0]?.title || site.domain || item.domain,
+-      url: item.url,
+-      topic: (site.services || []).slice(0, 4).join(", ") || (site.topicKeywords || []).slice(0, 4).join(", "),
+-      offerClarity: (site.services || []).length >= 3 || site.pageCount >= 4 ? "Strong" : (site.services || []).length ? "Moderate" : "Light",
+-      trustProof: band(scoreTrust(site)),
+-      ctaClarity: (site.ctas || []).length >= 1 && (site.ctas || []).length <= 8 ? "Strong" : (site.ctas || []).length ? "Moderate" : "Light",
+-      contentDepth: site.pageCount >= 6 ? "Strong" : site.pageCount >= 3 ? "Moderate" : "Light",
+-      eeat: band(scoreTrust(site)),
+-      pathClarity: (site.forms || []).length || (site.ctas || []).length ? "Moderate" : "Light",
+-    };
+-  });
++function competitorComparison(
++  competitorResults,
++  competitorOpportunities,
++) {
++  /*
++   * Qualification truth already exists in the opportunity layer.
++   * Preserve those governed candidate objects unchanged rather than
++   * re-interpreting qualification inside the report projection.
++   */
++  const oppGaps =
++    competitorOpportunities?.gaps || [];
++
++  const oppQualified =
++    competitorOpportunities
++      ?.candidates
++      ?.qualified || [];
++
++  const oppExcluded =
++    competitorOpportunities
++      ?.candidates
++      ?.excluded || [];
++
++  const comparisons =
++    (competitorResults || []).map(
++      (item) => {
++        const evidenceStatus =
++          item?.status ||
++          SOURCE_STATUS.UNAVAILABLE;
++
++        const site =
++          item?.evidence || {};
++
++        const name =
++          site.pages?.[0]?.title ||
++          site.domain ||
++          item?.domain ||
++          item?.url;
+ 
+-  // Attach competitor opportunity layer data
+-  const oppGaps = competitorOpportunities?.gaps || [];
+-  const oppQualified = competitorOpportunities?.candidates?.qualified || [];
+-  const oppExcluded = competitorOpportunities?.candidates?.excluded || [];
++        if (
++          evidenceStatus !==
++          SOURCE_STATUS.AVAILABLE
++        ) {
++          return {
++            name,
++            url: item.url,
++            status: evidenceStatus,
++            note:
++              item?.error ||
++              `Competitor evidence status: ${evidenceStatus}.`,
++          };
++        }
++
++        const usableSiteEvidence =
++          (
++            Array.isArray(site.pages) &&
++            site.pages.length > 0
++          ) ||
++          (
++            Array.isArray(site.services) &&
++            site.services.length > 0
++          ) ||
++          (
++            typeof site.pageCount ===
++              "number" &&
++            site.pageCount > 0
++          );
++
++        if (!usableSiteEvidence) {
++          return {
++            name,
++            url: item.url,
++            status:
++              "INSUFFICIENT_EVIDENCE",
++            note:
++              `Competitor evidence status: ${evidenceStatus}. The available record does not contain enough crawl evidence for comparison.`,
++            topic: "",
++            offerClarity:
++              "Not Assessed",
++            trustProof:
++              "Not Assessed",
++            ctaClarity:
++              "Not Assessed",
++            contentDepth:
++              "Not Assessed",
++            eeat:
++              "Not Assessed",
++            pathClarity:
++              "Not Assessed",
++          };
++        }
++
++        return {
++          name,
++          url: item.url,
++          status: evidenceStatus,
++          topic:
++            (site.services || [])
++              .slice(0, 4)
++              .join(", ") ||
++            (site.topicKeywords || [])
++              .slice(0, 4)
++              .join(", "),
++          offerClarity:
++            (site.services || [])
++              .length >= 3 ||
++            site.pageCount >= 4
++              ? "Strong"
++              : (site.services || [])
++                    .length
++                ? "Moderate"
++                : "Light",
++          trustProof:
++            band(scoreTrust(site)),
++          ctaClarity:
++            (site.ctas || [])
++                  .length >= 1 &&
++            (site.ctas || [])
++                  .length <= 8
++              ? "Strong"
++              : (site.ctas || [])
++                    .length
++                ? "Moderate"
++                : "Light",
++          contentDepth:
++            site.pageCount >= 6
++              ? "Strong"
++              : site.pageCount >= 3
++                ? "Moderate"
++                : "Light",
++          eeat:
++            band(scoreTrust(site)),
++          pathClarity:
++            (site.forms || [])
++                .length ||
++            (site.ctas || [])
++                .length
++              ? "Moderate"
++              : "Light",
++        };
++      },
++    );
+ 
+   return {
+     comparisons,
+     opportunities: {
+-      topics: competitorOpportunities?.topics || [],
+-      qualifiedCandidates: oppQualified,
+-      excludedCandidates: oppExcluded,
+-      gaps: oppGaps,
+-      allGaps: competitorOpportunities?.allGaps || [],
+-      sources: competitorOpportunities?.sources || {},
+-      limitations: competitorOpportunities?.limitations || [],
++      topics:
++        competitorOpportunities
++          ?.topics || [],
++      qualifiedCandidates:
++        oppQualified,
++      excludedCandidates:
++        oppExcluded,
++      gaps:
++        oppGaps,
++      allGaps:
++        competitorOpportunities
++          ?.allGaps || [],
++      sources:
++        competitorOpportunities
++          ?.sources || {},
++      limitations:
++        competitorOpportunities
++          ?.limitations || [],
+     },
+   };
+ }

@@ -1,0 +1,162 @@
+[
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+    "ruleId": "VAN-TECH-001",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "technical_hygiene",
+    "title": "Missing meta descriptions",
+    "affectedUrls": [
+      "https://www.tbkcreative.com/logout/",
+      "https://www.tbkcreative.com/our-work/old-oak-2/",
+      "https://www.tbkcreative.com/2019/09/03/media-event-2019-women-tech-scholarship/",
+      "https://www.tbkcreative.com/2022/03/25/harnessing-a-i-privacy-settings-as-a-marketing-manager/",
+      "https://www.tbkcreative.com/forms-paging/",
+      "https://www.tbkcreative.com/forms/",
+      "https://www.tbkcreative.com/holiday-card/",
+      "https://www.tbkcreative.com/our-work/",
+      "https://www.tbkcreative.com/services/",
+      "https://www.tbkcreative.com/tbk-welcomes-you/"
+    ],
+    "evidence": [
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "PARTIAL",
+        "field": "meta_description",
+        "observedValue": null,
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Missing meta descriptions may reduce control over search-result messaging for these pages.",
+    "recommendation": "Write a unique 150–160 character description for each important page",
+    "implementationEffort": "L",
+    "verificationMethod": "Re-crawl the URLs and confirm descriptions are present.",
+    "scoreBearing": true,
+    "rawPriority": 76,
+    "finalPriority": 76,
+    "severity": "High",
+    "problem": "Missing meta descriptions",
+    "impact": "Missing meta descriptions may reduce control over search-result messaging for these pages.",
+    "fix": "Write a unique 150–160 character description for each important page",
+    "effort": "L",
+    "key": "meta",
+    "evidenceText": "35 of 247 crawled pages"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "509d1795-9dcb-400e-8242-41f58647b40a",
+    "ruleId": "VAN-TECH-002",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "technical_hygiene",
+    "title": "Heading structure is inconsistent",
+    "affectedUrls": [
+      "https://www.tbkcreative.com/"
+    ],
+    "evidence": [
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "PARTIAL",
+        "field": "h1_missing",
+        "observedValue": 32,
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "PARTIAL",
+        "field": "h1_multiple",
+        "observedValue": 4,
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Inconsistent heading structure may reduce semantic clarity and accessibility.",
+    "recommendation": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+    "implementationEffort": "M",
+    "verificationMethod": "Re-crawl and verify heading structure on all pages.",
+    "scoreBearing": true,
+    "rawPriority": 54,
+    "finalPriority": 54,
+    "severity": "Medium",
+    "problem": "Heading structure is inconsistent",
+    "impact": "Inconsistent heading structure may reduce semantic clarity and accessibility.",
+    "fix": "Use one descriptive H1 per page with sequential H2 and H3 sections",
+    "effort": "M",
+    "key": "headings",
+    "evidenceText": "32 pages missing H1; 4 pages with multiple H1s"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
+    "ruleId": "VAN-TECH-003",
+    "ruleVersion": "4.1.1",
+    "dimension": "technical_performance",
+    "module": "technical_hygiene",
+    "title": "Security headers are incomplete",
+    "affectedUrls": [
+      "https://www.tbkcreative.com/"
+    ],
+    "evidence": [
+      {
+        "provider": "playwright-conversion-path",
+        "sourceStatus": "AVAILABLE",
+        "field": "security_headers",
+        "observedValue": "xFrameOptions, xContentTypeOptions, referrerPolicy, contentSecurityPolicy",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      }
+    ],
+    "confidence": "deterministic",
+    "businessImpact": "Missing browser protections may weaken technical trust.",
+    "recommendation": "Configure the missing response headers at the hosting layer",
+    "implementationEffort": "L",
+    "verificationMethod": "Re-crawl and confirm security headers are present in response.",
+    "scoreBearing": true,
+    "rawPriority": 45,
+    "finalPriority": 45,
+    "severity": "Medium",
+    "problem": "Security headers are incomplete",
+    "impact": "Missing browser protections may weaken technical trust.",
+    "fix": "Configure the missing response headers at the hosting layer",
+    "effort": "L",
+    "key": "security",
+    "evidenceText": "xFrameOptions, xContentTypeOptions, referrerPolicy, contentSecurityPolicy"
+  },
+  {
+    "contractVersion": "1.0.0",
+    "findingId": "df48581f-7375-4863-be49-eb6107647b75",
+    "ruleId": "VAN-CONTENT-002",
+    "ruleVersion": "4.1.1",
+    "dimension": "content_funnel",
+    "module": "funnel_coverage",
+    "title": "No buyer-question content detected",
+    "affectedUrls": [
+      "https://www.tbkcreative.com/"
+    ],
+    "evidence": [
+      {
+        "provider": "dataforseo_onpage",
+        "sourceStatus": "PARTIAL",
+        "field": "trust.faq",
+        "observedValue": false,
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      }
+    ],
+    "confidence": "supported",
+    "businessImpact": "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
+    "recommendation": "Add an FAQ based on the questions prospects ask before booking",
+    "implementationEffort": "M",
+    "verificationMethod": "Re-crawl and confirm FAQ content is present with structured data where applicable.",
+    "scoreBearing": true,
+    "rawPriority": 54,
+    "finalPriority": 41,
+    "severity": "Medium",
+    "problem": "No buyer-question content detected",
+    "impact": "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
+    "fix": "Add an FAQ based on the questions prospects ask before booking",
+    "effort": "M",
+    "key": "faq",
+    "evidenceText": "No FAQ or common-question section found"
+  }
+]

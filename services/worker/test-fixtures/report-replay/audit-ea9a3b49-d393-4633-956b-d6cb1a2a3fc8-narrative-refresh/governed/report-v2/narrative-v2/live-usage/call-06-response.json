@@ -1,0 +1,302 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "ea9a3b49-d393-4633-956b-d6cb1a2a3fc8",
+  "passNumber": 3,
+  "judgeModelId": "gpt-5.6-sol",
+  "judgePromptVersion": "2.0.0",
+  "evaluatedAt": "2026-08-28T00:00:00Z",
+  "hardGate": {
+    "status": "FAIL",
+    "violations": [
+      {
+        "violationId": "HG-001",
+        "code": "UNAVAILABLE_AS_ABSENT",
+        "section": "eeatTrust.proofGaps",
+        "explanation": "The statement that buyer-question content \"remains absent in the assessed evidence\" converts PARTIAL body and FAQ evidence into an absence conclusion. The governed evidence supports only that buyer-question content was not detected in the available assessment; it does not prove absence across the partially assessed content set.",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:content.body"
+        ],
+        "automaticFail": true
+      },
+      {
+        "violationId": "HG-002",
+        "code": "UNSUPPORTED_FACT",
+        "section": "aiSearch.constraints",
+        "explanation": "The claim that missing buyer-question content limits the site's assessed ability to address concerns in a direct-answer format is stronger than the evidence. A PARTIAL FAQ observation does not establish that buyer-question content is missing across the site or directly assess AI-search answerability.",
+        "evidenceRefs": [
+          "finding:df48581f-7375-4863-be49-eb6107647b75",
+          "capability:content.body",
+          "score:entitySchemaAiDimension"
+        ],
+        "automaticFail": true
+      }
+    ]
+  },
+  "rubric": {
+    "evidenceFidelity": {
+      "score": 15,
+      "maxScore": 20,
+      "status": "FAIL",
+      "rationale": "Most scores, priorities, conversion-path statements, technical findings, limitations and competitor comparisons remain faithful to governed evidence. However, two statements turn PARTIAL buyer-question evidence into broader absence and AI-answerability conclusions, triggering the hard gate.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body",
+        "analysis:conversionPaths",
+        "analysis:conversionInfluence",
+        "capability:performance.field"
+      ],
+      "defectIds": [
+        "DEF-001",
+        "DEF-002"
+      ]
+    },
+    "businessRelevance": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative consistently connects recommendations to Tbkcreative's stated goal of generating qualified enquiries and to its governed service set.",
+      "evidenceRefs": [
+        "business:businessName",
+        "business:primaryGoal",
+        "business:services"
+      ],
+      "defectIds": []
+    },
+    "executiveClarity": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The preserve/change/do-next decision and priority sequence are clear, concise and suitable for executive use.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "business:primaryGoal"
+      ],
+      "defectIds": []
+    },
+    "rootCauseCoherence": {
+      "score": 9,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The narrative coherently distinguishes a validated action mechanism from decision-support opportunities and places technical hygiene afterward. Most assertions are framed as governed interpretations or risks rather than observed conversion outcomes.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75"
+      ],
+      "defectIds": []
+    },
+    "actionability": {
+      "score": 10,
+      "maxScore": 10,
+      "status": "PASS",
+      "rationale": "The action plan is sequenced, scoped, assigned governed effort levels and paired with concrete verification steps.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:contentIdeas",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "conversionInterpretation": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "The narrative follows the governed Conversion-First hierarchy: it preserves the validated action path, prioritizes buyer-question decision support, and places metadata, headings and security headers afterward without claiming observed conversion outcomes.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "analysis:conversionPaths",
+        "analysis:readinessMap",
+        "capability:conversion.cta",
+        "capability:conversion.form",
+        "capability:conversion.path"
+      ],
+      "defectIds": []
+    },
+    "contentFunnelDepth": {
+      "score": 8,
+      "maxScore": 8,
+      "status": "PASS",
+      "rationale": "Awareness, consideration and decision opportunities are distinct, tied to governed content concepts and connected to user needs, objectives and next actions.",
+      "evidenceRefs": [
+        "analysis:contentIdeas",
+        "analysis:readinessMap",
+        "business:services",
+        "business:primaryGoal"
+      ],
+      "defectIds": []
+    },
+    "eeatTrust": {
+      "score": 5,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "The section appropriately uses the moderate trust band and governed process, experience and expert-content opportunities. Its single absence formulation is captured as an evidence-fidelity hard-gate defect.",
+      "evidenceRefs": [
+        "score:trust",
+        "band:trust",
+        "analysis:readinessMap",
+        "analysis:contentIdeas",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": [
+        "DEF-001"
+      ]
+    },
+    "seoTechnical": {
+      "score": 6,
+      "maxScore": 6,
+      "status": "PASS",
+      "rationale": "Metadata, heading and security-header recommendations accurately reflect the governed findings, preserve their conditional impacts and follow the governed priority order.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141",
+        "finding:509d1795-9dcb-400e-8242-41f58647b40a",
+        "finding:6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40"
+      ],
+      "defectIds": []
+    },
+    "competitiveUsefulness": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The competitor discussion is limited to the two assessed comparisons, accurately reports their governed attributes and expressly avoids conclusions about unassessed competitors.",
+      "evidenceRefs": [
+        "analysis:competitors",
+        "business:competitors"
+      ],
+      "defectIds": []
+    },
+    "strengthsBalance": {
+      "score": 4,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "The narrative preserves meaningful strengths in validated conversion actions and relative content depth rather than presenting only deficiencies.",
+      "evidenceRefs": [
+        "analysis:conversionPaths",
+        "score:contentDepth",
+        "score:contentFunnelDimension",
+        "score:technicalPerformanceDimension",
+        "score:entitySchemaAiDimension"
+      ],
+      "defectIds": []
+    },
+    "nonRepetition": {
+      "score": 3,
+      "maxScore": 4,
+      "status": "PASS",
+      "rationale": "Buyer-question support, next-step clarity and meta-description implications recur across several sections, but repetition generally reinforces the governed priority structure rather than introducing contradictions.",
+      "evidenceRefs": [
+        "analysis:conversionInfluence",
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "finding:13b9521f-8e1b-4d31-bfd6-f3337c54b141"
+      ],
+      "defectIds": []
+    }
+  },
+  "totalScore": 91,
+  "decision": "HUMAN_REVIEW_REQUIRED",
+  "defects": [
+    {
+      "defectId": "DEF-001",
+      "criterion": "evidenceFidelity",
+      "section": "eeatTrust.proofGaps",
+      "severity": "MAJOR",
+      "problem": "The prose states that buyer-question content remains absent in the assessed evidence even though content-body coverage and the FAQ observation are PARTIAL.",
+      "whyItMatters": "PARTIAL evidence permits a not-detected conclusion but cannot establish absence, including absence across unreturned pages.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body"
+      ],
+      "requiredCorrection": "Limit the statement to buyer-question content not being detected in the available assessment and preserve the explicit partial-coverage qualification.",
+      "allowedFields": [
+        "eeatTrust"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "aiSearch",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    },
+    {
+      "defectId": "DEF-002",
+      "criterion": "evidenceFidelity",
+      "section": "aiSearch.constraints",
+      "severity": "MAJOR",
+      "problem": "The prose treats buyer-question content as missing and states that this limits direct-answer ability, although the underlying evidence is PARTIAL and does not directly assess AI-search answerability.",
+      "whyItMatters": "The claim expands a partial FAQ detection result into a broader site-content and AI-search condition unsupported by direct governed evidence.",
+      "evidenceRefs": [
+        "finding:df48581f-7375-4863-be49-eb6107647b75",
+        "capability:content.body",
+        "score:entitySchemaAiDimension"
+      ],
+      "requiredCorrection": "State only that buyer-question content was not detected in the available assessment and frame direct-answer content as an opportunity, not an established current limitation.",
+      "allowedFields": [
+        "aiSearch"
+      ],
+      "mustPreserve": [
+        "executiveConclusion",
+        "strengths",
+        "rootCause",
+        "conversion",
+        "content",
+        "funnelOpportunities.awareness",
+        "funnelOpportunities.consideration",
+        "funnelOpportunities.decision",
+        "seoSerp",
+        "eeatTrust",
+        "technical",
+        "performanceUx",
+        "competitors",
+        "limitations",
+        "actionPlan",
+        "executiveDecision"
+      ]
+    }
+  ],
+  "revisionDirective": {
+    "required": true,
+    "mode": "HUMAN_REVIEW",
+    "fieldsToRewrite": [
+      "aiSearch",
+      "eeatTrust"
+    ],
+    "fieldsLocked": [
+      "executiveConclusion",
+      "strengths",
+      "rootCause",
+      "conversion",
+      "content",
+      "funnelOpportunities.awareness",
+      "funnelOpportunities.consideration",
+      "funnelOpportunities.decision",
+      "seoSerp",
+      "technical",
+      "performanceUx",
+      "competitors",
+      "limitations",
+      "actionPlan",
+      "executiveDecision"
+    ],
+    "defectIds": [
+      "DEF-001",
+      "DEF-002"
+    ]
+  }
+}

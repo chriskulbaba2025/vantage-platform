@@ -1,0 +1,31 @@
+{
+  "contractVersion": "1.0.0",
+  "auditId": "ea9a3b49-d393-4633-956b-d6cb1a2a3fc8",
+  "tenantId": "omnipressence",
+  "clientId": "www.tbkcreative.com-tbkcreative",
+  "idempotencyKey": "narrative-refresh:ea9a3b49-d393-4633-956b-d6cb1a2a3fc8",
+  "targetUrl": "https://www.tbkcreative.com/",
+  "businessName": "Tbkcreative",
+  "market": "London, Ontario, Canada",
+  "language": "en-CA",
+  "primaryGoal": "Generate qualified enquiries",
+  "services": [
+    "Custom Websites",
+    "Digital Marketing",
+    "SEO",
+    "Branding",
+    "Custom Software"
+  ],
+  "competitors": [
+    "https://red-rhino.com",
+    "https://www.northern.co",
+    "https://www.zoomedia.ca"
+  ],
+  "report": {
+    "designVersion": "2.0.0",
+    "narrativeVersion": "2.0.0"
+  },
+  "crawl": {
+    "pathValidationLiveBrowser": true
+  }
+}

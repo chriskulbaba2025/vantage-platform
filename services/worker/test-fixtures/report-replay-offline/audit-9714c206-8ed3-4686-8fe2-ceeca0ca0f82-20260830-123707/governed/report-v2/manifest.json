@@ -1,0 +1,34 @@
+{
+  "contractVersion": "1.0.0",
+  "artifactVersion": "1.0.0",
+  "reportVersion": "4.1.1",
+  "reportDesignVersion": "2.0.0",
+  "runId": "8fbd7f8d-4b93-469b-a659-77647ac3eff9",
+  "slug": "tbkcreative",
+  "targetUrl": "https://www.tbkcreative.com/",
+  "targetDomain": "www.tbkcreative.com",
+  "startedAt": "2026-08-27T23:15:47.107Z",
+  "completedAt": "2026-08-27T23:15:47.775Z",
+  "status": "draft",
+  "scores": {
+    "trust": 75,
+    "contentDepth": 85,
+    "conversionPathways": 70,
+    "technical": 6,
+    "performance": 71,
+    "conversionReadiness": 65
+  },
+  "sources": {
+    "website": "PARTIAL",
+    "performance": "AVAILABLE",
+    "competitors": "PARTIAL",
+    "backlinks": "AVAILABLE",
+    "ga4": "NOT_APPLICABLE",
+    "gsc": "NOT_APPLICABLE"
+  },
+  "files": [
+    "index.html"
+  ],
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "lifecycleStatus": "DRAFT_RENDERED"
+}

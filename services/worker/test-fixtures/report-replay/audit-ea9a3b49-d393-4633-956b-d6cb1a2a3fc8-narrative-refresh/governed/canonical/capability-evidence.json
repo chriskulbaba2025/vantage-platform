@@ -1,0 +1,274 @@
+{
+  "contractVersion": "1.0.0",
+  "capabilityEvidenceVersion": "2.0.0",
+  "auditId": "ea9a3b49-d393-4633-956b-d6cb1a2a3fc8",
+  "generatedAt": "2026-08-27T22:32:54.375Z",
+  "capabilities": {
+    "content.body": {
+      "capability": "content.body",
+      "status": "PARTIAL",
+      "coverage": {
+        "requested": 35,
+        "completed": 25,
+        "failed": 10
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [
+        "Usable body content returned for 25 of 35 requested pages"
+      ],
+      "requiredFieldsPresent": true
+    },
+    "offer.clarity": {
+      "capability": "offer.clarity",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": null,
+        "completed": null,
+        "failed": null
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "trust.proof": {
+      "capability": "trust.proof",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": null,
+        "completed": null,
+        "failed": null
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "conversion.cta": {
+      "capability": "conversion.cta",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 6,
+        "completed": 6,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "playwright-conversion-path",
+        "adapterVersion": null,
+        "artifactRef": null
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true,
+      "validated": true,
+      "validatedBy": "playwright-conversion-path",
+      "browserSummary": {
+        "requested": 6,
+        "completed": 6,
+        "unassessed": 0,
+        "presentPages": 6,
+        "readyPages": 6
+      }
+    },
+    "conversion.form": {
+      "capability": "conversion.form",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 6,
+        "completed": 6,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "playwright-conversion-path",
+        "adapterVersion": null,
+        "artifactRef": null
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true,
+      "validated": true,
+      "validatedBy": "playwright-conversion-path",
+      "browserSummary": {
+        "requested": 6,
+        "completed": 6,
+        "unassessed": 0,
+        "presentPages": 6,
+        "readyPages": 6
+      }
+    },
+    "conversion.path": {
+      "capability": "conversion.path",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 6,
+        "completed": 6,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [
+        "Conversion path evidence was not extracted (parsed text does not prove path absence)"
+      ],
+      "requiredFieldsPresent": true,
+      "kind": "validated",
+      "validated": true,
+      "validatedBy": "playwright-conversion-path",
+      "validationSummary": {
+        "requested": 6,
+        "pass": 0,
+        "partial": 6,
+        "failed": 0,
+        "notAssessed": 0,
+        "obstructionCount": 0
+      }
+    },
+    "technical.indexability": {
+      "capability": "technical.indexability",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 1000,
+        "completed": 1,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "technical.redirects": {
+      "capability": "technical.redirects",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 20,
+        "completed": 20,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "technical.resources": {
+      "capability": "technical.resources",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 10,
+        "completed": 10,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "technical.headers": {
+      "capability": "technical.headers",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 6,
+        "completed": 6,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "playwright-conversion-path",
+        "adapterVersion": null,
+        "artifactRef": null
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true,
+      "validated": true,
+      "validatedBy": "playwright-conversion-path",
+      "observedHeaders": {
+        "xFrameOptions": false,
+        "xContentTypeOptions": false,
+        "referrerPolicy": false,
+        "contentSecurityPolicy": false
+      },
+      "headerCoverage": {
+        "requested": 6,
+        "completed": 6,
+        "unassessed": 0
+      }
+    },
+    "schema.structured_data": {
+      "capability": "schema.structured_data",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 1,
+        "completed": 1,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "dataforseo-onpage",
+        "adapterVersion": "1.4.1",
+        "artifactRef": "dataforseo://on_page/08272217-1281-0216-0000-ec75157b5013?sha256=48d59687b3290498a7d08347c20266f4aee5aa335289f31f046046a332d434b5"
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "performance.lab": {
+      "capability": "performance.lab",
+      "status": "AVAILABLE",
+      "coverage": {
+        "requested": 2,
+        "completed": 2,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "pagespeed-insights",
+        "adapterVersion": null,
+        "artifactRef": null
+      },
+      "limitations": [],
+      "requiredFieldsPresent": true
+    },
+    "performance.field": {
+      "capability": "performance.field",
+      "status": "UNAVAILABLE",
+      "coverage": {
+        "requested": 2,
+        "completed": 2,
+        "failed": 0
+      },
+      "provenance": {
+        "source": "pagespeed-insights",
+        "adapterVersion": null,
+        "artifactRef": null
+      },
+      "limitations": [
+        "CrUX field data was not returned for this site (not populated or not collected)"
+      ],
+      "requiredFieldsPresent": false
+    }
+  },
+  "summary": {
+    "total": 13,
+    "available": 11,
+    "partial": 1,
+    "unavailable": 1,
+    "failed": 0,
+    "notConnected": 0,
+    "notApplicable": 0,
+    "assessed": 12
+  }
+}

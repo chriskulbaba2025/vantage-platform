@@ -1,0 +1,17 @@
+WRITER INPUT
+contractVersion=1.0.0
+writerInputVersion=1.0.0
+
+BASE ORCHESTRATION
+status=HUMAN_REVIEW_REQUIRED
+passCount=2
+judgeContractVersion=1.0.0
+judgePromptVersion=2.0.0
+decision=REVISE
+
+FINAL-PASS ORCHESTRATION
+status=RELEASE_CANDIDATE
+passCount=3
+judgeContractVersion=1.0.0
+judgePromptVersion=2.0.0
+decision=PASS

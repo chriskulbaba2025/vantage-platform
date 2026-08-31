@@ -1,0 +1,76 @@
+297-  const uniqueLimits = new Set(allLimits);
+298-  if (uniqueLimits.size < allLimits.length) {
+299-    errors.push(_err("performance.limitations", "evidence-appendix",
+300-      `Performance limitations contain ${allLimits.length - uniqueLimits.size} duplicate entries.`));
+301-  }
+302-
+303-    // Null or undefined top-level denominators
+304-  if (model.assessedWeight == null) {
+305-    errors.push(_err("assessedWeight", "executive-conversion-scorecard",
+306-      "Assessed weight is null or undefined."));
+307-  }
+308-  if (model.evidenceConfidenceScore == null) {
+309-    errors.push(_err("evidenceConfidenceScore", "evidence-appendix",
+310-      "Evidence confidence score is null or undefined."));
+311-  }
+312-
+313-  // PF-18 GÇö final release must independently reject impossible image
+314-  // numerator/denominator states even if an upstream decision-scope repair
+315-  // was expected to neutralize them.
+316-  const site = evidence.site || {};
+317:  const imageDenominator = site.imageCount;
+318-
+319-  if (
+320-    imageDenominator != null &&
+321-    (!Number.isFinite(imageDenominator) || imageDenominator < 0)
+322-  ) {
+323-    errors.push(_err(
+324:      "site.imageCount",
+325-      "technical-health",
+326-      `Image count must be a non-negative finite denominator, got ${String(imageDenominator)}.`,
+327-    ));
+328-  }
+329-
+330:  for (const field of ["imagesMissingAlt", "imagesMissingDimensions"]) {
+331-    const numerator = site[field];
+332-
+333-    if (numerator == null) continue;
+334-
+335-    if (!Number.isFinite(numerator) || numerator < 0) {
+336-      errors.push(_err(
+337-        `site.${field}`,
+338-        "technical-health",
+339-        `${field} must be a non-negative finite numerator, got ${String(numerator)}.`,
+340-      ));
+341-      continue;
+342-    }
+343-
+344-    if (
+345-      !Number.isFinite(imageDenominator) ||
+346-      imageDenominator < 0 ||
+347-      numerator > imageDenominator
+348-    ) {
+349-      errors.push(_err(
+350-        `site.${field}`,
+351-        "technical-health",
+352:        `${field} (${numerator}) cannot exceed or exist without a valid imageCount denominator (${String(imageDenominator)}).`,
+353-      ));
+354-    }
+355-  }
+356-
+357-  // Undefined values in client-facing text
+358-  for (const f of (model.findings || [])) {
+359-    if (f.title == null || f.title === "") {
+360-      errors.push(_err("findings[].title", "priority-fixes",
+361-        `Finding ${f.ruleId || "unknown"} has null or empty title.`));
+362-    }
+363-    if (f.businessImpact == null || f.businessImpact === "") {
+364-      warnings.push(_err("findings[].businessImpact", "priority-fixes",
+365-        `Finding ${f.ruleId || "unknown"} has null or empty businessImpact.`));
+366-    }
+367-    if (f.recommendation == null || f.recommendation === "") {
+368-      warnings.push(_err("findings[].recommendation", "priority-fixes",
+369-        `Finding ${f.ruleId || "unknown"} has null or empty recommendation.`));
+370-    }
+371-
+372-    // PF-18 GÇö final release backstop for the proven PARTIAL-to-absence defect.

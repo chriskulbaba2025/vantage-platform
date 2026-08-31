@@ -1,0 +1,22 @@
+﻿FILE=src\application\narrative-v2-production-path.test.js
+LINE_COUNT=1419
+BUILD_PASSING_WRITER_OUTPUT_START=195
+EFFORT_M_LINE=281
+
+  273:   : [],
+  274:     actionPlan: [{
+  275:       actionId: "ACT-01",
+  276:       priority: 1,
+  277:       title: "Governed priority",
+  278:       action: opportunity("Governed action"),
+  279:       whyNow: opportunity("Governed why now"),
+  280:       expectedBusinessEffect: opportunity("Governed business effect"),
+  281:       effort: "M",
+  282:       verification: opportunity("Governed verification"),
+  283:     }],
+  284:     executiveDecision: {
+  285:       preserve: interpret("Preserve"),
+  286:       change: interpret("Change"),
+  287:       doNext: opportunity("Do next"),
+  288:     },
+  289:   };
