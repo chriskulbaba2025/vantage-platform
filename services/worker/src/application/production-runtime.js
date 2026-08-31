@@ -942,10 +942,9 @@ export function createProductionRuntime({
 
     const v2ManifestKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/manifest.json`;
     const isCurrentV2 = Boolean(await artifactStore.get(v2ManifestKey).catch(() => null));
-    const artifactKey = isCurrentV2
-      ? `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/pages/${filename}`
-      : `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`;
-    const bytes = await artifactStore.get(artifactKey);
+    const bytes = isCurrentV2
+      ? await reportStore.readPublishedV2Page(slug, auditId, filename)
+      : await artifactStore.get(`tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`);
     if (!bytes) {
       const err = new Error("Report file not found");
       err.statusCode = 404;

@@ -536,6 +536,7 @@ const checklist = ["source_failures","top_ten_findings","high_severity","competi
   const publishResult = await runtime.auditService.publishAudit(auditId, tenantId, slug);
   check("Publication accepted", publishResult.status === T.PUBLISHED, `Got ${publishResult.status}`);
   check("Publication metadata exists", !!publishResult.publishedAt && !!publishResult.publication);
+  check("Publication verifies approved v2 artifact", publishResult.publication?.verifiedArtifacts?.some((artifact) => artifact.filename === "report-v2/approved/index.html"));
 }
 
 {
@@ -543,6 +544,8 @@ const checklist = ["source_failures","top_ten_findings","high_severity","competi
   check("Published retrieval succeeds", retrieved.filename === "index.html" && retrieved.lifecycleStatus === T.PUBLISHED);
   const html = Buffer.from(retrieved.bytes).toString("utf8");
   check("Published artifact contains sentinel domain", html.includes(SENTINELS.domain));
+  const approvedBytes = await reportStore.readPublishedV2Page(slug, auditId, "index.html");
+  check("Published retrieval reads the exact verified approved bytes", Buffer.from(approvedBytes).equals(retrieved.bytes));
 }
 
 // Exact ordered terminal lifecycle including publication

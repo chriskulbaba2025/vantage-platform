@@ -30,6 +30,7 @@ export const REQUIRED_APPROVED_PAGE_FILENAMES = Object.freeze([
 ]);
 const REQUIRED_PAGE_COUNT = REQUIRED_APPROVED_PAGE_FILENAMES.length; // 16
 const REQUIRED_PAGE_SET = new Set(REQUIRED_APPROVED_PAGE_FILENAMES);
+const V2_APPROVED_PREFIX = "report-v2/approved";
 
 function validateApprovedPageSet(pages) {
   if (!pages || !(pages instanceof Map)) {
@@ -565,18 +566,33 @@ export function createLocalReportStore(options = {}) {
       if (typeof html !== "string" || html.length === 0) {
         throw Object.assign(new Error("Approval requires a non-empty current Narrative v2 page"), { statusCode: 422 });
       }
+      const approvedArtifact = `${V2_APPROVED_PREFIX}/index.html`;
       const dir = reportDir(slug, runId);
-      await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, "index.html"), html, "utf8");
+      await mkdir(join(dir, V2_APPROVED_PREFIX), { recursive: true });
+      await writeFile(join(dir, approvedArtifact), html, "utf8");
       const updated = {
         ...lc,
         status: "approved",
         approval: { approver: approvalRecord.approver, approvedAt: approvalRecord.approvedAt, reviewRef: approvalRecord.reviewRef },
-        artifacts: { ...(lc.artifacts || {}), final: ["index.html"] },
+        designVersion: "2.0.0",
+        artifacts: { ...(lc.artifacts || {}), final: [approvedArtifact] },
         updatedAt: new Date().toISOString(),
       };
       await writeLifecycle(slug, runId, updated);
       return updated;
+    },
+
+    async readPublishedV2Page(slug, runId, filename) {
+      const lc = await readLifecycle(slug, runId);
+      const approvedArtifact = `${V2_APPROVED_PREFIX}/${filename}`;
+      if (!lc || lc.status !== "published") throw Object.assign(new Error("Report publication record missing"), { statusCode: 404 });
+      const verified = lc.publication?.verifiedArtifacts?.find((artifact) => artifact.filename === approvedArtifact);
+      if (!verified) throw Object.assign(new Error("Published v2 artifact was not verified"), { statusCode: 409 });
+      const bytes = await readFile(join(reportDir(slug, runId), approvedArtifact));
+      if (!bytes.length || bytes.length !== verified.bytes || sha256(bytes) !== verified.sha) {
+        throw Object.assign(new Error("Published v2 artifact verification mismatch"), { statusCode: 409 });
+      }
+      return bytes;
     },
 
     /**
@@ -633,7 +649,7 @@ export function createLocalReportStore(options = {}) {
           if (!data || data.length === 0) {
             throw new Error(`Artifact ${filename} is empty`);
           }
-          verified.push({ filename, bytes: data.length, sha: sha256(data) });
+          verified.push({ filename, bytes: Buffer.byteLength(data, "utf8"), sha: sha256(data) });
         } catch (readErr) {
           const updated = {
             ...lc,
@@ -1073,6 +1089,39 @@ export function createS3ReportStore(options = {}) {
       return updated;
     },
 
+    async writeApprovedV2Page(slug, runId, approvalRecord, html) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+      if (lc.status === "approved") return lc;
+      if (lc.status !== "reviewed" && lc.status !== "draft") throw Object.assign(new Error(`Cannot approve audit in "${lc.status}" status`), { statusCode: 409 });
+      if (typeof html !== "string" || html.length === 0) throw Object.assign(new Error("Approval requires a non-empty current Narrative v2 page"), { statusCode: 422 });
+      const approvedArtifact = `${V2_APPROVED_PREFIX}/index.html`;
+      const baseKey = `${prefix}/${safeSegment(slug)}/${safeSegment(runId)}`;
+      const { PutObjectCommand } = await aws();
+      await client.send(new PutObjectCommand({ Bucket: bucket, Key: `${baseKey}/${approvedArtifact}`, Body: html, ContentType: "text/html; charset=utf-8", CacheControl: "no-cache" }));
+      const updated = {
+        ...lc, status: "approved", designVersion: "2.0.0",
+        approval: { approver: approvalRecord.approver, approvedAt: approvalRecord.approvedAt, reviewRef: approvalRecord.reviewRef },
+        artifacts: { ...(lc.artifacts || {}), final: [approvedArtifact] }, updatedAt: new Date().toISOString(),
+      };
+      await writeLifecycle(slug, runId, updated, lc.status);
+      return updated;
+    },
+
+    async readPublishedV2Page(slug, runId, filename) {
+      const lc = await readLifecycle(slug, runId);
+      const approvedArtifact = `${V2_APPROVED_PREFIX}/${filename}`;
+      if (!lc || lc.status !== "published") throw Object.assign(new Error("Report publication record missing"), { statusCode: 404 });
+      const verified = lc.publication?.verifiedArtifacts?.find((artifact) => artifact.filename === approvedArtifact);
+      if (!verified) throw Object.assign(new Error("Published v2 artifact was not verified"), { statusCode: 409 });
+      const { GetObjectCommand } = await aws();
+      const baseKey = `${prefix}/${safeSegment(slug)}/${safeSegment(runId)}`;
+      const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: `${baseKey}/${approvedArtifact}` }));
+      const body = await response.Body.transformToString("utf-8");
+      if (!body || Buffer.byteLength(body, "utf8") !== verified.bytes || sha256(body) !== verified.sha) throw Object.assign(new Error("Published v2 artifact verification mismatch"), { statusCode: 409 });
+      return Buffer.from(body, "utf8");
+    },
+
     /**
      * Publish an approved report (WP10-PUBLISH-01) — S3 variant.
      *
@@ -1131,7 +1180,7 @@ export function createS3ReportStore(options = {}) {
           if (!body || body.length === 0) {
             throw new Error(`Artifact ${filename} is empty`);
           }
-          verified.push({ filename, bytes: body.length, sha: sha256(body) });
+          verified.push({ filename, bytes: Buffer.byteLength(body, "utf8"), sha: sha256(body) });
         } catch (readErr) {
           if (readErr.name === "NoSuchKey") {
             const updated = {
