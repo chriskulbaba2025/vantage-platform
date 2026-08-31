@@ -24,8 +24,10 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildControlledJudgeResponse, buildControlledWriterOutput } from "./current-replay-controlled-narrative.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -306,6 +308,11 @@ const runtime = createProductionRuntime({
   artifactStore,
   lifecycleRepo,
   reportStore,
+  narrativeV2: {
+    enabled: true,
+    writerExecutor: async ({ writerInput, passNumber }) => buildControlledWriterOutput({ writerInput, passNumber }),
+    judgeExecutor: async ({ writerInput, passNumber }) => buildControlledJudgeResponse({ writerInput, passNumber }),
+  },
 });
 
 const tenantId = "prysm-acceptance-tenant";
@@ -334,6 +341,7 @@ const { auditId, clientId, slug } = await runtime.auditService.createAudit({
   market: "Toronto, Ontario, Canada",
   language: "en-CA",
   primaryGoal: "conversion",
+  report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
   services: [SENTINELS.service],
   competitors: [`https://${SENTINELS.competitorDomain}`],
   crawl: { fixtures: onpageFixtures, maxPages: 10 },
@@ -380,6 +388,7 @@ check("SCORED reached", histStates.includes(T.SCORED));
 check("NARRATIVE_PENDING reached", histStates.includes(T.NARRATIVE_PENDING));
 check("NARRATIVE_READY reached", histStates.includes(T.NARRATIVE_READY));
 check("DRAFT_RENDERED reached", finalState === T.DRAFT_RENDERED, `Got ${finalState}, path: ${histStates.join(" → ")}`);
+if (finalState === T.NARRATIVE_FAILED) console.error("Narrative failure detail:", lifecycleHistory.at(-1)?.reason);
 
 // Every real production adapter executed at least once
 console.log("\n--- Real adapter execution ---");
@@ -453,7 +462,7 @@ check("Findings artifact exists", await artifactStore.exists(findingsKey));
 console.log("\n--- Report content and narrative ---");
 const pkgKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/report-content.json`;
 check("ReportContentPackage exists", await artifactStore.exists(pkgKey));
-const narrKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/narrative.json`;
+const narrKey = buildArtifactKey({ tenantId, clientId, auditId, category: "report-v2", artifactName: "narrative-v2/orchestration.json" });
 check("Narrative artifact exists", await artifactStore.exists(narrKey));
 
 console.log("\n--- Renderer (exact validated frozen model) ---");
@@ -464,7 +473,7 @@ let htmlContainsPlatform = false;
 let htmlContainsBacklink = false;
 let htmlContainsCompetitor = false;
 for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
-  const pageKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/${filename}`;
+  const pageKey = buildArtifactKey({ tenantId, clientId, auditId, category: "report-v2", artifactName: `pages/${filename}` });
   if (await artifactStore.exists(pageKey)) {
     pageCount++;
     const html = Buffer.from(await artifactStore.get(pageKey)).toString("utf8");
@@ -475,7 +484,7 @@ for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
     if (html.includes(SENTINELS.competitorDomain)) htmlContainsCompetitor = true;
   }
 }
-check("All 16 pages rendered", pageCount === REQUIRED_APPROVED_PAGE_FILENAMES.length, `${pageCount}/${REQUIRED_APPROVED_PAGE_FILENAMES.length}`);
+check("Current Narrative v2 page rendered", pageCount === 1, `${pageCount}/1`);
 check("Sentinel domain in HTML", htmlContainsDomain);
 check("Sentinel service in HTML", htmlContainsService);
 check("Sentinel platform in HTML", htmlContainsPlatform);
@@ -509,13 +518,7 @@ const checklist = ["source_failures","top_ten_findings","high_severity","competi
   check("Review submission accepted", reviewResult.status === "reviewed", `Got ${reviewResult.status}`);
 }
 {
-  const pages = new Map();
-  for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
-    const pageKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/${fn}`;
-    const pageBytes = await artifactStore.get(pageKey);
-    if (pageBytes) pages.set(fn, Buffer.from(pageBytes).toString("utf8"));
-  }
-  const approveResult = await runtime.auditService.approveAudit(auditId, tenantId, slug, "approver@proof.example.com", pages);
+  const approveResult = await runtime.auditService.approveAudit(auditId, tenantId, slug, "approver@proof.example.com");
   check("Approval accepted", approveResult.status === "approved" || approveResult.status === T.APPROVED, `Got ${approveResult.status}`);
 }
 
@@ -659,6 +662,40 @@ console.log("\n--- Acceptance integrity scan ---");
   check("Integrity: fabricated SourceResults = 0", fabricatedSourceResults === 0, `${fabricatedSourceResults} found`);
   check("Integrity: manual lifecycle seeds in final E2E = 0", manualLifecycleSeeds === 0, `${manualLifecycleSeeds} found`);
   check("Integrity: real production contract validator used", realValidatorUsage >= 1, `${realValidatorUsage} usage(s)`);
+}
+
+// =============================================================================
+// Optional current-release replay export
+// =============================================================================
+// The whole-app gate replays these exact bytes. This deliberately exports only
+// artifacts produced by the real production composition; it is not a fixture
+// builder and must never copy or mutate historical artifacts.
+if (process.env.PRYSM_CURRENT_REPLAY_EXPORT_DIR) {
+  const exportRoot = resolve(process.env.PRYSM_CURRENT_REPLAY_EXPORT_DIR);
+  const exportPaths = {
+    auditRequest: "governed/canonical/audit-request.json",
+    capabilityEvidence: "governed/canonical/capability-evidence.json",
+    decisionEvidence: "governed/canonical/decision-evidence.json",
+    findings: "governed/canonical/findings.json",
+    scores: "governed/canonical/scores.json",
+    writerInput: "governed/report-v2/narrative-v2/writer-input.json",
+    orchestration: "governed/report-v2/narrative-v2/orchestration.json",
+  };
+  const artifactKeys = {
+    auditRequest: buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "audit-request.json" }),
+    capabilityEvidence: buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "capability-evidence.json" }),
+    decisionEvidence: deKey,
+    findings: findingsKey,
+    scores: scoresKey,
+    writerInput: buildArtifactKey({ tenantId, clientId, auditId, category: "report-v2", artifactName: "narrative-v2/writer-input.json" }),
+    orchestration: buildArtifactKey({ tenantId, clientId, auditId, category: "report-v2", artifactName: "narrative-v2/orchestration.json" }),
+  };
+  for (const [name, relativePath] of Object.entries(exportPaths)) {
+    const destination = resolve(exportRoot, relativePath);
+    mkdirSync(dirname(destination), { recursive: true });
+    await writeFile(destination, await artifactStore.get(artifactKeys[name]));
+  }
+  console.log(`Current production replay fixture exported: ${exportRoot}`);
 }
 
 // =============================================================================

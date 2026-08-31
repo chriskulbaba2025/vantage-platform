@@ -554,6 +554,31 @@ export function createLocalReportStore(options = {}) {
       return updated;
     },
 
+    /** Persist approval for a current Narrative v2 report without fabricating legacy pages. */
+    async writeApprovedV2Page(slug, runId, approvalRecord, html) {
+      const lc = await readLifecycle(slug, runId);
+      if (!lc) throw Object.assign(new Error("Audit not found"), { statusCode: 404 });
+      if (lc.status === "approved") return lc;
+      if (lc.status !== "reviewed" && lc.status !== "draft") {
+        throw Object.assign(new Error(`Cannot approve audit in "${lc.status}" status`), { statusCode: 409 });
+      }
+      if (typeof html !== "string" || html.length === 0) {
+        throw Object.assign(new Error("Approval requires a non-empty current Narrative v2 page"), { statusCode: 422 });
+      }
+      const dir = reportDir(slug, runId);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "index.html"), html, "utf8");
+      const updated = {
+        ...lc,
+        status: "approved",
+        approval: { approver: approvalRecord.approver, approvedAt: approvalRecord.approvedAt, reviewRef: approvalRecord.reviewRef },
+        artifacts: { ...(lc.artifacts || {}), final: ["index.html"] },
+        updatedAt: new Date().toISOString(),
+      };
+      await writeLifecycle(slug, runId, updated);
+      return updated;
+    },
+
     /**
      * Publish an approved report (WP10-PUBLISH-01).
      *

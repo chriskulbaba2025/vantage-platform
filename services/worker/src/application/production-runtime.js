@@ -799,6 +799,7 @@ export function createProductionRuntime({
     }
 
     let governedPages = pages;
+    let currentV2Page = null;
     if (!(governedPages instanceof Map)) {
       const v2ManifestKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/manifest.json`;
       let v2ManifestBytes = null;
@@ -808,7 +809,10 @@ export function createProductionRuntime({
         v2ManifestBytes = null;
       }
       if (v2ManifestBytes && v2ManifestBytes.length > 0) {
-        governedPages = new Map();
+        const v2PageKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/pages/index.html`;
+        const v2Bytes = await artifactStore.get(v2PageKey);
+        if (!v2Bytes) throw Object.assign(new Error("Current Narrative v2 page missing"), { statusCode: 422 });
+        currentV2Page = Buffer.from(v2Bytes).toString("utf8");
       } else {
         governedPages = new Map();
         for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
@@ -825,7 +829,9 @@ export function createProductionRuntime({
       }
     }
 
-    const result = await baseAuditService.approveAudit(auditId, tenantId, slug, approver, governedPages);
+    const result = currentV2Page !== null && typeof reportStore.writeApprovedV2Page === "function"
+      ? await reportStore.writeApprovedV2Page(slug, auditId, { approver, approvedAt: new Date().toISOString() }, currentV2Page)
+      : await baseAuditService.approveAudit(auditId, tenantId, slug, approver, governedPages);
     if (current.state === T.IN_REVIEW) {
       await lifecycleService.transition({
         auditId,
@@ -934,7 +940,11 @@ export function createProductionRuntime({
       }
     }
 
-    const artifactKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`;
+    const v2ManifestKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/manifest.json`;
+    const isCurrentV2 = Boolean(await artifactStore.get(v2ManifestKey).catch(() => null));
+    const artifactKey = isCurrentV2
+      ? `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/pages/${filename}`
+      : `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`;
     const bytes = await artifactStore.get(artifactKey);
     if (!bytes) {
       const err = new Error("Report file not found");
