@@ -25,7 +25,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildControlledJudgeResponse, buildControlledWriterOutput } from "./current-replay-controlled-narrative.js";
 
@@ -540,12 +540,26 @@ const checklist = ["source_failures","top_ten_findings","high_severity","competi
 }
 
 {
+  const approvedBytes = await reportStore.readPublishedV2Page(slug, auditId, "index.html");
+  const draftBytes = Buffer.from("<html><body>DRAFT MUST NEVER BE PUBLISHED</body></html>", "utf8");
+  const draftDir = join(testBaseDir, slug, auditId, "report-v2", "pages");
+  mkdirSync(draftDir, { recursive: true });
+  await writeFile(join(draftDir, "index.html"), draftBytes);
   const retrieved = await runtime.auditService.getPublishedReportPage(auditId, tenantId, slug, "index.html");
   check("Published retrieval succeeds", retrieved.filename === "index.html" && retrieved.lifecycleStatus === T.PUBLISHED);
   const html = Buffer.from(retrieved.bytes).toString("utf8");
   check("Published artifact contains sentinel domain", html.includes(SENTINELS.domain));
-  const approvedBytes = await reportStore.readPublishedV2Page(slug, auditId, "index.html");
   check("Published retrieval reads the exact verified approved bytes", Buffer.from(approvedBytes).equals(retrieved.bytes));
+  check("Published retrieval does not read the divergent draft bytes", !draftBytes.equals(retrieved.bytes));
+
+  await writeFile(join(testBaseDir, slug, auditId, "report-v2", "approved", "index.html"), "tampered approved artifact", "utf8");
+  let tamperBlocked = null;
+  try {
+    await runtime.auditService.getPublishedReportPage(auditId, tenantId, slug, "index.html");
+  } catch (err) { tamperBlocked = err; }
+  check("Published retrieval fails closed when the approved artifact is tampered",
+    !!tamperBlocked && tamperBlocked.statusCode === 409,
+    tamperBlocked ? `statusCode=${tamperBlocked.statusCode}` : "no error");
 }
 
 // Exact ordered terminal lifecycle including publication
