@@ -13,6 +13,7 @@ const commands = [
   ["--test", "src/narrative-v2/writer-input.test.js", "persisted hierarchy WriterInput parity"],
   ["--test", "src/application/narrative-v2-production-path.test.js", "current Narrative v2 production path"],
   ["--test", "scripts/replay-report.test.js", "current replay canonical hydration"],
+  ["--test", "src/report-model/current-consumer-parity.test.js", "base, Narrative v2, and replay current-model parity"],
 ];
 
 for (const args of commands) {

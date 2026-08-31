@@ -40,6 +40,7 @@ const REQUIRED_SCHEMAS = [
   "report-content.schema.json",
   "narrative-response.schema.json",
   "report-view-model.schema.json",
+  "report-view-model-current.schema.json",
   "report-manifest.schema.json",
   "lifecycle-event.schema.json",
   "lifecycle-state.schema.json",

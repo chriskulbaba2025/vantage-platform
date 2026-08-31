@@ -1248,18 +1248,7 @@ export function createAuditOrchestrator({
       if (!scoresBytes) throw new Error("Scores artifact not found");
       const scoreSet = JSON.parse(scoresBytes.toString());
       scoreSetRaw = scoreSet;
-      scoringModel = {
-        scoringVersion: scoreSet.scoringVersion || "3.0.0", generatedAt: scoreSet.generatedAt || c.now(),
-        scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
-        assessedWeight: scoreSet.assessedWeight ?? 0, readinessStatus: scoreSet.readinessStatus || "",
-        showNumericScore: scoreSet.showNumericScore ?? false, evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
-          rootCauseRuleId: scoreSet.rootCauseRuleId || null,
-        rootCause: scoreSet.rootCause || "", findings: [],
-        conversionPaths: scoreSet.conversionPaths || [],
-        readinessMap: scoreSet.readinessMap || [],
-        contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
-        competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
-      };
+      scoringModel = { ...scoreSet, findings: [] };
     } catch (err) {
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-scores-load-failed:" + (err.message || "").slice(0, 200), null);
@@ -1292,6 +1281,17 @@ export function createAuditOrchestrator({
       throw evidenceErr;
     }
 
+    let capabilityEvidence;
+    if (scoreSetRaw?.contractVersion === "2.0.0") {
+      try {
+        capabilityEvidence = await loadAndValidateCapabilityEvidence({ store: artifactStore, scope, validateContract });
+      } catch (capabilityErr) {
+        await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+          "render-capability-invalid:" + (capabilityErr.message || "").slice(0, 200), null);
+        throw capabilityErr;
+      }
+    }
+
     // --- PRYSM-CLOSE-06: finalization gate before any rendering ---
     // The governed finalization gate validates the scored model against the
     // actual decision evidence.  A failing gate blocks the renderer entirely:
@@ -1322,7 +1322,8 @@ export function createAuditOrchestrator({
     const vmResult = buildReportViewModel({
       reportPackage, narrative, scoringModel, validateContract,
       reportVersion: scoringModel.scoringVersion, now: c.now(),
-      evidence: decisionEvidence,
+      decisionEvidence,
+      capabilityEvidence,
     });
 
     if (!vmResult.valid) {

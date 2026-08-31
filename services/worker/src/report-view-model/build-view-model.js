@@ -87,7 +87,9 @@ function validateNarrativeResponse(narrative, validateContract) {
  */
 function validateReportViewModel(model, validateContract) {
   const result = validateContract(
-    "https://vantage-platform.io/prysm/contracts/v1/report-view-model.schema.json",
+    model.contractVersion === "2.0.0"
+      ? "https://vantage-platform.io/prysm/contracts/v2/report-view-model.schema.json"
+      : "https://vantage-platform.io/prysm/contracts/v1/report-view-model.schema.json",
     model,
   );
   return result;
@@ -119,7 +121,8 @@ export function buildReportViewModel({
   validateContract,
   reportVersion,
   now,
-  evidence,
+  decisionEvidence,
+  capabilityEvidence,
 }) {
   const errors = [];
   let rendererCallCount = 0;
@@ -201,14 +204,19 @@ export function buildReportViewModel({
   // Current ScoreSet artifacts have one canonical semantic hydration source.
   // Older WP10 fixtures remain supported only as historical compatibility.
   const current = scoringModel.contractVersion === "2.0.0"
-    ? hydrateCurrentReportModel({ scoreSet: scoringModel, findings: scoringModel.findings, evidence })
+    ? hydrateCurrentReportModel({
+      scoreSet: scoringModel,
+      findings: scoringModel.findings,
+      decisionEvidence,
+      capabilityEvidence,
+    })
     : null;
 
   // --- 5. Assemble ReportViewModel ---
   const generatedAt = now || new Date().toISOString();
 
   const model = {
-    contractVersion: "1.0.0",
+    contractVersion: current ? "2.0.0" : "1.0.0",
     reportVersion: reportVersion || scoringModel.scoringVersion || "3.0.0",
     reportDesignVersion: LOCKED_REPORT_DESIGN_VERSION,
     generatedAt,
@@ -287,7 +295,8 @@ export function buildReportViewModel({
     limitations: reportPackage.limitations || [],
     // Governed decision evidence — part of the COMPLETE model, validated
     // together with everything else BEFORE the renderer receives it.
-    evidence: evidence || null,
+    evidence: current?.evidence || decisionEvidence || null,
+    ...(current ? { capabilityEvidence: current.capabilityEvidence } : {}),
     // Narrative fields
     narrative: narrative,
     // Gate

@@ -278,6 +278,10 @@
       "type": ["object", "null"],
       "description": "Governed decision evidence consumed by the renderer. Part of the complete validated model — the renderer receives exactly this validated object."
     },
+    "capabilityEvidence": {
+      "type": "object",
+      "description": "Governed capability evidence supplied by the canonical current report-model hydrator."
+    },
     "narrative": {
       "$ref": "https://vantage-platform.io/prysm/contracts/v1/narrative-response.schema.json",
       "description": "Validated narrative response from the n8n/LLM step. Optional — may be absent for audits that failed before narrative generation."

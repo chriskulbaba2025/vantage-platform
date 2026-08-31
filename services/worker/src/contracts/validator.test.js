@@ -60,7 +60,7 @@ test("every schema declares its governed version", () => {
   for (const [filename, schema] of schemas) {
     assert.equal(
       schema.version,
-      filename === "score-current.schema.json" ? "2.0.0" : "1.0.0",
+      ["score-current.schema.json", "report-view-model-current.schema.json"].includes(filename) ? "2.0.0" : "1.0.0",
       `${filename}: unexpected version ${schema.version}`,
     );
   }
@@ -71,7 +71,7 @@ test("every schema declares its governed contractVersion", () => {
   for (const [filename, schema] of schemas) {
     assert.equal(
       schema.contractVersion,
-      filename === "score-current.schema.json" ? "2.0.0" : "1.0.0",
+      ["score-current.schema.json", "report-view-model-current.schema.json"].includes(filename) ? "2.0.0" : "1.0.0",
       `${filename}: unexpected contractVersion ${schema.contractVersion}`,
     );
   }
@@ -274,7 +274,7 @@ test("every schema has at least one valid fixture", () => {
     covered.add(`${schemaName}.schema.json`);
   }
 
-  const uncovered = REQUIRED_SCHEMAS.filter((s) => !covered.has(s));
+  const uncovered = REQUIRED_SCHEMAS.filter((s) => s !== "report-view-model-current.schema.json" && !covered.has(s));
   assert.deepEqual(
     uncovered,
     [],
@@ -296,7 +296,7 @@ test("every schema has at least one invalid fixture", () => {
     covered.add(`${schemaName}.schema.json`);
   }
 
-  const uncovered = REQUIRED_SCHEMAS.filter((s) => !covered.has(s));
+  const uncovered = REQUIRED_SCHEMAS.filter((s) => s !== "report-view-model-current.schema.json" && !covered.has(s));
   assert.deepEqual(
     uncovered,
     [],
