@@ -55,9 +55,11 @@ addFormats(_ajv);
   "finding.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json",
   "narrative-response.schema.json", "report-content.schema.json",
   "report-manifest.schema.json", "report-view-model.schema.json",
-  "score.schema.json", "source-result.schema.json",
+  "report-view-model-current.schema.json", "score.schema.json",
+  "score-current.schema.json", "source-result.schema.json",
 ].forEach((f) => {
-  _ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
+  const version = ["report-view-model-current.schema.json", "score-current.schema.json"].includes(f) ? "v2" : "v1";
+  _ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")), `https://vantage-platform.io/prysm/contracts/${version}/${f}`);
 });
 function validateContract(sid, obj) {
   const v = _ajv.getSchema(sid);
