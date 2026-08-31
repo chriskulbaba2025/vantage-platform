@@ -42,11 +42,7 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run check:template
-      - run: npm test
-      - run: npm run test:narrative-v2
-      - run: npm run test:schemas
-      - run: npm run test:artifacts
-      - run: npm run test:lifecycle
+      - run: npm run verify:prysm-closure
       - run: npm run test:lifecycle:postgres
         env:
           PGHOST: localhost

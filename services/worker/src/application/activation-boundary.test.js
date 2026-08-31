@@ -128,6 +128,13 @@ async function makeRuntimeInReview({ auditId, tenantId, clientId }) {
     reportStore,
   });
 
+  // The production approval path reads the report-store lifecycle, which is
+  // created by report generation. Seed that durable boundary explicitly.
+  await reportStore.writeReport({
+    slug: "slug", runId: auditId,
+    model: { evidence: {} }, manifest: {}, html: "<html>draft</html>",
+  });
+
   await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey: "k" });
   for (const [state, key] of [
     [T.VALIDATED, "v"], [T.COLLECTING, "c"], [T.EVIDENCE_STORED, "es"],

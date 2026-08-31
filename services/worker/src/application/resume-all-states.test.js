@@ -194,7 +194,7 @@ test("PRYSM-CLOSE-11b: EVIDENCE_LOCKED resume — zero adapter calls", async () 
   const callCounts = {};
   // First orchestrator: scoring validation fails → stays EVIDENCE_LOCKED
   const failingValidator = (sid, obj) => {
-    if (sid.includes("score.schema.json")) return { valid: false, errors: [{ message: "controlled scoring validation failure" }] };
+    if (sid.toLowerCase().includes("score")) return { valid: false, errors: [{ message: "controlled scoring validation failure" }] };
     return validateContract(sid, obj);
   };
   const first = setup({ adapters: countingAdapters(callCounts), validateContract: failingValidator });
@@ -272,6 +272,7 @@ test("PRYSM-CLOSE-11c: NARRATIVE_PENDING resume — narrative re-run, zero provi
   await copyArtifact("canonical", "decision-evidence.json");
   await copyArtifact("canonical", "findings.json");
   await copyArtifact("canonical", "scores.json");
+  await copyArtifact("canonical", "capability-evidence.json");
   await copyArtifact("report", "report-content.json", true);
   // NOTE: narrative.json intentionally NOT copied — the stranded audit
   // died before the narrative persisted.
@@ -356,6 +357,7 @@ test("PRYSM-CLOSE-11d: NARRATIVE_READY resume — renders, zero provider calls",
   await copyArtifact("canonical", "decision-evidence.json");
   await copyArtifact("canonical", "findings.json");
   await copyArtifact("canonical", "scores.json");
+  await copyArtifact("canonical", "capability-evidence.json");
   await copyArtifact("report", "report-content.json", true);
   await copyArtifact("report", "narrative.json", true);
 

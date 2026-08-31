@@ -1101,6 +1101,8 @@ const requestListener = createRequestHandler({
 });
 
 const server = createServer(requestListener);
-server.listen(config.port, "0.0.0.0", () => {
-  console.log(`Prysm worker listening on :${config.port}`);
-});
+if (process.env.VANTAGE_TEST_MODE !== "true") {
+  server.listen(config.port, "0.0.0.0", () => {
+    console.log(`Prysm worker listening on :${config.port}`);
+  });
+}
