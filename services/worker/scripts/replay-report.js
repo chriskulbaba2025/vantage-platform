@@ -31,6 +31,7 @@ const DEFAULT_FIXTURE_ROOT = resolve(
   "test-fixtures",
   "report-replay",
 );
+const LEGACY_COMPAT_MODE = process.argv.includes("--legacy-compat");
 const SCHEMA_BASE = "https://vantage-platform.io/prysm/contracts/v1/";
 
 const REQUIRED_ARTIFACTS = Object.freeze({
@@ -432,6 +433,18 @@ function assertReplayContracts(
     "ScoreSet",
   );
 
+  if (inputs.scoreSet.contractVersion !== "2.0.0") {
+    throw new Error(
+      `Current replay requires ScoreSet contract 2.0.0; got ${String(inputs.scoreSet.contractVersion || "missing")}. Historical artifacts are compatibility-only`,
+    );
+  }
+
+  if (!inputs.scoreSet.rootCauseRuleId || !inputs.scoreSet.decisionHierarchy) {
+    throw new Error(
+      "Current replay requires persisted current root-cause identity and decision hierarchy",
+    );
+  }
+
   for (
     let index = 0;
     index < inputs.findings.length;
@@ -545,6 +558,14 @@ if (!judgeValidation.valid) {
           error,
         ),
     );
+
+  if (
+    !LEGACY_COMPAT_MODE && historicalJudge
+  ) {
+    throw new Error(
+      "Historical JudgeResponse contract 1.0.0/2.0.0 is compatibility-only; rerun with --legacy-compat and do not count this replay as current release proof",
+    );
+  }
 
   if (
     !historicalJudge ||
@@ -867,17 +888,18 @@ function baselineLabel(summary) {
 }
 
 async function main() {
-  if (process.argv.length > 3) {
+  const inputArgument = process.argv.slice(2).find((arg) => arg !== "--legacy-compat");
+  if (process.argv.slice(2).filter((arg) => arg !== "--legacy-compat").length > 1) {
     throw new Error(
       "Usage: node scripts/replay-report.js [fixture-directory-or-report-replay-root]",
     );
   }
 
   const inputPath =
-    process.argv[2]
+    inputArgument
       ? resolve(
           process.cwd(),
-          process.argv[2],
+          inputArgument,
         )
       : DEFAULT_FIXTURE_ROOT;
 
