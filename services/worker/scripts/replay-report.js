@@ -60,6 +60,7 @@ const SCHEMA_FILES = Object.freeze([
   "decision-evidence.schema.json",
   "finding.schema.json",
   "score.schema.json",
+  "score-current.schema.json",
   "report-content.schema.json",
   "narrative-response.schema.json",
   "report-view-model.schema.json",
@@ -405,6 +406,12 @@ function assertReplayContracts(
   inputs,
   validateContract,
 ) {
+  if (!LEGACY_COMPAT_MODE && inputs.scoreSet?.contractVersion !== "2.0.0") {
+    throw new Error(
+      `Current replay requires ScoreSet contract 2.0.0; got ${String(inputs.scoreSet?.contractVersion || "missing")}. Historical artifacts are compatibility-only`,
+    );
+  }
+
   assertSchema(
     validateContract,
     "audit-request.schema.json",
@@ -426,20 +433,18 @@ function assertReplayContracts(
     "CapabilityEvidence",
   );
 
+  const scoreSchema = LEGACY_COMPAT_MODE
+    ? "score.schema.json"
+    : "score-current.schema.json";
+
   assertSchema(
     validateContract,
-    "score.schema.json",
+    scoreSchema,
     inputs.scoreSet,
     "ScoreSet",
   );
 
-  if (inputs.scoreSet.contractVersion !== "2.0.0") {
-    throw new Error(
-      `Current replay requires ScoreSet contract 2.0.0; got ${String(inputs.scoreSet.contractVersion || "missing")}. Historical artifacts are compatibility-only`,
-    );
-  }
-
-  if (!inputs.scoreSet.rootCauseRuleId || !inputs.scoreSet.decisionHierarchy) {
+  if (!LEGACY_COMPAT_MODE && (!inputs.scoreSet.rootCauseRuleId || !inputs.scoreSet.decisionHierarchy)) {
     throw new Error(
       "Current replay requires persisted current root-cause identity and decision hierarchy",
     );
@@ -705,6 +710,36 @@ function safeDirectoryName(value) {
   );
 }
 
+async function replayLegacyFixture({ fixtureDirectory, outputRoot, inputs }) {
+  const savedHtml = await loadSavedHtml(fixtureDirectory);
+
+  if (!savedHtml) {
+    throw new Error("Legacy compatibility replay requires a persisted governed or published HTML artifact");
+  }
+
+  const auditId = inputs.auditRequest.auditId;
+  const auditOutputDirectory = resolve(outputRoot, safeDirectoryName(auditId));
+  await mkdir(auditOutputDirectory, { recursive: true });
+
+  const outputHtmlPath = resolve(auditOutputDirectory, "legacy-compatibility.html");
+  await writeFile(outputHtmlPath, savedHtml.bytes);
+
+  return {
+    auditId,
+    fixtureDirectory,
+    viewerVersion: "legacy-compatibility-only",
+    scoringVersion: inputs.scoreSet.scoringVersion || null,
+    generatedAt: inputs.scoreSet.generatedAt || null,
+    findingCount: inputs.findings.length,
+    narrativePassCount: inputs.orchestrationResult.passCount,
+    replaySha256: sha256(savedHtml.bytes),
+    savedHtmlPath: savedHtml.path,
+    savedHtmlSha256: sha256(savedHtml.bytes),
+    matchesSavedHtml: true,
+    outputHtmlPath,
+  };
+}
+
 async function replayFixture({
   fixtureDirectory,
   outputRoot,
@@ -718,6 +753,10 @@ async function replayFixture({
     inputs,
     validateContract,
   );
+
+  if (LEGACY_COMPAT_MODE) {
+    return replayLegacyFixture({ fixtureDirectory, outputRoot, inputs });
+  }
 
   const model = buildV2Model({
     auditRequest: inputs.auditRequest,
@@ -925,6 +964,12 @@ async function main() {
   console.log(
     "PRYSM offline report replay",
   );
+
+  if (LEGACY_COMPAT_MODE) {
+    console.log(
+      "Replay mode: LEGACY_COMPATIBILITY_ONLY (not current release proof)",
+    );
+  }
 
   console.log(
     `Input: ${inputPath}`,
