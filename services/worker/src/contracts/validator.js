@@ -36,6 +36,7 @@ const REQUIRED_SCHEMAS = [
   "decision-evidence.schema.json",
   "finding.schema.json",
   "score.schema.json",
+  "score-current.schema.json",
   "report-content.schema.json",
   "narrative-response.schema.json",
   "report-view-model.schema.json",

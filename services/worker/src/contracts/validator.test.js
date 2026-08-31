@@ -49,30 +49,30 @@ test("every schema declares a valid $id", () => {
   for (const [filename, schema] of schemas) {
     assert.ok(schema.$id, `${filename}: missing $id`);
     assert.ok(
-      schema.$id.startsWith("https://vantage-platform.io/prysm/contracts/v1/"),
+      schema.$id.startsWith("https://vantage-platform.io/prysm/contracts/v"),
       `${filename}: $id does not follow expected pattern: ${schema.$id}`,
     );
   }
 });
 
-test("every schema declares version 1.0.0", () => {
+test("every schema declares its governed version", () => {
   const schemas = loadAllSchemas();
   for (const [filename, schema] of schemas) {
     assert.equal(
       schema.version,
-      "1.0.0",
-      `${filename}: expected version 1.0.0, got ${schema.version}`,
+      filename === "score-current.schema.json" ? "2.0.0" : "1.0.0",
+      `${filename}: unexpected version ${schema.version}`,
     );
   }
 });
 
-test("every schema declares contractVersion 1.0.0", () => {
+test("every schema declares its governed contractVersion", () => {
   const schemas = loadAllSchemas();
   for (const [filename, schema] of schemas) {
     assert.equal(
       schema.contractVersion,
-      "1.0.0",
-      `${filename}: expected contractVersion 1.0.0, got ${schema.contractVersion}`,
+      filename === "score-current.schema.json" ? "2.0.0" : "1.0.0",
+      `${filename}: unexpected contractVersion ${schema.contractVersion}`,
     );
   }
 });

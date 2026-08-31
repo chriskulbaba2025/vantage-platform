@@ -1,0 +1,10 @@
+{
+  "contractVersion": "2.0.0",
+  "scoringVersion": "4.1.1",
+  "generatedAt": "2026-08-31T00:00:00.000Z",
+  "scores": {}, "bands": {}, "assessedWeight": 100,
+  "readinessStatus": "Complete", "showNumericScore": true,
+  "evidenceConfidenceScore": 100, "dimensionEligibility": {},
+  "moduleEligibility": {}, "suppressedModules": [],
+  "rootCauseRuleId": "VAN-CONV-001", "rootCause": "Governed finding.", "findingIds": []
+}

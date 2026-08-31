@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 import { scoreAudit, SCORING_VERSION } from "./vantage-score.js";
+import { assertCurrentScoreSet } from "./current-score-set.js";
 import { buildArtifactKey } from "../storage/artifact-key.js";
 import { loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
 
@@ -171,9 +172,15 @@ export async function persistScores({
   scoreSet,
   validateContract,
 }) {
+  // The current schema establishes persisted shape while this assertion
+  // establishes the release-critical semantic binding between the root cause
+  // and the single hierarchy derived by scoreAudit.  Keep both checks at the
+  // write boundary so a caller cannot persist a schema-shaped disagreement.
+  assertCurrentScoreSet(scoreSet, { validateContract });
+
   if (validateContract) {
     const sv = validateContract(
-      "https://vantage-platform.io/prysm/contracts/v1/score.schema.json",
+      "https://vantage-platform.io/prysm/contracts/v2/score-current.schema.json",
       scoreSet,
     );
 
@@ -241,6 +248,17 @@ export async function persistScores({
     );
   }
 
+  // Validate the exact persisted bytes, not only the in-memory object that
+  // was offered to the store.  This makes a store serialization/projection
+  // loss fail closed before the score boundary is reported successful.
+  let storedScoreSet;
+  try {
+    storedScoreSet = JSON.parse(Buffer.from(stored).toString("utf-8"));
+  } catch {
+    throw new Error("Scores artifact read-back is not valid JSON");
+  }
+  assertCurrentScoreSet(storedScoreSet, { validateContract });
+
   const verified = await store.verify(record);
 
   if (!verified) {
@@ -266,7 +284,7 @@ export async function persistScores({
  */
 function buildScoreSet(model, findingsRecord, scoresRecord) {
   return {
-    contractVersion: "1.0.0",
+    contractVersion: "2.0.0",
     scoringVersion: SCORING_VERSION,
     generatedAt: model.generatedAt,
 
@@ -311,6 +329,12 @@ function buildScoreSet(model, findingsRecord, scoresRecord) {
 
     dimensionEligibility:
       model.dimensionEligibility,
+
+    rootCauseRuleId:
+      model.rootCauseRuleId || null,
+
+    decisionHierarchy:
+      model.decisionHierarchy,
 
     rootCause:
       model.rootCause,

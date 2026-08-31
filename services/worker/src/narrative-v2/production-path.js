@@ -12,6 +12,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
 import { buildArtifactKey } from "../storage/artifact-key.js";
+import { assertCurrentScoreSet } from "../scoring/current-score-set.js";
 import { buildReportContentPackage, serializePackage, packageSha256 } from "../report-content/build-package.js";
 import { loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
 import { loadAndValidateCapabilityEvidence } from "../evidence/capability-evidence.js";
@@ -175,6 +176,7 @@ async function loadScoredInputs({ artifactStore, auditRequest, validateContract 
   const findingsRaw = JSON.parse(Buffer.from(findingsBytes).toString("utf8"));
   const findings = Array.isArray(findingsRaw) ? findingsRaw : (findingsRaw?.findings || []);
   const scoreSet = JSON.parse(Buffer.from(scoresBytes).toString("utf8"));
+  assertCurrentScoreSet(scoreSet, { validateContract });
 
   return { decisionEvidence, capabilityEvidence, findings, scoreSet };
 }
@@ -803,6 +805,7 @@ function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, de
     showNumericScore: scoreSet.showNumericScore ?? false,
     evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
     evidenceConfidenceFactorAvailability: scoreSet.evidenceConfidenceFactorAvailability || [],
+    rootCauseRuleId: scoreSet.rootCauseRuleId || null,
     rootCause: scoreSet.rootCause || "",
     findings,
     renderingDiagnostics: Array.isArray(scoreSet.renderingDiagnostics) ? scoreSet.renderingDiagnostics : undefined,
@@ -1006,6 +1009,7 @@ async function runNarrativeV2FromScored({
       scoreSet: inputs.scoreSet,
       findings: inputs.findings,
       capabilityEvidence: inputs.capabilityEvidence,
+      decisionEvidence: inputs.decisionEvidence,
     });
 
     await persistJsonArtifact({
@@ -1694,6 +1698,7 @@ export function createNarrativeV2ProductionPath({
         scoreSet: inputs.scoreSet,
         findings: inputs.findings,
         capabilityEvidence: inputs.capabilityEvidence,
+        decisionEvidence: inputs.decisionEvidence,
       });
       await persistJsonArtifact({
         artifactStore: args.artifactStore,

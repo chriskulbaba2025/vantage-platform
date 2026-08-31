@@ -429,7 +429,7 @@ check("Findings artifact exists", await artifactStore.exists(findingsKey));
 
 {
   const scores = JSON.parse(Buffer.from(await artifactStore.get(scoresKey)).toString("utf8"));
-  const sv = validateContract("https://vantage-platform.io/prysm/contracts/v1/score.schema.json", scores);
+  const sv = validateContract("https://vantage-platform.io/prysm/contracts/v2/score-current.schema.json", scores);
   check("Persisted ScoreSet validates against score schema", sv.valid, JSON.stringify(sv.errors?.slice(0, 3)));
   check("ScoreSet: bands present", !!scores.bands);
   check("ScoreSet: assessedWeight present", typeof scores.assessedWeight === "number");
@@ -611,7 +611,7 @@ console.log("\n--- Negative acceptance cases ---");
       validateContract,
     });
   } catch (err) { rejected = err; }
-  check("N3: invalid ScoreSet → persistence rejected", !!rejected && /validation failed/.test(rejected.message), rejected?.message);
+  check("N3: invalid ScoreSet → persistence rejected", !!rejected && /Current ScoreSet requires contractVersion/.test(rejected.message), rejected?.message);
 }
 
 // N4 — finalization failure blocks the renderer (production orchestration)

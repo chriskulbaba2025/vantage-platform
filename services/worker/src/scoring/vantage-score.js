@@ -1263,6 +1263,27 @@ export function scoreAudit(
     primaryFinding?.ruleId ||
     null;
 
+  // Persist the single Conversion-First decision order calculated here.  This
+  // prevents later Writer/render/replay boundaries from rediscovering a root
+  // cause from array order or independently re-running action-priority.
+  const decisionHierarchy = {
+    hierarchyVersion: "1.0.0",
+    provenance: "scoreAudit/action-priority",
+    rootCauseRuleId,
+    orderedFindingIds: rootCausePlan.actions.map((action) => action.finding.findingId),
+    actions: rootCausePlan.actions.map((action) => ({
+      findingId: action.finding.findingId,
+      ruleId: action.finding.ruleId,
+      rank: action.rank,
+      priority: action.priority,
+      effort: action.effort,
+      actionClass: action.actionClass,
+      foundationDomain: action.foundationDomain || null,
+      conversionInfluence: action.conversionInfluence,
+      conversionInfluenceRank: action.conversionInfluenceRank,
+    })),
+  };
+
   const rootCause =
     primaryFinding
       ? `${primaryFinding.title || "Primary governed finding"}. ${
@@ -1502,6 +1523,7 @@ export function scoreAudit(
         ),
       ),
     rootCauseRuleId,
+    decisionHierarchy,
     rootCause,
     findings,
     suppressedFindingReasons,

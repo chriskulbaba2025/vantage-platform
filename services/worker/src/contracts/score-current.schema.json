@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vantage-platform.io/prysm/contracts/v2/score-current.schema.json",
+  "title": "Current governed Score Set",
+  "version": "2.0.0",
+  "contractVersion": "2.0.0",
+  "type": "object",
+  "required": ["contractVersion", "scoringVersion", "generatedAt", "scores", "bands", "assessedWeight", "readinessStatus", "showNumericScore", "evidenceConfidenceScore", "dimensionEligibility", "moduleEligibility", "suppressedModules", "rootCauseRuleId", "rootCause", "findingIds", "decisionHierarchy"],
+  "properties": {
+    "contractVersion": { "const": "2.0.0" },
+    "scoringVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "scores": { "type": "object" },
+    "bands": { "type": "object" },
+    "assessedWeight": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "readinessStatus": { "type": "string" },
+    "showNumericScore": { "type": "boolean" },
+    "evidenceConfidenceScore": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "dimensionEligibility": { "type": "object" },
+    "moduleEligibility": { "type": "object" },
+    "suppressedModules": { "type": "array" },
+    "rootCauseRuleId": { "type": ["string", "null"] },
+    "rootCause": { "type": "string", "minLength": 1 },
+    "findingIds": { "type": "array", "items": { "type": "string" } },
+    "decisionHierarchy": {
+      "type": "object",
+      "required": ["hierarchyVersion", "provenance", "rootCauseRuleId", "orderedFindingIds", "actions"],
+      "properties": {
+        "hierarchyVersion": { "const": "1.0.0" },
+        "provenance": { "const": "scoreAudit/action-priority" },
+        "rootCauseRuleId": { "type": ["string", "null"] },
+        "orderedFindingIds": { "type": "array", "items": { "type": "string" } },
+        "actions": { "type": "array", "items": { "type": "object", "required": ["findingId", "ruleId", "rank", "priority", "effort", "actionClass", "conversionInfluence", "conversionInfluenceRank"], "properties": { "findingId": { "type": "string" }, "ruleId": { "type": "string" }, "rank": { "type": "integer", "minimum": 1 }, "priority": { "type": "number" }, "effort": { "type": "string" }, "actionClass": { "type": "string" }, "foundationDomain": { "type": ["string", "null"] }, "conversionInfluence": { "type": "string" }, "conversionInfluenceRank": { "type": "number" } } } }
+      }
+    }
+  }
+}

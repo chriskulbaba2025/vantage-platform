@@ -49,6 +49,7 @@
     "acceptance:wp12": "node scripts/acceptance-wp12.js",
     "acceptance:provisioning": "node scripts/acceptance-provisioning.js",
     "acceptance:prysm": "node scripts/acceptance-prysm.js",
+    "verify:prysm-whole-app": "node scripts/prysm-whole-app-gate.js",
     "wp11:preflight": "node scripts/wp11-preflight.js",
     "wp11:scope-check": "node scripts/wp11-scope-check.js",
     "wp11:verify": "node scripts/wp11-verify.js"

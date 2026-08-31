@@ -1253,6 +1253,7 @@ export function createAuditOrchestrator({
         scores: scoreSet.scores || {}, bands: scoreSet.bands || {},
         assessedWeight: scoreSet.assessedWeight ?? 0, readinessStatus: scoreSet.readinessStatus || "",
         showNumericScore: scoreSet.showNumericScore ?? false, evidenceConfidenceScore: scoreSet.evidenceConfidenceScore ?? 0,
+          rootCauseRuleId: scoreSet.rootCauseRuleId || null,
         rootCause: scoreSet.rootCause || "", findings: [],
         conversionPaths: scoreSet.conversionPaths || [],
         readinessMap: scoreSet.readinessMap || [],

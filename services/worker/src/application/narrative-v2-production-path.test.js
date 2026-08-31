@@ -201,6 +201,40 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
   const opportunity = (label) => atom(`${label} is a governed opportunity.`, ref, "OPPORTUNITY");
   const standard = (headline, fields) => ({ headline, ...fields });
 
+    const governedInfluence =
+    writerInput.deterministicAnalysis?.conversionInfluence;
+
+  const governedFindingId =
+    governedInfluence?.orderedFindingIds?.[0];
+
+  const governedAction =
+    governedInfluence?.byFindingId?.[governedFindingId];
+
+  assert.ok(
+    governedFindingId,
+    "WriterInput must expose a governed first action",
+  );
+
+  assert.ok(
+    governedAction,
+    "WriterInput must expose governed metadata for the first action",
+  );
+
+  const governedActionRef =
+    `finding:${governedFindingId}`;
+
+  assert.ok(
+    writerInput.referenceIndex[governedActionRef],
+    "Governed first action must resolve to a Writer finding reference",
+  );
+
+  const governedOpportunity = (label) =>
+    atom(
+      `${label} is a governed opportunity.`,
+      governedActionRef,
+      "OPPORTUNITY",
+    );
+
   return {
     contractVersion: "1.0.0",
     writerOutputVersion: WRITER_OUTPUT_VERSION,
@@ -271,15 +305,15 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
       impactOnReport: limitationInterpret("Limitation impact"),
     }]
   : [],
-    actionPlan: [{
+      actionPlan: [{
       actionId: "ACT-01",
-      priority: 1,
+      priority: governedAction.rank,
       title: "Governed priority",
-      action: opportunity("Governed action"),
-      whyNow: opportunity("Governed why now"),
-      expectedBusinessEffect: opportunity("Governed business effect"),
-      effort: "M",
-      verification: opportunity("Governed verification"),
+      action: governedOpportunity("Governed action"),
+      whyNow: governedOpportunity("Governed why now"),
+      expectedBusinessEffect: governedOpportunity("Governed business effect"),
+      effort: governedAction.effort,
+      verification: governedOpportunity("Governed verification"),
     }],
     executiveDecision: {
       preserve: interpret("Preserve"),
@@ -291,20 +325,30 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
 
 function buildPassingJudgeResponse({ writerInput, passNumber }) {
   const ref = Object.keys(writerInput.referenceIndex)[0];
-  const rubric = Object.fromEntries(Object.entries(RUBRIC).map(([key, maxScore]) => [key, {
-    score: maxScore,
-    maxScore,
-    status: "PASS",
-    rationale: `${key} passes the governed rubric.`,
-    evidenceRefs: key === "nonRepetition" ? [] : [ref],
-    defectIds: [],
-  }]));
+  const hierarchyRef = "analysis:conversionInfluence";
+
+  const rubric = Object.fromEntries(
+    Object.entries(RUBRIC).map(([key, maxScore]) => [key, {
+      score: maxScore,
+      maxScore,
+      status: "PASS",
+      rationale: `${key} passes the governed rubric.`,
+      evidenceRefs:
+        key === "nonRepetition"
+          ? []
+          : key === "conversionInterpretation"
+            ? [hierarchyRef]
+            : [ref],
+      defectIds: [],
+    }]),
+  );
+
   return {
     contractVersion: JUDGE_CONTRACT_VERSION,
     auditId: writerInput.auditId,
     passNumber,
     judgeModelId: "judge-controlled-test",
-    judgePromptVersion: "2.0.0",
+    judgePromptVersion: "2.1.0",
     evaluatedAt: FIXED_TS,
     hardGate: { status: "PASS", violations: [] },
     rubric,
@@ -468,6 +512,22 @@ async function buildContinuationFixture({
         offsite: "UNAVAILABLE",
       },
     },
+    deterministicAnalysis: {
+      conversionInfluence: {
+        orderedFindingIds: ["F-001"],
+        byFindingId: {
+          "F-001": {
+            ruleId: "ROOT-001",
+            rank: 1,
+            priority: 1,
+            effort: "M",
+            actionClass: "CONVERSION",
+            conversionInfluence: "HIGH",
+            conversionInfluenceRank: 1,
+          },
+        },
+      },
+    },
     referenceIndex: {
       "finding:F-001": {
         kind: "finding",
@@ -477,6 +537,10 @@ async function buildContinuationFixture({
         kind: "source-status",
         path:
           "scoreGovernance.sourceDependencies.offsite",
+      },
+      "analysis:conversionInfluence": {
+        kind: "analysis",
+        path: "deterministicAnalysis.conversionInfluence",
       },
     },
   };
