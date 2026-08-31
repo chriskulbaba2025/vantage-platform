@@ -76,6 +76,13 @@ function productionShapedWriterInput() {
       suppressedModules: [],
       rootCause: "Proof and conversion pathways do not consistently match content depth.",
       findingIds: [],
+      decisionHierarchy: {
+        hierarchyVersion: "1.0.0",
+        provenance: "scoreAudit/action-priority",
+        rootCauseRuleId: null,
+        orderedFindingIds: [],
+        actions: [],
+      },
       sourceDependencies: { website: "AVAILABLE", performance: "PARTIAL" },
       conversionPaths: [],
       readinessMap: [],

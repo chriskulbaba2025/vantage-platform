@@ -79,6 +79,23 @@ function scoreSet(overrides = {}) {
     suppressedModules: [],
     rootCause: "Strong subject depth is not consistently carried into proof and conversion pathways.",
     findingIds: [FINDING_ID],
+    decisionHierarchy: {
+      hierarchyVersion: "1.0.0",
+      provenance: "scoreAudit/action-priority",
+      rootCauseRuleId: "technical.canonical.missing",
+      orderedFindingIds: [FINDING_ID],
+      actions: [{
+        findingId: FINDING_ID,
+        ruleId: "technical.canonical.missing",
+        rank: 1,
+        priority: 72,
+        effort: "L",
+        actionClass: "technical_hygiene",
+        foundationDomain: null,
+        conversionInfluence: "supporting",
+        conversionInfluenceRank: 8,
+      }],
+    },
     sourceDependencies: {
       website: "AVAILABLE",
       performance: "AVAILABLE",
@@ -156,6 +173,33 @@ test("WRITER-V2-01: packet preserves exact canonical business, scores, findings 
   assert.deepEqual(packet.capabilityContext.capabilities["trust.proof"].coverage, { requested: 10, completed: 7, failed: 3 });
   assert.equal(packet.scoreGovernance.sourceDependencies.backlinks, "FAILED");
   assert.deepEqual(packet.deterministicAnalysis.contentIdeas.decision, ["Proof topic"]);
+});
+
+test("T1-WRITER-01: current WriterInput projects every persisted hierarchy action without recomputing it", () => {
+  const first = finding({ findingId: "finding-conversion-001", ruleId: "VAN-CONV-001", implementationEffort: "M", finalPriority: 91 });
+  const second = finding({ findingId: "finding-technical-002", ruleId: "VAN-TECH-002", implementationEffort: "H", finalPriority: 38 });
+  const hierarchy = {
+    hierarchyVersion: "1.0.0",
+    provenance: "scoreAudit/action-priority",
+    rootCauseRuleId: "VAN-CONV-001",
+    orderedFindingIds: [second.findingId, first.findingId],
+    actions: [
+      { findingId: second.findingId, ruleId: second.ruleId, rank: 1, priority: 38, effort: "H", actionClass: "foundation", foundationDomain: "technical", conversionInfluence: "blocker", conversionInfluenceRank: 1 },
+      { findingId: first.findingId, ruleId: first.ruleId, rank: 2, priority: 91, effort: "M", actionClass: "conversion", foundationDomain: null, conversionInfluence: "direct", conversionInfluenceRank: 2 },
+    ],
+  };
+  const packet = buildWriterInput({
+    auditId: AUDIT_ID,
+    auditRequest: request(),
+    scoreSet: scoreSet({ contractVersion: "2.0.0", rootCauseRuleId: hierarchy.rootCauseRuleId, findingIds: hierarchy.orderedFindingIds, decisionHierarchy: hierarchy }),
+    findings: [first, second],
+    capabilityEvidence: capabilityEvidence(),
+  });
+
+  assert.deepEqual(packet.deterministicAnalysis.conversionInfluence.orderedFindingIds, hierarchy.orderedFindingIds);
+  assert.deepEqual(packet.deterministicAnalysis.conversionInfluence.byFindingId[second.findingId], {
+    findingId: second.findingId, ruleId: second.ruleId, rank: 1, actionClass: "foundation", foundationDomain: "technical", conversionInfluence: "blocker", conversionInfluenceRank: 1, group: undefined, effort: "H", finalPriority: 38,
+  });
 });
 
 test("WRITER-V2-02: aliases and raw/provider extras do not cross the Writer boundary", () => {

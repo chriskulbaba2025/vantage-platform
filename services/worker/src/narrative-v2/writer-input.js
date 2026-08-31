@@ -12,8 +12,6 @@
 import { buildWriterBusinessContext } from "./writer-business-context.js";
 import { buildWriterScoreContext } from "./writer-scores.js";
 import { buildWriterFindings } from "./writer-findings.js";
-import { buildActionPlan } from "../report/action-priority.js";
-import { buildFoundationChecklist } from "../report/foundation-readiness.js";
 
 export const WRITER_INPUT_VERSION = "1.0.0";
 
@@ -39,6 +37,7 @@ const REQUIRED_SCORESET_FIELDS = Object.freeze([
   "suppressedModules",
   "rootCause",
   "findingIds",
+  "decisionHierarchy",
 ]);
 
 const REQUIRED_CORE_SCORE_FIELDS = Object.freeze([
@@ -429,79 +428,33 @@ function assertFindingIntegrity(
   }
 }
 
-function buildWriterActionModel({
-  auditRequest,
+function buildWriterConversionInfluence(
   scoreSet,
   findings,
-  capabilityEvidence,
-  decisionEvidence,
-}) {
-  if (
-    !decisionEvidence ||
-    typeof decisionEvidence !==
-      "object" ||
-    Array.isArray(
-      decisionEvidence,
-    )
-  ) {
-    throw new Error(
-      "decisionEvidence is required for governed Writer action-plan parity",
-    );
+) {
+  const hierarchy = scoreSet.decisionHierarchy;
+
+  if (!hierarchy || !Array.isArray(hierarchy.actions) || !Array.isArray(hierarchy.orderedFindingIds)) {
+    throw new Error("scoreSet.decisionHierarchy is required for Writer action-plan parity");
   }
 
-  return {
-    ...cloneDefined(
-      scoreSet,
-    ),
+  const findingIds = new Set(findings.map((finding) => finding.findingId));
+  const actionIds = hierarchy.actions.map((action) => action?.findingId);
+  if (
+    actionIds.length !== hierarchy.orderedFindingIds.length ||
+    actionIds.some((findingId, index) => findingId !== hierarchy.orderedFindingIds[index]) ||
+    actionIds.some((findingId) => !findingIds.has(findingId))
+  ) {
+    throw new Error("scoreSet.decisionHierarchy is inconsistent with Writer FindingSet");
+  }
 
-    findings,
-    capabilityEvidence,
-
-    evidence:
-      cloneDefined(
-        decisionEvidence,
-      ),
-
-    input: {
-      businessName:
-        auditRequest
-          ?.businessName ||
-        "",
-
-      targetUrl:
-        decisionEvidence
-          ?.site
-          ?.targetUrl ||
-        auditRequest
-          ?.targetUrl ||
-        "",
-    },
-  };
-}
-
-function buildWriterConversionInfluence(
-  model,
-) {
-  const checklist =
-    buildFoundationChecklist(
-      model,
-    );
-
-  const plan =
-    buildActionPlan(
-      model,
-      checklist,
-    );
-
-  const orderedFindingIds = [];
   const byFindingId = {};
 
   for (
     const action
-    of plan.actions || []
+    of hierarchy.actions
   ) {
-    const findingId =
-      action.finding?.findingId;
+    const findingId = action.findingId;
 
     if (!findingId) {
       throw new Error(
@@ -509,16 +462,11 @@ function buildWriterConversionInfluence(
       );
     }
 
-    orderedFindingIds.push(
-      findingId,
-    );
-
     byFindingId[findingId] =
       Object.freeze({
         findingId,
 
-        ruleId:
-          action.finding.ruleId,
+        ruleId: action.ruleId,
 
         rank:
           action.rank,
@@ -541,27 +489,15 @@ function buildWriterConversionInfluence(
         effort:
           action.effort,
 
-        finalPriority:
-          action.priority,
+        finalPriority: action.priority,
       });
   }
 
   return Object.freeze({
-    hierarchyVersion:
-      "4.2",
-
-    foundationRuleIds:
-      Object.freeze([
-        ...(
-          plan.foundationRuleIds ||
-          []
-        ),
-      ]),
-
-    orderedFindingIds:
-      Object.freeze(
-        orderedFindingIds,
-      ),
+    hierarchyVersion: hierarchy.hierarchyVersion,
+    provenance: hierarchy.provenance,
+    rootCauseRuleId: hierarchy.rootCauseRuleId,
+    orderedFindingIds: Object.freeze([...hierarchy.orderedFindingIds]),
 
     byFindingId:
       Object.freeze(
@@ -844,19 +780,10 @@ export function buildWriterInput({
       DETERMINISTIC_ANALYSIS_FIELDS,
     );
 
-  const actionModel =
-    buildWriterActionModel({
-      auditRequest,
-      scoreSet,
-      findings:
-        projectedFindings,
-      capabilityEvidence,
-      decisionEvidence,
-    });
-
   deterministicAnalysis.conversionInfluence =
     buildWriterConversionInfluence(
-      actionModel,
+      scoreSet,
+      projectedFindings,
     );
 
   const packet = {
