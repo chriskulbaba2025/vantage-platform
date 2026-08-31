@@ -198,8 +198,9 @@ test("T1-WRITER-01: current WriterInput projects every persisted hierarchy actio
 
   assert.deepEqual(packet.deterministicAnalysis.conversionInfluence.orderedFindingIds, hierarchy.orderedFindingIds);
   assert.deepEqual(packet.deterministicAnalysis.conversionInfluence.byFindingId[second.findingId], {
-    findingId: second.findingId, ruleId: second.ruleId, rank: 1, actionClass: "foundation", foundationDomain: "technical", conversionInfluence: "blocker", conversionInfluenceRank: 1, group: undefined, effort: "H", finalPriority: 38,
+    findingId: second.findingId, ruleId: second.ruleId, rank: 1, actionClass: "foundation", foundationDomain: "technical", conversionInfluence: "blocker", conversionInfluenceRank: 1, effort: "H", finalPriority: 38,
   });
+  assert.equal(Object.hasOwn(packet.deterministicAnalysis.conversionInfluence.byFindingId[second.findingId], "group"), false);
 });
 
 test("WRITER-V2-02: aliases and raw/provider extras do not cross the Writer boundary", () => {

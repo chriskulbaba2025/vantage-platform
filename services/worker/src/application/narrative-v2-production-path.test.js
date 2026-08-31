@@ -204,36 +204,25 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
     const governedInfluence =
     writerInput.deterministicAnalysis?.conversionInfluence;
 
-  const governedFindingId =
-    governedInfluence?.orderedFindingIds?.[0];
-
-  const governedAction =
-    governedInfluence?.byFindingId?.[governedFindingId];
-
-  assert.ok(
-    governedFindingId,
-    "WriterInput must expose a governed first action",
-  );
-
-  assert.ok(
-    governedAction,
-    "WriterInput must expose governed metadata for the first action",
-  );
-
-  const governedActionRef =
-    `finding:${governedFindingId}`;
-
-  assert.ok(
-    writerInput.referenceIndex[governedActionRef],
-    "Governed first action must resolve to a Writer finding reference",
-  );
-
-  const governedOpportunity = (label) =>
-    atom(
-      `${label} is a governed opportunity.`,
-      governedActionRef,
-      "OPPORTUNITY",
-    );
+  const governedFindingIds = governedInfluence?.orderedFindingIds || [];
+  assert.ok(governedFindingIds.length > 0, "WriterInput must expose at least one governed action");
+  const governedActions = governedFindingIds.map((findingId, index) => {
+    const action = governedInfluence?.byFindingId?.[findingId];
+    const actionRef = `finding:${findingId}`;
+    assert.ok(action, `WriterInput must expose governed metadata for action ${findingId}`);
+    assert.ok(writerInput.referenceIndex[actionRef], `Governed action ${findingId} must resolve to a Writer finding reference`);
+    const actionOpportunity = (label) => atom(`${label} is a governed opportunity.`, actionRef, "OPPORTUNITY");
+    return {
+      actionId: `ACT-${String(index + 1).padStart(2, "0")}`,
+      priority: action.rank,
+      title: `Governed priority ${index + 1}`,
+      action: actionOpportunity(`Governed action ${index + 1}`),
+      whyNow: actionOpportunity(`Governed why now ${index + 1}`),
+      expectedBusinessEffect: actionOpportunity(`Governed business effect ${index + 1}`),
+      effort: action.effort,
+      verification: actionOpportunity(`Governed verification ${index + 1}`),
+    };
+  });
 
   return {
     contractVersion: "1.0.0",
@@ -305,16 +294,7 @@ function buildPassingWriterOutput({ writerInput, passNumber }) {
       impactOnReport: limitationInterpret("Limitation impact"),
     }]
   : [],
-      actionPlan: [{
-      actionId: "ACT-01",
-      priority: governedAction.rank,
-      title: "Governed priority",
-      action: governedOpportunity("Governed action"),
-      whyNow: governedOpportunity("Governed why now"),
-      expectedBusinessEffect: governedOpportunity("Governed business effect"),
-      effort: governedAction.effort,
-      verification: governedOpportunity("Governed verification"),
-    }],
+    actionPlan: governedActions,
     executiveDecision: {
       preserve: interpret("Preserve"),
       change: interpret("Change"),
@@ -845,15 +825,19 @@ test("NV2-PROD-01: disabled runtime rejects an explicit Narrative v2 request ins
 test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer", async () => {
   let writerCalls = 0;
   let judgeCalls = 0;
+  let writerExecutionInput;
+  let judgeExecutionOutput;
   const { runtime, artifactStore } = buildRuntime({
     narrativeV2: {
       enabled: true,
       writerExecutor: async ({ writerInput, passNumber }) => {
         writerCalls += 1;
+        writerExecutionInput = structuredClone(writerInput);
         return buildPassingWriterOutput({ writerInput, passNumber });
       },
-      judgeExecutor: async ({ writerInput, passNumber }) => {
+      judgeExecutor: async ({ writerInput, writerOutput, passNumber }) => {
         judgeCalls += 1;
+        judgeExecutionOutput = structuredClone(writerOutput);
         return buildPassingJudgeResponse({ writerInput, passNumber });
       },
     },
@@ -877,19 +861,33 @@ test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judg
 
   const writerInputKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report-v2/narrative-v2/writer-input.json`;
   const orchestrationKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report-v2/narrative-v2/orchestration.json`;
+  const scoresKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/canonical/scores.json`;
   const pageKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report-v2/pages/index.html`;
   const oldNarrativeKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report/narrative.json`;
 
   const writerInput = await readJson(artifactStore, writerInputKey);
   const orchestration = await readJson(artifactStore, orchestrationKey);
+  const scores = await readJson(artifactStore, scoresKey);
   const html = Buffer.from(await artifactStore.get(pageKey)).toString("utf8");
 
   assert.equal(writerInput.auditId, created.auditId);
+  assert.ok(scores.decisionHierarchy.orderedFindingIds.length >= 2, "production-composed hierarchy proof requires at least two scored findings");
+  const expectedActions = scores.decisionHierarchy.actions.map(({ findingId, ruleId, rank, effort, actionClass, conversionInfluence }) => ({ findingId, ruleId, rank, effort, actionClass, conversionInfluence }));
+  const writerActions = writerInput.deterministicAnalysis.conversionInfluence.orderedFindingIds.map((findingId) => ({
+    findingId,
+    ...writerInput.deterministicAnalysis.conversionInfluence.byFindingId[findingId],
+  })).map(({ findingId, ruleId, rank, effort, actionClass, conversionInfluence }) => ({ findingId, ruleId, rank, effort, actionClass, conversionInfluence }));
+  assert.equal(writerInput.deterministicAnalysis.conversionInfluence.rootCauseRuleId, scores.decisionHierarchy.rootCauseRuleId);
+  assert.deepEqual(writerActions, expectedActions, "persisted/reloaded WriterInput must preserve every governed hierarchy action");
+  assert.deepEqual(writerExecutionInput.deterministicAnalysis.conversionInfluence, writerInput.deterministicAnalysis.conversionInfluence, "controlled Writer must consume the persisted/reloaded hierarchy unchanged");
+  assert.deepEqual(judgeExecutionOutput.actionPlan.map((action, index) => ({ priority: action.priority, effort: action.effort, findingId: writerActions[index]?.findingId })), expectedActions.map(({ findingId, rank, effort }) => ({ priority: rank, effort, findingId })), "controlled Judge must receive every governed action in persisted order");
+  assert.deepEqual(orchestration.passes[0].writerOutput.actionPlan, judgeExecutionOutput.actionPlan, "release candidate must persist the validated multi-action Writer output");
   assert.equal(orchestration.status, "RELEASE_CANDIDATE");
   assert.equal(orchestration.passCount, 1);
   assert.match(html, /id="narrative-layer"/);
   assert.match(html, /A\. Conversion Readiness/);
   assert.match(html, /Evidence detail/);
+  for (const action of judgeExecutionOutput.actionPlan) assert.match(html, new RegExp(action.title));
   assert.equal(await artifactStore.exists(oldNarrativeKey), false, "Narrative v2 must not run/persist the legacy WP9 narrative artifact");
 });
 

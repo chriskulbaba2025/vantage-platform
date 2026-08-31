@@ -462,8 +462,7 @@ function buildWriterConversionInfluence(
       );
     }
 
-    byFindingId[findingId] =
-      Object.freeze({
+    const actionRecord = {
         findingId,
 
         ruleId: action.ruleId,
@@ -490,7 +489,17 @@ function buildWriterConversionInfluence(
           action.effort,
 
         finalPriority: action.priority,
-      });
+      };
+
+    // WriterInput is persisted as JSON and must have one canonical identity
+    // before persistence. JSON.stringify omits undefined object properties;
+    // omit them at construction time so in-memory Writer execution and a
+    // persisted/reloaded WriterInput are strictly equal.
+    byFindingId[findingId] = Object.freeze(
+      Object.fromEntries(
+        Object.entries(actionRecord).filter(([, value]) => value !== undefined),
+      ),
+    );
   }
 
   return Object.freeze({
