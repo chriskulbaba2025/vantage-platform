@@ -73,7 +73,7 @@ test("WRITER-STRUCT-01: schema fixes deterministic statement classes and metadat
   assert.deepEqual(schema.properties.auditId.enum, [AUDIT_ID]);
   assert.deepEqual(schema.properties.passNumber.enum, [1]);
   assert.deepEqual(schema.properties.modelId.enum, ["gpt-5.6-terra"]);
-  assert.deepEqual(schema.properties.promptVersion.enum, ["2.0.0"]);
+  assert.deepEqual(schema.properties.promptVersion.enum, ["2.1.0"]);
   assert.deepEqual(
     schema.properties.conversion.properties.priority.properties.statementClass.enum,
     ["INTERPRETATION"],

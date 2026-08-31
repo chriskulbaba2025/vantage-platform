@@ -84,6 +84,15 @@ test("INTERPRETATION-04: siteFootprint survives ScoreSet into WriterInput and re
   };
 
   const scoreSet = buildScoreSet(model, null, null);
+  scoreSet.rootCauseRuleId = null;
+  scoreSet.findingIds = [];
+  scoreSet.decisionHierarchy = {
+    hierarchyVersion: "1.0.0",
+    provenance: "scoreAudit/action-priority",
+    rootCauseRuleId: null,
+    orderedFindingIds: [],
+    actions: [],
+  };
 
   assert.deepEqual(scoreSet.siteFootprint, siteFootprint);
 

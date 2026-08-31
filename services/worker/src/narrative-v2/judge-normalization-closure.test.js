@@ -26,11 +26,11 @@ function responseWithLowScoreAndNoDefects() {
     defectIds: [],
   }]));
   return {
-    contractVersion: "1.0.0",
+    contractVersion: "1.1.0",
     auditId: AUDIT_ID,
     passNumber: 1,
     judgeModelId: "judge-structured",
-    judgePromptVersion: "2.0.0",
+    judgePromptVersion: "2.1.0",
     evaluatedAt: "2026-08-21T12:00:00.000Z",
     hardGate: { status: "PASS", violations: [] },
     rubric,
