@@ -299,6 +299,13 @@ test("PDV5-WRITER-OUT-04: bounded non-assessment language is accepted without AI
   );
   const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
   assert.deepEqual(result, { valid: true, errors: [] });
+
+  output.aiSearch.citationReadiness = atom(
+    "The supplied evidence does not directly assess citation readiness sufficiently to establish a limitation.",
+    ["score:contentFunnelDimension"],
+  );
+  const scopedResult = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(scopedResult, { valid: true, errors: [] });
 });
 
 test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {

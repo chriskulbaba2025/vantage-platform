@@ -10,6 +10,10 @@ import {
 } from "node:path";
 
 import {
+  tmpdir,
+} from "node:os";
+
+import {
   createFsArtifactStore,
 } from "./src/storage/fs-artifact-store.js";
 
@@ -60,9 +64,11 @@ if (
   );
 }
 
+const sampleId = `fresh-live-${Date.now()}-${process.pid}`;
 const ledgerDir = join(
-  narrativeDir,
-  "fresh-live-ledger",
+  tmpdir(),
+  "prysm-pdv5-evidence",
+  sampleId,
 );
 
 await mkdir(
@@ -92,7 +98,7 @@ binding.registerAuditScope({
   clientId: auditRequest.clientId,
   auditId: writerInput.auditId,
   executionId:
-    `tbk-fresh-narrative-${Date.now()}`,
+    `tbk-fresh-narrative-${sampleId}`,
 });
 
 console.log(
@@ -121,7 +127,7 @@ const result =
   });
 
 const outputPath = join(
-  narrativeDir,
+  ledgerDir,
   "orchestration-refresh.json",
 );
 
