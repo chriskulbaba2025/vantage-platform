@@ -291,6 +291,16 @@ test("PDV5-WRITER-OUT-03: AI-search support cannot be inferred from finding meta
   assert.match(result.errors.join("\n"), /non-AI evidence into an established AI-search limitation/);
 });
 
+test("PDV5-WRITER-OUT-04: bounded non-assessment language is accepted without AI evidence", () => {
+  const output = validOutput();
+  output.aiSearch.answerability = atom(
+    "Direct-answer content readiness cannot be evaluated because page body content was not collected.",
+    ["score:contentFunnelDimension"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
 test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {
   const unsupported = validOutput();
   unsupported.executiveConclusion.narrative = atom(

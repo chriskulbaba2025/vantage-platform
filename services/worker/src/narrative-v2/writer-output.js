@@ -408,7 +408,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:limited|limitation|weak|poor|missing|absent|lacks?|insufficient|not ready|cannot|can't)\b/i;
 
   const boundedAiPattern =
-    /\b(?:may|might|could|potential|opportunity|not assessed|not established|does not establish|cannot establish|requires? (?:separate )?assessment)\b/i;
+    /\b(?:may|might|could|potential|opportunity|not assessed|not established|does not establish|cannot (?:be )?(?:evaluated|assessed|established|concluded|determined)|requires? (?:separate )?assessment)\b/i;
 
   const negatedAiEstablishmentPattern =
     /\bno\b[^.!?]{0,120}\b(?:limitation|constraint|weakness|gap)\b[^.!?]{0,80}\b(?:established|identified|observed|detected)\b/i;
