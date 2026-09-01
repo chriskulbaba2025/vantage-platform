@@ -414,6 +414,23 @@ test("PDV5-WRITER-OUT-08: established assessed conversion paths are not commerci
   assert.deepEqual(result, { valid: true, errors: [] });
 });
 
+test("PDV5-WRITER-OUT-09: conversion-action terms cannot support asserted commercial outcomes", () => {
+  const unsupportedClaims = [
+    "The conversion form confirmed revenue.",
+    "The conversion action established increased traffic.",
+    "The CTA shows sales.",
+    "The assessed route confirms conversions.",
+  ];
+
+  for (const text of unsupportedClaims) {
+    const output = validOutput();
+    output.conversion.whatWorks = atom(text, ["finding:F-001"]);
+    const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
 test("PDV5-WRITER-OUT-01: truthful PARTIAL negations preserve their scope", () => {
   const input = writerInput();
   input.capabilityContext.capabilities["technical.indexability"].status = "PARTIAL";

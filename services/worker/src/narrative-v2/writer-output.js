@@ -410,6 +410,9 @@ export function validateWriterSemanticFidelity(
   const observedConversionActionPattern =
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
 
+  const observedConversionActionCompoundPattern =
+    /\bconversion[-\s]+(?:action|path|route|cta|form|assessment)s?\b/gi;
+
   const competitorDifferentiatorPattern =
     /\b(?:differentiator|advantage|superiority|market position)\b/i;
 
@@ -466,7 +469,9 @@ export function validateWriterSemanticFidelity(
       !boundedOutcomePattern.test(sentence) &&
       !(
         observedConversionActionPattern.test(sentence) &&
-        !/\b(?:lead|enquir(?:y|ies)|inquir(?:y|ies)|sales?|customers?|pipeline)\b/i.test(sentence)
+        !commercialOutcomePattern.test(
+          sentence.replace(observedConversionActionCompoundPattern, ""),
+        )
       )
     )) {
       errors.push(
