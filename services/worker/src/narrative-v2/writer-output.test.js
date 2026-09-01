@@ -308,6 +308,13 @@ test("PDV5-WRITER-OUT-04: bounded non-assessment language is accepted without AI
   assert.deepEqual(scopedResult, { valid: true, errors: [] });
 });
 
+test("PDV5-WRITER-PROMPT-01: citation readiness has an explicit direct-evidence boundary", () => {
+  const prompt = buildWriterPrompt({ writerInput: writerInput(), passNumber: 1 });
+  assert.match(prompt, /applies separately to every aiSearch field/);
+  assert.match(prompt, /content score, content finding.*not direct support for citation readiness/);
+  assert.match(prompt, /Citation readiness was not directly assessed sufficiently to establish a limitation/);
+});
+
 test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {
   const unsupported = validOutput();
   unsupported.executiveConclusion.narrative = atom(
