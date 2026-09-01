@@ -394,6 +394,26 @@ test("PDV5-WRITER-OUT-04: causal certainty is rejected in opportunity atoms too"
   assert.ok(result.errors.some((error) => /unmeasured business outcome with causal certainty/.test(error)));
 });
 
+test("PDV5-WRITER-OUT-07: observed conversion actions are not misclassified as commercial outcomes", () => {
+  const output = validOutput();
+  output.conversion.whatWorks = atom(
+    "The conversion assessment confirmed a visible, interactable and unobstructed action on the assessed pages.",
+    ["finding:F-001"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
+test("PDV5-WRITER-OUT-08: established assessed conversion paths are not commercial outcome claims", () => {
+  const output = validOutput();
+  output.conversion.constraints = atom(
+    "The available conversion-path assessment established a clear route; it did not measure completed enquiries or downstream outcomes.",
+    ["finding:F-001"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
 test("PDV5-WRITER-OUT-01: truthful PARTIAL negations preserve their scope", () => {
   const input = writerInput();
   input.capabilityContext.capabilities["technical.indexability"].status = "PARTIAL";

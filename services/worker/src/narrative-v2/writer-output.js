@@ -402,10 +402,13 @@ export function validateWriterSemanticFidelity(
     /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|decreases?|reduces?|improves?|hurts?|damages?|loses?|costs?)\b/i;
 
   const boundedOutcomePattern =
-    /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?)\b/i;
+    /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?|not measured|did not measure)\b/i;
 
   const establishedOutcomePattern =
     /\b(?:confirmed|confirms|established|proven|demonstrates?|shows?)\b/i;
+
+  const observedConversionActionPattern =
+    /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
 
   const competitorDifferentiatorPattern =
     /\b(?:differentiator|advantage|superiority|market position)\b/i;
@@ -460,7 +463,11 @@ export function validateWriterSemanticFidelity(
     if (sentences.some((sentence) =>
       commercialOutcomePattern.test(sentence) &&
       (causalCertaintyPattern.test(sentence) || establishedOutcomePattern.test(sentence)) &&
-      !boundedOutcomePattern.test(sentence)
+      !boundedOutcomePattern.test(sentence) &&
+      !(
+        observedConversionActionPattern.test(sentence) &&
+        !/\b(?:lead|enquir(?:y|ies)|inquir(?:y|ies)|sales?|customers?|pipeline)\b/i.test(sentence)
+      )
     )) {
       errors.push(
         `${path}.text states an unmeasured business outcome with causal certainty`,
