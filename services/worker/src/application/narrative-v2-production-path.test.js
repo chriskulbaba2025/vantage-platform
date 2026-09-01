@@ -812,7 +812,9 @@ async function putJson(store, scope, value) {
 }
 
 test("NV2-PROD-01: disabled runtime rejects an explicit Narrative v2 request instead of silently falling back", async () => {
-  const { runtime } = buildRuntime();
+  // Pin the capability off so the assertion is hermetic when the closure
+  // runner supplies live Narrative v2 environment variables.
+  const { runtime } = buildRuntime({ narrativeV2: { enabled: false } });
   await assert.rejects(
     runtime.auditService.createAudit({
       ...baseInput(),
