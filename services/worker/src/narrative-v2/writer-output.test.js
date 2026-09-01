@@ -320,6 +320,8 @@ test("PDV5-WRITER-PROMPT-02: causal certainty has an atom-wide pre-emission rewr
   assert.match(prompt, /scan EVERY atom/);
   assert.match(prompt, /business-outcome noun paired with causal\/certainty language/);
   assert.match(prompt, /conversion impact was not measured/);
+  assert.match(prompt, /EVERY sentence in EVERY atom/);
+  assert.match(prompt, /whole output is invalid/);
 });
 
 test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {
@@ -347,6 +349,17 @@ test("PDV5-WRITER-OUT-03: bounded language in another sentence cannot launder ca
     "The missing proof will reduce conversions. This may create hesitation.",
     ["finding:F-001"],
     "INTERPRETATION",
+  );
+  const result = validateWriterOutput(unsupported, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.ok(result.errors.some((error) => /unmeasured business outcome with causal certainty/.test(error)));
+});
+
+test("PDV5-WRITER-OUT-04: causal certainty is rejected in opportunity atoms too", () => {
+  const unsupported = validOutput();
+  unsupported.funnelOpportunities.awareness[0] = atom(
+    "This change will increase leads.",
+    ["finding:F-001"],
+    "OPPORTUNITY",
   );
   const result = validateWriterOutput(unsupported, { writerInput: writerInput(), expectedPassNumber: 1 });
   assert.ok(result.errors.some((error) => /unmeasured business outcome with causal certainty/.test(error)));

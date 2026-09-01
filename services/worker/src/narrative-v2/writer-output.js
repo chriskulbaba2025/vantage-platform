@@ -447,19 +447,18 @@ export function validateWriterSemanticFidelity(
       );
     }
 
-    if (atom.statementClass === WRITER_STATEMENT_CLASS.INTERPRETATION) {
-      // Evaluate each sentence independently. A bounded marker in a later
-      // sentence must not launder an earlier unsupported causal claim.
-      const sentences = text.split(/(?<=[.!?;])\s+/).filter(Boolean);
-      if (sentences.some((sentence) =>
-        commercialOutcomePattern.test(sentence) &&
-        causalCertaintyPattern.test(sentence) &&
-        !boundedOutcomePattern.test(sentence)
-      )) {
-        errors.push(
-          `${path}.text states an unmeasured business outcome with causal certainty`,
-        );
-      }
+    // Every atom can reach an executive reader, including opportunities and
+    // action text. A bounded marker in a different sentence must not launder
+    // an unsupported causal claim in the same output.
+    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (sentences.some((sentence) =>
+      commercialOutcomePattern.test(sentence) &&
+      causalCertaintyPattern.test(sentence) &&
+      !boundedOutcomePattern.test(sentence)
+    )) {
+      errors.push(
+        `${path}.text states an unmeasured business outcome with causal certainty`,
+      );
     }
 
     if (
