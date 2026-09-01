@@ -52,6 +52,8 @@ const { createMemoryLifecycleRepository } = await import("../src/lifecycle/memor
 const { createLocalReportStore, REQUIRED_APPROVED_PAGE_FILENAMES } = await import("../src/storage/report-store.js");
 const { LIFECYCLE_STATE } = await import("../src/lifecycle/state-enum.js");
 const { createProductionContractValidator } = await import("../src/application/production-bootstrap.js");
+const { scoreAudit } = await import("../src/scoring/vantage-score.js");
+const { buildScoreSet, persistScores } = await import("../src/scoring/scoring-service.js");
 const T = LIFECYCLE_STATE;
 
 // --- Real contract validator (production bootstrap) ---
@@ -560,6 +562,33 @@ const checklist = ["source_failures","top_ten_findings","high_severity","competi
   check("Published retrieval fails closed when the approved artifact is tampered",
     !!tamperBlocked && tamperBlocked.statusCode === 409,
     tamperBlocked ? `statusCode=${tamperBlocked.statusCode}` : "no error");
+}
+
+// P-B03 / PDV3: exercise the alternate non-viable producer through the
+// current ScoreSet persistence boundary. An empty hierarchy is valid governed
+// state; omission is not.
+{
+  const notAssessedEvidence = JSON.parse(Buffer.from(await artifactStore.get(deKey)).toString("utf8"));
+  const pB03AuditId = randomUUID();
+  notAssessedEvidence.site = {
+    ...notAssessedEvidence.site,
+    sourceStatus: "NOT_CONNECTED",
+    status: "NOT_CONNECTED",
+  };
+  const notAssessedModel = scoreAudit(
+    { auditId: pB03AuditId, targetUrl: `https://${SENTINELS.domain}`, competitors: [] },
+    notAssessedEvidence,
+    { scoredAt: "2026-01-15T12:00:00.000Z" },
+  );
+  const notAssessedScoreSet = buildScoreSet(notAssessedModel, { findings: [] }, null);
+  await persistScores({
+    store: artifactStore,
+    scope: { tenantId, clientId, auditId: pB03AuditId },
+    scoreSet: notAssessedScoreSet,
+    validateContract,
+  });
+  const persisted = JSON.parse(Buffer.from(await artifactStore.get(buildArtifactKey({ tenantId, clientId, auditId: pB03AuditId, category: "canonical", artifactName: "scores.json" }))).toString("utf8"));
+  check("P-B03: Not-Assessed ScoreSet persists and reloads with empty hierarchy", persisted.rootCauseRuleId === null && persisted.decisionHierarchy?.orderedFindingIds?.length === 0);
 }
 
 // Exact ordered terminal lifecycle including publication

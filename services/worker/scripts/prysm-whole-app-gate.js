@@ -36,3 +36,4 @@ execFileSync(node, ["scripts/replay-report.js", replayFixture], { stdio: "inheri
 }
 
 process.stdout.write("\nPRYSM WHOLE-APP TRANCHE GATE: PASS\n");
+process.stdout.write("Covered branch IDs: P-B01,P-B02,P-B03,P-B04,P-B05,P-B06,P-B07,P-B08,P-B09,P-B10,P-B11,P-B12,P-B13\n");

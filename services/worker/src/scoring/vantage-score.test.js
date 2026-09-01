@@ -482,6 +482,14 @@ test("BLOCKED crawl suppresses all crawl-dependent scores", () => {
   assert.notEqual(model.scores.performance, null);
   assert.equal(model._crawlSuppressed, true);
   assert.match(model.rootCause, /blocked/i);
+  assert.deepEqual(model.decisionHierarchy, {
+    hierarchyVersion: "1.0.0",
+    provenance: "scoreAudit/action-priority",
+    rootCauseRuleId: null,
+    orderedFindingIds: [],
+    actions: [],
+  });
+  assert.equal(model.rootCauseRuleId, null);
 });
 
 test("NOT_CONNECTED crawl suppresses all crawl-dependent scores", () => {

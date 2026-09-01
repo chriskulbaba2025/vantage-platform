@@ -740,6 +740,17 @@ function buildNotAssessedModel(
       ),
 
     suppressedModules,
+    // Not-Assessed is still a valid current ScoreSet: the governed decision
+    // hierarchy is explicitly empty rather than omitted or reconstructed by
+    // a downstream consumer.
+    rootCauseRuleId: null,
+    decisionHierarchy: {
+      hierarchyVersion: "1.0.0",
+      provenance: "scoreAudit/action-priority",
+      rootCauseRuleId: null,
+      orderedFindingIds: [],
+      actions: [],
+    },
     rootCause,
     findings: [],
     suppressedFindingReasons: [],
