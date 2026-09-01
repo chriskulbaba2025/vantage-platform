@@ -306,6 +306,13 @@ test("PDV5-WRITER-OUT-04: bounded non-assessment language is accepted without AI
   );
   const scopedResult = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
   assert.deepEqual(scopedResult, { valid: true, errors: [] });
+
+  output.aiSearch.answerability = atom(
+    "Answerability was not directly assessed sufficiently to establish a limitation.",
+    ["score:contentFunnelDimension"],
+  );
+  const directPassiveResult = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(directPassiveResult, { valid: true, errors: [] });
 });
 
 test("PDV5-WRITER-PROMPT-01: citation readiness has an explicit direct-evidence boundary", () => {
