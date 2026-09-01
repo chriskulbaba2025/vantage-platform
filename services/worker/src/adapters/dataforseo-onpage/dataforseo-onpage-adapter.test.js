@@ -2452,6 +2452,7 @@ test(
         descriptions: true,
         canonicals: true,
         headings: true,
+        images: false,
       },
     );
 

@@ -172,6 +172,7 @@ test("T-GATE-IMG-01: schema-coerced zero image denominator does not contradict b
       imagesMissingAlt: 222,
       imagesMissingDimensions: 0,
       _contentEvidenceAvailable: false,
+      _metaFieldAvailability: { images: false },
     },
   });
 
@@ -247,6 +248,43 @@ test("T-GATE-IMG-02: known zero image denominator still rejects a positive image
     imageError,
     "known zero denominator with positive numerator must remain blocked",
   );
+});
+
+test("T-GATE-P-B15-01: assessed-scope PARTIAL heading evidence passes", () => {
+  const evidence = baseEvidence();
+  const model = baseModel({
+    evidence,
+    findings: [{
+      ruleId: "VAN-TECH-002",
+      title: "Heading structure needs review",
+      evidenceText: "2 assessed pages missing H1; 1 assessed page with multiple H1s; unassessed pages remain unknown",
+      evidence: [{ sourceStatus: SOURCE_STATUS.PARTIAL, field: "headings", observedValue: "assessed pages" }],
+      businessImpact: "Search clarity is bounded to the assessed pages.",
+      recommendation: "Review heading structure.",
+      scoreBearing: true,
+    }],
+  });
+  const { passed, errors } = runFinalizationGate(model, evidence);
+  assert.equal(passed, true, JSON.stringify(errors));
+});
+
+test("T-GATE-P-B15-02: unqualified PARTIAL heading absence remains blocked", () => {
+  const evidence = baseEvidence();
+  const model = baseModel({
+    evidence,
+    findings: [{
+      ruleId: "VAN-TECH-002",
+      title: "Pages missing H1",
+      evidenceText: "Pages missing H1",
+      evidence: [{ sourceStatus: SOURCE_STATUS.PARTIAL, field: "headings", observedValue: "missing" }],
+      businessImpact: "Pages lack heading structure.",
+      recommendation: "Review heading structure.",
+      scoreBearing: true,
+    }],
+  });
+  const { passed, errors } = runFinalizationGate(model, evidence);
+  assert.equal(passed, false);
+  assert.ok(errors.some((error) => error.field === "findings[].evidence"));
 });
 
 // PRYSM-INCIDENT-01 — production incident regression.  The real production

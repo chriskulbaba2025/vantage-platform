@@ -322,14 +322,7 @@ const imageDenominator = site.imageCount;
 
 const imageDenominatorUnavailable =
   site._metaFieldAvailability?.images === false ||
-  (
-    site._metaFieldAvailability?.images == null &&
-    site._contentEvidenceAvailable === false &&
-    (
-      imageDenominator == null ||
-      imageDenominator === 0
-    )
-  );
+  (site._metaFieldAvailability?.images == null && imageDenominator == null);
 
 if (
   imageDenominator != null &&
@@ -431,7 +424,7 @@ for (
         /\b(missing|absent|none|lacks?|without)\b|\bno\b|\bdoes not have\b/i;
 
       const boundedPartialPattern =
-        /\b(partial|available assessment|available coverage|observed scope|not detected|not observed|does not establish|absence is not established)\b/i;
+        /\b(partial|available assessment|available coverage|observed scope|assessed pages?\b.*\bunassessed pages? remain unknown|not detected|not observed|does not establish|absence is not established)\b/i;
 
       if (
         absencePattern.test(claimText) &&

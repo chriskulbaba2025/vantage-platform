@@ -1341,6 +1341,10 @@ function summarizeSite({
       canonicals: true, // page-derived (computed from collected canonicals)
       headings:
         hasPageHeadingData || typeof metricChecks.no_h1_tag === "number",
+      // An image denominator is available only when the pages endpoint
+      // supplied image records. A positive summary no_image_alt count is a
+      // numerator only and must not be treated as denominator evidence.
+      images: hasPageImageData,
     },
     _contentEvidenceAvailable: contentEvidenceAvailable,
     _responseHeadersAvailable: responseHeadersAvailable,
