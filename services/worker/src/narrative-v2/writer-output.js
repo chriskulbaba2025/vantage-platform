@@ -8,7 +8,7 @@
 import { governedStatusForWriterReference } from "./writer-reference.js";
 
 export const WRITER_OUTPUT_VERSION = "1.0.0";
-export const WRITER_PROMPT_VERSION = "2.1.0";
+export const WRITER_PROMPT_VERSION = "2.2.0";
 export const WRITER_STATEMENT_CLASS = Object.freeze({
   INTERPRETATION: "INTERPRETATION",
   OPPORTUNITY: "OPPORTUNITY",

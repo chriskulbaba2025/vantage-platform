@@ -277,6 +277,25 @@ test("PDV1-WRITER-OUT-01: explicit negated AI-search establishment is bounded wi
   assert.match(establishedResult.errors.join("\n"), /non-AI evidence into an established AI-search limitation/);
 });
 
+test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {
+  const unsupported = validOutput();
+  unsupported.executiveConclusion.narrative = atom(
+    "The missing proof will reduce conversions and cost sales.",
+    ["finding:F-001"],
+  );
+  const unsupportedResult = validateWriterOutput(unsupported, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.equal(unsupportedResult.valid, false);
+  assert.match(unsupportedResult.errors.join("\n"), /unmeasured business outcome with causal certainty/);
+
+  const bounded = validOutput();
+  bounded.executiveConclusion.narrative = atom(
+    "The observed proof condition may create a conversion opportunity.",
+    ["finding:F-001"],
+  );
+  const boundedResult = validateWriterOutput(bounded, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(boundedResult, { valid: true, errors: [] });
+});
+
 test("PDV5-WRITER-OUT-01: truthful PARTIAL negations preserve their scope", () => {
   const input = writerInput();
   input.capabilityContext.capabilities["technical.indexability"].status = "PARTIAL";
