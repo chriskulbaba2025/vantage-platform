@@ -23,7 +23,10 @@ for (const path of required) {
 
 const commands = [
   [["--test", "src/evidence/*.test.js", "src/scoring/*.test.js", "src/report/*.test.js", "src/audit/*.test.js", "src/storage/*.test.js", "src/adapters/**/*.test.js", "src/auth/*.test.js", "src/n8n/*.test.js", "src/utils/*.test.js"], "worker regression families"],
-  [["--test", "src/application/*.test.js"], "application production-path tests"],
+  // production-bootstrap.test.js temporarily instruments globalThis.fetch;
+  // serialize this family so sibling production-path files cannot race that
+  // process-local proof harness and create false provider-call failures.
+  [["--test", "--test-concurrency=1", "src/application/*.test.js"], "application production-path tests"],
   [["--test", "src/narrative-v2/*.test.js"], "Narrative v2 tests"],
   [["--test", "src/contracts/validator.test.js"], "schema and contract tests"],
   [["--test", "test-fixtures/artifacts/memory-artifact-store.test.js", "test-fixtures/artifacts/fs-artifact-store.test.js", "test-fixtures/artifacts/object-artifact-store.test.js"], "artifact tests"],
@@ -39,6 +42,11 @@ for (const [args, label] of commands) {
   if (label === "application production-path tests") {
     env.VANTAGE_DEV_MEMORY_STORE = "true";
     env.VANTAGE_TEST_MODE = "true";
+    // BL-12 explicitly proves the no-credentials fail-closed branch. Do not
+    // let a developer/CI DataForSEO environment turn that proof into a live
+    // provider call or a false failure.
+    delete env.DATAFORSEO_LOGIN;
+    delete env.DATAFORSEO_PASSWORD;
   }
   execFileSync(node, args, { stdio: "inherit", env });
 }
