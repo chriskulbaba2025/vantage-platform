@@ -315,6 +315,13 @@ test("PDV5-WRITER-PROMPT-01: citation readiness has an explicit direct-evidence 
   assert.match(prompt, /Citation readiness was not directly assessed sufficiently to establish a limitation/);
 });
 
+test("PDV5-WRITER-PROMPT-02: causal certainty has an atom-wide pre-emission rewrite guard", () => {
+  const prompt = buildWriterPrompt({ writerInput: writerInput(), passNumber: 1 });
+  assert.match(prompt, /scan EVERY atom/);
+  assert.match(prompt, /business-outcome noun paired with causal\/certainty language/);
+  assert.match(prompt, /conversion impact was not measured/);
+});
+
 test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {
   const unsupported = validOutput();
   unsupported.executiveConclusion.narrative = atom(
