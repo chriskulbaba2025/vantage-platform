@@ -512,6 +512,8 @@ function judgePrompt({
     "When WriterInput.deterministicAnalysis.conversionInfluence is present, evaluate whether the Writer follows that governed Conversion-First hierarchy. rubric.conversionInterpretation.evidenceRefs MUST include the exact reference ID analysis:conversionInfluence.",
     "UNKNOWN, UNAVAILABLE, PARTIAL, or not-deeply-parsed evidence must never be interpreted as ABSENT, MISSING, FALSE, ZERO, or fully assessed. PARTIAL content evidence supports only not-detected-in-the-available-assessment language, with the partial-coverage qualification preserved.",
     "Do not treat a content-detection gap as an established AI-search limitation unless WriterInput directly assesses and supports that AI-search condition. Otherwise require opportunity language.",
+    "Partial or directional competitor evidence does not establish a present differentiator, advantage, disadvantage, market position, or superiority; require opportunity language unless the cited evidence directly establishes it.",
+    "A visible form, CTA, enquiry route, or conversion-path condition is not a confirmed conversion, lead, enquiry, or customer outcome; reject unsupported certainty and require observed-path or bounded-opportunity wording.",
     "Before issuing REVISE, perform the evidence-fidelity check across every WriterOutput section and report all material evidence-fidelity defects found in that pass. A field containing an unresolved material defect must not be treated as locked or clean for a subsequent targeted revision.",
     "Return ONLY one JSON object matching JudgeResponse contractVersion 1.0.0.",
     "The decision must follow the supplied deterministic thresholds. No markdown or code fences.",

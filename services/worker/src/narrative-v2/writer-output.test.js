@@ -222,6 +222,28 @@ function validOutput(passNumber = 1) {
   };
 }
 
+test("PDV5-WRITER-OUT-05: partial competitor evidence cannot become a confirmed differentiator", () => {
+  const output = validOutput();
+  output.competitors.differentiatorToProtect = atom(
+    "The assessed comparison confirms a differentiator to protect.",
+    ["source:competitors"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput() });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /established differentiator/);
+});
+
+test("PDV5-WRITER-OUT-06: confirmed conversion outcomes are rejected without direct measurement", () => {
+  const output = validOutput();
+  output.executiveDecision.doNext = opportunity(
+    "The assessed route confirms conversions and enquiries.",
+    ["score:conversionPathwaysDimension"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput() });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /unmeasured business outcome/);
+});
+
 test("WRITER-OUT-01: complete governed Writer output validates", () => {
   const result = validateWriterOutput(validOutput(), { writerInput: writerInput(), expectedPassNumber: 1 });
   assert.deepEqual(result, { valid: true, errors: [] });

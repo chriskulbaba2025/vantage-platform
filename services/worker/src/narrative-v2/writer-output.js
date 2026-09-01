@@ -8,7 +8,7 @@
 import { governedStatusForWriterReference } from "./writer-reference.js";
 
 export const WRITER_OUTPUT_VERSION = "1.0.0";
-export const WRITER_PROMPT_VERSION = "2.2.0";
+export const WRITER_PROMPT_VERSION = "2.3.0";
 export const WRITER_STATEMENT_CLASS = Object.freeze({
   INTERPRETATION: "INTERPRETATION",
   OPPORTUNITY: "OPPORTUNITY",
@@ -404,6 +404,12 @@ export function validateWriterSemanticFidelity(
   const boundedOutcomePattern =
     /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?)\b/i;
 
+  const establishedOutcomePattern =
+    /\b(?:confirmed|confirms|established|proven|demonstrates?|shows?)\b/i;
+
+  const competitorDifferentiatorPattern =
+    /\b(?:differentiator|advantage|superiority|market position)\b/i;
+
   const negativeAiPattern =
     /\b(?:limited|limitation|weak|poor|missing|absent|lacks?|insufficient|not ready|cannot|can't)\b/i;
 
@@ -453,11 +459,23 @@ export function validateWriterSemanticFidelity(
     const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
     if (sentences.some((sentence) =>
       commercialOutcomePattern.test(sentence) &&
-      causalCertaintyPattern.test(sentence) &&
+      (causalCertaintyPattern.test(sentence) || establishedOutcomePattern.test(sentence)) &&
       !boundedOutcomePattern.test(sentence)
     )) {
       errors.push(
         `${path}.text states an unmeasured business outcome with causal certainty`,
+      );
+    }
+
+    if (
+      path.endsWith("competitors.differentiatorToProtect") &&
+      [...statuses].some((status) => status === "PARTIAL") &&
+      competitorDifferentiatorPattern.test(text) &&
+      establishedOutcomePattern.test(text) &&
+      !boundedOutcomePattern.test(text)
+    ) {
+      errors.push(
+        `${path}.text treats partial competitor evidence as an established differentiator`,
       );
     }
 
