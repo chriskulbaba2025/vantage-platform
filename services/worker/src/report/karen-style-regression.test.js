@@ -266,7 +266,7 @@ function writerOutput() {
       title: "Correct the verified priority",
       action: opportunity("Correct the verified priority."),
       whyNow: opportunity("Address it now because the evidence marks it as material."),
-      expectedBusinessEffect: opportunity("Improve the conversion path without inventing an outcome."),
+      expectedBusinessEffect: opportunity("Create a clearer conversion path; the outcome was not measured."),
       effort: "M",
       verification: opportunity("Re-run the governed audit to verify the change."),
     }],

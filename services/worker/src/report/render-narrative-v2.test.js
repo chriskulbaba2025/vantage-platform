@@ -224,7 +224,7 @@ function validWriterOutput(passNumber = 1) {
           "Address it now because the governed evidence marks it as material.",
         ),
         expectedBusinessEffect: opportunity(
-          "Improve the governed conversion path without inventing a result.",
+          "Create a clearer governed conversion path; the result was not measured.",
         ),
         effort: "M",
         verification: opportunity(
