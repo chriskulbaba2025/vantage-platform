@@ -93,7 +93,7 @@ function defectsSchema() {
     items: objectSchema({
       defectId: nonEmptyString(),
       criterion: { type: "string", enum: Object.keys(RUBRIC) },
-      section: nonEmptyString(),
+      section: { type: "string", enum: [...WRITER_SECTION_FIELDS] },
       severity: enumString("MAJOR", "MINOR"),
       problem: nonEmptyString(),
       whyItMatters: nonEmptyString(),
