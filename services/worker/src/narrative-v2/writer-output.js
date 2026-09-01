@@ -411,7 +411,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
 
   const observedConversionActionCompoundPattern =
-    /\bconversion[-\s]+(?:action|path|route|cta|form|assessment)s?\b/gi;
+    /\bconversion[-\s]+(?:action|path|route|cta|form|assessment|page|interface|readiness)s?\b/gi;
 
   const competitorDifferentiatorPattern =
     /\b(?:differentiator|advantage|superiority|market position)\b/i;
@@ -467,12 +467,12 @@ export function validateWriterSemanticFidelity(
       commercialOutcomePattern.test(sentence) &&
       (causalCertaintyPattern.test(sentence) || establishedOutcomePattern.test(sentence)) &&
       !boundedOutcomePattern.test(sentence) &&
-      !(
-        observedConversionActionPattern.test(sentence) &&
-        !commercialOutcomePattern.test(
-          sentence.replace(observedConversionActionCompoundPattern, ""),
+        !(
+          observedConversionActionPattern.test(sentence) &&
+          !commercialOutcomePattern.test(
+            sentence.replace(observedConversionActionCompoundPattern, ""),
+          )
         )
-      )
     )) {
       errors.push(
         `${path}.text states an unmeasured business outcome with causal certainty`,

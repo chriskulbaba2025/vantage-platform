@@ -414,6 +414,16 @@ test("PDV5-WRITER-OUT-08: established assessed conversion paths are not commerci
   assert.deepEqual(result, { valid: true, errors: [] });
 });
 
+test("PDV5-WRITER-OUT-08A: conversion assessment observations are not commercial outcome claims", () => {
+  const output = validOutput();
+  output.conversion.whatWorks = atom(
+    "The conversion assessment confirmed a visible, interactable and unobstructed action on the assessed pages.",
+    ["finding:F-001"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
 test("PDV5-WRITER-OUT-09: conversion-action terms cannot support asserted commercial outcomes", () => {
   const unsupportedClaims = [
     "The conversion form confirmed revenue.",
