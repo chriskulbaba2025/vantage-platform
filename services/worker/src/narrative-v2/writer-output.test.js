@@ -395,6 +395,7 @@ test("WRITER-PROMPT-01: Pass 1 prompt freezes exact terminology and evidence aut
   assert.match(prompt, /may not create new OBSERVED facts/);
   assert.match(prompt, /trustEeatDimension/);
   assert.match(prompt, /source:backlinks/);
+  assert.match(prompt, /will, should, cause/);
   assert.doesNotMatch(prompt, /eeatScore/);
 });
 

@@ -402,7 +402,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|decreases?|reduces?|improves?|hurts?|damages?|loses?|costs?)\b/i;
 
   const boundedOutcomePattern =
-    /\b(?:may|might|could|can|risk|potential|possible|likely|opportunity|suggests?|indicates?)\b/i;
+    /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?)\b/i;
 
   const negativeAiPattern =
     /\b(?:limited|limitation|weak|poor|missing|absent|lacks?|insufficient|not ready|cannot|can't)\b/i;
