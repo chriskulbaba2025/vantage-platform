@@ -360,41 +360,23 @@ function referenceSupportsAiSearch(
   const record =
     writerInput?.referenceIndex?.[ref];
 
-  const findingId =
-    typeof ref === "string" &&
-    ref.startsWith("finding:")
-      ? ref.slice(
-          "finding:".length,
-        )
-      : null;
+  // Direct AI-search support must come from a canonical AI/schema/entity
+  // evidence boundary. Do not classify a reference by free-text titles or
+  // descriptions: unrelated findings can mention AI search while measuring
+  // only content or conversion conditions.
+  if (record?.kind === "score") {
+    return ref === "score:entitySchemaAiDimension";
+  }
+  if (record?.kind === "capability") {
+    const key = ref.slice("capability:".length);
+    return /(?:ai|schema|structured[._ -]?data|entity|citation)/i.test(key);
+  }
+  if (record?.kind === "deterministic-analysis") {
+    const key = ref.slice("analysis:".length);
+    return /(?:ai|schema|structured[._ -]?data|entity|citation)/i.test(key);
+  }
+  return false;
 
-  const finding =
-    findingId &&
-    Array.isArray(
-      writerInput?.findings,
-    )
-      ? writerInput.findings.find(
-          (item) =>
-            item?.findingId ===
-            findingId,
-        )
-      : null;
-
-  const searchable =
-    [
-      ref,
-      record?.path,
-      finding?.module,
-      finding?.dimension,
-      finding?.title,
-      finding?.description,
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-  return /ai[_\s-]?search|schema|structured data|entity|citation/i.test(
-    searchable,
-  );
 }
 
 export function validateWriterSemanticFidelity(

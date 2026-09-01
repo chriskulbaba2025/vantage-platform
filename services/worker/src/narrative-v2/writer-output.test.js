@@ -277,6 +277,20 @@ test("PDV1-WRITER-OUT-01: explicit negated AI-search establishment is bounded wi
   assert.match(establishedResult.errors.join("\n"), /non-AI evidence into an established AI-search limitation/);
 });
 
+test("PDV5-WRITER-OUT-03: AI-search support cannot be inferred from finding metadata", () => {
+  const input = writerInput();
+  input.findings[0].title = "AI-search visibility limitation";
+  input.findings[0].description = "AI search citation evidence is weak";
+  const output = validOutput();
+  output.aiSearch.answerability = atom(
+    "AI-search answerability is limited by the available content.",
+    ["finding:F-001"],
+  );
+  const result = validateWriterOutput(output, { writerInput: input, expectedPassNumber: 1 });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /non-AI evidence into an established AI-search limitation/);
+});
+
 test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while bounded significance is accepted", () => {
   const unsupported = validOutput();
   unsupported.executiveConclusion.narrative = atom(
