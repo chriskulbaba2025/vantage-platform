@@ -341,6 +341,17 @@ test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while boun
   assert.deepEqual(boundedResult, { valid: true, errors: [] });
 });
 
+test("PDV5-WRITER-OUT-03: bounded language in another sentence cannot launder causal certainty", () => {
+  const unsupported = validOutput();
+  unsupported.executiveConclusion.narrative = atom(
+    "The missing proof will reduce conversions. This may create hesitation.",
+    ["finding:F-001"],
+    "INTERPRETATION",
+  );
+  const result = validateWriterOutput(unsupported, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.ok(result.errors.some((error) => /unmeasured business outcome with causal certainty/.test(error)));
+});
+
 test("PDV5-WRITER-OUT-01: truthful PARTIAL negations preserve their scope", () => {
   const input = writerInput();
   input.capabilityContext.capabilities["technical.indexability"].status = "PARTIAL";
