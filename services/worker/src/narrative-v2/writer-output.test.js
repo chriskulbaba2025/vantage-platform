@@ -277,6 +277,29 @@ test("PDV1-WRITER-OUT-01: explicit negated AI-search establishment is bounded wi
   assert.match(establishedResult.errors.join("\n"), /non-AI evidence into an established AI-search limitation/);
 });
 
+test("PDV5-WRITER-OUT-01: truthful PARTIAL negations preserve their scope", () => {
+  const input = writerInput();
+  input.capabilityContext.capabilities["technical.indexability"].status = "PARTIAL";
+  input.referenceIndex["capability:technical.indexability"].path = "capabilityContext.capabilities.technical.indexability";
+
+  const output = validOutput();
+  output.aiSearch.citationReadiness = atom(
+    "No direct citation-readiness condition was established from the supplied evidence.",
+    ["capability:technical.indexability"],
+  );
+  output.limitations = [{
+    itemId: "LIM-01",
+    area: "content",
+    status: "PARTIAL",
+    clientExplanation: atom("The available assessment is partial.", ["capability:technical.indexability"]),
+    whatThisMeans: atom("The evidence is limited to the assessed coverage.", ["capability:technical.indexability"]),
+    whatThisDoesNotMean: atom("It does not mean buyer-question content is absent across the site.", ["capability:technical.indexability"]),
+    impactOnReport: atom("Interpret this area within the available evidence.", ["capability:technical.indexability"]),
+  }];
+  const result = validateWriterOutput(output, { writerInput: input, expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
 test("WRITER-OUT-05: funnel is bounded to at most three ideas per stage", () => {
   const output = validOutput();
   output.funnelOpportunities.awareness = [1, 2, 3, 4].map((n) => ({

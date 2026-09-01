@@ -411,7 +411,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:no|none|missing|absent|lacks?|without|does not have|do not have|not present|not found|not detected)\b/i;
 
   const boundedPartialPattern =
-    /not detected.{0,50}(?:available|partial|assessed)|(?:available|partial|assessed|observed).{0,50}(?:assessment|coverage|evidence|pages?|sample)|does not establish|cannot establish/i;
+    /not detected.{0,50}(?:available|partial|assessed)|(?:available|partial|assessed|observed).{0,50}(?:assessment|coverage|evidence|pages?|sample)|does not establish|cannot establish|\bno\b[^.!?]{0,80}\b(?:was|were|has been|have been)?\s*established\b|\bdoes not mean\b[^.!?]{0,100}\b(?:absent|missing|lack(?:s)?|without)\b/i;
 
   const commercialOutcomePattern =
     /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
