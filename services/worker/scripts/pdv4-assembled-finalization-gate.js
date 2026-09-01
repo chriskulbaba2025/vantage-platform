@@ -18,6 +18,7 @@ import { scoreAudit } from "../src/scoring/vantage-score.js";
 import { runFinalizationGate } from "../src/scoring/report-finalization-gate.js";
 
 const validateContract = createProductionContractValidator();
+const FINDING_SCHEMA_ID = "https://vantage-platform.io/prysm/contracts/v1/finding.schema.json";
 const store = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
 const scope = { tenantId: "pdv4-assembled", clientId: "controlled", auditId: randomUUID() };
 
@@ -83,7 +84,11 @@ const producedFinding = producedModel.findings.find((finding) => finding.ruleId 
 check("P-B15 deterministic producer emits assessed-scope wording", /assessed pages missing H1;.*unassessed pages remain unknown/i.test(producedFinding?.evidenceText || ""));
 await persistFindings({ store, scope: pB15Scope, findings: [producedFinding], validateContract });
 const findingsKey = buildArtifactKey({ ...pB15Scope, category: "canonical", artifactName: "findings.json" });
-const reloadedFinding = JSON.parse(Buffer.from(await store.get(findingsKey)).toString("utf8"))[0];
+const reloadedFindings = JSON.parse(Buffer.from(await store.get(findingsKey)).toString("utf8"));
+check("P-B15 reload contains a FindingSet", Array.isArray(reloadedFindings));
+const reloadedFindingValidations = reloadedFindings.map((finding) => validateContract(FINDING_SCHEMA_ID, finding));
+check("P-B15 every reloaded finding passes the governed finding schema", reloadedFindingValidations.length > 0 && reloadedFindingValidations.every((result) => result.valid));
+const reloadedFinding = reloadedFindings[0];
 check("P-B15 validated FindingSet reload preserves bounded wording", reloadedFinding.evidenceText === producedFinding.evidenceText);
 const pB15Gate = runFinalizationGate(finalizationModel(pB15Evidence, [reloadedFinding]), pB15Evidence);
 check("P-B15 finalization accepts the persisted assessed-scope finding", !pB15Gate.errors.some((error) => error.field === "findings[].evidence"));
