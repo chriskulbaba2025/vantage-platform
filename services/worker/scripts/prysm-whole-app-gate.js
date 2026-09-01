@@ -20,8 +20,7 @@ const commands = [
   ["--test", "scripts/replay-report.test.js", "current replay canonical hydration"],
   ["--test", "scripts/replay-report-cli.test.js", "replay CLI historical compatibility boundary"],
   ["--test", "src/report-model/current-consumer-parity.test.js", "base, Narrative v2, and replay current-model parity"],
-  ["--test", "src/adapters/dataforseo-onpage/dataforseo-onpage-adapter.test.js", "P-B14 producer availability metadata"],
-  ["--test", "src/scoring/report-finalization-gate.test.js", "P-B14/P-B15 finalization branches"],
+  ["scripts/pdv4-assembled-finalization-gate.js", "P-B14/P-B15 assembled persistence and finalization branches"],
 ];
 
 try {
