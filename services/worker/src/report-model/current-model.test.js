@@ -11,6 +11,7 @@ const scoreSet = {
   decisionHierarchy: { version: "1.0.0", orderedFindingIds: ["F-1"], rootCauseRuleId: "VAN-CONV-001", actions: [{ findingId: "F-1", ruleId: "VAN-CONV-001", rank: 1, effort: "S", actionClass: "CLARITY", conversionInfluence: "DIRECT" }] },
   conversionPaths: [], readinessMap: [], contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
   competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+  crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Clear", conversionPathClarity: "Clear", trustProof: "Moderate", mobileUsability: "Strong", indexability: "Strong" } },
 };
 
 test("T2-MODEL-01: current report consumers receive one persisted semantic source", () => {
@@ -22,4 +23,9 @@ test("T2-MODEL-01: current report consumers receive one persisted semantic sourc
 
 test("T2-MODEL-02: missing persisted hierarchy fails closed", () => {
   assert.throws(() => hydrateCurrentReportModel({ scoreSet: { ...scoreSet, decisionHierarchy: null }, findings: [] }), /decision hierarchy/);
+});
+
+test("P1-CROSS-03: missing persisted interpretation fails closed at hydration", () => {
+  const { crossReportInterpretation, ...missingProjection } = scoreSet;
+  assert.throws(() => hydrateCurrentReportModel({ scoreSet: missingProjection, findings: [] }), /persisted cross-report interpretation/);
 });

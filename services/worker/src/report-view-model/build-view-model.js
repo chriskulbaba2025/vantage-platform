@@ -283,6 +283,7 @@ export function buildReportViewModel({
         gaps: [], allGaps: [], sources: {}, limitations: [],
       },
     },
+    ...(current ? { crossReportInterpretation: current.crossReportInterpretation } : {}),
     // Source status
     sourceStatus: {
       website: reportPackage.sourceStatus?.website || "NOT_APPLICABLE",

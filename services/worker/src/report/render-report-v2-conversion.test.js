@@ -2279,13 +2279,13 @@ test("CR-26: client competitor comparison uses only usable evidence and governed
 
   assert.match(
     comp,
-    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Clear<\/td>/,
+    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Weak<\/td>/,
     "own-site buyer action clarity must consume governed conversion-path state",
   );
 
   assert.match(
     comp,
-    /<td><strong>Conversion path<\/strong><\/td>\s*<td>Clear<\/td>/,
+    /<td><strong>Conversion path<\/strong><\/td>\s*<td>Weak<\/td>/,
     "own-site conversion path must consume the same governed conversion state as the main report",
   );
 });
@@ -2382,6 +2382,24 @@ test("CR-27: competitor no-comparison rendering preserves canonical source statu
       );
     }
   }
+});
+
+test("P1-CROSS-04: renderer consumes persisted interpretation and fails closed when absent", () => {
+  const model = scoreWith(assessedSite());
+  const tampered = {
+    ...model,
+    crossReportInterpretation: {
+      ...model.crossReportInterpretation,
+      constructs: { ...model.crossReportInterpretation.constructs, ctaClarity: "Persisted test value" },
+    },
+    competitors: {
+      ...(model.competitors || {}),
+      comparisons: [{ name: "Comparable", url: "https://comparable.example", status: "AVAILABLE" }],
+    },
+  };
+  assert.match(renderReportV2(tampered), /Persisted test value/);
+  const { crossReportInterpretation, ...missingProjection } = model;
+  assert.throws(() => renderReportV2({ ...missingProjection, competitors: tampered.competitors }), /persisted cross-report interpretation/);
 });
 
     test("CR-45: infrastructure URLs are excluded from client-facing report URLs", () => {

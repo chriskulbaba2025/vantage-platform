@@ -1082,6 +1082,7 @@ test("NV2-PROD-05: production v2 model preserves readiness detail and rendering 
         rootCauseRuleId: "SENTINEL-RULE",
         actions: [{ findingId: "SENTINEL-FINDING", ruleId: "SENTINEL-RULE", rank: 1, effort: "S", actionClass: "CLARITY", conversionInfluence: "DIRECT" }],
       },
+      crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Not Assessed", ctaClarity: "Not Assessed", conversionPathClarity: "Not Assessed", trustProof: "Not Assessed", mobileUsability: "Not Assessed", indexability: "Not Assessed" } },
       renderingDiagnostics: [{ diagnosticCode: "SENTINEL-DIAGNOSTIC", diagnosticCategory: "SITE_RENDERING" }],
     },
     findings: [],

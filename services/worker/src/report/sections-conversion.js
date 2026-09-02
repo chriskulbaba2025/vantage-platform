@@ -1,5 +1,6 @@
 import { e, severityClass, scoreCard, section, table } from "./html-helpers.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
+import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
 
 function scorecard(model) {
   const { scores, bands, evidenceConfidenceScore, rootCause, evidence } = model;
@@ -99,15 +100,16 @@ function competitorBenchmark(model) {
     : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>';
 
   const comparisons = competitors.comparisons || [];
+  const interpretation = requireCrossReportInterpretation(model);
   const headers = ["Signal", site.domain, ...comparisons.map((competitor) => competitor.name)];
   const value = (label, target, key) => [e(label), e(target), ...comparisons.map((competitor) => e(competitor[key] || "Unavailable"))];
   const rows = [
-    value("Offer Clarity", model.crossReportInterpretation?.constructs?.offerClarity || (site.services.length ? "Observed service scope" : "Not Assessed"), "offerClarity"),
+    value("Offer Clarity", interpretation.constructs.offerClarity, "offerClarity"),
     value("Trust Proof (on-site)", model.bands.trust, "trustProof"),
-    value("CTA Clarity", model.crossReportInterpretation?.constructs?.ctaClarity || "Not Assessed", "ctaClarity"),
+    value("CTA Clarity", interpretation.constructs.ctaClarity, "ctaClarity"),
     value("Content Depth", (model.scores.contentDepth ?? 0) >= 70 ? "Strong" : (model.scores.contentDepth ?? 0) >= 40 ? "Moderate" : "Light", "contentDepth"),
     value("On-Site E-E-A-T Proof", model.bands.trust === "Not Assessed" ? "Not Assessed" : model.bands.trust, "eeat"),
-    value("Conversion Path Clarity", model.crossReportInterpretation?.constructs?.conversionPathClarity || "Not Assessed", "pathClarity"),
+    value("Conversion Path Clarity", interpretation.constructs.conversionPathClarity, "pathClarity"),
   ];
 
   const gaps = opportunities.gaps || [];

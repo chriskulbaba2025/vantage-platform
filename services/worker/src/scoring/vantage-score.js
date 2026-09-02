@@ -816,6 +816,13 @@ function buildNotAssessedModel(
           [],
       ),
 
+    crossReportInterpretation: buildCrossReportInterpretation({
+      site: evidence.site,
+      scores: { performance: perfScore, technical: null },
+      bands: { trust: "Not Assessed" },
+      conversionPaths: [{ status: "Not Assessed" }],
+    }),
+
     competitorOpportunities:
       evidence
         .competitorOpportunities,

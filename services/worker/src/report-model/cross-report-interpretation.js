@@ -32,3 +32,14 @@ export function buildCrossReportInterpretation({ site = {}, scores = {}, bands =
     }),
   });
 }
+
+/** Enforces the persisted current-report contract at consumer boundaries. */
+export function requireCrossReportInterpretation(model) {
+  const projection = model?.crossReportInterpretation;
+  const constructs = projection?.constructs;
+  const requiredConstructs = ["offerClarity", "ctaClarity", "conversionPathClarity", "trustProof", "mobileUsability", "indexability"];
+  if (!projection || projection.version !== "1.0.0" || !constructs || requiredConstructs.some((key) => typeof constructs[key] !== "string")) {
+    throw new Error("Current report model requires persisted cross-report interpretation");
+  }
+  return projection;
+}

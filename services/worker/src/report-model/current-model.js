@@ -11,6 +11,9 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
   if (!scoreSet.decisionHierarchy || !scoreSet.rootCauseRuleId) {
     throw new Error("Current report model requires persisted decision hierarchy and root-cause identity");
   }
+  if (!scoreSet.crossReportInterpretation) {
+    throw new Error("Current report model requires persisted cross-report interpretation");
+  }
   if (!Array.isArray(findings)) throw new Error("Current report model requires findings");
 
   return {

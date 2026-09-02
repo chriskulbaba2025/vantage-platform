@@ -119,6 +119,7 @@
     "readinessMap": { "type": "array" },
     "contentIdeas": { "type": "object" },
     "competitors": { "type": "object" },
+    "crossReportInterpretation": { "type": "object" },
     "renderingDiagnostics": { "type": "array" },
     "sourceDependencies": {
       "type": "object",
