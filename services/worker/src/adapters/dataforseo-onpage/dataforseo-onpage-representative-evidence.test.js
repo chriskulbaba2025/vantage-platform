@@ -768,6 +768,30 @@ test(
       "CONTENT_PARSING_PAGE_LIMIT",
     );
 
+    assert.equal(defaultLedger.trace.length, expectedSelectedUrls.length);
+    assert.deepEqual(
+      defaultLedger.trace.slice(0, 8).map((row) => [
+        row.url,
+        row.selectionReason,
+        row.pageClass,
+        row.bodyRequested,
+        row.bodyStatus,
+        row.downstreamModules,
+      ]),
+      [
+        [mustHaveUrls[0], "must_have_priority", "home", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[1], "must_have_priority", "conversion", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[2], "must_have_priority", "pricing", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[3], "must_have_priority", "service", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[4], "must_have_priority", "service", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[5], "must_have_priority", "about", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[6], "must_have_priority", "proof", true, "RETURNED", ["content.body", "programmaticSeo"]],
+        [mustHaveUrls[7], "must_have_priority", "education", true, "RETURNED", ["content.body", "programmaticSeo"]],
+      ],
+    );
+    assert.equal(defaultLedger.trace[20].bodyRequested, false);
+    assert.equal(defaultLedger.trace[20].bodyStatus, "UNASSESSED");
+
     const expandedResult =
       await crawlWithDataforseo(
         "https://example.com/",
