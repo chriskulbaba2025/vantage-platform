@@ -561,7 +561,42 @@ function contentIdeas(site, input = {}) {
   };
 
   const [t0, t1, t2] = [pretty(safeTopics[0]), pretty(safeTopics[1]), pretty(safeTopics[2])];
-  return {
+  const evidencePages = Array.isArray(site.pages) ? site.pages : [];
+  const opportunityEvidence = (topic) => {
+    const tokens = String(topic || "").toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+    const matches = evidencePages.filter((page) => {
+      const haystack = [page?.title, page?.crawledUrl, page?.url, ...(page?.headings?.h1 || [])].join(" ").toLowerCase();
+      return tokens.some((token) => haystack.includes(token));
+    }).slice(0, 3);
+    const available = site._contentEvidenceAvailable === true;
+    const urls = matches.map((page) => page?.crawledUrl || page?.url).filter(Boolean);
+    const observations = matches.map((page) => page?.bodyText ? `Body content returned for ${page.title || page.crawledUrl || page.url || "the matched page"}.` : "Page identity matched, but body content was not returned.");
+    return {
+      status: available ? (matches.some((page) => page?.bodyText) ? "AVAILABLE" : "PARTIAL") : "UNAVAILABLE",
+      urls,
+      observations,
+    };
+  };
+  const enrich = (row, stage) => {
+    const topic = row.topic || row.idea || row.query;
+    const evidence = opportunityEvidence(topic);
+    const hasEvidence = evidence.status === "AVAILABLE" || evidence.status === "PARTIAL";
+    return {
+      ...row,
+      stage,
+      topic,
+      whyItMatters: goal ? `Supports the stated goal: ${goal}.` : "Helps prospective buyers understand and evaluate the service.",
+      currentEvidence: evidence,
+      gap: hasEvidence ? "The evidence supports an opportunity, but does not establish that the recommended asset is complete." : "Current content coverage cannot be established from the available evidence.",
+      recommendedAsset: row.type || (stage === "TOFU" ? "Guide" : stage === "MOFU" ? "Comparison page" : "Decision page"),
+      placement: stage === "TOFU" ? "Awareness content" : stage === "MOFU" ? "Consideration content" : "Decision-stage content",
+      objective: goal || "support qualified enquiries",
+      internalLinks: evidence.urls,
+      funnelStage: stage === "TOFU" ? "Awareness" : stage === "MOFU" ? "Consideration" : "Decision",
+      evidenceStatus: evidence.status,
+    };
+  };
+  const result = {
     tofu: [
       { idea: `What Is ${t0}?`, frame: "Answer-first", type: "Guide", question: "What is this?", priority: "H" },
       { idea: `Signs You May Need ${t1}`, frame: "Answer-first", type: "Article", question: "Does this apply to me?", priority: "M" },
@@ -601,6 +636,11 @@ function contentIdeas(site, input = {}) {
       { query: `${t0} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },
     ],
   };
+  result.tofu = result.tofu.map((row) => enrich(row, "TOFU"));
+  result.mofu = result.mofu.map((row) => enrich(row, "MOFU"));
+  result.bofu = result.bofu.map((row) => enrich(row, "BOFU"));
+  result.leading = result.leading.map((row) => enrich(row, "LEADING"));
+  return result;
 }
 
 function competitorComparison(
