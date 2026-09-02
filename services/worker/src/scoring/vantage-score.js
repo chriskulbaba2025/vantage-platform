@@ -24,6 +24,7 @@ import {
   contentIdeas,
   competitorComparison,
 } from "./report-model.js";
+import { buildCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
 import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { scopeSiteForDecision } from "./decision-scope.js";
@@ -1558,7 +1559,7 @@ export function scoreAudit(
         input,
       ),
 
-        competitors:
+    competitors:
       competitorComparison(
         evidence.competitors ||
           [],
@@ -1567,6 +1568,13 @@ export function scoreAudit(
         input.competitors ||
           [],
       ),
+
+    crossReportInterpretation: buildCrossReportInterpretation({
+      site: decisionSite,
+      scores: legacyScores,
+      bands,
+      conversionPaths: buildConversionPaths(decisionSite, capabilities),
+    }),
 
     competitorOpportunities:
       evidence

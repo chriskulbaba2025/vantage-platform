@@ -1719,14 +1719,14 @@ const RENDER_GOLDEN = {
   "slow-mobile": "271c6d34045195450cd1d8fbf169e9141784857b382cff96ce64424b0d29dc46",
   "no-performance": "ff7562f98942b2f4657539589d0f4afbc880b03ee1149ecd164c0c12be9d82df",
   "path-validated-blocker": "45e970d7894d9b62a129367c70e32fee5d41eba3eeb10ac38b8241a6327c3446",
-  "competitor-present": "18391084f147ba9ca28825608fb354dc0742396aa65b78d17e1003afbc2274ee",
+  "competitor-present": "56247c42c31017ba6d4d997392a6f34eb862ef883260addaaa192d86fa72e4bb",
   "proprietary-platform": "3ec650836fc84d28e52856bedfc01ff492f81d1d45b0b8cffb16aa1a1e56412f",
   "untraced-broken-links": "a39a2ba49b1cdbe31f15a4f8a723c2e74eb0bc046d6e5b834f8d85a602831565",
   "schema-confirmed-absent": "740f11811e091ac6a832444efadaed6c5919c642366ac7a1efecc95bb2e9bbc5",
   "headings-absent-h1": "40331f5720dc93c24f58e30d46387478ede79b45570646ad81266170ded8dcc9",
   "headings-multiple-h1": "09b7915e0a505c76343b287073db8dafc29a6b36e20a2b8ac4cdc8ec351b563d",
   "perf-field-and-multipage": "ca5645baac285c7c7fceea886a88741a14c6ad39e34d98d6b53ea7ed34cb00ba",
-  "competitor-with-limitations": "d2699e9bbd38c182c0da56a21e155c45606b94d74437b3dbde0d152b937ec65f",
+  "competitor-with-limitations": "254e9a72978505062d3776535ff9b6dd5705b08591c7b8d34a35f1875c4721c7",
   "device-profile-failed": "428fad51700c147d2f392c18aec124d407a66a17c327b3b828d23e73a9fb2231",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {

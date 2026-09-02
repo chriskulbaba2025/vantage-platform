@@ -696,19 +696,18 @@ function competitorSection(model) {
           ? "Weak"
           : "Partial";
 
+  const interpretation = buildCrossReportInterpretation({
+    site,
+    scores: model.scores,
+    bands: model.bands,
+    conversionPaths,
+  });
   const ownSite = {
-    offerClarity: (site.services || []).length
-      ? `${(site.services || []).length} service topic(s)`
-      : "Not Assessed",
-    trustProof:
-      trustBand && trustBand !== "Not Assessed"
-        ? trustBand
-        : "Not Assessed",
-    ctaClarity: governedConversionState,
-    contentDepth: site.pageCount
-      ? `${site.pageCount} page(s)`
-      : "Not Assessed",
-    pathClarity: governedConversionState,
+    offerClarity: interpretation?.constructs?.offerClarity || ((site.services || []).length ? "Observed service scope" : "Not Assessed"),
+    trustProof: interpretation?.constructs?.trustProof || (trustBand && trustBand !== "Not Assessed" ? trustBand : "Not Assessed"),
+    ctaClarity: interpretation?.constructs?.ctaClarity || governedConversionState,
+    contentDepth: site.pageCount ? `${site.pageCount} page(s)` : "Not Assessed",
+    pathClarity: interpretation?.constructs?.conversionPathClarity || governedConversionState,
   };
 
   const SIGNALS = [
@@ -2471,3 +2470,4 @@ export default {
   REPORT_V2_VIEWER_PAGES,
   REPORT_V2_VIEWER_VERSION,
 };
+import { buildCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";

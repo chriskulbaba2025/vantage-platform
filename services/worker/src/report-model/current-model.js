@@ -39,5 +39,6 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
     readinessMap: scoreSet.readinessMap,
     contentIdeas: scoreSet.contentIdeas,
     competitors: scoreSet.competitors,
+    crossReportInterpretation: scoreSet.crossReportInterpretation,
   };
 }
