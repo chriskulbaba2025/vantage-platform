@@ -12,5 +12,23 @@
     "hierarchyVersion": "1.0.0", "provenance": "scoreAudit/action-priority",
     "rootCauseRuleId": "VAN-CONV-001", "orderedFindingIds": ["finding-1"],
     "actions": [{"findingId":"finding-1","ruleId":"VAN-CONV-001","rank":1,"priority":100,"effort":"M","actionClass":"CONVERSION","foundationDomain":null,"conversionInfluence":"DIRECT","conversionInfluenceRank":1}]
+  },
+  "contentIdeas": {
+    "tofu": [{
+      "stage": "TOFU",
+      "topic": "Common buyer questions",
+      "whyItMatters": "Answers early questions with evidence from the assessed site.",
+      "currentEvidence": {"status":"AVAILABLE","urls":["https://example.com/services"],"observations":["The assessed service page explains the core offering."]},
+      "gap": "No established gap is asserted by this fixture.",
+      "recommendedAsset": "Buyer questions guide",
+      "placement": "Learning centre",
+      "objective": "Support awareness-stage research",
+      "internalLinks": ["https://example.com/services"],
+      "funnelStage": "Awareness",
+      "evidenceStatus": "AVAILABLE"
+    }],
+    "mofu": [],
+    "bofu": [],
+    "leading": []
   }
 }
