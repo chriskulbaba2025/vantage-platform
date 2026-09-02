@@ -26,7 +26,9 @@
     "findings": { "type": "array" },
     "conversionPaths": { "type": "array" },
     "readinessMap": { "type": "array" },
-    "contentIdeas": { "type": "object" },
+    "contentIdeas": {
+      "$ref": "https://vantage-platform.io/prysm/contracts/v2/score-current.schema.json#/$defs/contentIdeas"
+    },
     "competitors": { "type": "object" },
     "crossReportInterpretation": { "type": "object", "required": ["version","constructs"], "additionalProperties": true },
     "sourceStatus": { "type": "object" },
