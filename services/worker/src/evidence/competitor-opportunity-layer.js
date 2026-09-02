@@ -265,9 +265,11 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
     .map((competitor) => ({
       candidateUrl: competitor.url,
       domain: domainOf(competitor.url),
-      topic: topics[0]?.topic || input.businessName || "general",
+      // A supplied competitor's topic must come from its observed evidence;
+      // inheriting the client's first topic can qualify unrelated businesses.
+      topic: competitor.evidence?.services?.[0] || competitor.evidence?.title || "",
       discoverySource: "user-supplied",
-      geographicContext: input.location || "",
+      geographicContext: competitor.evidence?.geographicContext || competitor.evidence?.location || "",
       languageContext: input.language || "en",
       pageType: "landing",
       position: null,

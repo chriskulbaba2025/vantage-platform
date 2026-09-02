@@ -414,6 +414,28 @@ test("T9-13: competitors are separated by topic", async () => {
   assert.ok(result.topics.length >= 2, `Expected at least 2 topics, got ${result.topics.length}`);
 });
 
+// P4-DIRECT-01: supplied competitor qualification uses competitor evidence,
+// not the client's first service topic.
+test("P4-DIRECT-01: conflicting supplied service evidence is excluded", async () => {
+  const result = await collectCompetitorOpportunities(
+    { ...BASE_SITE, services: ["Physiotherapy"], topicKeywords: [] },
+    { ...BASE_INPUT, businessName: "Toronto Clinic" },
+    {
+      dataforseoLogin: "",
+      dataforseoPassword: "",
+      suppliedCompetitors: [{
+        url: "https://accounting.example",
+        status: SOURCE_STATUS.AVAILABLE,
+        evidence: { services: ["Accounting"], pageCount: 4 },
+      }],
+    },
+  );
+
+  assert.equal(result.candidates.qualified.length, 0);
+  assert.equal(result.candidates.excluded.length, 1);
+  assert.equal(result.candidates.excluded[0].qualificationResults.service_relevance, false);
+});
+
 // ---------------------------------------------------------------------------
 // T9-14: No live DataForSEO calls during tests
 // ---------------------------------------------------------------------------
