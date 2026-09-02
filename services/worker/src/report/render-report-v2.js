@@ -412,7 +412,7 @@ function blockersSection(model, plan) {
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">What should you fix first?</p>
       <p class="muted small">Priority Findings &amp; Recommendations</p>
       <h2>E. What should be fixed first?</h2>
-      <p><span class="chip cap-ok">PASS</span> No score-bearing finding produced a prioritized action from the assessed evidence.</p>
+      <p><span class="chip cap-ok">PASS</span> No score-bearing finding produced a prioritized action from the assessed evidence; under the current evidence scope, no prioritized action is required.</p>
     </section>`;
   }
 
@@ -430,6 +430,10 @@ function blockersSection(model, plan) {
       .filter(Boolean)
       .slice(0, 3)
       .join(", ");
+    const affectedUrls = clientFacingPageUrls(model, f.affectedUrls);
+    const location = affectedUrls.length
+      ? `Affected page${affectedUrls.length === 1 ? "" : "s"}: ${affectedUrls.join(", ")}`
+      : `Evidence location: ${evidenceLocation || "Relevant assessed evidence source"}`;
 
     const verification =
       a.verificationMethod ||
@@ -446,7 +450,7 @@ function blockersSection(model, plan) {
         <td><strong>${e(f.title)}</strong><br>${classChip}<br><span class="small">${e(f.ruleId || "")}</span></td>
         <td>${e(f.businessImpact || "")}</td>
         <td>${e(f.recommendation || "")}</td>
-        <td class="small">${e(evidenceLocation || "Relevant assessed page or evidence source")}</td>
+        <td class="small">${e(location)}</td>
         <td class="small">${e(verification)}</td>
         <td class="small">${e(rankReason)}</td>
       </tr>`;

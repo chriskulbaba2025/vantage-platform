@@ -155,6 +155,30 @@ test("WP-G-03: blocker rows carry priority/problem/consequence/evidence/action/i
   assert.ok(html.includes(firstFinding.confidence));
 });
 
+test("P2: blocker location lists client-owned affected URLs when available", () => {
+  const m = model();
+  const finding = m.findings.find((f) => f.scoreBearing === true);
+  finding.affectedUrls = ["https://x.com/services/consulting"];
+  const html = renderReportV2(m);
+  assert.match(html, /Affected page: https:\/\/x\.com\/services\/consulting/);
+});
+
+test("P2: blocker location falls back to the governed evidence source when no URL is available", () => {
+  const m = model();
+  const finding = m.findings.find((f) => f.scoreBearing === true);
+  finding.affectedUrls = [];
+  finding.evidence = [{ field: "site.imagesMissingAlt" }];
+  const html = renderReportV2(m);
+  assert.match(html, /Evidence location: site\.imagesMissingAlt/);
+});
+
+test("P2: no-action PASS states the current evidence-scope criterion", () => {
+  const m = model();
+  m.findings = [];
+  const html = renderReportV2(m);
+  assert.match(html, /under the current evidence scope, no prioritized action is required/);
+});
+
 test("WP-G-03: no invented evidence — every displayed ruleId exists in the model", () => {
   const m = model();
   const html = renderReportV2(m);
