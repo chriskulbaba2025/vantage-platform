@@ -51,7 +51,7 @@ const PROD_INPUT = {
 };
 
 // ---------------------------------------------------------------------------
-// S-01: Locale normalization — en-CA → English
+// S-01: Locale normalization â€” en-CA â†’ English
 // ---------------------------------------------------------------------------
 
 test("S-01: en-CA normalizes to DataForSEO English, not sent as BCP-47", () => {
@@ -66,7 +66,7 @@ test("S-01: en-CA normalizes to DataForSEO English, not sent as BCP-47", () => {
 });
 
 // ---------------------------------------------------------------------------
-// S-02: Location normalization — Ottawa and Ontario, Canada → hierarchy
+// S-02: Location normalization â€” Ottawa and Ontario, Canada â†’ hierarchy
 // ---------------------------------------------------------------------------
 
 test("S-02: Ottawa and Ontario, Canada resolves to city-level hierarchy", () => {
@@ -124,7 +124,7 @@ test("S-03: DataForSEO request body contains normalized language_name and locati
     fetchImpl,
   });
 
-  // ── Verify the request body ──────────────────────────────────────────
+  // â”€â”€ Verify the request body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(capturedBody, "Request body must be captured");
   assert.equal(capturedBody.length, 1);
   const task = capturedBody[0];
@@ -139,7 +139,7 @@ test("S-03: DataForSEO request body contains normalized language_name and locati
     `Expected location_name "Ottawa,Ontario,Canada", got "${task.location_name}"`);
   assert.notEqual(task.location_name, "Ottawa and Ontario, Canada");
 
-  // ── Verify the response ──────────────────────────────────────────────
+  // â”€â”€ Verify the response â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(result.error, null);
   assert.equal(result.rawTaskId, "task-abc-001");
   assert.equal(result.items.length, 2);
@@ -182,7 +182,7 @@ test("S-04: task with non-20000 status_code produces error, not empty items", as
     fetchImpl,
   });
 
-  // ── Task error must be surfaced ──────────────────────────────────────
+  // â”€â”€ Task error must be surfaced â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(result.error, "Must have an error for failed task");
   assert.ok(result.error.includes("40401"), `Error must include status code, got: ${result.error}`);
   assert.ok(result.error.includes("Invalid location"), `Error must include status message, got: ${result.error}`);
@@ -193,7 +193,7 @@ test("S-04: task with non-20000 status_code produces error, not empty items", as
   assert.equal(result.taskError.statusCode, 40401);
   assert.equal(result.taskError.statusMessage, "Invalid location specified.");
 
-  // Items must be empty — never silently return empty as success
+  // Items must be empty â€” never silently return empty as success
   assert.equal(result.items.length, 0);
   assert.equal(result.rawTaskId, "task-fail-002");
 
@@ -203,7 +203,7 @@ test("S-04: task with non-20000 status_code produces error, not empty items", as
 });
 
 // ---------------------------------------------------------------------------
-// S-05: Zero organic results (successful task) ≠ task failure
+// S-05: Zero organic results (successful task) â‰  task failure
 // ---------------------------------------------------------------------------
 
 test("S-05: successful task with zero organic results is UNAVAILABLE, not FAILED", async () => {
@@ -239,13 +239,13 @@ test("S-05: successful task with zero organic results is UNAVAILABLE, not FAILED
     fetchImpl,
   });
 
-  // ── Zero results is NOT an error ─────────────────────────────────────
+  // â”€â”€ Zero results is NOT an error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(result.error, null, "Zero results with success code must not be an error");
   assert.ok(!result.taskError, "Must not have taskError for successful task");
   assert.equal(result.rawTaskId, "task-empty-003");
   assert.equal(result.items.length, 0, "Zero items is valid for a niche query");
 
-  // ── Via competitor layer, this should become UNAVAILABLE ──────────────
+  // â”€â”€ Via competitor layer, this should become UNAVAILABLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const opp = await collectCompetitorOpportunities(
     { ...PROD_SITE, services: ["rare niche query"], topicKeywords: [] },
     PROD_INPUT,
@@ -263,7 +263,7 @@ test("S-05: successful task with zero organic results is UNAVAILABLE, not FAILED
 });
 
 // ---------------------------------------------------------------------------
-// S-06: Task error → FAILED in competitor layer, not UNAVAILABLE
+// S-06: Task error â†’ FAILED in competitor layer, not UNAVAILABLE
 // ---------------------------------------------------------------------------
 
 test("S-06: task error produces FAILED SERP source status in competitor layer", async () => {
@@ -293,7 +293,7 @@ test("S-06: task error produces FAILED SERP source status in competitor layer", 
     },
   );
 
-  // ── SERP source must be FAILED ───────────────────────────────────────
+  // â”€â”€ SERP source must be FAILED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
     "Task error must produce FAILED, not UNAVAILABLE or AVAILABLE");
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.AVAILABLE,
@@ -321,7 +321,7 @@ test("S-06: task error produces FAILED SERP source status in competitor layer", 
 });
 
 // ---------------------------------------------------------------------------
-// S-07: audit.json canonical fields — success path
+// S-07: audit.json canonical fields â€” success path
 // ---------------------------------------------------------------------------
 
 test("S-07: audit.json records full canonical state on SERP success", async () => {
@@ -359,33 +359,33 @@ test("S-07: audit.json records full canonical state on SERP success", async () =
     },
   );
 
-  // ── Source status ────────────────────────────────────────────────────
+  // â”€â”€ Source status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.source, "competitor-opportunity-layer");
   assert.equal(opp.evidenceVersion, "1.0.0");
 
-  // ── SERP source fields ───────────────────────────────────────────────
+  // â”€â”€ SERP source fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const serp = opp.sources.dataforseoSerp;
   assert.equal(serp.status, SOURCE_STATUS.AVAILABLE);
-  // 2 topics (Consulting, Coaching) × 3 results each = 6 candidates
+  // 2 topics (Consulting, Coaching) Ã— 3 results each = 6 candidates
   assert.ok(serp.candidateCount >= 3,
     `Expected at least 3 SERP candidates, got ${serp.candidateCount}`);
   assert.ok(serp.taskIds.length > 0);
   assert.equal(serp.taskErrors, undefined, "No task errors on success");
 
-  // ── Normalized locale fields ─────────────────────────────────────────
+  // â”€â”€ Normalized locale fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(serp.normalizedLanguage, "English");
   assert.equal(serp.normalizedLocation, "Ottawa,Ontario,Canada");
   assert.equal(serp.originalLanguage, "en-CA");
   assert.equal(serp.originalLocation, "Ottawa and Ontario, Canada");
 
-  // ── _sourceStatus canonical record ────────────────────────────────────
+  // â”€â”€ _sourceStatus canonical record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp._sourceStatus.provider, "competitor-opportunity-layer");
   assert.ok(opp._sourceStatus.startedAt);
   assert.ok(opp._sourceStatus.completedAt);
   assert.ok(opp._sourceStatus.returnedRecordCount > 0);
   assert.equal(opp._sourceStatus.errorCategory, null);
 
-  // ── Coverage ─────────────────────────────────────────────────────────
+  // â”€â”€ Coverage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.coverage.topicsRequested > 0);
   assert.ok(opp.coverage.serpCandidatesFound >= 3,
     `Expected at least 3 SERP candidates found, got ${opp.coverage.serpCandidatesFound}`);
@@ -393,7 +393,7 @@ test("S-07: audit.json records full canonical state on SERP success", async () =
 });
 
 // ---------------------------------------------------------------------------
-// S-08: audit.json canonical fields — failure path
+// S-08: audit.json canonical fields â€” failure path
 // ---------------------------------------------------------------------------
 
 test("S-08: audit.json records full canonical state on SERP failure", async () => {
@@ -423,32 +423,32 @@ test("S-08: audit.json records full canonical state on SERP failure", async () =
     },
   );
 
-  // ── SERP source must be FAILED ───────────────────────────────────────
+  // â”€â”€ SERP source must be FAILED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const serp = opp.sources.dataforseoSerp;
   assert.equal(serp.status, SOURCE_STATUS.FAILED);
 
-  // ── Task error details ───────────────────────────────────────────────
+  // â”€â”€ Task error details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(serp.taskErrors);
   assert.equal(serp.taskErrors[0].statusCode, 40401);
   assert.equal(serp.taskErrors[0].statusMessage, "Invalid location specified.");
 
-  // ── Normalized + original locale preserved ───────────────────────────
+  // â”€â”€ Normalized + original locale preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(serp.normalizedLanguage, "English");
   assert.equal(serp.normalizedLocation, "Ottawa,Ontario,Canada");
   assert.equal(serp.originalLanguage, "en-CA");
   assert.equal(serp.originalLocation, "Ottawa and Ontario, Canada");
 
-  // ── _sourceStatus failure fields ─────────────────────────────────────
+  // â”€â”€ _sourceStatus failure fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
   assert.ok(opp._sourceStatus.limitation);
   assert.ok(opp._sourceStatus.limitation.includes("Invalid location"),
     `Limitation must mention the task error, got: "${opp._sourceStatus.limitation}"`);
 
-  // ── Never marks failed task as AVAILABLE ─────────────────────────────
+  // â”€â”€ Never marks failed task as AVAILABLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.notEqual(opp.sourceStatus, SOURCE_STATUS.AVAILABLE);
   assert.notEqual(serp.status, SOURCE_STATUS.AVAILABLE);
 
-  // ── Limitations contain the error ────────────────────────────────────
+  // â”€â”€ Limitations contain the error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.limitations.length > 0);
   assert.ok(opp.limitations.some((l) => l.includes("40401") || l.includes("Invalid location")),
     `Limitations must reference task error, got: ${opp.limitations.join(" | ")}`);
@@ -499,7 +499,7 @@ test("S-09: report renders SERP failure limitation, not empty success", () => {
 
   const html = competitorBenchmark(model);
 
-  // ── Must render the SERP failure limitation ──────────────────────────
+  // â”€â”€ Must render the SERP failure limitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(html.includes("Source limitation"),
     "Report must render source limitation for SERP failure");
   assert.ok(html.includes("FAILED") || html.includes("status_code=40401"),
@@ -507,22 +507,22 @@ test("S-09: report renders SERP failure limitation, not empty success", () => {
   assert.ok(html.includes("Invalid location"),
     "Report must include the provider error message");
 
-  // ── Must NOT say competitors were absent ─────────────────────────────
+  // â”€â”€ Must NOT say competitors were absent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(html.includes("Competitor analysis continues with supplied-competitor evidence only") ||
     html.includes("localized competitor evidence could not be collected"),
     "Report must explain the limitation, not claim competitors are absent");
 
-  // ── Must NOT render empty competitor results as success ──────────────
+  // â”€â”€ Must NOT render empty competitor results as success â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // The "No qualified gaps" message is OK because there truly are no gaps
   // But we must not claim SERP analysis was successful
   assert.equal(html.includes("DataForSEO SERP analysis of"), false,
     "Must not claim SERP analysis contributed when it failed");
 
-  // ── Must include normalized locale info ──────────────────────────────
+  // â”€â”€ Must include normalized locale info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(html.includes("English"), "Report must show normalized language");
   assert.ok(html.includes("Ottawa,Ontario,Canada"), "Report must show normalized location");
 
-  // ── Must not leak credentials or stack traces ────────────────────────
+  // â”€â”€ Must not leak credentials or stack traces â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(html.includes("test-login"), false, "Must not expose credentials");
   assert.equal(html.includes("test-pass"), false, "Must not expose credentials");
   assert.equal(html.includes("at querySerp"), false, "Must not expose stack traces");
@@ -591,20 +591,20 @@ test("S-10: report renders competitor evidence normally on SERP success", () => 
 
   const html = competitorBenchmark(model);
 
-  // ── Must show successful SERP analysis ───────────────────────────────
+  // â”€â”€ Must show successful SERP analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(html.includes("AVAILABLE"), "Report must show AVAILABLE SERP status");
   assert.ok(html.includes("task-success-010"), "Report must include task ID");
 
-  // ── Must render qualified gaps ───────────────────────────────────────
+  // â”€â”€ Must render qualified gaps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(html.includes("Qualified Competitor Gaps"), "Must render gap section");
   assert.ok(html.includes("comp1.example"), "Must render competitor domain");
   assert.ok(html.includes("Consulting"), "Must render topic");
 
-  // ── Must NOT show failure limitation ─────────────────────────────────
+  // â”€â”€ Must NOT show failure limitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(html.includes("Source limitation"), false,
     "Must not show failure limitation on success");
 
-  // ── Must include normalized locale info ──────────────────────────────
+  // â”€â”€ Must include normalized locale info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(html.includes("English"), "Report must show normalized language");
   assert.ok(html.includes("Ottawa,Ontario,Canada"), "Report must show normalized location");
 });
@@ -672,7 +672,7 @@ test("S-12: supplied competitors still processed when SERP tasks fail", async ()
         {
           url: "https://supplied-comp.example",
           status: SOURCE_STATUS.AVAILABLE,
-          evidence: { services: ["Consulting"], pageCount: 8, trust: { credentials: true } },
+          evidence: { services: ["Consulting"], audience: "Business leaders seeking consulting services", commercialIntent: "Consulting services are offered for purchase", pageCount: 8, trust: { credentials: true } },
         },
       ],
       fetchImpl,
@@ -686,7 +686,7 @@ test("S-12: supplied competitors still processed when SERP tasks fail", async ()
   // SERP must be FAILED
   assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED);
 
-  // Overall sourceStatus — should reflect that supplied competitors exist
+  // Overall sourceStatus â€” should reflect that supplied competitors exist
   // even though SERP failed
   assert.ok(
     opp.candidates.totalSupplied > 0,
@@ -695,7 +695,7 @@ test("S-12: supplied competitors still processed when SERP tasks fail", async ()
 });
 
 // ---------------------------------------------------------------------------
-// S-13: Missing top-level status_code → structured API failure
+// S-13: Missing top-level status_code â†’ structured API failure
 // ---------------------------------------------------------------------------
 
 test("S-13: missing top-level status_code produces error, not empty success", async () => {
@@ -735,7 +735,7 @@ test("S-13: missing top-level status_code produces error, not empty success", as
 });
 
 // ---------------------------------------------------------------------------
-// S-14: Null top-level status_code → structured API failure
+// S-14: Null top-level status_code â†’ structured API failure
 // ---------------------------------------------------------------------------
 
 test("S-14: null top-level status_code produces error, not empty success", async () => {
@@ -768,7 +768,7 @@ test("S-14: null top-level status_code produces error, not empty success", async
 });
 
 // ---------------------------------------------------------------------------
-// S-15: Missing task-level status_code → FAILED source, report limitation
+// S-15: Missing task-level status_code â†’ FAILED source, report limitation
 // ---------------------------------------------------------------------------
 
 test("S-15: missing task-level status_code becomes FAILED source and renders limitation", async () => {
@@ -787,7 +787,7 @@ test("S-15: missing task-level status_code becomes FAILED source and renders lim
     }), { status: 200 });
   };
 
-  // ── querySerp must return an error ───────────────────────────────────
+  // â”€â”€ querySerp must return an error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const result = await querySerp("test query", {
     login: "test-login",
     password: "test-pass",
@@ -803,7 +803,7 @@ test("S-15: missing task-level status_code becomes FAILED source and renders lim
   assert.equal(result.taskError.statusMessage, "missing task status code");
   assert.equal(result.items.length, 0, "Must not return items");
 
-  // ── Competitor layer must report FAILED ──────────────────────────────
+  // â”€â”€ Competitor layer must report FAILED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const opp = await collectCompetitorOpportunities(
     { sourceStatus: "AVAILABLE", services: ["Consulting"], topicKeywords: [], pages: [{ title: "Test" }], pageCount: 1, domain: "test.com", ctas: [], forms: [], trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false } },
     { targetUrl: "https://test.com", businessName: "Test", location: "Ottawa and Ontario, Canada", language: "en-CA", competitors: [] },
@@ -815,7 +815,7 @@ test("S-15: missing task-level status_code becomes FAILED source and renders lim
   assert.notEqual(opp.sources.dataforseoSerp.status, "AVAILABLE");
   assert.notEqual(opp.sources.dataforseoSerp.status, "UNAVAILABLE");
 
-  // ── Report must render source limitation ─────────────────────────────
+  // â”€â”€ Report must render source limitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { competitorBenchmark } = await import("../../report/sections-conversion.js");
   const { competitorComparison } = await import("../../scoring/report-model.js");
   const model = {
@@ -834,7 +834,7 @@ test("S-15: missing task-level status_code becomes FAILED source and renders lim
 });
 
 // ---------------------------------------------------------------------------
-// S-16: Null task-level status_code → FAILED source, no empty success
+// S-16: Null task-level status_code â†’ FAILED source, no empty success
 // ---------------------------------------------------------------------------
 
 test("S-16: null task-level status_code becomes FAILED source, not empty success", async () => {
@@ -853,7 +853,7 @@ test("S-16: null task-level status_code becomes FAILED source, not empty success
     }), { status: 200 });
   };
 
-  // ── querySerp must return an error ───────────────────────────────────
+  // â”€â”€ querySerp must return an error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const result = await querySerp("test query", {
     login: "test-login",
     password: "test-pass",
@@ -868,7 +868,7 @@ test("S-16: null task-level status_code becomes FAILED source, not empty success
   assert.equal(result.taskError.statusCode, null);
   assert.equal(result.items.length, 0);
 
-  // ── Competitor layer must report FAILED ──────────────────────────────
+  // â”€â”€ Competitor layer must report FAILED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const opp = await collectCompetitorOpportunities(
     { sourceStatus: "AVAILABLE", services: ["Consulting"], topicKeywords: [], pages: [{ title: "Test" }], pageCount: 1, domain: "test.com", ctas: [], forms: [], trust: { testimonials: false, credentials: false, caseStudies: false, faq: false, pricing: false, policies: false, contact: false } },
     { targetUrl: "https://test.com", businessName: "Test", location: "Canada", language: "en", competitors: [] },
@@ -887,7 +887,7 @@ test("S-16: null task-level status_code becomes FAILED source, not empty success
 });
 
 // ---------------------------------------------------------------------------
-// S-17: Two successful tasks + one failed task → PARTIAL
+// S-17: Two successful tasks + one failed task â†’ PARTIAL
 // ---------------------------------------------------------------------------
 
 test("S-17: two successful tasks plus one failed task produces PARTIAL, not FAILED", async () => {
@@ -956,7 +956,7 @@ test("S-17: two successful tasks plus one failed task produces PARTIAL, not FAIL
     },
   );
 
-  // ── SERP source must be PARTIAL, not FAILED ───────────────────────────
+  // â”€â”€ SERP source must be PARTIAL, not FAILED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.PARTIAL,
     `Two successful + one failed task must produce PARTIAL, got ${opp.sources.dataforseoSerp.status}`);
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
@@ -966,11 +966,11 @@ test("S-17: two successful tasks plus one failed task produces PARTIAL, not FAIL
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.UNAVAILABLE,
     "Must not mark partial success as UNAVAILABLE");
 
-  // ── Candidates from successful tasks are preserved ─────────────────────
+  // â”€â”€ Candidates from successful tasks are preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.sources.dataforseoSerp.candidateCount >= 4,
-    `Expected at least 4 SERP candidates (2 topics × 2 results each), got ${opp.sources.dataforseoSerp.candidateCount}`);
+    `Expected at least 4 SERP candidates (2 topics Ã— 2 results each), got ${opp.sources.dataforseoSerp.candidateCount}`);
 
-  // ── Task errors are preserved ──────────────────────────────────────────
+  // â”€â”€ Task errors are preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.sources.dataforseoSerp.taskErrors, "Must preserve task errors");
   assert.equal(opp.sources.dataforseoSerp.taskErrors.length, 1,
     `Expected 1 task error, got ${opp.sources.dataforseoSerp.taskErrors.length}`);
@@ -978,21 +978,21 @@ test("S-17: two successful tasks plus one failed task produces PARTIAL, not FAIL
   assert.ok(opp.sources.dataforseoSerp.taskErrors[0].statusMessage.includes("Internal SE Server Error"),
     "Must preserve original error message");
 
-  // ── Task IDs from all tasks are preserved ──────────────────────────────
+  // â”€â”€ Task IDs from all tasks are preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.taskIds.length, 3,
     `Expected 3 task IDs (2 success + 1 failed), got ${opp.sources.dataforseoSerp.taskIds.length}`);
 
-  // ── Normalized locale/location preserved ───────────────────────────────
+  // â”€â”€ Normalized locale/location preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.normalizedLanguage, "English");
   assert.equal(opp.sources.dataforseoSerp.normalizedLocation, "Ottawa,Ontario,Canada");
   assert.equal(opp.sources.dataforseoSerp.originalLanguage, "en-CA");
   assert.equal(opp.sources.dataforseoSerp.originalLocation, "Ottawa and Ontario, Canada");
 
-  // ── _sourceStatus must reflect partial with error category ─────────────
+  // â”€â”€ _sourceStatus must reflect partial with error category â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
   assert.ok(opp._sourceStatus.limitation, "Must have limitation text for PARTIAL status");
 
-  // ── Limitations mention the failed topic without stack traces ──────────
+  // â”€â”€ Limitations mention the failed topic without stack traces â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.limitations.length > 0, "Must have limitations");
   const serpLimitation = opp.limitations.find((l) => l.includes("40101"));
   assert.ok(serpLimitation, "Must have a limitation referencing the 40101 error");
@@ -1001,12 +1001,12 @@ test("S-17: two successful tasks plus one failed task produces PARTIAL, not FAIL
   assert.equal(serpLimitation.includes("at querySerp"), false, "Must not expose stack traces");
   assert.equal(serpLimitation.includes("at collectCompetitorOpportunities"), false, "Must not expose stack traces");
 
-  // ── Supplied competitor source is unaffected ───────────────────────────
+  // â”€â”€ Supplied competitor source is unaffected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.supplied.status, SOURCE_STATUS.NOT_APPLICABLE);
 });
 
 // ---------------------------------------------------------------------------
-// S-18: All tasks failed → FAILED
+// S-18: All tasks failed â†’ FAILED
 // ---------------------------------------------------------------------------
 
 test("S-18: all SERP tasks failed produces FAILED, not PARTIAL", async () => {
@@ -1025,7 +1025,7 @@ test("S-18: all SERP tasks failed produces FAILED, not PARTIAL", async () => {
     }), { status: 200 });
   };
 
-  // Use a site with 2 topics — both will fail
+  // Use a site with 2 topics â€” both will fail
   const siteWith2Topics = {
     sourceStatus: SOURCE_STATUS.AVAILABLE,
     services: ["Consulting", "Coaching"],
@@ -1049,7 +1049,7 @@ test("S-18: all SERP tasks failed produces FAILED, not PARTIAL", async () => {
     },
   );
 
-  // ── SERP source must be FAILED when all tasks fail ─────────────────────
+  // â”€â”€ SERP source must be FAILED when all tasks fail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
     `All tasks failed must produce FAILED, got ${opp.sources.dataforseoSerp.status}`);
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.PARTIAL,
@@ -1057,21 +1057,21 @@ test("S-18: all SERP tasks failed produces FAILED, not PARTIAL", async () => {
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.AVAILABLE,
     "Must not produce AVAILABLE when all tasks fail");
 
-  // ── Zero candidates ────────────────────────────────────────────────────
+  // â”€â”€ Zero candidates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.candidateCount, 0,
     "Must have zero candidates when all tasks fail");
 
-  // ── Task errors for all topics ─────────────────────────────────────────
+  // â”€â”€ Task errors for all topics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.sources.dataforseoSerp.taskErrors, "Must preserve task errors");
   assert.equal(opp.sources.dataforseoSerp.taskErrors.length, 2,
     `Expected 2 task errors, got ${opp.sources.dataforseoSerp.taskErrors.length}`);
 
-  // ── _sourceStatus error category ───────────────────────────────────────
+  // â”€â”€ _sourceStatus error category â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp._sourceStatus.errorCategory, ERROR_CATEGORY.INTERNAL);
 });
 
 // ---------------------------------------------------------------------------
-// S-19: All tasks successful with zero results → UNAVAILABLE
+// S-19: All tasks successful with zero results â†’ UNAVAILABLE
 // ---------------------------------------------------------------------------
 
 test("S-19: all tasks successful with zero organic results produces UNAVAILABLE", async () => {
@@ -1119,7 +1119,7 @@ test("S-19: all tasks successful with zero organic results produces UNAVAILABLE"
     },
   );
 
-  // ── SERP source must be UNAVAILABLE for zero organic results ───────────
+  // â”€â”€ SERP source must be UNAVAILABLE for zero organic results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.status, SOURCE_STATUS.UNAVAILABLE,
     `Zero organic results with success must be UNAVAILABLE, got ${opp.sources.dataforseoSerp.status}`);
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.FAILED,
@@ -1127,16 +1127,16 @@ test("S-19: all tasks successful with zero organic results produces UNAVAILABLE"
   assert.notEqual(opp.sources.dataforseoSerp.status, SOURCE_STATUS.PARTIAL,
     "Must not produce PARTIAL for zero results with no task errors");
 
-  // ── Zero candidates, zero task errors ───────────────────────────────────
+  // â”€â”€ Zero candidates, zero task errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp.sources.dataforseoSerp.candidateCount, 0);
   assert.equal(opp.sources.dataforseoSerp.taskErrors, undefined,
     "Must not have task errors for successful tasks");
 
-  // ── Task IDs preserved ─────────────────────────────────────────────────
+  // â”€â”€ Task IDs preserved â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.ok(opp.sources.dataforseoSerp.taskIds.length > 0,
     "Must preserve task IDs even when zero results");
 
-  // ── _sourceStatus has no error category ────────────────────────────────
+  // â”€â”€ _sourceStatus has no error category â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   assert.equal(opp._sourceStatus.errorCategory, null,
     "Must not have error category for zero results success");
 });

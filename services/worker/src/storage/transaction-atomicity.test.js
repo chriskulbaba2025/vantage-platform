@@ -1,5 +1,5 @@
 /**
- * Task 9 — Transaction Atomicity Tests
+ * Task 9 â€” Transaction Atomicity Tests
  *
  * Proves that competitor review persistence is atomic:
  *  - failed staging leaves previous state fully intact
@@ -50,7 +50,7 @@ const NC = { evidenceVersion: "1.0.0", source: "none", sourceStatus: SOURCE_STAT
 
 const COMPETITORS = [{
   url: "https://competitor.example/services/consulting", status: SOURCE_STATUS.AVAILABLE,
-  evidence: { services: ["Consulting"], pageCount: 10, trust: { testimonials: true, credentials: true, caseStudies: false, faq: true, pricing: true, policies: true, contact: true }, schemaTypes: ["Service"], ctas: [{ text: "Book", url: "https://c.example/book", kind: "link" }], forms: [], domain: "competitor.example", socialLinks: [], topicKeywords: [], pages: [{ title: "Comp", headings: { h1: ["Consulting"], h2: [], h3: [], h4: [] }, responseHeaders: {} }], platform: "WordPress" },
+  evidence: { services: ["Consulting"], audience: "Business leaders seeking consulting services", commercialIntent: "Consulting services are offered for purchase", pageCount: 10, trust: { testimonials: true, credentials: true, caseStudies: false, faq: true, pricing: true, policies: true, contact: true }, schemaTypes: ["Service"], ctas: [{ text: "Book", url: "https://c.example/book", kind: "link" }], forms: [], domain: "competitor.example", socialLinks: [], topicKeywords: [], pages: [{ title: "Comp", headings: { h1: ["Consulting"], h2: [], h3: [], h4: [] }, responseHeaders: {} }], platform: "WordPress" },
 }];
 
 function baseConfig(dir) {
@@ -71,7 +71,7 @@ test("T9-ATOM-01: staging failure leaves previous state intact", async () => {
 
   const initialLc = await store._readLifecycle(slug, runId);
 
-  // Circular reference → JSON.stringify throws during staging
+  // Circular reference â†’ JSON.stringify throws during staging
   const bad = { circular: null };
   bad.circular = bad;
   try { await store.commitCompetitorReview({ slug, runId, evidence: bad, model: {}, reviewRecord: { runId, reviewer: "x", reviewedAt: NOW, checklist: [], overrides: [], notes: null, limitationsAccepted: false } }); assert.fail("Should throw"); } catch { /* expected */ }
@@ -165,7 +165,7 @@ test("T9-ATOM-04: reads resolve through active transaction, not orphaned staging
   const model = { scoringVersion: "3.0.0", input: { targetUrl: "https://example.com", businessName: "Example" }, scores: {}, evidence };
   await store.writeReport({ slug, runId, html: "<html></html>", model, manifest: { runId, slug, sources: {} } });
 
-  // Before review — no active transaction
+  // Before review â€” no active transaction
   const before = await store.readCommittedArtifacts(slug, runId);
   assert.ok(before, "Should read canonical artifacts");
   assert.equal(before.txId, null, "No active transaction before review");
@@ -291,7 +291,7 @@ test("T9-ATOM-04: reads resolve through active transaction only", async () => {
 
   await store.writeReport({ slug, runId, html: "<html></html>", model, manifest: { runId, slug, sources: {} } });
 
-  // Read before review — should read from canonical paths (no txId)
+  // Read before review â€” should read from canonical paths (no txId)
   const beforeRead = await store.readCommittedArtifacts(slug, runId);
   assert.ok(beforeRead, "Should read canonical artifacts");
   assert.equal(beforeRead.txId, null, "No active transaction before review");

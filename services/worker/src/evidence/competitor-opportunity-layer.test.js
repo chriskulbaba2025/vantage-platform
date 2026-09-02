@@ -31,8 +31,18 @@ const BASE_INPUT = {
   competitors: ["https://competitor-one.example"],
 };
 
+const COMPLETE_SUPPLIED_EVIDENCE = {
+  services: ["Consulting"],
+  geographicContext: "Toronto, Ontario, Canada",
+  audience: "Business leaders seeking consulting services",
+  commercialIntent: "Consulting services are offered for purchase",
+  pageCount: 10,
+  trust: { credentials: true },
+  schemaTypes: ["Service"],
+};
+
 // ---------------------------------------------------------------------------
-// T9-01: Qualification gate — all five checks
+// T9-01: Qualification gate â€” all five checks
 // ---------------------------------------------------------------------------
 
 test("T9-01: candidate passes all five qualification checks", () => {
@@ -162,7 +172,7 @@ test("T9-04: gaps from pending competitors are filtered from client output", asy
       {
         url: "https://competitor.example",
         status: SOURCE_STATUS.AVAILABLE,
-        evidence: { services: ["Consulting"], pageCount: 10, trust: { credentials: true }, schemaTypes: ["Service"] },
+        evidence: COMPLETE_SUPPLIED_EVIDENCE,
       },
     ],
     fetchImpl,
@@ -189,7 +199,7 @@ test("T9-05: gaps from rejected competitors are filtered from client output", as
       {
         url: "https://competitor.example",
         status: SOURCE_STATUS.AVAILABLE,
-        evidence: { services: ["Consulting"], pageCount: 10, trust: { credentials: true }, schemaTypes: ["Service"] },
+        evidence: COMPLETE_SUPPLIED_EVIDENCE,
       },
     ],
     fetchImpl,
@@ -215,7 +225,7 @@ test("T9-06: approved competitor generates gap when all checks pass", async () =
       {
         url: "https://competitor.example/services",
         status: SOURCE_STATUS.AVAILABLE,
-        evidence: { services: ["Consulting"], pageCount: 10, trust: { credentials: true }, schemaTypes: ["Service"] },
+        evidence: COMPLETE_SUPPLIED_EVIDENCE,
       },
     ],
     fetchImpl,
@@ -248,7 +258,7 @@ test("T9-07: DataForSEO SERP failure does not block supplied competitors", async
       {
         url: "https://competitor.example",
         status: SOURCE_STATUS.AVAILABLE,
-        evidence: { services: ["Consulting"], pageCount: 8 },
+        evidence: { services: ["Consulting"], audience: "Business leaders seeking consulting services", commercialIntent: "Consulting services are offered for purchase", pageCount: 8 },
       },
     ],
     fetchImpl,
@@ -277,7 +287,7 @@ test("T9-08: BLOCKED competitor does not stop other competitors", async () => {
       {
         url: "https://competitor.example",
         status: SOURCE_STATUS.AVAILABLE,
-        evidence: { services: ["Consulting"], pageCount: 8 },
+        evidence: { services: ["Consulting"], audience: "Business leaders seeking consulting services", commercialIntent: "Consulting services are offered for purchase", pageCount: 8 },
       },
     ],
     fetchImpl,
@@ -299,7 +309,7 @@ test("T9-09: unavailable competitors produce PARTIAL or UNAVAILABLE, not FAILED"
     { dataforseoLogin: "", dataforseoPassword: "", suppliedCompetitors: [], fetchImpl },
   );
 
-  // No competitors at all — should be UNAVAILABLE, not FAILED
+  // No competitors at all â€” should be UNAVAILABLE, not FAILED
   assert.ok(
     result.sourceStatus === SOURCE_STATUS.UNAVAILABLE || result.sourceStatus === SOURCE_STATUS.NOT_CONNECTED,
     `Expected UNAVAILABLE or NOT_CONNECTED, got ${result.sourceStatus}`,
@@ -434,6 +444,45 @@ test("P4-DIRECT-01: conflicting supplied service evidence is excluded", async ()
   assert.equal(result.candidates.qualified.length, 0);
   assert.equal(result.candidates.excluded.length, 1);
   assert.equal(result.candidates.excluded[0].qualificationResults.service_relevance, false);
+});
+
+test("P4-DIRECT-02: supplied candidates without observed qualification evidence remain excluded", async () => {
+  const result = await collectCompetitorOpportunities(
+    { ...BASE_SITE, services: ["Physiotherapy"], topicKeywords: [] },
+    { ...BASE_INPUT, businessName: "Toronto Clinic" },
+    {
+      dataforseoLogin: "",
+      dataforseoPassword: "",
+      suppliedCompetitors: [{
+        url: "https://unsupported.example",
+        status: SOURCE_STATUS.AVAILABLE,
+        evidence: { services: ["Physiotherapy"], pageCount: 4 },
+      }],
+    },
+  );
+
+  assert.equal(result.candidates.qualified.length, 0);
+  const excluded = result.candidates.excluded[0];
+  assert.equal(excluded.qualificationResults.geographic_relevance, false);
+  assert.equal(excluded.qualificationResults.audience_relevance, false);
+  assert.equal(excluded.qualificationResults.commercial_intent_relevance, false);
+});
+
+test("P4-DIRECT-03: complete supplied evidence preserves approved competitor workflow", async () => {
+  const result = await collectCompetitorOpportunities(BASE_SITE, BASE_INPUT, {
+    dataforseoLogin: "",
+    dataforseoPassword: "",
+    suppliedCompetitors: [{
+      url: "https://qualified.example/services",
+      status: SOURCE_STATUS.AVAILABLE,
+      evidence: COMPLETE_SUPPLIED_EVIDENCE,
+    }],
+    auditorApprovals: { "https://qualified.example/services": "approved" },
+  });
+
+  assert.equal(result.candidates.qualified.length, 1);
+  assert.equal(result.candidates.qualified[0].approvalStatus, "approved");
+  assert.ok(result.gaps.every((gap) => gap.approvalStatus === "approved"));
 });
 
 // ---------------------------------------------------------------------------
