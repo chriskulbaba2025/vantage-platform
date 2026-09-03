@@ -50,6 +50,8 @@ test("T9-01: candidate passes all five qualification checks", () => {
     candidateUrl: "https://competitor.example/services/consulting",
     domain: "competitor.example",
     topic: "business consulting",
+    observedServiceContext: "Business Consulting Services",
+    serviceEvidenceSource: "serp-title",
     discoverySource: "dataforseo-serp",
     geographicContext: "Toronto, Ontario, Canada",
     audienceContext: "Business leaders seeking consulting services",
@@ -381,6 +383,8 @@ test("T9-12: SERP organic results are normalized", () => {
     candidateUrl: "https://competitor.example/services/consulting",
     domain: "competitor.example",
     topic: "business consulting",
+    observedServiceContext: "Business Consulting Services",
+    serviceEvidenceSource: "serp-title",
     discoverySource: "dataforseo-serp",
     geographicContext: "Toronto, Ontario, Canada",
     audienceContext: "Business leaders seeking consulting services",
@@ -494,6 +498,8 @@ test("P4-DIRECT-04: SERP query locale and inferred page type are not competitor 
     candidateUrl: "https://serp-result.example/services/physiotherapy",
     domain: "serp-result.example",
     topic: "Physiotherapy",
+    observedServiceContext: "Accounting & Tax Services",
+    serviceEvidenceSource: "serp-title",
     discoverySource: "dataforseo-serp",
     queryGeographicContext: "Toronto, Canada",
     pageType: "service",
@@ -504,6 +510,7 @@ test("P4-DIRECT-04: SERP query locale and inferred page type are not competitor 
   });
 
   assert.equal(result.passed, false);
+  assert.equal(result.results.service_relevance, false);
   assert.equal(result.results.geographic_relevance, false);
   assert.equal(result.results.audience_relevance, false);
   assert.equal(result.results.commercial_intent_relevance, false);
@@ -514,6 +521,8 @@ test("P4-DIRECT-05: explicitly observed SERP evidence can enter approval workflo
     candidateUrl: "https://serp-result.example/services/physiotherapy",
     domain: "serp-result.example",
     topic: "Physiotherapy",
+    observedServiceContext: "Physiotherapy Clinic & Rehabilitation Services",
+    serviceEvidenceSource: "serp-title",
     discoverySource: "dataforseo-serp",
     queryGeographicContext: "Toronto, Canada",
     geographicContext: "Toronto, Canada",

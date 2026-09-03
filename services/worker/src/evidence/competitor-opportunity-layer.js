@@ -43,15 +43,17 @@ export function qualifyCandidate(candidate, clientContext) {
         );
   results.set("geographic_relevance", geoMatch);
 
+  const observedService = candidate.observedServiceContext || "";
+  const hasObservedServiceProvenance = Boolean(candidate.serviceEvidenceSource);
   const topicMatch =
-    !candidate.topic
+    !observedService || !hasObservedServiceProvenance
       ? false
       : (clientContext.services || []).some(
           (svc) =>
-            candidate.topic.toLowerCase().includes(svc.toLowerCase()) ||
-            svc.toLowerCase().includes((candidate.topic || "").toLowerCase()),
+            observedService.toLowerCase().includes(svc.toLowerCase()) ||
+            svc.toLowerCase().includes(observedService.toLowerCase()),
         ) || (clientContext.topicKeywords || []).some(
-          (kw) => candidate.topic.toLowerCase().includes(kw.toLowerCase()),
+          (kw) => observedService.toLowerCase().includes(kw.toLowerCase()),
         );
   results.set("service_relevance", topicMatch);
 
@@ -265,6 +267,8 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
       // A supplied competitor's topic must come from its observed evidence;
       // inheriting the client's first topic can qualify unrelated businesses.
       topic: competitor.evidence?.services?.[0] || competitor.evidence?.title || "",
+      observedServiceContext: competitor.evidence?.services?.join(", ") || competitor.evidence?.title || "",
+      serviceEvidenceSource: competitor.evidence?.services?.length ? "supplied-services" : competitor.evidence?.title ? "supplied-title" : null,
       discoverySource: "user-supplied",
       geographicContext: competitor.evidence?.geographicContext || competitor.evidence?.location || "",
       // Supplied URLs have no SERP observation to establish these factors.

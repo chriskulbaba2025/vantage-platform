@@ -144,6 +144,8 @@ test("S-03: DataForSEO request body contains normalized language_name and locati
   assert.equal(result.rawTaskId, "task-abc-001");
   assert.equal(result.items.length, 2);
   assert.equal(result.items[0].candidateUrl, "https://competitor1.example");
+  assert.equal(result.items[0].observedServiceContext, "Competitor One");
+  assert.equal(result.items[0].serviceEvidenceSource, "serp-title");
 
   // Normalized values are returned
   assert.equal(result.normalizedLanguage.languageName, "English");
