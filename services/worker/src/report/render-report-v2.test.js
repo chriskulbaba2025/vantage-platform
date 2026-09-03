@@ -155,6 +155,31 @@ test("WP-G-03: blocker rows carry priority/problem/consequence/evidence/action/i
   assert.ok(html.includes(firstFinding.confidence));
 });
 
+test("P9: conversion workflow diagram wraps complete labels without truncation", () => {
+  const longLabels = [
+    "Landing page discovery and orientation",
+    "Detailed service understanding",
+    "Customer proof and reassurance",
+    "Primary consultation request action",
+    "Completed conversion destination",
+  ];
+  const fixture = model();
+  fixture.conversionPaths = [{
+    name: "Primary path",
+    status: "Weak",
+    steps: longLabels,
+    blockers: ["Trust proof is limited"],
+  }];
+  const html = renderReportV2(fixture);
+  assert.match(html, /viewBox="0 0 1160 190"/);
+  assert.ok(!html.includes("slice(0, 26)"));
+  for (const label of longLabels) {
+    for (const word of label.split(" ")) assert.ok(html.includes(word), `label word is preserved: ${word}`);
+  }
+  assert.equal((html.match(/<rect x="\d+" y="42"/g) || []).length, 5);
+  assert.equal((html.match(/marker-end="url\(#pathArrow\)"/g) || []).length, 4);
+});
+
 test("P2: blocker location lists client-owned affected URLs when available", () => {
   const m = model();
   const finding = m.findings.find((f) => f.scoreBearing === true);

@@ -534,18 +534,34 @@ function conversionPathSection(model) {
     steps[4] || "Conversion destination",
   ];
 
+  const flowLabelLines = (label) => {
+    const words = String(label).trim().split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      if (current && `${current} ${word}`.length > 22) {
+        lines.push(current);
+        current = word;
+      } else current = current ? `${current} ${word}` : word;
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : ["—"];
+  };
+
   const flowSvg = `
     <div style="overflow-x:auto;margin:18px 0">
-          <svg viewBox="0 0 900 150" role="img" aria-label="Primary conversion path" style="width:100%;min-width:720px">
+          <svg viewBox="0 0 1160 190" role="img" aria-label="Primary conversion path" style="width:100%;min-width:760px;height:auto">
         <defs>
           <marker id="pathArrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
             <path d="M0,0 L0,6 L7,3 z" fill="currentColor"/>
           </marker>
         </defs>
         ${flowLabels.map((label, index) => {
-          const x = 20 + index * 176;
+          const x = 20 + index * 224;
+          const lines = flowLabelLines(label);
+          const startY = 82 - ((lines.length - 1) * 8);
           return `<rect x="${x}" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
-            <text x="${x + 72.5}" y="76" text-anchor="middle" font-size="12">${e(String(label).slice(0, 26))}</text>
+            <text x="${x + 72.5}" y="${startY}" text-anchor="middle" font-size="12">${lines.map((line, lineIndex) => `<tspan x="${x + 72.5}" dy="${lineIndex === 0 ? 0 : 16}">${e(line)}</tspan>`).join("")}</text>
             ${index < flowLabels.length - 1 ? `<line x1="${x + 145}" y1="71" x2="${x + 170}" y2="71" stroke="currentColor" marker-end="url(#pathArrow)" opacity=".55"/>` : ""}`;
         }).join("")}
       </svg>
