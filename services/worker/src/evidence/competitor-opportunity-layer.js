@@ -29,13 +29,12 @@ const EXCLUDED_PAGE_TYPES = new Set([
 
 export function qualifyCandidate(candidate, clientContext) {
   const results = new Map();
-  const isSuppliedCandidate = candidate.discoverySource === "user-supplied";
 
   const geoMatch =
     !clientContext.location
       ? true
       : !candidate.geographicContext
-        ? !isSuppliedCandidate
+        ? false
       : candidate.geographicContext.toLowerCase().includes(
           clientContext.location.toLowerCase().split(",")[0]?.trim() || "",
         ) ||
@@ -56,18 +55,10 @@ export function qualifyCandidate(candidate, clientContext) {
         );
   results.set("service_relevance", topicMatch);
 
-  const audienceMatch = isSuppliedCandidate
-    ? Boolean(candidate.audienceContext)
-    : candidate.pageType !== "reference" && candidate.pageType !== "community";
+  const audienceMatch = Boolean(candidate.audienceContext);
   results.set("audience_relevance", audienceMatch);
 
-  const commercialMatch = isSuppliedCandidate
-    ? Boolean(candidate.commercialContext)
-    : candidate.pageType === "service" ||
-      candidate.pageType === "product" ||
-      candidate.pageType === "pricing" ||
-      candidate.pageType === "company_page" ||
-      candidate.pageType === "landing";
+  const commercialMatch = Boolean(candidate.commercialContext);
   results.set("commercial_intent_relevance", commercialMatch);
 
   const comparable =

@@ -52,6 +52,8 @@ test("T9-01: candidate passes all five qualification checks", () => {
     topic: "business consulting",
     discoverySource: "dataforseo-serp",
     geographicContext: "Toronto, Ontario, Canada",
+    audienceContext: "Business leaders seeking consulting services",
+    commercialContext: "Consulting services offered for purchase",
     languageContext: "en",
     pageType: "service",
     position: 3,
@@ -381,6 +383,8 @@ test("T9-12: SERP organic results are normalized", () => {
     topic: "business consulting",
     discoverySource: "dataforseo-serp",
     geographicContext: "Toronto, Ontario, Canada",
+    audienceContext: "Business leaders seeking consulting services",
+    commercialContext: "Consulting services offered for purchase",
     languageContext: "en",
     pageType: "service",
     position: 3,
@@ -483,6 +487,46 @@ test("P4-DIRECT-03: complete supplied evidence preserves approved competitor wor
   assert.equal(result.candidates.qualified.length, 1);
   assert.equal(result.candidates.qualified[0].approvalStatus, "approved");
   assert.ok(result.gaps.every((gap) => gap.approvalStatus === "approved"));
+});
+
+test("P4-DIRECT-04: SERP query locale and inferred page type are not competitor evidence", () => {
+  const result = qualifyCandidate({
+    candidateUrl: "https://serp-result.example/services/physiotherapy",
+    domain: "serp-result.example",
+    topic: "Physiotherapy",
+    discoverySource: "dataforseo-serp",
+    queryGeographicContext: "Toronto, Canada",
+    pageType: "service",
+  }, {
+    location: "Toronto, Canada",
+    services: ["Physiotherapy"],
+    topicKeywords: [],
+  });
+
+  assert.equal(result.passed, false);
+  assert.equal(result.results.geographic_relevance, false);
+  assert.equal(result.results.audience_relevance, false);
+  assert.equal(result.results.commercial_intent_relevance, false);
+});
+
+test("P4-DIRECT-05: explicitly observed SERP evidence can enter approval workflow", () => {
+  const result = qualifyCandidate({
+    candidateUrl: "https://serp-result.example/services/physiotherapy",
+    domain: "serp-result.example",
+    topic: "Physiotherapy",
+    discoverySource: "dataforseo-serp",
+    queryGeographicContext: "Toronto, Canada",
+    geographicContext: "Toronto, Canada",
+    audienceContext: "Toronto physiotherapy patients",
+    commercialContext: "Physiotherapy appointments are offered",
+    pageType: "service",
+  }, {
+    location: "Toronto, Canada",
+    services: ["Physiotherapy"],
+    topicKeywords: [],
+  });
+
+  assert.equal(result.passed, true);
 });
 
 // ---------------------------------------------------------------------------

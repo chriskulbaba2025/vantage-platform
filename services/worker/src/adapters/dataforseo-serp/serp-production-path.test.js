@@ -382,7 +382,9 @@ test("S-07: audit.json records full canonical state on SERP success", async () =
   assert.equal(opp._sourceStatus.provider, "competitor-opportunity-layer");
   assert.ok(opp._sourceStatus.startedAt);
   assert.ok(opp._sourceStatus.completedAt);
-  assert.ok(opp._sourceStatus.returnedRecordCount > 0);
+  assert.equal(opp._sourceStatus.returnedRecordCount, 0,
+    "SERP snippets without observed competitor geography, audience, and commercial evidence remain excluded");
+  assert.ok(opp.candidates.excluded.length > 0);
   assert.equal(opp._sourceStatus.errorCategory, null);
 
   // â”€â”€ Coverage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

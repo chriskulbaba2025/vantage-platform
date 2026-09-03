@@ -21,6 +21,7 @@ const commands = [
   ["--test", "scripts/replay-report-cli.test.js", "replay CLI historical compatibility boundary"],
   ["--test", "src/report-model/current-consumer-parity.test.js", "base, Narrative v2, and replay current-model parity"],
   ["scripts/pdv4-assembled-finalization-gate.js", "P-B14/P-B15 assembled persistence and finalization branches"],
+  ["scripts/p4-serp-qualification-gate.js", "P-B16 SERP evidence-grounded qualification branch"],
 ];
 
 try {
@@ -37,4 +38,4 @@ execFileSync(node, ["scripts/replay-report.js", replayFixture], { stdio: "inheri
 }
 
 process.stdout.write("\nPRYSM WHOLE-APP TRANCHE GATE: PASS\n");
-process.stdout.write("Covered branch IDs: P-B01,P-B02,P-B03,P-B04,P-B05,P-B06,P-B07,P-B08,P-B09,P-B10,P-B11,P-B12,P-B13,P-B14,P-B15\n");
+process.stdout.write("Covered branch IDs: P-B01,P-B02,P-B03,P-B04,P-B05,P-B06,P-B07,P-B08,P-B09,P-B10,P-B11,P-B12,P-B13,P-B14,P-B15,P-B16\n");
