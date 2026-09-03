@@ -35,7 +35,7 @@ export const REPORT_V2_VIEWER_PAGES = Object.freeze([
   Object.freeze({ pageId: "conversion-paths", title: "Conversion Path Architecture", sectionIds: Object.freeze(["paths"]) }),
   Object.freeze({ pageId: "readiness-map", title: "Conversion Readiness Map", sectionIds: Object.freeze(["pillars"]) }),
   Object.freeze({ pageId: "content-ideas", title: "Topical Map & Qualified Content Opportunities", sectionIds: Object.freeze(["content-ideas"]) }),
-  Object.freeze({ pageId: "competitor-benchmark", title: "Competitor Benchmark", sectionIds: Object.freeze(["competitors"]) }),
+  Object.freeze({ pageId: "competitor-benchmark", title: "Competitor Benchmarking", sectionIds: Object.freeze(["competitors"]) }),
   Object.freeze({ pageId: "trust-eeat", title: "Trust & E-E-A-T Readiness", sectionIds: Object.freeze(["eeat"]) }),
   Object.freeze({ pageId: "cms-constraints", title: "CMS & Platform Constraints", sectionIds: Object.freeze(["cms"]) }),
   Object.freeze({ pageId: "technical-seo", title: "Technical SEO Hygiene", sectionIds: Object.freeze(["technical"]) }),
@@ -265,7 +265,7 @@ function executiveScorecard(model, pillars) {
     <h3>What should you do first?</h3>
     ${actionsHtml}
 
-    <h3>What is already working?</h3>
+    <h3>What Is Already Working</h3>
     ${strengths.length
       ? `<ul>${strengths.slice(0, 5).map((s) => `<li>${e(s)}</li>`).join("")}</ul>`
       : `<p>No readiness dimension reached the positive reporting threshold in the currently assessed evidence.</p>`}
@@ -686,7 +686,7 @@ function competitorSection(model) {
 
     return `<section id="competitors" class="card">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How does your website compare with the competitors buyers are likely to consider?</p>
-      <p class="muted small">Competitor Benchmark</p>
+      <p class="muted small">Competitor Benchmarking</p>
       <h2>Competitive context</h2>
       <p><span class="chip ${noComparisonState.className}">${e(noComparisonState.label)}</span> ${e(noComparisonState.explanation)}</p>
       ${limitations.length ? `<h3>Evidence limitations</h3><ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}
@@ -780,7 +780,7 @@ function competitorSection(model) {
   return `
   <section id="competitors" class="card">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How does your website compare with the competitors buyers are likely to consider?</p>
-    <p class="muted small">Competitor Benchmark</p>
+    <p class="muted small">Competitor Benchmarking</p>
 
     <h2>Competitive context</h2>
     <p>${e(directAnswer)}</p>

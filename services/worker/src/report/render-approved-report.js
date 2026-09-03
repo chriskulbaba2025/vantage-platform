@@ -38,7 +38,7 @@ export const APPROVED_PAGES = Object.freeze([
   { pageId: "conversion-paths",      title: "Conversion Path Architecture",            secNum: "03", sectionId: "conversion-path-architecture",          render: conversionPaths },
   { pageId: "readiness-map",         title: "Conversion Readiness Map",                secNum: "04", sectionId: "conversion-readiness-map",              render: readinessMap },
   { pageId: "content-ideas",         title: "Topical Map & Qualified Content Opportunities", secNum: "05", sectionId: "topical-map-content-ideas",      render: contentIdeas },
-  { pageId: "competitor-benchmark",  title: "Competitor Benchmark",                    secNum: "06", sectionId: "supplied-competitor-benchmark",         render: competitorBenchmark },
+  { pageId: "competitor-benchmark",  title: "Competitor Benchmarking",                 secNum: "06", sectionId: "supplied-competitor-benchmark",         render: competitorBenchmark },
   { pageId: "trust-eeat",            title: "Trust & E-E-A-T Readiness",               secNum: "07", sectionId: "e-e-a-t-conversion-trust-readiness",    render: eeat },
   { pageId: "cms-constraints",       title: "CMS & Platform Constraints",              secNum: "08", sectionId: "cms-platform-constraints",              render: cms },
   { pageId: "technical-seo",         title: "Technical SEO Hygiene",                   secNum: "09", sectionId: "technical-seo-hygiene",                 render: technical },

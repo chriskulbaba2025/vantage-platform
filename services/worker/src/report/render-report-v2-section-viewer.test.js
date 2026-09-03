@@ -111,7 +111,7 @@ const EXPECTED_PAGES = [
   "Conversion Path Architecture",
   "Conversion Readiness Map",
   "Topical Map & Qualified Content Opportunities",
-  "Competitor Benchmark",
+  "Competitor Benchmarking",
   "Trust & E-E-A-T Readiness",
   "CMS & Platform Constraints",
   "Technical SEO Hygiene",
