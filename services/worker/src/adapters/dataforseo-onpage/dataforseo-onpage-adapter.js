@@ -488,6 +488,20 @@ function normalizePage(raw, context = {}) {
 // Schema type extraction
 // ---------------------------------------------------------------------------
 
+// DataForSEO uses these values as structured-data categories, not schema.org
+// types. They must not cross the normalized evidence contract as types.
+const PROVIDER_SCHEMA_CATEGORY_ALIASES = new Set([
+  "json_ld",
+  "microdata",
+]);
+
+function addSchemaType(types, value) {
+  if (typeof value !== "string") return;
+  const type = value.trim();
+  if (!type || PROVIDER_SCHEMA_CATEGORY_ALIASES.has(type.toLowerCase())) return;
+  types.add(type);
+}
+
 function extractSchemaTypes(raw) {
   const types = new Set();
 
@@ -497,17 +511,17 @@ function extractSchemaTypes(raw) {
 
   for (const item of items) {
     if (item.type) {
-      types.add(item.type);
+      addSchemaType(types, item.type);
     }
     if (item.types && Array.isArray(item.types)) {
-      item.types.forEach((t) => types.add(t));
+      item.types.forEach((t) => addSchemaType(types, t));
     }
   }
 
   // Also check meta structured data
   if (raw.meta?.structured_data_types) {
     for (const t of raw.meta.structured_data_types) {
-      types.add(t);
+      addSchemaType(types, t);
     }
   }
 
@@ -876,8 +890,8 @@ function extractMicrodataTypes(raw) {
   const types = new Set();
   const items = raw?.items || [];
   for (const item of items) {
-    if (item.type) types.add(item.type);
-    for (const t of item.types || []) types.add(t);
+    if (item.type) addSchemaType(types, item.type);
+    for (const t of item.types || []) addSchemaType(types, t);
   }
   return [...types].sort();
 }

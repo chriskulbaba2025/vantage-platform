@@ -811,6 +811,30 @@ test("normalized pages contain all required PRD fields", async () => {
   }
 });
 
+test("provider structured-data category aliases do not become schema types", async () => {
+  const fixtures = buildSuccessfulFixtures(1);
+  fixtures.pages.items[0] = buildPageFixture(0, {
+    schemaTypes: ["json_ld", "Organization", "json_ld"],
+    structured_data: {
+      types: [
+        { type: "json_ld" },
+        { type: "Organization" },
+        { types: ["microdata", "LocalBusiness"] },
+      ],
+    },
+  });
+
+  const result = await crawlWithDataforseo(
+    "https://example.com",
+    crawlOpts(fixtures),
+  );
+
+  assert.deepEqual(result.pages[0].schemaTypes, ["LocalBusiness", "Organization"]);
+  assert.deepEqual(result.schemaTypes, ["LocalBusiness", "Organization"]);
+  assert.ok(result.pages[0].bodyText.includes("Page 0 content"));
+  assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
+});
+
 // ---------------------------------------------------------------------------
 // 11. Raw task ID preservation
 // ---------------------------------------------------------------------------
