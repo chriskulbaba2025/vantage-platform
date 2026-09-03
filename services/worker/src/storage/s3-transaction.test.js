@@ -1,7 +1,7 @@
 /**
  * Real S3 store transaction tests using a mocked in-memory S3 client.
  *
- * Tests createS3ReportStore with a Map-backed client — zero live AWS calls.
+ * Tests createS3ReportStore with a Map-backed client â€” zero live AWS calls.
  */
 
 import test from "node:test";
@@ -22,7 +22,7 @@ class MockBody {
 }
 
 function createMockS3Client() {
-  const store = new Map(); // "Bucket/Key" → { body, contentType }
+  const store = new Map(); // "Bucket/Key" â†’ { body, contentType }
 
   const client = {
     _store: store,
@@ -83,7 +83,7 @@ const NOW = new Date().toISOString();
 const SITE = { evidenceVersion:"1.0.0", source:"dfs", sourceStatus:SOURCE_STATUS.AVAILABLE, targetUrl:"https://x.com/", domain:"x.com", pageCount:5, totalWords:1000, averageWords:500, missingTitles:0, missingDescriptions:0, missingCanonicals:0, h1Missing:0, h1Multiple:0, imageCount:3, imagesMissingAlt:0, imagesMissingDimensions:0, schemaTypes:["Organization"], forms:[], ctas:[{text:"C",url:"https://x.com/c",kind:"link"}], externalCtas:[], socialLinks:[], internalLinkCount:2, brokenInternalLinks:[], platform:"WP", services:["Consulting"], topicKeywords:["consulting"], securityHeaders:{xFrameOptions:true,xContentTypeOptions:true,referrerPolicy:true,contentSecurityPolicy:false}, trust:{testimonials:true,credentials:true,caseStudies:false,faq:true,pricing:true,policies:true,contact:true}, limitations:[], pages:[{title:"H",language:"en",headings:{h1:["H"],h2:[],h3:[],h4:[]},responseHeaders:{}}], collectedAt:NOW, coverage:{requested:5,completed:5,failed:0}, _sourceStatus:{provider:"dfs",adapterVersion:"1.0.0",startedAt:NOW,completedAt:NOW,returnedRecordCount:5,expectedRecordCount:5} };
 const PERF = { evidenceVersion:"1.0.0", source:"psi", sourceStatus:SOURCE_STATUS.AVAILABLE, mobile:{status:SOURCE_STATUS.AVAILABLE,source:"psi",scores:{performance:75},metrics:{}}, desktop:{status:SOURCE_STATUS.AVAILABLE,source:"psi",scores:{performance:90},metrics:{}}, fieldData:{}, limitations:[], collectedAt:NOW, coverage:{requested:2,completed:2,failed:0}, _sourceStatus:{provider:"psi",adapterVersion:"1.0.0",returnedRecordCount:2,expectedRecordCount:2} };
 const NC = { evidenceVersion:"1.0.0", source:"none", sourceStatus:SOURCE_STATUS.NOT_CONNECTED, status:SOURCE_STATUS.NOT_CONNECTED, collectedAt:NOW, coverage:{requested:0,completed:0,failed:0}, _sourceStatus:{provider:"none",adapterVersion:"1.0.0",returnedRecordCount:0,expectedRecordCount:null} };
-const COMPS = [{ url:"https://c.example/s", status:SOURCE_STATUS.AVAILABLE, evidence:{ services:["Consulting"], pageCount:10, trust:{testimonials:true,credentials:true,caseStudies:false,faq:true,pricing:true,policies:true,contact:true}, schemaTypes:["Service"], ctas:[{text:"B",url:"https://c.example/b",kind:"link"}], forms:[], domain:"c.example", socialLinks:[], topicKeywords:[], pages:[{title:"C",headings:{h1:["Consulting"],h2:[],h3:[],h4:[]},responseHeaders:{}}], platform:"WP" } }];
+const COMPS = [{ url:"https://c.example/s", status:SOURCE_STATUS.AVAILABLE, evidence:{ services:["Consulting"], audience:"Business leaders seeking consulting services", commercialIntent:"Consulting services are offered for purchase", pageCount:10, trust:{testimonials:true,credentials:true,caseStudies:false,faq:true,pricing:true,policies:true,contact:true}, schemaTypes:["Service"], ctas:[{text:"B",url:"https://c.example/b",kind:"link"}], forms:[], domain:"c.example", socialLinks:[], topicKeywords:[], pages:[{title:"C",headings:{h1:["Consulting"],h2:[],h3:[],h4:[]},responseHeaders:{}}], platform:"WP" } }];
 const CHECKLIST = [{id:"source_failures",reviewed:true},{id:"top_ten_findings",reviewed:true},{id:"high_severity",reviewed:true},{id:"competitor_selections",reviewed:true},{id:"root_cause",reviewed:true},{id:"score_eligibility",reviewed:true},{id:"limitations",reviewed:true},{id:"causal_language",reviewed:true},{id:"internal_link_recommendations",reviewed:true},{id:"implementation_feasibility",reviewed:true}];
 
 function s3Config(client) {
@@ -135,7 +135,7 @@ test("S3-01: first competitor review commits successfully and is readable via cr
 });
 
 // ---------------------------------------------------------------------------
-// S3-02: pending → approved records previousValue "pending"
+// S3-02: pending â†’ approved records previousValue "pending"
 // ---------------------------------------------------------------------------
 
 test("S3-02: first review records previousValue pending in lifecycle overrides", async () => {
@@ -175,7 +175,7 @@ test("S3-03: re-review via S3 store preserves prior overrides and appends new on
 
   const newOverrides = secondLc.overrides.slice(firstOverrideCount);
   for (const ov of newOverrides) {
-    assert.equal(ov.previousValue, "approved", "Re-review should record approved→rejected");
+    assert.equal(ov.previousValue, "approved", "Re-review should record approvedâ†’rejected");
     assert.equal(ov.replacementValue, "rejected");
   }
 
@@ -189,7 +189,7 @@ test("S3-03: re-review via S3 store preserves prior overrides and appends new on
 // S3-04: deleting review-record.json causes null
 // ---------------------------------------------------------------------------
 
-test("S3-04: missing S3 review-record.json → readCommittedArtifacts returns null", async () => {
+test("S3-04: missing S3 review-record.json â†’ readCommittedArtifacts returns null", async () => {
   const s3Client = createMockS3Client();
   const store = createS3ReportStore({ bucket:"test-bucket", prefix:"vantage/reports", client:s3Client, region:"ca-central-1" });
   const result = await runAndReviewS3(store, s3Client, "s3-004");
@@ -204,10 +204,10 @@ test("S3-04: missing S3 review-record.json → readCommittedArtifacts returns nu
 });
 
 // ---------------------------------------------------------------------------
-// S3-05: tampered review checksum → null
+// S3-05: tampered review checksum â†’ null
 // ---------------------------------------------------------------------------
 
-test("S3-05: tampered review checksum in S3 → readCommittedArtifacts returns null", async () => {
+test("S3-05: tampered review checksum in S3 â†’ readCommittedArtifacts returns null", async () => {
   const s3Client = createMockS3Client();
   const store = createS3ReportStore({ bucket:"test-bucket", prefix:"vantage/reports", client:s3Client, region:"ca-central-1" });
   const result = await runAndReviewS3(store, s3Client, "s3-005");
@@ -296,7 +296,7 @@ test("S3-08: orphaned S3 staged objects are never treated as active", async () =
   tamperedLc.activeReviewTxId = bogusTxId;
   s3Client._store.set(lcKey, { body: JSON.stringify(tamperedLc) });
 
-  // Bogus txId has no staged objects → committed artifacts should be null
+  // Bogus txId has no staged objects â†’ committed artifacts should be null
   const committed = await store.readCommittedArtifacts(result.slug, result.runId);
-  assert.equal(committed, null, "Bogus transaction ID should return null — orphaned objects never active");
+  assert.equal(committed, null, "Bogus transaction ID should return null â€” orphaned objects never active");
 });

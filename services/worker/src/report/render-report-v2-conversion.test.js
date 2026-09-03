@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PRYSM-V2-REPORT-DEPTH-01 — conversion-first Section E + governed report depth.
  *
  * Proof-first suite (frozen checklist CR-01..CR-27, see
@@ -523,7 +523,7 @@ test("CR-09: technical sub-panels respect capability availability", () => {
   );
 
   const assessed = renderReportV2(scoreWith(assessedSite()));
-  const assessedTech = assessed.slice(assessed.indexOf("Technical Detail"), assessed.indexOf("Technical Detail") + 4000);
+  const assessedTech = assessed.slice(assessed.indexOf("Technical Detail"), assessed.indexOf("Technical Detail") + 8000);
 
   assert.match(
     assessedTech,
@@ -1701,33 +1701,33 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
 });
 
 const RENDER_GOLDEN = {
-  assessed: "1a194b1e7b5bef92cd4f26ef4ef19f29e018ff8a363ec9ff1b7bf521aa6175fa",
-  unassessed: "341e706b4b31bf341e447a825917c0c1ad4c455a3bd7e6d4e55892fb54350cc4",
-  "provider-failed": "dd4a8307c0cdae63fb5f58f190a5eb24a349e442bde1f439cbd8f981412f4d3b",
-  "crawl-blocked": "60d019959950dd9610fa4f0084891fe9f55ff4fa064bc29844bca9ad3974b9cd",
-  "target-outage": "14a92bde45a6dd39c016d421f10bb6dc702e1a7aaba53c0bbae7c420ac7e830c",
-  "outage-with-limitations": "3e6cb431ede15882d762ebdddd1cd9947db4f9677cd450fcedd40b0d39d801bb",
-  "http-and-noindex": "6f2a9290e051a0195ef2a6e8fb69c253060b8d71465fc2adf1ffcd59133a7b2b",
-  "robots-retrieved": "b7e945fd2a32955d90c5134af290c358b739dd4af789c39f485fc1272a2bd7f4",
-  "canonical-missing": "1240c5868da2fb87aaa685fb825b26cae63328e64f494d23396b1c4b7939cb31",
-  "no-conversion-mechanism": "c610df629bb54be620a8e4e99ed192f20bb350f661a8de16bcb801b749d3659b",
-  "no-contact": "892c4cf376a38d1a80694f3484c35e2b0ff5e62fcdcf0463b6aef0e0b62e3bfa",
-  "headers-all-present": "86314f90ffd90e40031c82bca8acf699d53631569bcb36875880bdb5cbf9ebdb",
-  "ga4-ready": "3cb00f6e077f56a72fc1af2cb498afa88f8d8b6a3debb2a915cd028abfa42408",
-  "ga4-issues": "46c38ae2b80a2b4ce684581e4d1aa013ceb4cf24c4dda839b12e4dc5836f0cd9",
-  "ga4-not-applicable": "ad4b988be3585c98a969d2010e9ee2f92d5b39b4eaced30f766ae47ca07ca0a7",
-  "slow-mobile": "271c6d34045195450cd1d8fbf169e9141784857b382cff96ce64424b0d29dc46",
-  "no-performance": "ff7562f98942b2f4657539589d0f4afbc880b03ee1149ecd164c0c12be9d82df",
-  "path-validated-blocker": "45e970d7894d9b62a129367c70e32fee5d41eba3eeb10ac38b8241a6327c3446",
-  "competitor-present": "18391084f147ba9ca28825608fb354dc0742396aa65b78d17e1003afbc2274ee",
-  "proprietary-platform": "3ec650836fc84d28e52856bedfc01ff492f81d1d45b0b8cffb16aa1a1e56412f",
-  "untraced-broken-links": "a39a2ba49b1cdbe31f15a4f8a723c2e74eb0bc046d6e5b834f8d85a602831565",
-  "schema-confirmed-absent": "740f11811e091ac6a832444efadaed6c5919c642366ac7a1efecc95bb2e9bbc5",
-  "headings-absent-h1": "40331f5720dc93c24f58e30d46387478ede79b45570646ad81266170ded8dcc9",
-  "headings-multiple-h1": "09b7915e0a505c76343b287073db8dafc29a6b36e20a2b8ac4cdc8ec351b563d",
-  "perf-field-and-multipage": "ca5645baac285c7c7fceea886a88741a14c6ad39e34d98d6b53ea7ed34cb00ba",
-  "competitor-with-limitations": "d2699e9bbd38c182c0da56a21e155c45606b94d74437b3dbde0d152b937ec65f",
-  "device-profile-failed": "428fad51700c147d2f392c18aec124d407a66a17c327b3b828d23e73a9fb2231",
+  assessed: "579a6a6559fd23f51bda48d44fa21dfbbbcff890abadb806c5b44e24411c95da",
+  unassessed: "7e1562b6788989206792b6e3692c1e0fdc407bdcd36c1480e6442f157b8da955",
+  "provider-failed": "8963470db568dd83c5bfbd1996e53bfdd7c049f6300874f79b80266807d0201d",
+  "crawl-blocked": "e208e8e077aba9fa9c753ef0fc837c7b94b6fd495b5a99573b8de3602bfe6820",
+  "target-outage": "9d10b5255daa9f61a6f71268718acbcb8e06aeb568c0927606f953d840f88d23",
+  "outage-with-limitations": "76f52274b9cdfcf2b680c5c45cec4d9d145978299224624a25892ffbcf95f389",
+  "http-and-noindex": "c12d1eec0a5a4700c8cb919ee01321204d8a62a612dd7699337fae5cd2289a12",
+  "robots-retrieved": "687c55a60606dfca9b238ca761cd2c268705b8ec9e11f760bdf19c8c11c7d182",
+  "canonical-missing": "089c27fc4c31391e1b117b05b458fd0ec82eafb98a59d06dfd054c9a40c7a27a",
+  "no-conversion-mechanism": "885296485a0a1b9804797f60ac936bc353f73dce7876cfa9516002b0ecd9476c",
+  "no-contact": "8562a63e6d70682ebddc5a7d078584f96ca19f122d617d98844166ba7102b2b5",
+  "headers-all-present": "c378515ce7b06015dbe7ad98b655ab1a4eaec1b45a7adcdfcaf644b185f55804",
+  "ga4-ready": "07fed4684b10cddcc59b628dbd5e2e03da6568d66ddfda7208b7a9207127aa24",
+  "ga4-issues": "0e6f9c585cc77e0e286ce84701f7b0c6a3d083ca044c48250ac30a056cef6a36",
+  "ga4-not-applicable": "448f52a07e5a704e22f3ca87cec9955d8ea8faf2d3888c8df54d04611f21537e",
+  "slow-mobile": "af8ba1808201c16df4c22f9e416911619235b879990b65ac2ae2478c466ccb79",
+  "no-performance": "2792de500eb0ee01ddb07bf0c5a296fbf62fc204993e8ddc04db41b6d3e7308c",
+  "path-validated-blocker": "70c120868f677b0764997bc1ac04212f65c2b882bab0451bef00fc9c5d22d5d8",
+  "competitor-present": "0895e2eb932a5316c2da8492577e5bb2cb12b37bc53cc020ca71577ab6901e30",
+  "proprietary-platform": "21d507c5ef0c20e0469c35fab7b6c750141969b87b209090e12c21c7ef8178e4",
+  "untraced-broken-links": "fdbd23d6e891a9554d23f2733174793f6d220bbf5997213267851189d384ce1f",
+  "schema-confirmed-absent": "1131d799e25926aa82be40627c65bd7cfb1a3d669d35f3e68a3ff04b8437ffa7",
+  "headings-absent-h1": "f6b48e7d13ff51ed16fbc7e6408bead490c3e16a343eb52b09c58f1933e2313a",
+  "headings-multiple-h1": "f9c723bd4840e256cb640720a464cc5ea03676316b031dc7ee066ea96421b1fc",
+  "perf-field-and-multipage": "cb5498e14a15c9ffc48674850900731f31336d4bd801a7d5be0877d94c03d5fc",
+  "competitor-with-limitations": "bfce09bf2970a7e1a6390b4f3a0c20b4e2fe843287a9827248261e1957c3eea1",
+  "device-profile-failed": "c0cc3b569c68fc5ff77b00dab54ef71fca8b1be787a2c00561377572ac31b28e",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
@@ -2279,13 +2279,13 @@ test("CR-26: client competitor comparison uses only usable evidence and governed
 
   assert.match(
     comp,
-    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Clear<\/td>/,
+    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Weak<\/td>/,
     "own-site buyer action clarity must consume governed conversion-path state",
   );
 
   assert.match(
     comp,
-    /<td><strong>Conversion path<\/strong><\/td>\s*<td>Clear<\/td>/,
+    /<td><strong>Conversion path<\/strong><\/td>\s*<td>Weak<\/td>/,
     "own-site conversion path must consume the same governed conversion state as the main report",
   );
 });
@@ -2382,6 +2382,24 @@ test("CR-27: competitor no-comparison rendering preserves canonical source statu
       );
     }
   }
+});
+
+test("P1-CROSS-04: renderer consumes persisted interpretation and fails closed when absent", () => {
+  const model = scoreWith(assessedSite());
+  const tampered = {
+    ...model,
+    crossReportInterpretation: {
+      ...model.crossReportInterpretation,
+      constructs: { ...model.crossReportInterpretation.constructs, ctaClarity: "Persisted test value" },
+    },
+    competitors: {
+      ...(model.competitors || {}),
+      comparisons: [{ name: "Comparable", url: "https://comparable.example", status: "AVAILABLE" }],
+    },
+  };
+  assert.match(renderReportV2(tampered), /Persisted test value/);
+  const { crossReportInterpretation, ...missingProjection } = model;
+  assert.throws(() => renderReportV2({ ...missingProjection, competitors: tampered.competitors }), /persisted cross-report interpretation/);
 });
 
     test("CR-45: infrastructure URLs are excluded from client-facing report URLs", () => {

@@ -18,6 +18,7 @@ const scoreSet = {
   evidenceConfidenceFactorAvailability: [],
   rootCauseRuleId: "VAN-CONV-001", rootCause: "Offer clarity",
   decisionHierarchy,
+  crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Clear", conversionPathClarity: "Clear", trustProof: "Moderate", mobileUsability: "Strong", indexability: "Strong" } },
 };
 
 test("T2-REPLAY-01: current replay consumes the canonical persisted model", () => {

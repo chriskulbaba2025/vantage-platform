@@ -79,8 +79,12 @@ function normalizeSerpItem(item, topic, location, language) {
     title: item.title || "",
     position: item.rank_absolute || item.rank_group || null,
     topic,
+    observedServiceContext: item.title || "",
+    serviceEvidenceSource: item.title ? "serp-title" : null,
     discoverySource: "dataforseo-serp",
-    geographicContext: location || "Canada",
+    // This is the location used to run the search, not observed competitor
+    // geography. Qualification must not treat it as candidate evidence.
+    queryGeographicContext: location || "Canada",
     languageContext: language || "English",
     pageType: inferPageType(item),
     rawArtifactRef: `dataforseo://serp/${item.rank_absolute || "unknown"}`,

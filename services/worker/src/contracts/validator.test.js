@@ -197,6 +197,26 @@ test("all valid fixtures pass validation", () => {
   }
 });
 
+test("P3 contentIdeas contract rejects incomplete opportunity rows", () => {
+  const schemas = loadAllSchemas();
+  const { ajv } = compileAllSchemas(schemas);
+  const validate = ajv.getSchema("https://vantage-platform.io/prysm/contracts/v2/score-current.schema.json");
+  assert.ok(validate, "current ScoreSet schema must be compiled");
+  const valid = {
+    contractVersion: "2.0.0", scoringVersion: "4.2.0", generatedAt: "2026-09-02T00:00:00.000Z",
+    scores: {}, bands: {}, assessedWeight: 0, readinessStatus: "NOT_ASSESSED", showNumericScore: false,
+    evidenceConfidenceScore: 0, dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [],
+    rootCauseRuleId: null, rootCause: "No established root cause", findingIds: [],
+    decisionHierarchy: { hierarchyVersion: "1.0.0", provenance: "scoreAudit/action-priority", rootCauseRuleId: null, orderedFindingIds: [], actions: [] },
+    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+  };
+  assert.equal(validate(valid), true);
+  const incomplete = structuredClone(valid);
+  incomplete.contentIdeas.tofu = [{ idea: "Generic idea" }];
+  assert.equal(validate(incomplete), false);
+  assert.ok(validate.errors.some((error) => error.instancePath.includes("/contentIdeas/tofu/0")));
+});
+
 // ---------------------------------------------------------------------------
 // Test: every invalid fixture fails
 // ---------------------------------------------------------------------------

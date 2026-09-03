@@ -35,7 +35,7 @@ export const REPORT_V2_VIEWER_PAGES = Object.freeze([
   Object.freeze({ pageId: "conversion-paths", title: "Conversion Path Architecture", sectionIds: Object.freeze(["paths"]) }),
   Object.freeze({ pageId: "readiness-map", title: "Conversion Readiness Map", sectionIds: Object.freeze(["pillars"]) }),
   Object.freeze({ pageId: "content-ideas", title: "Topical Map & Qualified Content Opportunities", sectionIds: Object.freeze(["content-ideas"]) }),
-  Object.freeze({ pageId: "competitor-benchmark", title: "Competitor Benchmark", sectionIds: Object.freeze(["competitors"]) }),
+  Object.freeze({ pageId: "competitor-benchmark", title: "Competitor Benchmarking", sectionIds: Object.freeze(["competitors"]) }),
   Object.freeze({ pageId: "trust-eeat", title: "Trust & E-E-A-T Readiness", sectionIds: Object.freeze(["eeat"]) }),
   Object.freeze({ pageId: "cms-constraints", title: "CMS & Platform Constraints", sectionIds: Object.freeze(["cms"]) }),
   Object.freeze({ pageId: "technical-seo", title: "Technical SEO Hygiene", sectionIds: Object.freeze(["technical"]) }),
@@ -265,7 +265,7 @@ function executiveScorecard(model, pillars) {
     <h3>What should you do first?</h3>
     ${actionsHtml}
 
-    <h3>What is already working?</h3>
+    <h3>What Is Already Working</h3>
     ${strengths.length
       ? `<ul>${strengths.slice(0, 5).map((s) => `<li>${e(s)}</li>`).join("")}</ul>`
       : `<p>No readiness dimension reached the positive reporting threshold in the currently assessed evidence.</p>`}
@@ -412,7 +412,7 @@ function blockersSection(model, plan) {
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">What should you fix first?</p>
       <p class="muted small">Priority Findings &amp; Recommendations</p>
       <h2>E. What should be fixed first?</h2>
-      <p><span class="chip cap-ok">PASS</span> No score-bearing finding produced a prioritized action from the assessed evidence.</p>
+      <p><span class="chip cap-ok">PASS</span> No score-bearing finding produced a prioritized action from the assessed evidence; under the current evidence scope, no prioritized action is required.</p>
     </section>`;
   }
 
@@ -430,6 +430,10 @@ function blockersSection(model, plan) {
       .filter(Boolean)
       .slice(0, 3)
       .join(", ");
+    const affectedUrls = clientFacingPageUrls(model, f.affectedUrls);
+    const location = affectedUrls.length
+      ? `Affected page${affectedUrls.length === 1 ? "" : "s"}: ${affectedUrls.join(", ")}`
+      : `Evidence location: ${evidenceLocation || "Relevant assessed evidence source"}`;
 
     const verification =
       a.verificationMethod ||
@@ -446,7 +450,7 @@ function blockersSection(model, plan) {
         <td><strong>${e(f.title)}</strong><br>${classChip}<br><span class="small">${e(f.ruleId || "")}</span></td>
         <td>${e(f.businessImpact || "")}</td>
         <td>${e(f.recommendation || "")}</td>
-        <td class="small">${e(evidenceLocation || "Relevant assessed page or evidence source")}</td>
+        <td class="small">${e(location)}</td>
         <td class="small">${e(verification)}</td>
         <td class="small">${e(rankReason)}</td>
       </tr>`;
@@ -530,18 +534,34 @@ function conversionPathSection(model) {
     steps[4] || "Conversion destination",
   ];
 
+  const flowLabelLines = (label) => {
+    const words = String(label).trim().split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      if (current && `${current} ${word}`.length > 22) {
+        lines.push(current);
+        current = word;
+      } else current = current ? `${current} ${word}` : word;
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : ["—"];
+  };
+
   const flowSvg = `
     <div style="overflow-x:auto;margin:18px 0">
-          <svg viewBox="0 0 900 150" role="img" aria-label="Primary conversion path" style="width:100%;min-width:720px">
+          <svg viewBox="0 0 1160 190" role="img" aria-label="Primary conversion path" style="width:100%;min-width:760px;height:auto">
         <defs>
           <marker id="pathArrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
             <path d="M0,0 L0,6 L7,3 z" fill="currentColor"/>
           </marker>
         </defs>
         ${flowLabels.map((label, index) => {
-          const x = 20 + index * 176;
+          const x = 20 + index * 224;
+          const lines = flowLabelLines(label);
+          const startY = 82 - ((lines.length - 1) * 8);
           return `<rect x="${x}" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
-            <text x="${x + 72.5}" y="76" text-anchor="middle" font-size="12">${e(String(label).slice(0, 26))}</text>
+            <text x="${x + 72.5}" y="${startY}" text-anchor="middle" font-size="12">${lines.map((line, lineIndex) => `<tspan x="${x + 72.5}" dy="${lineIndex === 0 ? 0 : 16}">${e(line)}</tspan>`).join("")}</text>
             ${index < flowLabels.length - 1 ? `<line x1="${x + 145}" y1="71" x2="${x + 170}" y2="71" stroke="currentColor" marker-end="url(#pathArrow)" opacity=".55"/>` : ""}`;
         }).join("")}
       </svg>
@@ -666,7 +686,7 @@ function competitorSection(model) {
 
     return `<section id="competitors" class="card">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How does your website compare with the competitors buyers are likely to consider?</p>
-      <p class="muted small">Competitor Benchmark</p>
+      <p class="muted small">Competitor Benchmarking</p>
       <h2>Competitive context</h2>
       <p><span class="chip ${noComparisonState.className}">${e(noComparisonState.label)}</span> ${e(noComparisonState.explanation)}</p>
       ${limitations.length ? `<h3>Evidence limitations</h3><ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : ""}
@@ -696,19 +716,13 @@ function competitorSection(model) {
           ? "Weak"
           : "Partial";
 
+  const interpretation = requireCrossReportInterpretation(model);
   const ownSite = {
-    offerClarity: (site.services || []).length
-      ? `${(site.services || []).length} service topic(s)`
-      : "Not Assessed",
-    trustProof:
-      trustBand && trustBand !== "Not Assessed"
-        ? trustBand
-        : "Not Assessed",
-    ctaClarity: governedConversionState,
-    contentDepth: site.pageCount
-      ? `${site.pageCount} page(s)`
-      : "Not Assessed",
-    pathClarity: governedConversionState,
+    offerClarity: interpretation.constructs.offerClarity,
+    trustProof: interpretation.constructs.trustProof,
+    ctaClarity: interpretation.constructs.ctaClarity,
+    contentDepth: site.pageCount ? `${site.pageCount} page(s)` : "Not Assessed",
+    pathClarity: interpretation.constructs.conversionPathClarity,
   };
 
   const SIGNALS = [
@@ -766,7 +780,7 @@ function competitorSection(model) {
   return `
   <section id="competitors" class="card">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How does your website compare with the competitors buyers are likely to consider?</p>
-    <p class="muted small">Competitor Benchmark</p>
+    <p class="muted small">Competitor Benchmarking</p>
 
     <h2>Competitive context</h2>
     <p>${e(directAnswer)}</p>
@@ -2471,3 +2485,4 @@ export default {
   REPORT_V2_VIEWER_PAGES,
   REPORT_V2_VIEWER_VERSION,
 };
+import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";

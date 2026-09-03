@@ -19,6 +19,7 @@ const scoreSet = {
   rootCauseRuleId: "VAN-CONV-001", rootCause: "Offer clarity", decisionHierarchy,
   conversionPaths: [], readinessMap: [], contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
   competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+  crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Clear", conversionPathClarity: "Clear", trustProof: "Moderate", mobileUsability: "Strong", indexability: "Strong" } },
   findings,
 };
 const decisionEvidence = { site: { targetUrl: "https://example.test" }, sourceStatus: { competitors: "PARTIAL" } };

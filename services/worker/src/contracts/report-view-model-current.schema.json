@@ -7,7 +7,7 @@
   "version": "2.0.0",
   "contractVersion": "2.0.0",
   "additionalProperties": false,
-  "required": ["contractVersion","reportVersion","reportDesignVersion","generatedAt","input","scores","bands","assessedWeight","readinessStatus","showNumericScore","evidenceConfidenceScore","rootCause","rootCauseRuleId","decisionHierarchy","findings","conversionPaths","readinessMap","contentIdeas","competitors","sourceStatus","limitations","evidence","capabilityEvidence","narrative","gate"],
+  "required": ["contractVersion","reportVersion","reportDesignVersion","generatedAt","input","scores","bands","assessedWeight","readinessStatus","showNumericScore","evidenceConfidenceScore","rootCause","rootCauseRuleId","decisionHierarchy","findings","conversionPaths","readinessMap","contentIdeas","competitors","crossReportInterpretation","sourceStatus","limitations","evidence","capabilityEvidence","narrative","gate"],
   "properties": {
     "contractVersion": { "const": "2.0.0" },
     "reportVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
@@ -26,8 +26,11 @@
     "findings": { "type": "array" },
     "conversionPaths": { "type": "array" },
     "readinessMap": { "type": "array" },
-    "contentIdeas": { "type": "object" },
+    "contentIdeas": {
+      "$ref": "https://vantage-platform.io/prysm/contracts/v2/score-current.schema.json#/$defs/contentIdeas"
+    },
     "competitors": { "type": "object" },
+    "crossReportInterpretation": { "type": "object", "required": ["version","constructs"], "additionalProperties": true },
     "sourceStatus": { "type": "object" },
     "limitations": { "type": "array" },
     "evidence": { "type": ["object","null"] },

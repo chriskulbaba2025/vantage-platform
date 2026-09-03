@@ -366,6 +366,26 @@ test("18. deferred analysis page is generated with content", async () => {
   // GA4 and backlinks both NOT_CONNECTED in fixture → should appear
   assert.match(deferredContent, /Google Analytics 4/);
   assert.match(deferredContent, /Backlink Analysis/);
+  assert.match(deferredContent, /Required source \/ information/);
+  assert.match(deferredContent, /How to enable \/ collect/);
+  assert.match(deferredContent, /Additional insight enabled/);
+  assert.match(deferredContent, /authorized GA4 property/);
+  assert.match(deferredContent, /authorized backlink source/);
+});
+
+test("18b. deferred roadmap preserves source status and does not fabricate available-source rows", () => {
+  const partial = scoredModel();
+  partial.evidence.ga4.sourceStatus = SOURCE_STATUS.PARTIAL;
+  const partialDeferred = renderApprovedReport(partial).pages.get("deferred.html");
+  assert.match(partialDeferred, /Google Analytics 4[\s\S]*?PARTIAL/);
+  assert.match(partialDeferred, /read-only data scope/);
+
+  const available = scoredModel();
+  available.evidence.ga4.sourceStatus = SOURCE_STATUS.AVAILABLE;
+  available.evidence.backlinks.sourceStatus = SOURCE_STATUS.AVAILABLE;
+  const availableDeferred = renderApprovedReport(available).pages.get("deferred.html");
+  assert.doesNotMatch(availableDeferred, /Google Analytics 4/);
+  assert.doesNotMatch(availableDeferred, /Backlink Analysis/);
 });
 
 test("19. internal-links page identifies broken links from evidence", async () => {

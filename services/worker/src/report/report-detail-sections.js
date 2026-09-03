@@ -17,6 +17,7 @@
 
 import { FOUNDATION_STATUS } from "./foundation-readiness.js";
 import { ACTION_CLASS, ACTION_GROUP } from "./action-priority.js";
+import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
 
 function e(value) {
   return String(value ?? "")
@@ -51,6 +52,15 @@ function orUnavailable(value, suffix = "") {
     ? `${value}${suffix}`
     : "Unavailable";
 }
+
+function clientMetric(value, kind) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Unavailable";
+  if (kind === "seconds") return `${(value / 1000).toFixed(1)}s`;
+  if (kind === "cls") return value.toFixed(3);
+  return `${Math.round(value)}ms`;
+}
+
+const PERFORMANCE_METRIC_DEFINITIONS = "LCP (largest contentful paint) is when the main content becomes visible; CLS (cumulative layout shift) measures unexpected movement; TBT (total blocking time) measures how long the page was prevented from responding during the test.";
 
 function statusChip(status) {
   const cls = {
@@ -806,18 +816,6 @@ export function technicalDetailSection(model) {
     <h3>Direct technical verdict</h3>
     <p>${e(verdict)}</p>
 
-    <h3>Server &amp; security headers</h3>
-    <div class="table-wrap"><table>
-      <thead>
-        <tr>
-          <th>Header</th>
-          <th>Observed</th>
-          <th>Note</th>
-        </tr>
-      </thead>
-      <tbody>${headerRows}</tbody>
-    </table></div>
-
     <h3>Is anything blocking search performance?</h3>
     ${
       material.length
@@ -878,6 +876,18 @@ export function technicalDetailSection(model) {
             .join("")}</ul>`
         : "<p>No material technical finding was created from fully assessed coverage.</p>"
     }
+
+    <h3>Server &amp; security headers</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Header</th>
+          <th>Observed</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>${headerRows}</tbody>
+    </table></div>
 
     <h3>Secondary observations</h3>
     <p class="small">Technical metrics and counts are supporting evidence, not conclusions by themselves. Items such as HTTP→HTTPS validation, redirect chains/loops, mixed content, compression diagnostics, material JavaScript errors, and Open Graph metadata are only stated when corresponding evidence exists in the report model.</p>
@@ -1670,7 +1680,14 @@ function deviceCard(label, data) {
         data.url ||
           "Unavailable",
       )}<br>
-        Provider: ${e(
+        Availability: ${e(
+          data.status === "AVAILABLE"
+            ? "Measured in the tested profile"
+            : data.status === "PARTIAL"
+              ? "Partially measured; coverage is incomplete"
+              : "Not available for this profile",
+        )}<br>
+        Provider (technical diagnostic): ${e(
           data.source ||
             "Unavailable",
         )} · ${e(
@@ -1719,25 +1736,25 @@ function deviceCard(label, data) {
         <tbody>
           <tr><td>FCP</td><td>${e(
             orUnavailable(
-              m.fcpMs,
+              m.fcpMs == null ? null : Math.round(m.fcpMs),
               " ms",
             ),
           )}</td></tr>
           <tr><td>LCP</td><td>${e(
             orUnavailable(
-              m.lcpMs,
-              " ms",
+              m.lcpMs == null ? null : Number((m.lcpMs / 1000).toFixed(1)),
+              " s",
             ),
           )}</td></tr>
           <tr><td>TBT</td><td>${e(
             orUnavailable(
-              m.tbtMs,
+              m.tbtMs == null ? null : Math.round(m.tbtMs),
               " ms",
             ),
           )}</td></tr>
           <tr><td>CLS</td><td>${e(
             orUnavailable(
-              m.cls,
+              m.cls == null ? null : Number(m.cls.toFixed(3)),
             ),
           )}</td></tr>
         </tbody>
@@ -1886,15 +1903,10 @@ export function performanceDetailSection(model) {
           ),
         )}</td>
         <td>${e(
-          orUnavailable(
-            metrics.lcpMs,
-            " ms",
-          ),
+          clientMetric(metrics.lcpMs, "seconds"),
         )}</td>
         <td>${e(
-          orUnavailable(
-            metrics.cls,
-          ),
+          clientMetric(metrics.cls, "cls"),
         )}</td>
         <td><span class="chip ${
           status === "PASS"
@@ -1946,7 +1958,10 @@ export function performanceDetailSection(model) {
           )
           .join("")}</tbody>
       </table></div>`
-      : '<p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p>';
+      : (() => {
+          const roadmap = withUnavailableRoadmap({}, "fieldPerformance").roadmap;
+          return `<p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p><p class="small"><strong>What to collect next:</strong> ${e(roadmap.requiredInformation)} ${e(roadmap.enablement)} <strong>Then:</strong> ${e(roadmap.additionalInsight)}</p>`;
+        })();
 
   const strengths = [];
 
@@ -2061,7 +2076,7 @@ export function performanceDetailSection(model) {
     }
 
     <h3>What does the visitor actually experience?</h3>
-    <p class="small">LCP, CLS, TBT, response time, and related metrics support the conclusion; they are not the conclusion. PRYSM interprets performance by whether delivery friction is likely to affect important user and conversion paths.</p>
+    <p class="small">${PERFORMANCE_METRIC_DEFINITIONS} These are lab measurements, not real-user field performance. They support the conclusion; they are not the conclusion.</p>
 
     <h3>Lab performance</h3>
     ${labBlock}
@@ -2385,6 +2400,16 @@ export function accessibilityMobileSection(model) {
         item.status ===
           "PARTIAL",
     );
+  const roadmapAreas = areas.map((item) =>
+    item.status === "UNAVAILABLE" || item.status === "PARTIAL"
+      ? withUnavailableRoadmap(
+          item,
+          item.status === "PARTIAL" && item.area === "Image alternative text"
+            ? "partialCrawl"
+            : "accessibility",
+        )
+      : item,
+  );
 
   const summary =
     barriers.length
@@ -2443,9 +2468,10 @@ export function accessibilityMobileSection(model) {
           <th>Status</th>
           <th>What was available</th>
           <th>What it means</th>
+          <th>What to collect next</th>
         </tr>
       </thead>
-      <tbody>${areas
+      <tbody>${roadmapAreas
         .map(
           (
             item,
@@ -2470,6 +2496,7 @@ export function accessibilityMobileSection(model) {
             <td class="small">${e(
               item.impact,
             )}</td>
+            <td class="small">${item.roadmap ? `${e(item.roadmap.requiredInformation)} ${e(item.roadmap.enablement)} ${e(item.roadmap.additionalInsight)}` : ""}</td>
           </tr>`,
         )
         .join("")}</tbody>

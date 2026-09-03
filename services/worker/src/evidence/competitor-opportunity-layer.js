@@ -31,8 +31,10 @@ export function qualifyCandidate(candidate, clientContext) {
   const results = new Map();
 
   const geoMatch =
-    !candidate.geographicContext || !clientContext.location
+    !clientContext.location
       ? true
+      : !candidate.geographicContext
+        ? false
       : candidate.geographicContext.toLowerCase().includes(
           clientContext.location.toLowerCase().split(",")[0]?.trim() || "",
         ) ||
@@ -41,27 +43,24 @@ export function qualifyCandidate(candidate, clientContext) {
         );
   results.set("geographic_relevance", geoMatch);
 
+  const observedService = candidate.observedServiceContext || "";
+  const hasObservedServiceProvenance = Boolean(candidate.serviceEvidenceSource);
   const topicMatch =
-    !candidate.topic
+    !observedService || !hasObservedServiceProvenance
       ? false
       : (clientContext.services || []).some(
           (svc) =>
-            candidate.topic.toLowerCase().includes(svc.toLowerCase()) ||
-            svc.toLowerCase().includes((candidate.topic || "").toLowerCase()),
+            observedService.toLowerCase().includes(svc.toLowerCase()) ||
+            svc.toLowerCase().includes(observedService.toLowerCase()),
         ) || (clientContext.topicKeywords || []).some(
-          (kw) => candidate.topic.toLowerCase().includes(kw.toLowerCase()),
+          (kw) => observedService.toLowerCase().includes(kw.toLowerCase()),
         );
   results.set("service_relevance", topicMatch);
 
-  const audienceMatch = candidate.pageType !== "reference" && candidate.pageType !== "community";
+  const audienceMatch = Boolean(candidate.audienceContext);
   results.set("audience_relevance", audienceMatch);
 
-  const commercialMatch =
-    candidate.pageType === "service" ||
-    candidate.pageType === "product" ||
-    candidate.pageType === "pricing" ||
-    candidate.pageType === "company_page" ||
-    candidate.pageType === "landing";
+  const commercialMatch = Boolean(candidate.commercialContext);
   results.set("commercial_intent_relevance", commercialMatch);
 
   const comparable =
@@ -265,9 +264,17 @@ export async function collectCompetitorOpportunities(site, input, options = {}) 
     .map((competitor) => ({
       candidateUrl: competitor.url,
       domain: domainOf(competitor.url),
-      topic: topics[0]?.topic || input.businessName || "general",
+      // A supplied competitor's topic must come from its observed evidence;
+      // inheriting the client's first topic can qualify unrelated businesses.
+      topic: competitor.evidence?.services?.[0] || competitor.evidence?.title || "",
+      observedServiceContext: competitor.evidence?.services?.join(", ") || competitor.evidence?.title || "",
+      serviceEvidenceSource: competitor.evidence?.services?.length ? "supplied-services" : competitor.evidence?.title ? "supplied-title" : null,
       discoverySource: "user-supplied",
-      geographicContext: input.location || "",
+      geographicContext: competitor.evidence?.geographicContext || competitor.evidence?.location || "",
+      // Supplied URLs have no SERP observation to establish these factors.
+      // Do not infer them from a default page type or from client context.
+      audienceContext: competitor.evidence?.audience || competitor.evidence?.audiences || competitor.evidence?.customerSegments || "",
+      commercialContext: competitor.evidence?.commercialIntent || competitor.evidence?.commercialOffer || "",
       languageContext: input.language || "en",
       pageType: "landing",
       position: null,

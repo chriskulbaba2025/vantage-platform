@@ -1094,6 +1094,7 @@ export function createAuditOrchestrator({
       readinessMap: scoreSet.readinessMap || [],
       contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
       competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
+      crossReportInterpretation: scoreSet.crossReportInterpretation,
     };
 
     const { renderReportV2 } = await import("../report/render-report-v2.js");

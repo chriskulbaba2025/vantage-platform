@@ -5,8 +5,11 @@
   "version": "2.0.0",
   "contractVersion": "2.0.0",
   "type": "object",
-  "required": ["contractVersion", "scoringVersion", "generatedAt", "scores", "bands", "assessedWeight", "readinessStatus", "showNumericScore", "evidenceConfidenceScore", "dimensionEligibility", "moduleEligibility", "suppressedModules", "rootCauseRuleId", "rootCause", "findingIds", "decisionHierarchy"],
+  "required": ["contractVersion", "scoringVersion", "generatedAt", "scores", "bands", "assessedWeight", "readinessStatus", "showNumericScore", "evidenceConfidenceScore", "dimensionEligibility", "moduleEligibility", "suppressedModules", "rootCauseRuleId", "rootCause", "findingIds", "decisionHierarchy", "contentIdeas"],
   "properties": {
+    "contentIdeas": {
+      "$ref": "#/$defs/contentIdeas"
+    },
     "contractVersion": { "const": "2.0.0" },
     "scoringVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
     "generatedAt": { "type": "string", "format": "date-time" },
@@ -31,6 +34,50 @@
         "rootCauseRuleId": { "type": ["string", "null"] },
         "orderedFindingIds": { "type": "array", "items": { "type": "string" } },
         "actions": { "type": "array", "items": { "type": "object", "required": ["findingId", "ruleId", "rank", "priority", "effort", "actionClass", "conversionInfluence", "conversionInfluenceRank"], "properties": { "findingId": { "type": "string" }, "ruleId": { "type": "string" }, "rank": { "type": "integer", "minimum": 1 }, "priority": { "type": "number" }, "effort": { "type": "string" }, "actionClass": { "type": "string" }, "foundationDomain": { "type": ["string", "null"] }, "conversionInfluence": { "type": "string" }, "conversionInfluenceRank": { "type": "number" } } } }
+      }
+    }
+  },
+  "$defs": {
+    "contentIdeas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tofu", "mofu", "bofu", "leading"],
+      "properties": {
+        "tofu": { "$ref": "#/$defs/opportunityRows" },
+        "mofu": { "$ref": "#/$defs/opportunityRows" },
+        "bofu": { "$ref": "#/$defs/opportunityRows" },
+        "leading": { "$ref": "#/$defs/opportunityRows" }
+      }
+    },
+    "opportunityRows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/opportunityRow" }
+    },
+    "opportunityRow": {
+      "type": "object",
+      "required": ["stage", "topic", "whyItMatters", "currentEvidence", "gap", "recommendedAsset", "placement", "objective", "internalLinks", "funnelStage", "evidenceStatus"],
+      "properties": {
+        "stage": { "type": "string", "enum": ["TOFU", "MOFU", "BOFU", "LEADING"] },
+        "topic": { "type": "string", "minLength": 1 },
+        "whyItMatters": { "type": "string", "minLength": 1 },
+        "currentEvidence": { "$ref": "#/$defs/currentEvidence" },
+        "gap": { "type": "string", "minLength": 1 },
+        "recommendedAsset": { "type": "string", "minLength": 1 },
+        "placement": { "type": "string", "minLength": 1 },
+        "objective": { "type": "string", "minLength": 1 },
+        "internalLinks": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "funnelStage": { "type": "string", "enum": ["Awareness", "Consideration", "Decision", "Leading"] },
+        "evidenceStatus": { "type": "string", "enum": ["AVAILABLE", "PARTIAL", "UNAVAILABLE"] }
+      }
+    },
+    "currentEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "urls", "observations"],
+      "properties": {
+        "status": { "type": "string", "enum": ["AVAILABLE", "PARTIAL", "UNAVAILABLE"] },
+        "urls": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "observations": { "type": "array", "items": { "type": "string" } }
       }
     }
   }

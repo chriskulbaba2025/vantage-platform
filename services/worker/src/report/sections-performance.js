@@ -2,6 +2,7 @@ import { e, fmtSec, scoreCard, section, table } from "./html-helpers.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 import { DIAGNOSTIC_CATEGORY } from "../scoring/diagnostic-contracts.js";
 import { readScreenshotAsDataUri, isValidPortableRef } from "../evidence/screenshot-artifact.js";
+import { unavailableRoadmap } from "./unavailable-roadmap.js";
 
 function perfMetricTable(data) {
   return table(
@@ -233,6 +234,17 @@ function appendix(model, renderOpts = {}) {
     ["Search Console", "Google Search Console API", gscAvailable ? `PASS — ${ev.gsc?.totals?.impressions || 0} impressions` : "NOT CONFIGURED — no score impact"],
   ];
 
+  const roadmapRows = [
+    ["Website Capture", ev.site?.sourceStatus, "partialCrawl"],
+    ["Performance", ev.performance?.sourceStatus, "fieldPerformance"],
+    ["Backlinks", ev.backlinks?.sourceStatus, "backlinks"],
+    ["GA4", ev.ga4?.sourceStatus, "ga4"],
+  ].flatMap(([source, status, roadmapKey]) => {
+    if (!status || status === SOURCE_STATUS.AVAILABLE) return [];
+    const roadmap = unavailableRoadmap(roadmapKey);
+    return roadmap ? [[source, status, roadmap.requiredInformation, roadmap.enablement, roadmap.additionalInsight]] : [];
+  });
+
   const limitations = [...(ev.site.limitations || []), ...(ev.performance?.limitations || [])];
   if (!backlinksAvailable) limitations.push("Backlink evidence was not included because DataForSEO credentials were not configured.");
   if (!ga4Available) limitations.push("GA4 was not connected. The audit completed without analytics and the score was not reduced.");
@@ -278,6 +290,7 @@ function appendix(model, renderOpts = {}) {
     "13",
     "Evidence Appendix",
     `<h3>Evidence Sources</h3>${table(["Layer", "Source", "Status"], sourceRows.map((r) => r.map(e)))}
+${roadmapRows.length ? `<h3>Unavailable &amp; Partial Evidence Roadmap</h3>${table(["Source", "Status", "Required source / information", "How to enable / collect", "Additional insight enabled"], roadmapRows.map((r) => r.map(e)))}` : ""}
 <h3>Evidence Confidence — Full Assessment</h3>
 <p><strong>Overall: ${e(model.bands.evidenceConfidence)}.</strong> Findings are traceable to the normalized evidence package produced during this audit. Optional sources do not reduce the conversion-readiness score when they are not configured.</p>
 <h3>Limitations</h3>

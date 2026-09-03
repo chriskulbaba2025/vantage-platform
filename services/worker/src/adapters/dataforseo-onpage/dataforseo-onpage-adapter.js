@@ -273,6 +273,40 @@ function mergeDeepPageUrls({
   return selected;
 }
 
+function buildDeepContentTrace({ keyPages, keyPageUrls, siteFootprint, requestedUrls }) {
+  const selectedByUrl = new Map((keyPages.selected || []).map((item) => [normalizeUrl(item.url), item]));
+  const mustHave = new Set((siteFootprint?.prioritySelection?.mustHaveUrls || []).map(normalizeUrl));
+  const familyRepresentative = new Set((siteFootprint?.clusters || []).flatMap((cluster) =>
+    cluster?.requiresRepresentativeAssessment === true ? (cluster.representativeUrls || []).map(normalizeUrl) : []));
+  const requested = new Set((requestedUrls || []).map(normalizeUrl));
+  return keyPageUrls.map((url) => {
+    const normalized = normalizeUrl(url);
+    const selected = selectedByUrl.get(normalized);
+    return {
+      url,
+      selectionReason: mustHave.has(normalized) ? "must_have_priority" : selected
+        ? `important_page_role:${selected.role}`
+        : familyRepresentative.has(normalized) ? "material_family_representative" : "merged_governed_selection",
+      pageClass: selected?.role || (familyRepresentative.has(normalized) ? "material_family_representative" : "priority_page"),
+      bodyRequested: requested.has(normalized),
+      bodyReturned: null,
+      bodyStatus: requested.has(normalized) ? "REQUESTED" : "UNASSESSED",
+      downstreamModules: ["content.body", "programmaticSeo"],
+    };
+  });
+}
+
+function contentParsingReturnedBody(result) {
+  if (Array.isArray(result?.items)) {
+    return result.items.some((item) => contentParsingReturnedBody(item));
+  }
+  if (typeof result?.text === "string" && result.text.trim()) return true;
+  const topics = result?.page_content?.main_topic || [];
+  return topics.some((topic) =>
+    (topic?.primary_content || []).some((part) => typeof part?.text === "string" && part.text.trim()),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page normalizer — maps DataForSEO page fields to canonical Vantage shape
 // ---------------------------------------------------------------------------
@@ -454,6 +488,20 @@ function normalizePage(raw, context = {}) {
 // Schema type extraction
 // ---------------------------------------------------------------------------
 
+// DataForSEO uses these values as structured-data categories, not schema.org
+// types. They must not cross the normalized evidence contract as types.
+const PROVIDER_SCHEMA_CATEGORY_ALIASES = new Set([
+  "json_ld",
+  "microdata",
+]);
+
+function addSchemaType(types, value) {
+  if (typeof value !== "string") return;
+  const type = value.trim();
+  if (!type || PROVIDER_SCHEMA_CATEGORY_ALIASES.has(type.toLowerCase())) return;
+  types.add(type);
+}
+
 function extractSchemaTypes(raw) {
   const types = new Set();
 
@@ -463,17 +511,17 @@ function extractSchemaTypes(raw) {
 
   for (const item of items) {
     if (item.type) {
-      types.add(item.type);
+      addSchemaType(types, item.type);
     }
     if (item.types && Array.isArray(item.types)) {
-      item.types.forEach((t) => types.add(t));
+      item.types.forEach((t) => addSchemaType(types, t));
     }
   }
 
   // Also check meta structured data
   if (raw.meta?.structured_data_types) {
     for (const t of raw.meta.structured_data_types) {
-      types.add(t);
+      addSchemaType(types, t);
     }
   }
 
@@ -842,8 +890,8 @@ function extractMicrodataTypes(raw) {
   const types = new Set();
   const items = raw?.items || [];
   for (const item of items) {
-    if (item.type) types.add(item.type);
-    for (const t of item.types || []) types.add(t);
+    if (item.type) addSchemaType(types, item.type);
+    for (const t of item.types || []) addSchemaType(types, t);
   }
   return [...types].sort();
 }
@@ -1929,8 +1977,14 @@ export async function crawlWithDataforseo(target, options = {}) {
                 ? "CONTENT_PARSING_PAGE_LIMIT"
                 : "CONTENT_PARSING_DISABLED"
             )
-          : null,
+        : null,
     };
+    acquisition.contentParsing.trace = buildDeepContentTrace({
+      keyPages,
+      keyPageUrls,
+      siteFootprint,
+      requestedUrls: cpUrls,
+    });
 
     if (cpUnassessedUrls.length > 0) {
       limitations.push(
@@ -2053,6 +2107,20 @@ export async function crawlWithDataforseo(target, options = {}) {
           acquisition.contentParsing.failed =
             failedUrls.length;
 
+          for (const row of acquisition.contentParsing.trace) {
+            const normalized = normalizeUrl(row.url);
+            if (failedUrls.some((url) => normalizeUrl(url) === normalized)) {
+              row.bodyStatus = "FAILED";
+              row.bodyReturned = false;
+            } else if (completedUrls.some((url) => normalizeUrl(url) === normalized)) {
+              const parsed = (rawContentParsing.results || []).find(
+                (item) => normalizeUrl(item.url || "") === normalized,
+              );
+              row.bodyReturned = contentParsingReturnedBody(parsed);
+              row.bodyStatus = row.bodyReturned ? "RETURNED" : "EMPTY_RETURNED";
+            }
+          }
+
           for (const url of failedUrls) {
             const metadata =
               metadataByUrl.get(
@@ -2085,6 +2153,12 @@ export async function crawlWithDataforseo(target, options = {}) {
           limitations.push(
             `Content parsing retrieval failed: ${cpError.message}`,
           );
+          for (const row of acquisition.contentParsing.trace) {
+            if (row.bodyRequested) {
+              row.bodyStatus = "FAILED";
+              row.bodyReturned = false;
+            }
+          }
         }
       }
 

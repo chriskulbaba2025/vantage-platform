@@ -231,3 +231,39 @@ test("contentIdeas with valid multi-word services produces sensible output", () 
     }
   }
 });
+
+test("contentIdeas carries deterministic, evidence-grounded opportunity intelligence", () => {
+  const ideas = contentIdeas({
+    services: ["Leadership Coaching"],
+    topicKeywords: [],
+    _contentEvidenceAvailable: true,
+    pages: [{
+      title: "Leadership Coaching",
+      url: "https://example.com/leadership-coaching",
+      headings: { h1: ["Leadership Coaching"], h2: [], h3: [], h4: [] },
+      bodyText: "Leadership coaching for growing teams.",
+    }],
+  }, { primaryGoal: "generate qualified enquiries" });
+
+  const row = ideas.tofu[0];
+  assert.equal(row.stage, "TOFU");
+  assert.equal(row.funnelStage, "Awareness");
+  assert.equal(row.evidenceStatus, "AVAILABLE");
+  assert.deepEqual(row.currentEvidence.urls, ["https://example.com/leadership-coaching"]);
+  assert.match(row.whyItMatters, /qualified enquiries/);
+  assert.ok(row.recommendedAsset);
+  assert.ok(row.placement);
+  assert.ok(row.gap);
+});
+
+test("contentIdeas keeps unavailable body evidence explicit", () => {
+  const ideas = contentIdeas({
+    services: ["Leadership Coaching"],
+    topicKeywords: [],
+    _contentEvidenceAvailable: false,
+    pages: [{ title: "Leadership Coaching", url: "https://example.com/leadership-coaching", headings: { h1: ["Leadership Coaching"] } }],
+  });
+  assert.equal(ideas.tofu[0].evidenceStatus, "UNAVAILABLE");
+  assert.match(ideas.tofu[0].gap, /cannot be established/);
+  assert.deepEqual(ideas.tofu[0].currentEvidence.urls, ["https://example.com/leadership-coaching"]);
+});

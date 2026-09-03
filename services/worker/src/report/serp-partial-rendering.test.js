@@ -14,6 +14,7 @@ function baseModel(dataforseoSerp) {
       },
     },
     competitors: { comparisons: [] },
+    crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Not Assessed", conversionPathClarity: "Not Assessed", trustProof: "Light", mobileUsability: "Not Assessed", indexability: "Not Assessed" } },
     competitorOpportunities: {
       gaps: [],
       qualifiedCandidates: [],

@@ -376,6 +376,9 @@ function buildScoreSet(model, findingsRecord, scoresRecord) {
         },
       },
 
+    crossReportInterpretation:
+      model.crossReportInterpretation,
+
     renderingDiagnostics:
       model.renderingDiagnostics || [],
 

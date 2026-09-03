@@ -43,7 +43,7 @@ const NC = { evidenceVersion: "1.0.0", source: "none", sourceStatus: SOURCE_STAT
 
 const COMPETITORS = [{
   url: "https://comp.example/services", status: SOURCE_STATUS.AVAILABLE,
-  evidence: { services: ["Consulting"], pageCount: 10, trust: { testimonials: true, credentials: true, caseStudies: false, faq: true, pricing: true, policies: true, contact: true }, schemaTypes: ["Service"], ctas: [{ text: "Book", url: "https://c.example/book", kind: "link" }], forms: [], domain: "comp.example", socialLinks: [], topicKeywords: [], pages: [{ title: "Comp", headings: { h1: ["Consulting"], h2: [], h3: [], h4: [] }, responseHeaders: {} }], platform: "WordPress" },
+  evidence: { services: ["Consulting"], audience: "Business leaders seeking consulting services", commercialIntent: "Consulting services are offered for purchase", pageCount: 10, trust: { testimonials: true, credentials: true, caseStudies: false, faq: true, pricing: true, policies: true, contact: true }, schemaTypes: ["Service"], ctas: [{ text: "Book", url: "https://c.example/book", kind: "link" }], forms: [], domain: "comp.example", socialLinks: [], topicKeywords: [], pages: [{ title: "Comp", headings: { h1: ["Consulting"], h2: [], h3: [], h4: [] }, responseHeaders: {} }], platform: "WordPress" },
 }];
 
 function baseConfig(dir) {
@@ -85,7 +85,7 @@ test("T9-AUTH-01: status returns competitorReview from active transaction, not s
     limitationsAccepted: true,
   });
 
-  // Read committed artifacts — should show approved candidates
+  // Read committed artifacts â€” should show approved candidates
   const committed = await store.readCommittedArtifacts(result.slug, result.runId);
   assert.ok(committed.txId, "Should have active transaction ID");
   const readOpp = committed.evidence.competitorOpportunities;
@@ -191,7 +191,7 @@ test("T9-AUTH-04: approveAudit ignores stale caller-supplied model", async () =>
   // Try to approve with a STALE model (different from committed)
   const staleModel = { scoringVersion: "9.9.9", scores: { trust: 999 }, evidence: {} };
 
-  // Should succeed — the stale model is IGNORED, committed model is used
+  // Should succeed â€” the stale model is IGNORED, committed model is used
   const approved = await approveAudit(store, result.slug, result.runId, "approver@example.com", { model: staleModel });
   assert.equal(approved.lifecycle.status, "approved");
 });
