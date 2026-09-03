@@ -4,6 +4,7 @@ import {
   accessibilityMobileSection,
   performanceDetailSection,
 } from "./report-detail-sections.js";
+import { appendix } from "./sections-performance.js";
 
 const availableLabProfile = {
   status: "AVAILABLE",
@@ -33,4 +34,43 @@ test("P6: unavailable and partial accessibility rows are actionable without beco
   assert.match(html, /Enable a browser-based mobile\/responsive assessment/);
   assert.match(html, /complete crawl response for the pages that were not returned/);
   assert.match(html, /Mobile viewport<\/strong><\/td>\s*<td><span class="chip cap-neutral">UNAVAILABLE/);
+});
+
+function appendixModel(overrides = {}) {
+  return {
+    evidence: {
+      site: { sourceStatus: "AVAILABLE", pageCount: 1, pages: [], limitations: [], platform: null, _contentEvidenceAvailable: true },
+      performance: { sourceStatus: "AVAILABLE", coverage: { completed: 2, requested: 2 }, limitations: [] },
+      backlinks: { sourceStatus: "AVAILABLE", totalBacklinksReviewed: 2 },
+      ga4: { sourceStatus: "AVAILABLE" },
+      gsc: { sourceStatus: "AVAILABLE", totals: { impressions: 10 } },
+      ...overrides,
+    },
+    competitors: [], renderingDiagnostics: [], readinessMap: [],
+    bands: { evidenceConfidence: "High" },
+    scores: { conversionReadiness: 80 }, reportVersion: "test", scoringVersion: "test",
+  };
+}
+
+test("P6: Evidence Appendix gives unavailable and partial sources an actionable roadmap", () => {
+  const html = appendix(appendixModel({
+    site: { sourceStatus: "PARTIAL", pageCount: 1, pages: [], limitations: [], platform: null, _contentEvidenceAvailable: true },
+    backlinks: { sourceStatus: "NOT_CONNECTED", totalBacklinksReviewed: 0 },
+    ga4: { sourceStatus: "PARTIAL" },
+  }));
+  assert.match(html, /Unavailable &amp; Partial Evidence Roadmap/);
+  assert.match(html, /Required source \/ information/);
+  assert.match(html, /complete crawl response for the pages that were not returned/);
+  assert.match(html, /authorized backlink source/);
+  assert.match(html, /Connect the relevant GA4 property/);
+  assert.match(html, /PARTIAL/);
+  assert.match(html, /NOT_CONNECTED/);
+});
+
+test("P6: Evidence Appendix does not fabricate a roadmap for fully available sources", () => {
+  const html = appendix(appendixModel());
+  assert.doesNotMatch(html, /Unavailable &amp; Partial Evidence Roadmap/);
+  assert.doesNotMatch(html, /Required source \/ information/);
+  assert.doesNotMatch(html, /How to enable \/ collect/);
+  assert.doesNotMatch(html, /Additional insight enabled/);
 });
