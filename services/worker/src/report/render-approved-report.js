@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { e } from "./html-helpers.js";
+import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
 import {
   scorecard,
   priorityFixes,
@@ -60,27 +61,27 @@ function deferredAnalysis(model) {
   const items = [];
 
   if (ev.ga4?.sourceStatus !== "AVAILABLE") {
-    items.push({ area: "Google Analytics 4", reason: "GA4 was not connected or available.", impact: "Conversion measurement and engagement analysis deferred.", phase: "Continuous Evidence" });
+    items.push(withUnavailableRoadmap({ area: "Google Analytics 4", status: ev.ga4?.sourceStatus || "UNAVAILABLE", reason: "GA4 was not connected or available.", impact: "Conversion measurement and engagement analysis deferred.", phase: "Continuous Evidence" }, "ga4"));
   }
   if (ev.backlinks?.sourceStatus !== "AVAILABLE") {
-    items.push({ area: "Backlink Analysis", reason: "Backlink data source was not configured.", impact: "External authority and link-gap analysis deferred.", phase: "Continuous Evidence" });
+    items.push(withUnavailableRoadmap({ area: "Backlink Analysis", status: ev.backlinks?.sourceStatus || "UNAVAILABLE", reason: "Backlink data source was not configured.", impact: "External authority and link-gap analysis deferred.", phase: "Continuous Evidence" }, "backlinks"));
   }
   if (!ev.site?.schemaTypes?.length) {
-    items.push({ area: "Rich-Result Validation", reason: "No structured data was detected on the site.", impact: "Rich-result eligibility cannot be confirmed.", phase: "Post-implementation" });
+    items.push(withUnavailableRoadmap({ area: "Rich-Result Validation", status: "UNAVAILABLE", reason: "No structured data was detected on the site.", impact: "Rich-result eligibility cannot be confirmed.", phase: "Post-implementation" }, "structuredData"));
   }
   if (ev.performance?.sourceStatus !== "AVAILABLE" && ev.performance?.sourceStatus !== "PARTIAL") {
-    items.push({ area: "Field Performance (CrUX)", reason: "No performance data was available.", impact: "Real-user experience cannot be assessed.", phase: "Continuous Evidence" });
+    items.push(withUnavailableRoadmap({ area: "Field Performance (CrUX)", status: ev.performance?.sourceStatus || "UNAVAILABLE", reason: "No performance data was available.", impact: "Real-user experience cannot be assessed.", phase: "Continuous Evidence" }, "fieldPerformance"));
   }
 
   const rows = items.length
-    ? items.map((i) => `<tr><td>${e(i.area)}</td><td>${e(i.reason)}</td><td>${e(i.impact)}</td><td>${e(i.phase)}</td></tr>`).join("")
-    : `<tr><td colspan="4">No deferred analysis items — all sources were available.</td></tr>`;
+    ? items.map((i) => `<tr><td>${e(i.area)}</td><td>${e(i.status)}</td><td>${e(i.reason)}</td><td>${e(i.impact)}</td><td>${e(i.roadmap.requiredInformation)}</td><td>${e(i.roadmap.enablement)}</td><td>${e(i.roadmap.additionalInsight)}</td><td>${e(i.phase)}</td></tr>`).join("")
+    : `<tr><td colspan="8">No deferred analysis items — all sources were available.</td></tr>`;
 
   return `<section id="deferred-unavailable-analysis">
 <h2><span class="sec-num">15 /</span> Deferred &amp; Unavailable Analysis</h2>
 <p style="font-size:.85rem;color:var(--muted);margin-bottom:16px">Analysis that could not be completed because required data sources were unavailable, not connected, or insufficient. These items do not affect the Conversion Readiness Score.</p>
 <table>
-<thead><tr><th>Area</th><th>Reason</th><th>Impact</th><th>Available In</th></tr></thead>
+<thead><tr><th>Area</th><th>Status</th><th>Reason</th><th>Impact</th><th>Required source / information</th><th>How to enable / collect</th><th>Additional insight enabled</th><th>Available In</th></tr></thead>
 <tbody>${rows}</tbody>
 </table>
 <p style="font-size:.8rem;color:var(--muted);margin-top:12px">Items listed here may become available when the required data sources are connected. The Continuous Evidence Layer (Phase 2) can monitor these areas after a baseline exists.</p>

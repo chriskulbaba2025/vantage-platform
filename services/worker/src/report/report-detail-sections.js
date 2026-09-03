@@ -17,6 +17,7 @@
 
 import { FOUNDATION_STATUS } from "./foundation-readiness.js";
 import { ACTION_CLASS, ACTION_GROUP } from "./action-priority.js";
+import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
 
 function e(value) {
   return String(value ?? "")
@@ -1946,7 +1947,10 @@ export function performanceDetailSection(model) {
           )
           .join("")}</tbody>
       </table></div>`
-      : '<p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p>';
+      : (() => {
+          const roadmap = withUnavailableRoadmap({}, "fieldPerformance").roadmap;
+          return `<p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p><p class="small"><strong>What to collect next:</strong> ${e(roadmap.requiredInformation)} ${e(roadmap.enablement)} <strong>Then:</strong> ${e(roadmap.additionalInsight)}</p>`;
+        })();
 
   const strengths = [];
 
@@ -2385,6 +2389,16 @@ export function accessibilityMobileSection(model) {
         item.status ===
           "PARTIAL",
     );
+  const roadmapAreas = areas.map((item) =>
+    item.status === "UNAVAILABLE" || item.status === "PARTIAL"
+      ? withUnavailableRoadmap(
+          item,
+          item.status === "PARTIAL" && item.area === "Image alternative text"
+            ? "partialCrawl"
+            : "accessibility",
+        )
+      : item,
+  );
 
   const summary =
     barriers.length
@@ -2443,9 +2457,10 @@ export function accessibilityMobileSection(model) {
           <th>Status</th>
           <th>What was available</th>
           <th>What it means</th>
+          <th>What to collect next</th>
         </tr>
       </thead>
-      <tbody>${areas
+      <tbody>${roadmapAreas
         .map(
           (
             item,
@@ -2470,6 +2485,7 @@ export function accessibilityMobileSection(model) {
             <td class="small">${e(
               item.impact,
             )}</td>
+            <td class="small">${item.roadmap ? `${e(item.roadmap.requiredInformation)} ${e(item.roadmap.enablement)} ${e(item.roadmap.additionalInsight)}` : ""}</td>
           </tr>`,
         )
         .join("")}</tbody>
