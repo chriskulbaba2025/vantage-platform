@@ -2375,9 +2375,10 @@ export function buildFindings(site, performance, gsc, opts = {}) {
           ].filter(Boolean);
 
     const dataForSeoStatus =
-      partialCapabilities.length >
-      0
-        ? SOURCE_STATUS.PARTIAL
+      requiredCapabilities.length > 0
+        ? partialCapabilities.length > 0
+          ? SOURCE_STATUS.PARTIAL
+          : SOURCE_STATUS.AVAILABLE
         : site?.sourceStatus;
 
     const evidenceRecords =

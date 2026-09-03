@@ -2317,3 +2317,59 @@ test(
     );
   },
 );
+
+test(
+  "VAN-SCHEMA mixed-status: AVAILABLE schema capability must not inherit PARTIAL site status",
+  () => {
+    const ev = evidenceOf({
+      site: site({
+        sourceStatus: SOURCE_STATUS.PARTIAL,
+        schemaTypes: [],
+      }),
+    });
+
+    const model = scoreAudit(
+      INPUT,
+      ev,
+      {
+        capabilityEvidence: {
+          capabilityEvidenceVersion: "2.0.0",
+          summary: {},
+          capabilities: {
+            "schema.structured_data": {
+              status: SOURCE_STATUS.AVAILABLE,
+              requiredFieldsPresent: true,
+              coverage: {
+                requested: 1,
+                completed: 1,
+                failed: 0,
+              },
+              limitations: [],
+            },
+          },
+        },
+        scoredAt: FIXED_TS,
+      },
+    );
+
+    const finding = model.findings.find(
+      (item) => item.ruleId === "VAN-SCHEMA-001",
+    );
+
+    assert.ok(
+      finding,
+      "confirmed schema absence must still emit VAN-SCHEMA-001",
+    );
+
+    assert.equal(
+      finding.evidence[0].sourceStatus,
+      SOURCE_STATUS.AVAILABLE,
+      "schema finding evidence must use schema capability status, not broader PARTIAL site status",
+    );
+
+    assert.equal(
+      finding.title,
+      "No structured data detected",
+    );
+  },
+);
