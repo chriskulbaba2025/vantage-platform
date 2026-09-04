@@ -19,6 +19,8 @@
  * the exact evidence they would need.
  */
 
+import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
+
 export const FOUNDATION_STATUS = Object.freeze({
   PASS: "PASS",
   ACTION_REQUIRED: "ACTION_REQUIRED",
@@ -235,13 +237,24 @@ function availability(model) {
 
 function indexability(model) {
   const site = model?.evidence?.site || {};
+  // scoreAudit supplies the persisted projection before this material
+  // consumer runs. Isolated checklist callers intentionally exercise the
+  // evidence-only checklist contract and have no report projection.
+  const governed = model?.crossReportInterpretation
+    ? requireCrossReportInterpretation(model).constructs.indexability
+    : null;
+  if (governed === "Not Assessed") {
+    return item("indexability", "Google indexability", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Page-level indexability signals were not collected for this audit.",
+      { requires: "crawl evidence including per-page robots directives and status codes", foundational: true });
+  }
   if (!capAvailable(model, "technical.indexability")) {
     return item("indexability", "Google indexability", FOUNDATION_STATUS.NOT_ASSESSED,
       "Page-level indexability signals were not collected for this audit.",
       { requires: "crawl evidence including per-page robots directives and status codes", foundational: true });
   }
   const blocked = Array.isArray(site.nonIndexablePages) ? site.nonIndexablePages : [];
-  if (blocked.length > 0) {
+  if (governed === "Needs attention" || (governed === null && blocked.length > 0)) {
     const sample = blocked.slice(0, 3).map((p) => `${p.url}${p.reason ? ` (${p.reason})` : ""}`).join("; ");
     return item("indexability", "Google indexability", FOUNDATION_STATUS.ACTION_REQUIRED,
       `${blocked.length} crawled page(s) cannot be indexed: ${sample}. Pages that cannot be indexed cannot be found in search.`,

@@ -793,6 +793,7 @@ function competitorSection(model) {
     <p class="muted small">Only supplied or qualified collected competitor evidence is shown. PRYSM does not infer market-wide behavior from this sample.</p>
 
     <h3>Comparative overview</h3>
+    <p class="muted small"><strong>How to read related signals:</strong> Buyer action clarity measures whether a clear next-step invitation was observed. Conversion path measures whether a visitor can complete that next step through the assessed path. They can legitimately differ.</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Material area</th><th>This site</th>${header}</tr></thead>
       <tbody>${signalRows}</tbody>

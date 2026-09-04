@@ -4,6 +4,7 @@ import { requireCrossReportInterpretation } from "../report-model/cross-report-i
 
 function scorecard(model) {
   const { scores, bands, evidenceConfidenceScore, rootCause, evidence } = model;
+  const interpretation = requireCrossReportInterpretation(model);
   const site = evidence.site;
 
   const assessedWeight = model.assessedWeight ?? 100;
@@ -29,7 +30,7 @@ function scorecard(model) {
     : `<div class="score-grid" style="margin:20px 0">
 ${scoreCard(readinessDisplay, readinessLabel, showNumeric && scores.conversionReadiness !== null)}
 ${scoreCard(bands.evidenceConfidence, "Evidence Confidence", false)}
-${scoreCard(bands.trust !== "Not Assessed" ? bands.trust : "Not Assessed", "On-Site Trust Proof", false)}
+${scoreCard(interpretation.constructs.trustProof, "On-Site Trust Proof", false)}
 ${scoreCard(scores.contentDepth, "Content Depth")}
 ${scoreCard(scores.conversionPathways, "Conversion Pathways")}
 </div>`;
@@ -105,10 +106,10 @@ function competitorBenchmark(model) {
   const value = (label, target, key) => [e(label), e(target), ...comparisons.map((competitor) => e(competitor[key] || "Unavailable"))];
   const rows = [
     value("Offer Clarity", interpretation.constructs.offerClarity, "offerClarity"),
-    value("Trust Proof (on-site)", model.bands.trust, "trustProof"),
+    value("Trust Proof (on-site)", interpretation.constructs.trustProof, "trustProof"),
     value("CTA Clarity", interpretation.constructs.ctaClarity, "ctaClarity"),
     value("Content Depth", (model.scores.contentDepth ?? 0) >= 70 ? "Strong" : (model.scores.contentDepth ?? 0) >= 40 ? "Moderate" : "Light", "contentDepth"),
-    value("On-Site E-E-A-T Proof", model.bands.trust === "Not Assessed" ? "Not Assessed" : model.bands.trust, "eeat"),
+    value("On-Site E-E-A-T Proof", interpretation.constructs.trustProof, "eeat"),
     value("Conversion Path Clarity", interpretation.constructs.conversionPathClarity, "pathClarity"),
   ];
 
@@ -204,7 +205,7 @@ ${table(["URL", "Domain", "Reason"], excludedCandidates.slice(0, 10).map((candid
     "supplied-competitor-benchmark",
     "06",
     "Supplied Competitor Benchmark — Conversion Positioning",
-    `${sourcesSection}${serpLimitationHtml}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3>${table(headers, rows)}${opportunitySection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>` : ""}`,
+    `${sourcesSection}${serpLimitationHtml}<div class="note"><strong>Disclaimer:</strong> This benchmark compares supplied competitor URLs and SERP-discovered competitors for visible conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, or domain authority. No causal ranking claims are made.</div><h3>Supplied Competitors</h3>${supplied}<h3>Conversion-Positioning Comparison</h3><p class="muted small"><strong>How to read related signals:</strong> CTA Clarity measures whether a clear next-step invitation was observed. Conversion Path Clarity measures whether a visitor can complete that next step through the assessed path. They can legitimately differ.</p>${table(headers, rows)}${opportunitySection}${excludedSection}<h3>Positioning Opportunity</h3><p><strong>${e(model.input.businessName || site.domain)}:</strong> ${e(opportunity)}</p>${limitations.length ? `<h3>Limitations</h3><ul>${limitations.map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>` : ""}`,
   );
 }
 

@@ -18,6 +18,7 @@
 import { FOUNDATION_STATUS } from "./foundation-readiness.js";
 import { ACTION_CLASS, ACTION_GROUP } from "./action-priority.js";
 import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
+import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
 
 function e(value) {
   return String(value ?? "")
@@ -1763,6 +1764,7 @@ function deviceCard(label, data) {
 }
 
 export function performanceDetailSection(model) {
+  const interpretation = requireCrossReportInterpretation(model);
   const perf =
     model?.evidence?.performance;
 
@@ -1833,7 +1835,7 @@ export function performanceDetailSection(model) {
               ? ""
               : "s"
           } produced measurable results, including a weakest available performance score of ${weakest}/100, but incomplete coverage prevents a complete site-level PASS or FINDING.`
-        : weakest >= 90
+        : interpretation.constructs.mobileUsability === "Strong" && weakest >= 90
           ? "The available performance evidence is strong across the tested profiles."
           : weakest >= 60
             ? "The tested experience is usable but leaves measurable performance headroom on at least one profile."

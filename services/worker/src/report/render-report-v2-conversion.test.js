@@ -1719,14 +1719,14 @@ const RENDER_GOLDEN = {
   "slow-mobile": "af8ba1808201c16df4c22f9e416911619235b879990b65ac2ae2478c466ccb79",
   "no-performance": "2792de500eb0ee01ddb07bf0c5a296fbf62fc204993e8ddc04db41b6d3e7308c",
   "path-validated-blocker": "70c120868f677b0764997bc1ac04212f65c2b882bab0451bef00fc9c5d22d5d8",
-  "competitor-present": "0895e2eb932a5316c2da8492577e5bb2cb12b37bc53cc020ca71577ab6901e30",
+  "competitor-present": "c08404392b4909ebb9f50162c4f9d5e6ddcae88ddc52b3686a83ff89e87565b8",
   "proprietary-platform": "21d507c5ef0c20e0469c35fab7b6c750141969b87b209090e12c21c7ef8178e4",
   "untraced-broken-links": "fdbd23d6e891a9554d23f2733174793f6d220bbf5997213267851189d384ce1f",
   "schema-confirmed-absent": "1131d799e25926aa82be40627c65bd7cfb1a3d669d35f3e68a3ff04b8437ffa7",
   "headings-absent-h1": "f6b48e7d13ff51ed16fbc7e6408bead490c3e16a343eb52b09c58f1933e2313a",
   "headings-multiple-h1": "f9c723bd4840e256cb640720a464cc5ea03676316b031dc7ee066ea96421b1fc",
   "perf-field-and-multipage": "cb5498e14a15c9ffc48674850900731f31336d4bd801a7d5be0877d94c03d5fc",
-  "competitor-with-limitations": "bfce09bf2970a7e1a6390b4f3a0c20b4e2fe843287a9827248261e1957c3eea1",
+  "competitor-with-limitations": "c1ae9b18515c9b9ee2ce04b3910db9f0733b8b536d107e2f6d789c7497463d95",
   "device-profile-failed": "c0cc3b569c68fc5ff77b00dab54ef71fca8b1be787a2c00561377572ac31b28e",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
@@ -2279,8 +2279,8 @@ test("CR-26: client competitor comparison uses only usable evidence and governed
 
   assert.match(
     comp,
-    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Weak<\/td>/,
-    "own-site buyer action clarity must consume governed conversion-path state",
+    /<td><strong>Buyer action clarity<\/strong><\/td>\s*<td>Clear<\/td>/,
+    "own-site buyer action clarity must consume the governed CTA-visibility state",
   );
 
   assert.match(

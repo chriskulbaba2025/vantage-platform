@@ -11,24 +11,34 @@ export function buildCrossReportInterpretation({ site = {}, scores = {}, bands =
     : clear === paths.length
       ? "Clear"
       : weak > 0 ? "Weak" : "Partial";
+  // CTA clarity measures invitation visibility; path clarity measures whether
+  // that invitation can be completed. They deliberately have separate inputs.
+  const ctas = Array.isArray(site.ctas) ? site.ctas : [];
+  const ctaClarity = ctas.length === 0
+    ? "No CTA observed"
+    : ctas.some((cta) => !String(cta?.text || "").trim() || !String(cta?.url || "").trim())
+      ? "Partial"
+      : "Clear";
   const serviceCount = Array.isArray(site.services) ? site.services.length : 0;
   return Object.freeze({
     version: "1.0.0",
     constructs: Object.freeze({
       offerClarity: serviceCount > 0 ? "Observed service scope" : "Not Assessed",
-      ctaClarity: pathClarity,
+      ctaClarity,
       conversionPathClarity: pathClarity,
       trustProof: bands.trust || "Not Assessed",
       mobileUsability: scores.performance == null ? "Not Assessed" : scores.performance >= 70 ? "Strong" : "Needs attention",
-      indexability: scores.technical == null ? "Not Assessed" : scores.technical >= 70 ? "Strong" : "Needs attention",
+      indexability: !Array.isArray(site.nonIndexablePages)
+        ? "Not Assessed"
+        : site.nonIndexablePages.length > 0 ? "Needs attention" : "Strong",
     }),
     lineage: Object.freeze({
       offerClarity: "site.services",
-      ctaClarity: "conversionPaths[].status",
+      ctaClarity: "site.ctas[].text,url",
       conversionPathClarity: "conversionPaths[].status",
       trustProof: "bands.trust",
       mobileUsability: "scores.performance",
-      indexability: "scores.technical",
+      indexability: "site.nonIndexablePages",
     }),
   });
 }

@@ -1257,6 +1257,17 @@ export function scoreAudit(
           .conversionReadiness
       : null;
 
+  // Build once before any material deterministic consumer so foundation,
+  // detail, and renderer conclusions all receive the same persisted authority.
+  const crossReportInterpretation = buildCrossReportInterpretation({
+    site: decisionSite,
+    scores: legacyScores,
+    bands: {
+      trust: legacyScores.trust !== null ? band(legacyScores.trust) : "Not Assessed",
+    },
+    conversionPaths: buildConversionPaths(decisionSite, capabilities),
+  });
+
   // ── Root cause ─────────────────────────────────────────────────────
 
   const rootCauseContext = {
@@ -1264,6 +1275,7 @@ export function scoreAudit(
     evidence,
     capabilityEvidence,
     scores: legacyScores,
+    crossReportInterpretation,
   };
 
   const rootCausePlan =
@@ -1576,12 +1588,7 @@ export function scoreAudit(
           [],
       ),
 
-    crossReportInterpretation: buildCrossReportInterpretation({
-      site: decisionSite,
-      scores: legacyScores,
-      bands,
-      conversionPaths: buildConversionPaths(decisionSite, capabilities),
-    }),
+    crossReportInterpretation,
 
     competitorOpportunities:
       evidence
