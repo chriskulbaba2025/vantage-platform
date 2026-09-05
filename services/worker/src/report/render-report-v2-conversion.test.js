@@ -14,6 +14,8 @@
  */
 
 import test from "node:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { scoreAudit } from "../scoring/vantage-score.js";
@@ -1731,6 +1733,8 @@ const RENDER_GOLDEN = {
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
+  const proofDir = process.env.P1_RENDER_PROOF_DIR || null;
+  const manifest = [];
 
   for (const [name, siteEvidence, overrides, pathEv, input] of foundationMatrix()) {
     const html = renderReportV2(
@@ -1745,7 +1749,15 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
     actual[name] = createHash("sha256")
       .update(html)
       .digest("hex");
+    if (proofDir) {
+      mkdirSync(proofDir, { recursive: true });
+      const file = join(proofDir, `${name}.html`);
+      writeFileSync(file, html, "utf8");
+      manifest.push({ scenario: name, file: `${name}.html`, sha256: actual[name], applicationSha: process.env.P1_APPLICATION_SHA || "UNBOUND", renderer: "renderReportV2", test: "CR-43" });
+    }
   }
+
+  if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
   assert.deepEqual(
     actual,
