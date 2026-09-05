@@ -253,7 +253,7 @@ export function eeatSection(model) {
     [
       "What reduces my risk?",
       "policies",
-      "Policies, pricing context, guarantees, or other reassurance",
+      "Policies, pricing, guarantees, or other reassurance",
     ],
   ];
 

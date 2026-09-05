@@ -315,8 +315,9 @@ function robots(model) {
       ROBOTS_DETAIL.REFUSED, { requires: ROBOTS_REQUIRES.REFUSED });
   }
   if (typeof site.robotsText === "string" && site.robotsText.trim().length > 0) {
-    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.PASS,
-      ROBOTS_DETAIL.RETRIEVED);
+    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
+      "A robots.txt file was retrieved, but this assessment did not evaluate its directives for search-engine user agents.",
+      { requires: "parsed robots.txt directives for the relevant search-engine user agents" });
   }
   return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
     ROBOTS_DETAIL.NOT_RETURNED, { requires: ROBOTS_REQUIRES.NOT_RETURNED });

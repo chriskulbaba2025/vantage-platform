@@ -1320,7 +1320,6 @@ const REACHABLE_BRANCHES = [
   "primary_contact:NOT_ASSESSED",
   "primary_contact:PASS",
   "robots_txt:NOT_ASSESSED",
-  "robots_txt:PASS",
   "security_headers:ACTION_REQUIRED",
   "security_headers:NOT_ASSESSED",
   "security_headers:PASS",
@@ -1479,9 +1478,9 @@ test("CR-38: all three robots branches render exactly the frozen wording", () =>
       assessedSite({
         robotsText: "User-agent: *\nAllow: /",
       }),
-      "RETRIEVED",
       null,
-      FOUNDATION_STATUS.PASS,
+      "parsed robots.txt directives for the relevant search-engine user agents",
+      FOUNDATION_STATUS.NOT_ASSESSED,
     ],
     [
       "not returned (production path)",
@@ -1508,7 +1507,7 @@ test("CR-38: all three robots branches render exactly the frozen wording", () =>
 
     assert.equal(
       i.detail,
-      FROZEN.robots[key],
+      key ? FROZEN.robots[key] : "A robots.txt file was retrieved, but this assessment did not evaluate its directives for search-engine user agents.",
       `${label}: detail`,
     );
 
@@ -1623,7 +1622,7 @@ const CHECKLIST_GOLDEN = {
   "target-outage": "b249c5d0b671094d224ea4ac751292abea10af854b5e12bab199b79d90213698",
   "outage-with-limitations": "61a260947f7d335d9b1fe6ba0342c579e18257530a987b14f4dace938f9cc317",
   "http-and-noindex": "76514e6aa9b39b65708e0be60db0f4547ecb1d6489bbc597d6b205749be20496",
-  "robots-retrieved": "46c0e4738f6eddae9f3c31b491ec3fe1a831fcab561776e2d8b84eb0e425174d",
+  "robots-retrieved": "b149bb2618bfc8ce2eab16b815083ac5282b17810943c9c043f925020267855d",
   "canonical-missing": "dc364988408a8465f436dd46d0d733a1a503484a5b59954288e7f97bcc71197d",
   "no-conversion-mechanism": "b0ecd7cf4bc3f42fa56d8c18d69dbc27b8b11c26a52422df7f3c73b439cca830",
   "no-contact": "71ffdb1e959c0a991535b23488ca8db7f9afbd6afa0893fd668d4df35c3f580f",
@@ -1667,9 +1666,7 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
       foundational: i.foundational,
     }));
 
-    actual[name] = createHash("sha256")
-      .update(JSON.stringify(checklist))
-      .digest("hex");
+    actual[name] = normalizedSha256(JSON.stringify(checklist));
   }
 
   assert.deepEqual(
@@ -1703,33 +1700,33 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
 });
 
 const RENDER_GOLDEN = {
-  assessed: "579a6a6559fd23f51bda48d44fa21dfbbbcff890abadb806c5b44e24411c95da",
-  unassessed: "7e1562b6788989206792b6e3692c1e0fdc407bdcd36c1480e6442f157b8da955",
-  "provider-failed": "8963470db568dd83c5bfbd1996e53bfdd7c049f6300874f79b80266807d0201d",
-  "crawl-blocked": "e208e8e077aba9fa9c753ef0fc837c7b94b6fd495b5a99573b8de3602bfe6820",
-  "target-outage": "9d10b5255daa9f61a6f71268718acbcb8e06aeb568c0927606f953d840f88d23",
-  "outage-with-limitations": "76f52274b9cdfcf2b680c5c45cec4d9d145978299224624a25892ffbcf95f389",
-  "http-and-noindex": "c12d1eec0a5a4700c8cb919ee01321204d8a62a612dd7699337fae5cd2289a12",
-  "robots-retrieved": "687c55a60606dfca9b238ca761cd2c268705b8ec9e11f760bdf19c8c11c7d182",
-  "canonical-missing": "089c27fc4c31391e1b117b05b458fd0ec82eafb98a59d06dfd054c9a40c7a27a",
-  "no-conversion-mechanism": "885296485a0a1b9804797f60ac936bc353f73dce7876cfa9516002b0ecd9476c",
-  "no-contact": "8562a63e6d70682ebddc5a7d078584f96ca19f122d617d98844166ba7102b2b5",
-  "headers-all-present": "c378515ce7b06015dbe7ad98b655ab1a4eaec1b45a7adcdfcaf644b185f55804",
-  "ga4-ready": "07fed4684b10cddcc59b628dbd5e2e03da6568d66ddfda7208b7a9207127aa24",
-  "ga4-issues": "0e6f9c585cc77e0e286ce84701f7b0c6a3d083ca044c48250ac30a056cef6a36",
-  "ga4-not-applicable": "448f52a07e5a704e22f3ca87cec9955d8ea8faf2d3888c8df54d04611f21537e",
-  "slow-mobile": "af8ba1808201c16df4c22f9e416911619235b879990b65ac2ae2478c466ccb79",
-  "no-performance": "2792de500eb0ee01ddb07bf0c5a296fbf62fc204993e8ddc04db41b6d3e7308c",
-  "path-validated-blocker": "70c120868f677b0764997bc1ac04212f65c2b882bab0451bef00fc9c5d22d5d8",
-  "competitor-present": "c08404392b4909ebb9f50162c4f9d5e6ddcae88ddc52b3686a83ff89e87565b8",
-  "proprietary-platform": "21d507c5ef0c20e0469c35fab7b6c750141969b87b209090e12c21c7ef8178e4",
-  "untraced-broken-links": "fdbd23d6e891a9554d23f2733174793f6d220bbf5997213267851189d384ce1f",
-  "schema-confirmed-absent": "1131d799e25926aa82be40627c65bd7cfb1a3d669d35f3e68a3ff04b8437ffa7",
-  "headings-absent-h1": "f6b48e7d13ff51ed16fbc7e6408bead490c3e16a343eb52b09c58f1933e2313a",
-  "headings-multiple-h1": "f9c723bd4840e256cb640720a464cc5ea03676316b031dc7ee066ea96421b1fc",
-  "perf-field-and-multipage": "cb5498e14a15c9ffc48674850900731f31336d4bd801a7d5be0877d94c03d5fc",
-  "competitor-with-limitations": "c1ae9b18515c9b9ee2ce04b3910db9f0733b8b536d107e2f6d789c7497463d95",
-  "device-profile-failed": "c0cc3b569c68fc5ff77b00dab54ef71fca8b1be787a2c00561377572ac31b28e",
+  assessed: "02afd7fbc7249ca98d1f67196c42c31a5d569bffd231b1bc931af433c0062009",
+  unassessed: "bf6eb8f520fd4dde0ec6f05dc5a18116fef762c47a7f64f4cbb5238a382cb5d6",
+  "provider-failed": "62627f10dd5762d8a9101b192f303eed966612286abeab306c504a003f0f47b0",
+  "crawl-blocked": "2372abdd657a7025a7207647a4754e8b42817be2e7dc14d5e2752b7c8d2a05af",
+  "target-outage": "98229f2522cead3061fe100fd1a1768c0a472e07f9004736096fa8873afa91fc",
+  "outage-with-limitations": "46f058d9e155cb444828cec6d06d6abd33e078b9e6ada0ef722afdfcf47d7542",
+  "http-and-noindex": "7a19bdae036d2a3415b55d51dbdae813af38d161bd934da23a254cd6f3e801a0",
+  "robots-retrieved": "2e32d3893c79d0928b9f8e4efb03a47f7b4c3f9cfbf7957cf8152da6cd5772c3",
+  "canonical-missing": "3bea611269f4e660551bdad289e4b06125d08f464e2a3c54b06fd254d3249708",
+  "no-conversion-mechanism": "c42dd6f549eef6fedf13aea9c8d5dbaf48603b01f220b647765c4fdb9f50ec7b",
+  "no-contact": "a38c2fa5e452d6d8290a50a954375fa011476514fb2ddb84289a9a5229f119c3",
+  "headers-all-present": "8ac246dca79c201eb3c6e5668af82b43e33854b487657fca76b4eb16eced297c",
+  "ga4-ready": "249ec2c861c25945fac544dc7d901b251793048bd11f4edd0719907ab50373f4",
+  "ga4-issues": "630f3474176393c7fdf7e7f78f58a82f36afe380b1ee187223addb8cb13f6fa9",
+  "ga4-not-applicable": "7e908405e9708e855bb19e3fff53466f75ab4e78128b738e3258744c5c6329b6",
+  "slow-mobile": "f587df0ed6ae05efa70be872af4b54b9761cd6436220de8fef9ce9ccfc2a1627",
+  "no-performance": "71ec448010d3f6353b6e3f4133f6f04ff8f025835051d12083ccf8d68c9ade18",
+  "path-validated-blocker": "eb6fea3e6ffab7cfd307b428453d02d593c1bedfcbfc8f2fd7ee2ca211a3fe0b",
+  "competitor-present": "f441d416757afd4460b1f48b55227dd0f06d4de782712f092e359b8dd44c8e59",
+  "proprietary-platform": "c56f582e09118fe33f142fcd4a7db7d1730f233646a8297863c3419817c13bac",
+  "untraced-broken-links": "de6aaf05ef3e578f2c9ba83960c89c530d4425f0be3660fe3273141ec51180d6",
+  "schema-confirmed-absent": "e81748c8ac6009d26bbf9fd1ef9246ce0299096bce41530f5507d5d4970e4e27",
+  "headings-absent-h1": "8e31de8a28df19c07b2b880b48aa708d80010ab4ae0157f901f7d8cc336bd82c",
+  "headings-multiple-h1": "58b38140a108638e9567b4a0c1cf258822495b5381bcce0b2bac95cbfb642b23",
+  "perf-field-and-multipage": "fef0b1a6ab0eac2d5efea3cf414b20320c9a4800b6b0dbaf1868366e16978b6b",
+  "competitor-with-limitations": "d33102785385bacb4c2d56abe6c052da86d7089846fb610dda4dfb47faeb89d7",
+  "device-profile-failed": "7f7c8ee66907c2c14a04d8c26a92d463d150e011e6962042e6835de0c46187cd",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
@@ -1746,14 +1743,12 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
       ),
     );
 
-    actual[name] = createHash("sha256")
-      .update(html)
-      .digest("hex");
+    actual[name] = normalizedSha256(html);
     if (proofDir) {
       mkdirSync(proofDir, { recursive: true });
       const file = join(proofDir, `${name}.html`);
       writeFileSync(file, html, "utf8");
-      manifest.push({ scenario: name, file: `${name}.html`, sha256: actual[name], applicationSha: process.env.P1_APPLICATION_SHA || "UNBOUND", renderer: "renderReportV2", test: "CR-43" });
+      manifest.push({ scenario: name, file: `${name}.html`, sha256: actual[name], hashNormalization: "LF", applicationSha: process.env.P1_APPLICATION_SHA || "UNBOUND", renderer: "renderReportV2", test: "CR-43" });
     }
   }
 
@@ -2438,4 +2433,12 @@ test("P1-CROSS-04: renderer consumes persisted interpretation and fails closed w
   ]);
 
   assert.equal(rawUrls.length, 6);
+});
+function normalizedSha256(text) {
+  return createHash("sha256").update(String(text).replace(/\r\n?/g, "\n"), "utf8").digest("hex");
+}
+
+test("P1 proof hashes are stable across CRLF and LF normalization", () => {
+  const lf = "<p>same rendered content</p>\n";
+  assert.equal(normalizedSha256(lf), normalizedSha256(lf.replace(/\n/g, "\r\n")));
 });

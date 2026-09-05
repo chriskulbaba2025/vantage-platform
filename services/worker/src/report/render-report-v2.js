@@ -151,6 +151,7 @@ function clientFacingReportModel(model) {
 }
 
 function executiveScorecard(model, pillars) {
+  const site = model.evidence?.site || {};
   const readiness = model.scores.conversionReadiness;
   const confidence = model.evidenceConfidenceScore;
   const assessedWeight = model.assessedWeight ?? 0;
@@ -200,7 +201,9 @@ function executiveScorecard(model, pillars) {
 
   const findingsHtml = findings.length
     ? `<ol>${findings.map((f) => `<li><strong>${e(f.title || "Finding")}</strong> — ${e(f.businessImpact || "Material impact identified in the assessed evidence.")}</li>`).join("")}</ol>`
-    : `<p><span class="chip cap-ok">PASS</span> No material score-bearing finding was produced from the assessed evidence.</p>`;
+    : ["BLOCKED", "FAILED", "UNAVAILABLE", "NOT_CONNECTED"].includes(String(site.sourceStatus || ""))
+      ? `<p><span class="chip cap-neutral">LIMITED EVIDENCE</span> No page-level conclusion is made because usable page evidence was not available for this audit.</p>`
+      : `<p><span class="chip cap-ok">PASS</span> No material finding was produced from the evidence assessed.</p>`;
 
   const actionsHtml = actions.length
     ? `<ol>${actions.map((a) => `<li><strong>${e(a.finding?.title || "Priority action")}</strong> — ${e(a.finding?.recommendation || "Address the governed finding and verify the change.")}</li>`).join("")}</ol>`
@@ -888,9 +891,9 @@ function contentOpportunitiesSection(model) {
     ],
     [
       "Take action",
-      bofu.length || (site.ctas || []).length,
+      (site.ctas || []).length,
       (site.ctas || []).length > 0,
-      "Decision-stage information and a clear route to action.",
+      "An observed conversion action visitors can take.",
     ],
   ];
 
