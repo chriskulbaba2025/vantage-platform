@@ -1,0 +1,2359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<title>Example Business — Conversion Readiness Report</title>
+<style>
+:root {
+  --navy:#0d1b33;
+  --navy2:#122544;
+  --ink:#142033;
+  --muted:#667085;
+  --bg:#f4f7fb;
+  --card:#ffffff;
+  --line:#dfe5ee;
+  --accent:#2d6cdf;
+  --accent-soft:#eaf2ff;
+  --warn:#b7791f;
+  --ok:#16875b;
+  --bad:#c2413b;
+  --shadow:0 8px 28px rgba(21,31,51,.08);
+}
+
+* {
+  box-sizing:border-box;
+}
+
+html {
+  scroll-behavior:smooth;
+}
+
+body {
+  margin:0;
+  min-height:100vh;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color:var(--ink);
+  background:var(--bg);
+  line-height:1.55;
+}
+
+.mono {
+  font-family:'Courier New',ui-monospace,monospace;
+}
+
+header.brand {
+  position:sticky;
+  top:0;
+  z-index:20;
+  background:#fff;
+  color:var(--ink);
+  min-height:64px;
+  padding:.85rem 1.5rem;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+
+header.brand h1 {
+  margin:0;
+  font-size:1.35rem;
+  line-height:1.2;
+  letter-spacing:-.01em;
+}
+
+header.brand .sub {
+  margin:.25rem 0 0;
+  color:var(--muted);
+  font-size:.78rem;
+}
+
+.report-layout {
+  display:grid;
+  grid-template-columns:280px minmax(0,1fr);
+  grid-template-areas:'sidebar content';
+  gap:24px;
+  max-width:1600px;
+  margin:0 auto;
+  padding:24px;
+  align-items:start;
+}
+
+.viewer-sidebar {
+  grid-area:sidebar;
+  position:sticky;
+  top:88px;
+  max-height:calc(100vh - 112px);
+  overflow-y:auto;
+  background:var(--navy);
+  color:#fff;
+  border:0;
+  border-radius:16px;
+  padding:18px;
+  box-shadow:var(--shadow);
+}
+
+.viewer-sidebar-title {
+  margin:4px 8px 12px;
+  font-size:.68rem;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:#9eb0cc;
+  font-weight:800;
+}
+
+.viewer-nav {
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+}
+
+.viewer-nav-link {
+  display:grid;
+  grid-template-columns:26px 1fr;
+  gap:10px;
+  align-items:start;
+  padding:10px 11px;
+  border-radius:9px;
+  color:#dce5f3;
+  text-decoration:none;
+  font-size:.8rem;
+  line-height:1.25;
+}
+
+.viewer-nav-link:hover {
+  background:rgba(255,255,255,.08);
+  color:#fff;
+}
+
+.viewer-nav-link[aria-current='page'] {
+  background:#fff;
+  color:var(--navy);
+  font-weight:800;
+}
+
+.viewer-nav-num {
+  display:inline-grid;
+  place-items:center;
+  min-width:22px;
+  height:22px;
+  border-radius:6px;
+  background:rgba(255,255,255,.08);
+  font-family:'Courier New',ui-monospace,monospace;
+  font-size:.67rem;
+  line-height:1;
+}
+
+.viewer-nav-link[aria-current='page'] .viewer-nav-num {
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+
+.viewer-content {
+  grid-area:content;
+  min-width:0;
+}
+  .viewer-toolbar {
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:1rem;
+  background:transparent;
+  border:0;
+  padding:2px 0 14px;
+  margin:0 0 4px;
+}
+
+.viewer-toolbar h2 {
+  margin:0;
+  font-size:1.45rem;
+  line-height:1.2;
+  letter-spacing:-.02em;
+}
+
+.print-page-btn {
+  border:1px solid var(--accent);
+  border-radius:9px;
+  padding:.65rem .9rem;
+  background:var(--accent);
+  color:#fff;
+  font-weight:750;
+  cursor:pointer;
+  white-space:nowrap;
+  box-shadow:0 3px 10px rgba(45,108,223,.18);
+}
+
+.print-page-btn:hover {
+  filter:brightness(.95);
+}
+
+main {
+  min-width:0;
+}
+
+body.viewer-ready main > section:not(.viewer-active) {
+  display:none;
+}
+
+body.viewer-ready main > section.viewer-active {
+  display:block;
+}
+
+body.viewer-ready .narrative-layer > section:not(.viewer-active) {
+  display:none;
+}
+
+body.viewer-ready .narrative-layer > section.viewer-active {
+  display:block;
+}
+
+.card {
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:18px;
+  margin:0 0 18px;
+  box-shadow:var(--shadow);
+}
+
+main > section:not(.card) {
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:18px;
+  margin:0 0 18px;
+  box-shadow:var(--shadow);
+}
+
+section > h2 {
+  margin:.05rem 0 .8rem;
+  font-size:1.05rem;
+  border-bottom:1px solid #edf0f5;
+  padding-bottom:.62rem;
+  letter-spacing:-.01em;
+}
+
+section > h3,
+.card h3 {
+  font-size:.9rem;
+  margin:1rem 0 .55rem;
+}
+
+.grid-3 {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+}
+
+.pillar-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:14px;
+}
+
+.pillar {
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:15px;
+  box-shadow:0 4px 16px rgba(21,31,51,.05);
+}
+
+.pillar h3 {
+  margin:.1rem 0 .5rem;
+  font-size:.9rem;
+}
+
+.pillar-score {
+  font-size:1.65rem;
+  font-weight:800;
+  letter-spacing:-.02em;
+}
+
+.pillar-score.none {
+  font-size:1rem;
+  color:var(--muted);
+}
+
+.pillar-modules {
+  margin:.5rem 0;
+  padding-left:1rem;
+  font-size:.76rem;
+  color:var(--muted);
+}
+
+.pillar-caps {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.3rem;
+}
+
+.readiness,
+.confidence,
+.coverage {
+  font-size:2rem;
+  font-weight:800;
+  letter-spacing:-.03em;
+}
+
+.readiness-none {
+  font-size:1.1rem;
+  font-weight:800;
+  color:var(--warn);
+}
+
+.readiness-max {
+  font-size:.92rem;
+  color:var(--muted);
+  font-weight:500;
+}
+
+.chip {
+  display:inline-block;
+  font-size:.7rem;
+  padding:.18rem .5rem;
+  border-radius:999px;
+  background:#eef2f8;
+  color:var(--muted);
+  font-weight:700;
+}
+
+.band-strong,
+.cap-ok {
+  background:#e9f8f1;
+  color:var(--ok);
+}
+
+.band-moderate,
+.cap-partial {
+  background:#fff4db;
+  color:var(--warn);
+}
+
+.band-limited {
+  background:#feeceb;
+  color:var(--bad);
+}
+
+.band-weak,
+.cap-missing {
+  background:#feeceb;
+  color:var(--bad);
+}
+
+.cap-neutral {
+  background:#eef2f8;
+  color:var(--muted);
+}
+
+.muted {
+  color:var(--muted);
+}
+
+.small {
+  font-size:.76rem;
+  color:var(--muted);
+}
+
+.table-wrap {
+  overflow-x:auto;
+  border-radius:10px;
+}
+
+table {
+  width:100%;
+  border-collapse:collapse;
+  font-size:.78rem;
+  font-family:inherit;
+}
+
+th,
+td {
+  border:0;
+  border-bottom:1px solid #edf0f5;
+  padding:.62rem .55rem;
+  text-align:left;
+  vertical-align:top;
+}
+
+th {
+  background:#f8fafc;
+  color:var(--muted);
+  font-size:.72rem;
+  font-weight:750;
+}
+
+tbody tr:last-child td {
+  border-bottom:0;
+}
+
+a {
+  color:var(--accent);
+}
+
+ul.findings {
+  padding-left:1.1rem;
+}
+
+ul.findings > li {
+  margin:.5rem 0;
+}
+
+.note {
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#f8fafc;
+  padding:12px 14px;
+  margin:10px 0;
+}
+
+footer {
+  text-align:center;
+  color:var(--muted);
+  font-size:.72rem;
+  padding:1rem 1.2rem 1.4rem;
+}
+
+@media (max-width:900px) {
+  .report-layout {
+    grid-template-columns:220px minmax(0,1fr);
+    grid-template-areas:'sidebar content';
+    gap:14px;
+    padding:14px;
+  }
+
+  .viewer-sidebar {
+    position:sticky;
+    top:78px;
+    max-height:calc(100vh - 92px);
+    overflow-y:auto;
+    padding:12px;
+    border-radius:12px;
+  }
+
+  .viewer-nav {
+    flex-direction:column;
+    overflow:visible;
+  }
+
+  .viewer-nav-link {
+    min-width:0;
+    padding:9px 8px;
+  }
+
+  .viewer-sidebar-title {
+    margin-left:6px;
+  }
+
+  .grid-3 {
+    grid-template-columns:1fr;
+  }
+}
+
+@media (max-width:720px) {
+  .report-layout {
+    grid-template-columns:180px minmax(0,1fr);
+    gap:10px;
+    padding:10px;
+  }
+
+  .viewer-sidebar {
+    top:76px;
+    max-height:calc(100vh - 86px);
+    padding:9px;
+  }
+      .viewer-nav-link {
+    grid-template-columns:22px 1fr;
+    gap:7px;
+    padding:8px 7px;
+    font-size:.72rem;
+  }
+
+  .viewer-nav-num {
+    min-width:20px;
+    height:20px;
+    font-size:.62rem;
+  }
+
+  header.brand {
+    padding:.75rem 1rem;
+  }
+
+  header.brand h1 {
+    font-size:1.05rem;
+  }
+
+  header.brand .sub {
+    font-size:.68rem;
+  }
+
+  .viewer-toolbar {
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .viewer-toolbar h2 {
+    font-size:1.15rem;
+  }
+
+  .print-page-btn {
+    width:100%;
+  }
+
+  .card,
+  main > section:not(.card) {
+    padding:14px;
+  }
+}
+
+@media print {
+.nav-jump, .no-print { display:none !important; }
+
+  body {
+    background:#fff;
+  }
+
+  header.brand {
+    position:static;
+    border:0;
+    padding:0 0 1rem;
+  }
+
+  .report-layout {
+    display:block;
+    max-width:100%;
+    margin:0;
+    padding:0;
+  }
+
+  .viewer-content,
+  main {
+    max-width:100%;
+    padding:0;
+  }
+
+  body.viewer-ready main > section:not(.viewer-active) {
+    display:none !important;
+  }
+
+  body.viewer-ready main > section.viewer-active { display:block !important; }
+
+  body.viewer-ready .narrative-layer > section:not(.viewer-active) {
+    display:none !important;
+  }
+
+  body.viewer-ready .narrative-layer > section.viewer-active {
+    display:block !important;
+  }
+
+  .card,
+  .pillar,
+  main > section:not(.card) {
+    box-shadow:none;
+    page-break-inside:avoid;
+  }
+}
+</style>
+<style data-prysm-theme="brand-v1">
+:root {
+  --prysm-primary:#3D756B;
+  --prysm-dark:#173C36;
+  --prysm-deep:#102D29;
+  --prysm-mint:#EAF5F1;
+  --prysm-mint-2:#F4F9F7;
+  --prysm-lime:#D9ED9A;
+  --prysm-paper:#FCFDFC;
+  --prysm-ink:#17221F;
+  --prysm-muted:#64736F;
+  --prysm-line:#D9E3DF;
+  --prysm-success:#28735F;
+  --prysm-warning:#9A7028;
+  --prysm-risk:#A94A43;
+}
+
+/* Visual theme only.
+   Viewer layout, sticky sidebar positioning,
+   responsive grid, page switching and print logic
+   remain controlled by PRYSM Viewer v2.2.0. */
+
+body {
+  font-family:'DM Sans',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color:var(--prysm-ink);
+  background:var(--prysm-paper);
+  font-size:18.5px;
+  line-height:1.6;
+}
+
+header.brand {
+  background:#fff;
+  border-bottom:1px solid var(--prysm-line);
+  padding:20px 32px;
+}
+
+header.brand h1 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:38px;
+  font-weight:800;
+  line-height:1.10;
+  letter-spacing:-0.035em;
+  color:var(--prysm-deep);
+}
+
+header.brand .sub {
+  margin-top:8px;
+  color:var(--prysm-muted);
+  font-size:12.5px;
+  font-weight:600;
+  line-height:1.5;
+}
+
+.viewer-sidebar {
+  background:var(--prysm-deep);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:16px;
+  box-shadow:0 8px 24px rgba(16,45,41,.08);
+}
+
+.viewer-sidebar-title {
+  color:#B8CEC7;
+  font-family:'DM Sans',sans-serif;
+  font-size:12.5px;
+  font-weight:700;
+  letter-spacing:.14em;
+}
+
+.viewer-nav-link {
+  color:#DCEAE5;
+  font-family:'DM Sans',sans-serif;
+  font-weight:500;
+  border-radius:10px;
+  transition:
+    background-color .2s ease,
+    color .2s ease;
+}
+
+.viewer-nav-link:hover {
+  background:rgba(255,255,255,.07);
+  color:#fff;
+}
+
+.viewer-nav-link[aria-current='page'] {
+  background:var(--prysm-mint);
+  color:var(--prysm-deep);
+  box-shadow:none;
+}
+
+.viewer-nav-num {
+  background:rgba(255,255,255,.08);
+  color:#DCEAE5;
+  border-radius:6px;
+}
+
+.viewer-nav-link[aria-current='page'] .viewer-nav-num {
+  background:#fff;
+  color:var(--prysm-primary);
+}
+
+.viewer-toolbar {
+  padding-top:12px;
+  padding-bottom:24px;
+}
+
+.viewer-toolbar h2 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:40px;
+  font-weight:700;
+  line-height:1.12;
+  letter-spacing:-0.035em;
+  color:var(--prysm-deep);
+}
+
+.print-page-btn {
+  font-family:'DM Sans',sans-serif;
+  border:1px solid var(--prysm-primary);
+  border-radius:999px;
+  padding:15px 20px;
+  background:var(--prysm-primary);
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  box-shadow:none;
+  transition:
+    transform .25s ease,
+    background-color .25s ease;
+}
+
+.print-page-btn:hover {
+  filter:none;
+  background:var(--prysm-dark);
+  transform:translateY(-1px);
+}
+
+.print-page-btn:focus-visible,
+.viewer-nav-link:focus-visible {
+  outline:3px solid var(--prysm-lime);
+  outline-offset:3px;
+}
+
+.card,
+main > section:not(.card) {
+  background:#fff;
+  border:1px solid var(--prysm-line);
+  border-radius:16px;
+  padding:32px;
+  box-shadow:0 6px 20px rgba(16,45,41,.045);
+}
+
+section > h2,
+.card h2 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:40px;
+  font-weight:700;
+  line-height:1.12;
+  letter-spacing:-0.035em;
+  color:var(--prysm-deep);
+  border-bottom:1px solid var(--prysm-line);
+  padding-bottom:20px;
+  margin-bottom:24px;
+}
+
+section > h3,
+.card h3 {
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:32px;
+  font-weight:800;
+  line-height:1.20;
+  letter-spacing:-0.025em;
+  color:var(--prysm-deep);
+  margin-top:40px;
+}
+
+p,
+li {
+  font-size:18.5px;
+  line-height:1.6;
+}
+
+.small,
+.muted {
+  color:var(--prysm-muted);
+}
+
+.small {
+  font-size:15px;
+  line-height:1.55;
+}
+
+a {
+  color:var(--prysm-primary);
+}
+
+.pillar {
+  background:var(--prysm-mint-2);
+  border:1px solid var(--prysm-line);
+  border-radius:14px;
+  box-shadow:none;
+  padding:24px;
+}
+
+.pillar h3 {
+  font-family:'Manrope',sans-serif;
+  color:var(--prysm-deep);
+}
+
+.pillar-score,
+.readiness,
+.confidence,
+.coverage {
+  font-family:'Manrope',system-ui,sans-serif;
+  color:var(--prysm-primary);
+  font-weight:800;
+}
+
+.chip {
+  font-family:'DM Sans',sans-serif;
+  font-size:12.5px;
+  font-weight:700;
+  line-height:1.35;
+}
+
+.band-strong,
+.cap-ok {
+  background:#E5F3ED;
+  color:var(--prysm-success);
+}
+
+.band-moderate,
+.cap-partial {
+  background:#F8F0DC;
+  color:var(--prysm-warning);
+}
+
+.band-limited,
+.band-weak,
+.cap-missing {
+  background:#F8E8E6;
+  color:var(--prysm-risk);
+}
+
+.cap-neutral {
+  background:#EEF3F1;
+  color:var(--prysm-muted);
+}
+
+.note {
+  background:var(--prysm-mint-2);
+  border:1px solid var(--prysm-line);
+  border-radius:14px;
+  padding:20px 22px;
+}
+
+.table-wrap {
+  border:1px solid var(--prysm-line);
+  border-radius:14px;
+}
+
+table {
+  font-family:'DM Sans',sans-serif;
+  font-size:15px;
+  line-height:1.5;
+}
+
+th {
+  background:var(--prysm-mint-2);
+  color:var(--prysm-dark);
+  font-size:12.5px;
+  font-weight:700;
+  letter-spacing:.02em;
+}
+
+th,
+td {
+  border-bottom:1px solid var(--prysm-line);
+  padding:14px 16px;
+}
+
+.narrative-card {
+  border-color:#C9DCD5;
+}
+
+.narrative-eyebrow {
+  color:var(--prysm-primary);
+  font-family:'DM Sans',sans-serif;
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+
+.narrative-field {
+  background:var(--prysm-mint-2);
+  border-color:var(--prysm-line);
+}
+
+footer {
+  color:var(--prysm-muted);
+  font-family:'DM Sans',sans-serif;
+  font-size:12.5px;
+}
+
+/* Keep PRYSM's existing responsive LEFT navigation. */
+
+@media (max-width:720px) {
+  body {
+    font-size:15px;
+  }
+
+  header.brand h1 {
+    font-size:24px;
+  }
+
+  .viewer-toolbar h2 {
+    font-size:28px;
+  }
+
+  section > h2,
+  .card h2 {
+    font-size:26px;
+  }
+
+  section > h3,
+  .card h3 {
+    font-size:22px;
+  }
+
+  p,
+  li {
+    font-size:15px;
+  }
+
+  .card,
+  main > section:not(.card) {
+    padding:18px;
+  }
+}
+
+@media print {
+  body {
+    background:#fff;
+    color:#111;
+  }
+
+  .card,
+  main > section:not(.card),
+  .pillar {
+    box-shadow:none;
+  }
+}
+</style>
+</head>
+
+<body
+  data-report-design="2.0.0"
+  data-viewer-version="2.2.0"
+>
+<header class="brand">
+  <h1>Example Business — Conversion Readiness Report</h1>
+  <p class="sub">x.com · 2026-01-15 · Report design v2.0.0 · Viewer v2.2.0 · Scoring version 4.1.1</p>
+</header>
+
+<div class="report-layout">
+  <div class="viewer-content">
+    <div class="viewer-toolbar no-print">
+      <h2 id="viewerPageTitle">Executive Scorecard</h2>
+      <button
+        type="button"
+        class="print-page-btn"
+        onclick="window.print()"
+        aria-label="Print or save this page as PDF"
+      >Print or save this page as PDF</button>
+    </div>
+
+    <main id="reportContent" tabindex="-1">
+      
+  <section id="executive" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How ready is your website to convert the right visitors?</p>
+    <p class="muted small">Executive Scorecard</p>
+
+    <h2>Executive verdict</h2>
+    <p>The site has a conversion-readiness score of 53/100. The priority is to address the highest-impact issues that most directly affect clarity, trust, and movement toward action.</p>
+
+    <div class="grid-3">
+      <div>
+        <h2>A. Conversion Readiness</h2>
+        <div class="readiness">53<span class="readiness-max">/100</span></div>
+         <div class="readiness-band"><span class="chip band-limited">Limited</span></div>
+        <p class="muted">Complete</p>
+        <p class="muted small">How effectively the assessed site supports a visitor moving toward action.</p>
+      </div>
+      <div>
+        <h2>B. Evidence Confidence</h2>
+        <div class="confidence">94<span class="readiness-max">/100</span></div>
+        <span class="chip band-strong">High</span>
+        <p class="muted">Known factors: 8 · Unknown (excluded): 0</p>
+        <p class="muted small">How dependable and complete the available audit evidence is.</p>
+      </div>
+      <div>
+        <h2>C. Evidence Coverage</h2>
+        <div class="coverage">97<span class="readiness-max">%</span></div>
+        <p class="muted">10 of 13 evidence capabilities</p>
+        <p class="muted">Modules assessed: 10 of 10</p>
+        <p class="muted small">Missing evidence is not treated as a negative site finding.</p>
+      </div>
+    </div>
+
+    <h3>What is really holding the site back?</h3>
+    <p><strong>Primary root cause:</strong> Pricing or investment context is absent. Missing pricing context may leave commitment expectations unclear before contact.</p>
+    <ol><li><strong>Pricing or investment context is absent</strong> — Missing pricing context may leave commitment expectations unclear before contact.</li><li><strong>No buyer-question content detected</strong> — Missing buyer-question content may leave common objections unresolved before a visitor acts.</li><li><strong>Missing meta descriptions</strong> — Missing meta descriptions may reduce control over search-result messaging for these pages.</li></ol>
+
+    <h3>What should you do first?</h3>
+    <ol><li><strong>Pricing or investment context is absent</strong> — State pricing, starting price, or the process used to determine cost</li><li><strong>No buyer-question content detected</strong> — Add an FAQ based on the questions prospects ask before booking</li><li><strong>Missing meta descriptions</strong> — Write a unique 150–160 character description for each important page</li></ol>
+
+    <h3>What Is Already Working</h3>
+    <ul><li>Trust &amp; Proof: 72/100</li><li>Conversion Path: 65/100</li><li>Performance &amp; Experience: 77/100</li></ul>
+
+    <h3>What could we not determine?</h3>
+    <div class="note"><strong>PARTIAL:</strong> 97% of intended dimension weight was assessed.</div>
+
+    <h3>Where to go next</h3>
+    <p>Continue to <strong>Priority Fixes</strong> for the ranked actions, supporting evidence, and verification steps behind these executive priorities.</p>
+  </section>
+      <section id="pillars">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Where is the site helping or hurting conversion?</p>
+    <p class="muted small">Conversion Readiness Map</p>
+    <h2>D. Where are the problems?</h2>
+    <p>Readiness is uneven. Technical Health is the weakest assessed dimension at 30/100, while stronger dimensions provide a foundation to build on.</p>
+        <div style="overflow-x:auto;margin:18px 0 22px">
+      <svg viewBox="0 0 460 340" role="img" aria-label="Five-axis conversion readiness map" style="width:100%;max-width:720px;display:block;margin:0 auto">
+        <polygon points="230.0,58.0 336.5,135.4 295.8,260.6 164.2,260.6 123.5,135.4" fill="none" stroke="currentColor" opacity=".15"/>
+        <polygon points="230.0,80.4 315.2,142.3 282.7,242.5 177.3,242.5 144.8,142.3" fill="none" stroke="currentColor" opacity=".12"/>
+        <polygon points="230.0,102.8 293.9,149.2 269.5,224.4 190.5,224.4 166.1,149.2" fill="none" stroke="currentColor" opacity=".10"/>
+        <polygon points="230.0,125.2 272.6,156.2 256.3,206.2 203.7,206.2 187.4,156.2" fill="none" stroke="currentColor" opacity=".08"/>
+        <line x1="230" y1="170" x2="230.0" y2="58.0" stroke="currentColor" opacity=".22"/>
+      <circle cx="230.0" cy="130.8" r="4"><title>Offer &amp; Content: 35</title></circle>
+      <text x="230.0" y="28.9" text-anchor="middle" dominant-baseline="middle" font-size="11">Conversion</text><line x1="230" y1="170" x2="336.5" y2="135.4" stroke="currentColor" opacity=".22"/>
+      <circle cx="306.7" cy="145.1" r="4"><title>Trust &amp; Proof: 72</title></circle>
+      <text x="364.2" y="126.4" text-anchor="middle" dominant-baseline="middle" font-size="11">Trust</text><line x1="230" y1="170" x2="295.8" y2="260.6" stroke="currentColor" opacity=".22"/>
+      <circle cx="272.8" cy="228.9" r="4"><title>Conversion Path: 65</title></circle>
+      <text x="312.9" y="284.2" text-anchor="middle" dominant-baseline="middle" font-size="11">Content</text><line x1="230" y1="170" x2="164.2" y2="260.6" stroke="currentColor" opacity=".22"/>
+      <circle cx="210.3" cy="197.2" r="4"><title>Technical Health: 30</title></circle>
+      <text x="147.1" y="284.2" text-anchor="middle" dominant-baseline="middle" font-size="11">Technical</text><line x1="230" y1="170" x2="123.5" y2="135.4" stroke="currentColor" opacity=".22"/>
+      <circle cx="148.0" cy="143.4" r="4"><title>Performance &amp; Experience: 77</title></circle>
+      <text x="95.8" y="126.4" text-anchor="middle" dominant-baseline="middle" font-size="11">Entity / AI</text>
+        <polygon points="230.0,130.8 306.7,145.1 272.8,228.9 210.3,197.2 148.0,143.4" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <p class="muted small">Bands: Strong 80–100 · Adequate 60–79 · Needs Attention 40–59 · Material Gap below 40. An asterisk marks a dimension with limited evidence. Missing dimensions are never plotted as zero.</p>
+
+    <div class="pillar-grid">
+      <div class="pillar">
+        <h3>Offer &amp; Content</h3>
+        <div class="pillar-score">35<span class="readiness-max">/100</span></div>
+        <p class="small"><strong>Material Gap</strong></p>
+        <ul class="pillar-modules"><li>offer_clarity: 30 (weight 12.5)</li><li>content_depth: 39 (weight 10)</li><li>funnel_coverage: 36 (weight 10)</li></ul>
+        <div class="pillar-caps"><span class="chip cap-ok">offer.clarity: AVAILABLE</span> <span class="chip cap-ok">content.body: AVAILABLE</span></div>
+      </div>
+      <div class="pillar">
+        <h3>Trust &amp; Proof</h3>
+        <div class="pillar-score">72<span class="readiness-max">/100</span></div>
+        <p class="small"><strong>Adequate</strong></p>
+        <ul class="pillar-modules"><li>trust_signals: 70 (weight 12.5)</li><li>risk_reduction: 73 (weight 12.5)</li></ul>
+        <div class="pillar-caps"><span class="chip cap-ok">trust.proof: AVAILABLE</span> <span class="chip cap-ok">technical.headers: AVAILABLE</span></div>
+      </div>
+      <div class="pillar">
+        <h3>Conversion Path</h3>
+        <div class="pillar-score">65<span class="readiness-max">/100</span></div>
+        <p class="small"><strong>Adequate</strong></p>
+        <ul class="pillar-modules"><li>conversion_paths: 65 (weight 12.5)</li></ul>
+        <div class="pillar-caps"><span class="chip cap-ok">conversion.cta: AVAILABLE</span> <span class="chip cap-ok">conversion.form: AVAILABLE</span> <span class="chip cap-ok">conversion.path: AVAILABLE</span></div>
+      </div>
+      <div class="pillar">
+        <h3>Technical Health</h3>
+        <div class="pillar-score">30<span class="readiness-max">/100</span></div>
+        <p class="small"><strong>Material Gap</strong></p>
+        <ul class="pillar-modules"><li>technical_hygiene: 30 (weight 10)</li></ul>
+        <div class="pillar-caps"><span class="chip cap-partial">technical.indexability: PARTIAL</span> <span class="chip cap-neutral">technical.redirects: UNAVAILABLE</span> <span class="chip cap-neutral">technical.resources: UNAVAILABLE</span> <span class="chip cap-ok">technical.headers: AVAILABLE</span></div>
+      </div>
+      <div class="pillar">
+        <h3>Performance &amp; Experience</h3>
+        <div class="pillar-score">77<span class="readiness-max">/100</span></div>
+        <p class="small"><strong>Adequate</strong> · Real-user performance data was not available, so this result reflects lab measurements and is not a complete real-user readiness conclusion.</p>
+        <ul class="pillar-modules"><li>performance: 77 (weight 10)</li></ul>
+        <div class="pillar-caps"><span class="chip cap-ok">performance.lab: AVAILABLE</span> <span class="chip cap-neutral">performance.field: UNAVAILABLE</span></div>
+      </div></div>
+
+    <h3>What is driving weaker areas</h3>
+    <ul><li><strong>Technical Health</strong> — 30/100 (Material Gap). Review the underlying governed findings and capability limitations shown on this page.</li><li><strong>Offer &amp; Content</strong> — 35/100 (Material Gap). Review the underlying governed findings and capability limitations shown on this page.</li></ul>
+
+    <h3>Where the foundation is strong</h3>
+    <ul><li><strong>Performance &amp; Experience</strong> — 77/100 (Adequate).</li><li><strong>Trust &amp; Proof</strong> — 72/100 (Adequate).</li><li><strong>Conversion Path</strong> — 65/100 (Adequate).</li></ul>
+
+    <h3>Evidence limitations by dimension</h3>
+    <ul class="small">
+      <li><strong>Offer &amp; Content:</strong> No capability limitation recorded for the displayed dimension.</li><li><strong>Trust &amp; Proof:</strong> No capability limitation recorded for the displayed dimension.</li><li><strong>Conversion Path:</strong> No capability limitation recorded for the displayed dimension.</li><li><strong>Technical Health:</strong> technical.indexability PARTIAL; technical.redirects UNAVAILABLE; technical.resources UNAVAILABLE</li><li><strong>Performance &amp; Experience:</strong> performance.field UNAVAILABLE</li>
+    </ul>
+  </section>
+      
+  <section id="blockers" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">What should you fix first?</p>
+    <p class="muted small">Priority Findings &amp; Recommendations</p>
+    <h2>E. What should be fixed first?</h2>
+    <p>The actions below are the highest-priority changes supported by the assessed evidence. PRYSM limits this page to the five items most important enough to warrant client attention.</p>
+
+    <div class="table-wrap">
+      <table class="blockers">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>What we found</th>
+            <th>Why it matters</th>
+            <th>What to do</th>
+            <th>Where</th>
+            <th>How to verify</th>
+            <th>Why this rank</th>
+          </tr>
+        </thead>
+        <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>Pricing or investment context is absent</strong><br><span class="chip cap-neutral">High conversion impact</span><br><span class="small">VAN-TRUST-002</span></td>
+        <td>Missing pricing context may leave commitment expectations unclear before contact.</td>
+        <td>State pricing, starting price, or the process used to determine cost</td>
+        <td class="small">Affected page: https://x.com/</td>
+        <td class="small">Re-crawl and confirm pricing information is visible on relevant pages.</td>
+        <td class="small">Medium impact with strongly_supported evidence confidence.</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>No buyer-question content detected</strong><br><span class="chip cap-neutral">Optimization</span><br><span class="small">VAN-CONTENT-002</span></td>
+        <td>Missing buyer-question content may leave common objections unresolved before a visitor acts.</td>
+        <td>Add an FAQ based on the questions prospects ask before booking</td>
+        <td class="small">Affected page: https://x.com/</td>
+        <td class="small">Re-crawl and confirm FAQ content is present with structured data where applicable.</td>
+        <td class="small">Medium impact with supported evidence confidence.</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>Missing meta descriptions</strong><br><span class="chip cap-neutral">Optimization</span><br><span class="small">VAN-TECH-001</span></td>
+        <td>Missing meta descriptions may reduce control over search-result messaging for these pages.</td>
+        <td>Write a unique 150–160 character description for each important page</td>
+        <td class="small">Evidence location: meta_description</td>
+        <td class="small">Re-crawl the URLs and confirm descriptions are present.</td>
+        <td class="small">High impact with deterministic evidence confidence.</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><strong>Security headers are incomplete</strong><br><span class="chip cap-neutral">Optimization</span><br><span class="small">VAN-TECH-003</span></td>
+        <td>Missing browser protections may weaken technical trust.</td>
+        <td>Configure the missing response headers at the hosting layer</td>
+        <td class="small">Affected page: https://x.com/</td>
+        <td class="small">Re-crawl and confirm security headers are present in response.</td>
+        <td class="small">Medium impact with deterministic evidence confidence.</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><strong>Images are missing alternative text</strong><br><span class="chip cap-neutral">Optimization</span><br><span class="small">VAN-TECH-004</span></td>
+        <td>Missing alternative text may reduce accessibility and image understanding.</td>
+        <td>Add concise descriptive alt text to meaningful images</td>
+        <td class="small">Affected page: https://x.com/</td>
+        <td class="small">Re-crawl and verify alt text on all images.</td>
+        <td class="small">Low impact with deterministic evidence confidence.</td>
+      </tr></tbody>
+      </table>
+    </div>
+
+    <p class="muted small">No additional lower-priority action was generated beyond the primary list shown here.</p>
+  </section>
+      
+  <section id="foundations" class="card">
+    <h2>First Things First — Foundational Readiness</h2>
+    <p class="muted small">Before optimizing content and conversion, these fundamentals need to be in place.
+      An item is marked FINDING only when collected evidence proves a deficiency; where evidence was
+      not collected it is marked UNAVAILABLE with the source that would be required.</p>
+    <p class="muted small">
+      8 pass ·
+      1 finding ·
+      4 unavailable ·
+      1 not applicable
+    </p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Foundation</th><th>Status</th><th>What the evidence shows</th></tr></thead>
+      <tbody><tr>
+        <td><strong>Site availability</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">The site responded and 3 page(s) were retrieved during the crawl.</td>
+      </tr><tr>
+        <td><strong>HTTPS (URL scheme)</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">The audited URL was served over HTTPS. Certificate validity and expiry were not assessed in Phase 1.</td>
+      </tr><tr>
+        <td><strong>Google indexability</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">No crawled page was found blocking search-engine indexing.</td>
+      </tr><tr>
+        <td><strong>robots.txt configuration</strong></td>
+        <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+        <td class="small">robots.txt content was not returned by the crawl provider, so its directives were not evaluated.<!-- NOT ASSESSED compatibility anchor --><br><span class="small">UNAVAILABLE — requires a direct robots.txt fetch with directive parsing</span></td>
+      </tr><tr>
+        <td><strong>XML sitemap</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">1 sitemap URL(s) were discovered and used to seed the crawl.</td>
+      </tr><tr>
+        <td><strong>Canonical tags</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">Every crawled page declared a canonical URL.</td>
+      </tr><tr>
+        <td><strong>Conversion mechanism</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">1 call(s) to action and 1 form(s) were detected on the assessed pages. A conversion action was observed, but the assessed path to complete it is weak; mechanism presence does not establish usable path completion.</td>
+      </tr><tr>
+        <td><strong>Conversion measurement</strong></td>
+        <td><span class="chip cap-neutral">NOT APPLICABLE</span></td>
+        <td class="small">Conversion measurement was marked not applicable for this audit.</td>
+      </tr><tr>
+        <td><strong>Primary contact information</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">Direct phone and email contact link(s) were detected.</td>
+      </tr><tr>
+        <td><strong>Mobile experience (performance signal)</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">The mobile performance score was 62/100 in lab testing. Mobile usability itself was not assessed.</td>
+      </tr><tr>
+        <td><strong>Basic security headers</strong></td>
+        <td><span class="chip cap-missing">FINDING</span><!-- <span class="chip cap-missing">ACTION REQUIRED</span> --></td>
+        <td class="small">Observed response headers do not include: referrerPolicy, contentSecurityPolicy.</td>
+      </tr><tr>
+        <td><strong>Bing indexability</strong></td>
+        <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+        <td class="small">Bing index status is not collected by any Phase 1 source.<!-- NOT ASSESSED compatibility anchor --><br><span class="small">UNAVAILABLE — requires Bing Webmaster Tools API access</span></td>
+      </tr><tr>
+        <td><strong>Google Business Profile</strong></td>
+        <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+        <td class="small">Presence and completeness of a Google Business Profile is not collected by any Phase 1 source.<!-- NOT ASSESSED compatibility anchor --><br><span class="small">UNAVAILABLE — requires Google Business Profile API access, or SERP local-pack evidence</span></td>
+      </tr><tr>
+        <td><strong>NAP consistency (name, address, phone)</strong></td>
+        <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+        <td class="small">Business address is not extracted, and no directory source is available to compare against.<!-- NOT ASSESSED compatibility anchor --><br><span class="small">UNAVAILABLE — requires structured NAP extraction plus at least one directory source</span></td>
+      </tr></tbody>
+    </table></div>
+  </section>
+      
+  <section id="paths" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can visitors easily move from interest to action?</p>
+    <p class="muted small">Conversion Path Architecture</p>
+
+    <h2>Conversion path architecture</h2>
+    <p>1 assessed conversion path is weak enough to create hesitation or uncertainty before action.</p>
+
+    <h3>Primary conversion-path sequence</h3>
+    
+    <div style="overflow-x:auto;margin:18px 0">
+          <svg viewBox="0 0 1160 190" role="img" aria-label="Primary conversion path" style="width:100%;min-width:760px;height:auto">
+        <defs>
+          <marker id="pathArrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <rect x="20" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+            <text x="92.5" y="74" text-anchor="middle" font-size="12"><tspan x="92.5" dy="0">Land on the relevant</tspan><tspan x="92.5" dy="16">page</tspan></text>
+            <line x1="165" y1="71" x2="190" y2="71" stroke="currentColor" marker-end="url(#pathArrow)" opacity=".55"/><rect x="244" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+            <text x="316.5" y="82" text-anchor="middle" font-size="12"><tspan x="316.5" dy="0">Locate &quot;Book a call&quot;</tspan></text>
+            <line x1="389" y1="71" x2="414" y2="71" stroke="currentColor" marker-end="url(#pathArrow)" opacity=".55"/><rect x="468" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+            <text x="540.5" y="74" text-anchor="middle" font-size="12"><tspan x="540.5" dy="0">Continue through</tspan><tspan x="540.5" dy="16">on-site</tspan></text>
+            <line x1="613" y1="71" x2="638" y2="71" stroke="currentColor" marker-end="url(#pathArrow)" opacity=".55"/><rect x="692" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+            <text x="764.5" y="74" text-anchor="middle" font-size="12"><tspan x="764.5" dy="0">Complete the requested</tspan><tspan x="764.5" dy="16">action</tspan></text>
+            <line x1="837" y1="71" x2="862" y2="71" stroke="currentColor" marker-end="url(#pathArrow)" opacity=".55"/><rect x="916" y="42" width="145" height="58" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+            <text x="988.5" y="82" text-anchor="middle" font-size="12"><tspan x="988.5" dy="0">Conversion destination</tspan></text>
+            
+      </svg>
+    </div>
+
+    <h3>Important path status</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Path</th><th>Status</th><th>Observed sequence</th><th>Where it weakens</th></tr></thead>
+      <tbody>
+    <tr>
+      <td><strong>Primary Path: Book a call</strong><br><span class="small">on-site</span></td>
+      <td><span class="chip cap-partial">FINDING</span><br><span class="small">Weak</span></td>
+      <td class="small">Land on the relevant page → Locate &quot;Book a call&quot; → Continue through on-site → Complete the requested action</td>
+      <td class="small">no pricing context</td>
+    </tr></tbody>
+    </table></div>
+
+    <h3>Where visitors may hesitate</h3>
+    <ul><li>no pricing context</li></ul>
+
+    <h3>What is working</h3>
+    <p>No assessed route was classified as fully Clear.</p>
+
+    <h3>Material findings only</h3>
+    <p>The blocker list above contains the material route weaknesses already carried in the governed conversion-path evidence. PRYSM does not add navigation issues that were not observed.</p>
+
+    <h3>Limitations</h3>
+    <p class="small">All displayed paths had an explicit governed status. This page explains the most important routes to action rather than cataloguing every navigation element.</p>
+  </section>
+      <section id="competitors" class="card">
+      <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How does your website compare with the competitors buyers are likely to consider?</p>
+      <p class="muted small">Competitor Benchmarking</p>
+      <h2>Competitive context</h2>
+      <p><span class="chip cap-neutral">NOT APPLICABLE</span> Competitor analysis was not applicable for this audit, so PRYSM does not make a competitive-positioning claim.</p>
+      
+    </section>
+      
+  <section id="content-ideas" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Does your content answer the questions buyers actually have?</p>
+    <p class="muted small">Topical Map &amp; Qualified Content Opportunities</p>
+    <h2>Topical Map &amp; Content Opportunities</h2>
+
+    <p>Content and funnel coverage is limited at 38/100. Buyers are likely to encounter unanswered questions as they move from understanding the problem toward taking action.</p>
+
+    <h3>Buyer-question coverage</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Buyer need</th><th>Coverage state</th><th>What it means</th></tr></thead>
+      <tbody><tr>
+        <td><strong>Understand the problem</strong></td>
+        <td>Adequate</td>
+        <td class="small">Awareness-stage questions and educational context.</td>
+      </tr><tr>
+        <td><strong>Understand the service</strong></td>
+        <td>Adequate</td>
+        <td class="small">Clear explanation of services or offers.</td>
+      </tr><tr>
+        <td><strong>Evaluate fit</strong></td>
+        <td>Adequate</td>
+        <td class="small">Comparison, fit, and decision-support content.</td>
+      </tr><tr>
+        <td><strong>Build trust</strong></td>
+        <td>Adequate</td>
+        <td class="small">Proof and reassurance needed before action.</td>
+      </tr><tr>
+        <td><strong>Compare options</strong></td>
+        <td>Thin</td>
+        <td class="small">Content that helps a buyer understand alternatives.</td>
+      </tr><tr>
+        <td><strong>Take action</strong></td>
+        <td>Adequate</td>
+        <td class="small">An observed conversion action visitors can take.</td>
+      </tr></tbody>
+    </table></div>
+
+    <h3>Material content gaps and qualified opportunities</h3>
+    <div class="table-wrap"><table>
+          <thead><tr><th>Buyer question</th><th>Current coverage</th><th>Why it matters</th><th>Recommended content</th><th>Where it should connect</th></tr></thead>
+          <tbody><tr>
+        <td>What is this?</td>
+        <td>Awareness</td>
+        <td>Answer-first</td>
+        <td>What Is Business Coaching?</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>Does this apply to me?</td>
+        <td>Awareness</td>
+        <td>Answer-first</td>
+        <td>Signs You May Need Undefined</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>Will this work?</td>
+        <td>Awareness</td>
+        <td>Objection handler</td>
+        <td>Can Business Coaching Produce Measurable Change?</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>Which option is right?</td>
+        <td>Evaluation</td>
+        <td>Comparison/fit</td>
+        <td>Business Coaching: Options and Fit</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>What should I expect?</td>
+        <td>Evaluation</td>
+        <td>Process page</td>
+        <td>What Happens in the Process</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>What results are possible?</td>
+        <td>Evaluation</td>
+        <td>Case study</td>
+        <td>Client Results and Outcomes</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>Why trust this provider?</td>
+        <td>Evaluation</td>
+        <td>Founder/expert</td>
+        <td>Who Leads This Work?</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>What does it cost?</td>
+        <td>Decision</td>
+        <td>Risk-reversal</td>
+        <td>Pricing and What to Expect</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>What happens after I act?</td>
+        <td>Decision</td>
+        <td>Process page</td>
+        <td>Your First Step Toward generating qualified enquiries</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr><tr>
+        <td>What concerns are common?</td>
+        <td>Decision</td>
+        <td>Testimonial FAQ</td>
+        <td>Frequently Asked Questions with Examples</td>
+        <td class="small">Connect to the most relevant service, proof, or conversion page.</td>
+      </tr></tbody>
+        </table></div>
+
+    <h3>Where content is already doing its job</h3>
+    <ul><li>Business Coaching</li><li>business coaching</li></ul>
+
+    <h3>Additional qualified search intents</h3>
+       <div class="table-wrap"><table>
+         <thead><tr><th>Query</th><th>Rationale</th><th>Priority</th></tr></thead>
+         <tbody><tr><td>Business Coaching for generating qualified enquiries</td><td class="small">Connects the offer directly to the stated business goal</td><td>H</td></tr><tr><td>Business Coaching for decision making</td><td class="small">Connects the offer to an urgent practical use</td><td>H</td></tr><tr><td>Business Coaching results and process</td><td class="small">Combines proof and buyer intent</td><td>M</td></tr></tbody>
+       </table></div>
+
+    <h3>Evidence limitations</h3>
+    <p class="small">Ideas are derived from existing business-context topics and crawl-visible content carried in the governed model. Search demand or competitor coverage may strengthen an opportunity, but neither alone creates a recommendation.</p>
+  </section>
+      
+  <section id="eeat" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can a buyer find enough proof to feel confident taking the next step?</p>
+    <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>
+
+    <h3>Governed E-E-A-T dimensions</h3>
+    <div class="pillar-grid">
+        <div class="pillar">
+          <h4>Experience</h4>
+          
+          <p class="small">No checked signal was observed in this dimension.</p>
+        </div>
+        <div class="pillar">
+          <h4>Expertise</h4>
+          
+          <p class="small"><strong>Observed:</strong> credentials, qualifications, or certifications</p>
+        </div>
+        <div class="pillar">
+          <h4>Authoritativeness</h4>
+          
+          <p class="small"><strong>Observed:</strong> testimonials or client validation</p>
+        </div>
+        <div class="pillar">
+          <h4>Trust</h4>
+          
+          <p class="small"><strong>Observed:</strong> contact information; policy or terms content</p>
+        </div></div>
+
+    <h3>Confidence verdict</h3>
+    <p>The site has a useful trust foundation (72/100), but important decision points should still be checked for proof, reassurance, and clear next-step expectations.</p>
+
+    <h3>Buyer trust questions</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Buyer question</th><th>Status</th><th>What the evidence shows</th></tr></thead>
+      <tbody><tr>
+        <td><strong>Who are these people?</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">named credentials, qualifications, or expertise proof was observed.</td>
+      </tr><tr>
+        <td><strong>Do they understand my problem?</strong></td>
+        <td><span class="chip cap-missing">FINDING</span></td>
+        <td class="small">Case studies, examples, or documented outcomes was not observed in the assessed page content.</td>
+      </tr><tr>
+        <td><strong>Have they done this successfully before?</strong></td>
+        <td><span class="chip cap-missing">FINDING</span></td>
+        <td class="small">Evidence of completed work or outcomes was not observed in the assessed page content.</td>
+      </tr><tr>
+        <td><strong>Why should I believe the claims?</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">independent validation such as testimonials was observed.</td>
+      </tr><tr>
+        <td><strong>What happens if I contact them?</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">clear contact information and next-step expectations was observed.</td>
+      </tr><tr>
+        <td><strong>What reduces my risk?</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">policy or terms content was observed.</td>
+      </tr></tbody>
+    </table></div>
+
+    <h3>How confidence should build</h3>
+    <div style="overflow-x:auto;margin:16px 0">
+      <svg viewBox="0 0 760 120" role="img" aria-label="Claim to proof to reassurance to action trust pathway" style="width:100%;min-width:620px">
+        <defs>
+          <marker id="trustArrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <rect x="20" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="210" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="400" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="590" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
+        <line x1="170" y1="56" x2="204" y2="56" stroke="currentColor" marker-end="url(#trustArrow)"/>
+        <line x1="360" y1="56" x2="394" y2="56" stroke="currentColor" marker-end="url(#trustArrow)"/>
+        <line x1="550" y1="56" x2="584" y2="56" stroke="currentColor" marker-end="url(#trustArrow)"/>
+        <text x="95" y="61" text-anchor="middle" font-size="14">Claim</text>
+        <text x="285" y="61" text-anchor="middle" font-size="14">Proof</text>
+        <text x="475" y="61" text-anchor="middle" font-size="14">Reassurance</text>
+        <text x="665" y="61" text-anchor="middle" font-size="14">Action</text>
+      </svg>
+    </div>
+
+    <h3>Where confidence breaks down</h3>
+    <ul><li><strong>caseStudies</strong> — this proof or reassurance signal was not observed in the assessed content.</li><li><strong>pricing</strong> — this proof or reassurance signal was not observed in the assessed content.</li></ul>
+
+    <h3>Proof already available but underused</h3>
+    <ul><li>testimonials</li><li>credentials</li><li>policies</li><li>contact</li></ul>
+    <p class="muted small">Detected proof is listed here as an available asset. PRYSM does not claim it is well placed on every important conversion page unless page-level evidence proves that.</p>
+
+    <h3>Material trust findings</h3>
+    <ul class="small"><li><strong>Pricing or investment context is absent</strong> — Missing pricing context may leave commitment expectations unclear before contact. <strong>Action:</strong> State pricing, starting price, or the process used to determine cost</li></ul>
+
+    <h3>Assessment limitations</h3>
+    <p class="small">This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources.</p>
+  </section>
+      
+  <section id="technical" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can search engines reliably discover, understand, and trust your important pages?</p>
+    <p class="muted small">Technical SEO Hygiene · Technical Detail</p>
+    <!-- Not Assessed compatibility anchor -->
+
+    <h3>Direct technical verdict</h3>
+    <p>2 fully assessed technical areas are currently flagged. Partial rows remain explicitly separated from complete findings.</p>
+
+    <h3>Is anything blocking search performance?</h3>
+    <ul><li><strong>Meta descriptions:</strong> 2 of 3 page(s) missing a description. Descriptions support search-result messaging but are not direct ranking scores.</li><li><strong>Server and security headers:</strong> Observed response-header evidence was assessed. Header observations are technical evidence; they become recommendations only when materially relevant.</li></ul>
+
+    <h3>Evaluated-page technical health</h3>
+    <div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>Page</th><th>Observed title</th><th>Heading evidence</th></tr></thead>
+          <tbody><tr>
+        <td>1</td>
+        <td class="small">https://x.com/</td>
+        <td class="small">Home</td>
+        <td><span class="chip cap-ok">PASS</span></td>
+      </tr></tbody>
+        </table></div>
+        <p class="muted small">This table uses the page-level evidence carried into the report model. It does not infer page importance where the model does not provide a governed priority label.</p>
+
+    <h3>SEO Coverage Matrix — Reach → Index → Understand → Deliver</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Purpose</th>
+          <th>Audit area</th>
+          <th>Status</th>
+          <th>What was assessed</th>
+          <th>Explanation</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+        <td>Reach</td>
+        <td><strong>HTTP status / crawl reachability</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">3 page(s) available to the crawl.</td>
+        <td class="small">The crawler returned site evidence.</td>
+      </tr><tr>
+        <td>Reach</td>
+        <td><strong>Broken internal links</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">0 broken internal link(s) observed.</td>
+        <td class="small">Broken links matter when they interrupt access to important pages or conversion routes.</td>
+      </tr><tr>
+        <td>Index</td>
+        <td><strong>Canonical URLs</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">0 of 3 page(s) missing a canonical.</td>
+        <td class="small">Canonical evidence was collected for the governed metadata scope.</td>
+      </tr><tr>
+        <td>Understand</td>
+        <td><strong>Page titles</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">0 of 3 page(s) missing a title.</td>
+        <td class="small">Titles help identify page purpose in search.</td>
+      </tr><tr>
+        <td>Understand</td>
+        <td><strong>Meta descriptions</strong></td>
+        <td><span class="chip cap-missing">FINDING</span></td>
+        <td class="small">2 of 3 page(s) missing a description.</td>
+        <td class="small">Descriptions support search-result messaging but are not direct ranking scores.</td>
+      </tr><tr>
+        <td>Understand</td>
+        <td><strong>Structured data</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">1 structured-data type(s) observed.</td>
+        <td class="small">Structured data supports machine understanding when it accurately describes real entities and content.</td>
+      </tr><tr>
+        <td>Deliver</td>
+        <td><strong>Performance</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">Performance module score: 77/100.</td>
+        <td class="small">Performance matters when delivery friction affects important user and conversion paths.</td>
+      </tr><tr>
+        <td>Deliver</td>
+        <td><strong>Server and security headers</strong></td>
+        <td><span class="chip cap-missing">FINDING</span></td>
+        <td class="small">Observed response-header evidence was assessed.</td>
+        <td class="small">Header observations are technical evidence; they become recommendations only when materially relevant.</td>
+      </tr><tr>
+        <td>Deliver</td>
+        <td><strong>Page content extraction</strong></td>
+        <td><span class="chip cap-ok">PASS</span></td>
+        <td class="small">Average words per page: 400.</td>
+        <td class="small">Content depth supports interpretation of important pages.</td>
+      </tr></tbody>
+    </table></div>
+
+    <h3>Material findings</h3>
+    <ul><li><strong>Meta descriptions</strong> — Descriptions support search-result messaging but are not direct ranking scores.</li><li><strong>Server and security headers</strong> — Header observations are technical evidence; they become recommendations only when materially relevant.</li></ul>
+
+    <h3>Server &amp; security headers</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Header</th>
+          <th>Observed</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+    <td>xFrameOptions</td>
+    <td>Present</td>
+    <td class="small"></td>
+  </tr><tr>
+    <td>xContentTypeOptions</td>
+    <td>Present</td>
+    <td class="small"></td>
+  </tr><tr>
+    <td>referrerPolicy</td>
+    <td>Not present in the observed response</td>
+    <td class="small"></td>
+  </tr><tr>
+    <td>contentSecurityPolicy</td>
+    <td>Not present in the observed response</td>
+    <td class="small"></td>
+  </tr></tbody>
+    </table></div>
+
+    <h3>Secondary observations</h3>
+    <p class="small">Technical metrics and counts are supporting evidence, not conclusions by themselves. Items such as HTTP→HTTPS validation, redirect chains/loops, mixed content, compression diagnostics, material JavaScript errors, and Open Graph metadata are only stated when corresponding evidence exists in the report model.</p>
+
+    <h3>Unavailable or partial evidence</h3>
+    <p>All coverage rows shown above had complete assessable evidence.</p>
+  </section>
+      
+  <section id="headings" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your important pages structured clearly for visitors and search engines?</p>
+    <p class="muted small">Heading &amp; Semantic Structure · Heading Structure — Evaluated Page</p>
+
+    <h3>Direct answer</h3>
+    <p>The 1 relevant evaluated page shown here each has one observed H1, providing a clear primary semantic signal.</p>
+
+    <h3>Relevant evaluated-page heading health</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Page</th>
+          <th>Expected main topic / page purpose</th>
+          <th>Observed structure</th>
+          <th>Status</th>
+          <th>Why it matters</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+        <td class="small">https://x.com/</td>
+        <td class="small">Home</td>
+        <td class="small">Coaching that converts<br>2 H2 · 1 H3</td>
+        <td><span class="chip cap-ok">PASS</span><br><span class="small">One primary H1 was observed.</span></td>
+        <td class="small">The page has a clear primary heading signal.</td>
+      </tr></tbody>
+    </table></div>
+
+    <h3>Observed outline example</h3>
+         <p class="muted small">Example from https://x.com/.</p>
+         <div style="overflow-x:auto;margin:16px 0">
+        <svg viewBox="0 0 720 216" role="img" aria-label="Observed heading outline for one evaluated page" style="width:100%;min-width:620px">
+          <rect x="20" y="10" width="640" height="34" rx="7" fill="none" stroke="currentColor" opacity=".35"/>
+                <text x="32" y="31" font-size="12">H1 — Coaching that converts</text><rect x="70" y="58" width="590" height="34" rx="7" fill="none" stroke="currentColor" opacity=".35"/>
+                <text x="82" y="79" font-size="12">H2 — How it works</text><rect x="70" y="106" width="590" height="34" rx="7" fill="none" stroke="currentColor" opacity=".35"/>
+                <text x="82" y="127" font-size="12">H2 — Results</text><rect x="120" y="154" width="540" height="34" rx="7" fill="none" stroke="currentColor" opacity=".35"/>
+                <text x="132" y="175" font-size="12">H3 — Step one</text>
+        </svg>
+      </div>
+
+    <h3>Material hierarchy findings</h3>
+    <p>No material H1 hierarchy finding was established on the relevant evaluated pages.</p>
+
+    <h3>What is already structured well</h3>
+    <ul><li>https://x.com/ — one primary H1 observed.</li></ul>
+
+    <h3>Secondary observations</h3>
+    <p class="small">Raw H1/H2/H3 counts support the assessment but do not determine page quality on their own. Low-value utility URLs are excluded from this presentation when identifiable from their URL.</p>
+
+    <h3>Limitations</h3>
+    <p class="small">Page purpose is described from the title/H1 evidence carried into the report model. PRYSM does not claim a deeper intent classification where that evidence is unavailable.</p>
+  </section>
+      
+  <section id="schema" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can search engines clearly understand who you are and what you offer?</p>
+    <p class="muted small">Schema &amp; Entity Clarity · Schema &amp; Entity Signals</p>
+
+    <h3>Direct answer</h3>
+    <p>Search systems have 1 observed structured-data type to help interpret the site, but entity clarity depends on whether those signals accurately connect the business, services, expertise, locations, and supporting content.</p>
+
+    <h3>Observed structured data</h3>
+    <div class="table-wrap"><table>
+          <thead><tr><th>Type detected on the site</th></tr></thead>
+          <tbody><tr><td>Organization</td></tr></tbody>
+        </table></div>
+        
+
+    <h3>Recommended structured-data candidates</h3>
+    <div class="table-wrap"><table>
+          <thead><tr><th>Candidate type</th><th>Why it may help</th></tr></thead>
+          <tbody><tr><td>Service</td><td class="small">Describes each service so it can be matched to a specific need.</td></tr><tr><td>Person</td><td class="small">Attributes expertise to a named individual.</td></tr><tr><td>FAQPage</td><td class="small">Marks up buyer questions already answered on the page.</td></tr></tbody>
+        </table></div>
+        <p class="muted small">These are candidates for consideration only. A missing schema type is not automatically a finding or recommendation.</p>
+
+    <h3>Entity-question matrix</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>Status</th>
+          <th>What the evidence shows</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+            <td><strong>Who is the business?</strong></td>
+            <td><span class="chip cap-neutral">PARTIAL</span></td>
+            <td class="small">The audited domain is x.com, but domain identity alone does not prove the site's structured business entity identity.</td>
+          </tr><tr>
+            <td><strong>What does the business offer?</strong></td>
+            <td><span class="chip cap-ok">PASS</span></td>
+            <td class="small">1 service or offer topic(s) were detected: Business Coaching.</td>
+          </tr><tr>
+            <td><strong>Where does the business operate?</strong></td>
+            <td><span class="chip cap-neutral">PARTIAL</span></td>
+            <td class="small">Location or market evidence was not available.</td>
+          </tr><tr>
+            <td><strong>Who is behind the expertise?</strong></td>
+            <td><span class="chip cap-ok">PASS</span></td>
+            <td class="small">Credential or expertise proof was observed.</td>
+          </tr><tr>
+            <td><strong>How are key pages connected?</strong></td>
+            <td><span class="chip cap-neutral">PARTIAL</span></td>
+            <td class="small">Too little page-level evidence was available to describe entity relationships confidently.</td>
+          </tr></tbody>
+    </table></div>
+
+    <h3>Entity relationship view</h3>
+    <div style="overflow-x:auto;margin:16px 0">
+      <svg viewBox="0 0 760 270" role="img" aria-label="Business entity relationship diagram" style="width:100%;min-width:620px">
+        <defs>
+          <marker id="entityArrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <rect x="290" y="18" width="180" height="58" rx="10" fill="none" stroke="currentColor" opacity=".5"/>
+        <text x="380" y="50" text-anchor="middle" font-size="14">Business</text>
+
+        <rect x="30" y="160" width="150" height="58" rx="10" fill="none" stroke="currentColor" opacity=".4"/>
+        <text x="105" y="192" text-anchor="middle" font-size="13">Services</text>
+
+        <rect x="210" y="160" width="150" height="58" rx="10" fill="none" stroke="currentColor" opacity=".4"/>
+        <text x="285" y="192" text-anchor="middle" font-size="13">People / Expertise</text>
+
+        <rect x="400" y="160" width="150" height="58" rx="10" fill="none" stroke="currentColor" opacity=".4"/>
+        <text x="475" y="192" text-anchor="middle" font-size="13">Locations</text>
+
+        <rect x="580" y="160" width="150" height="58" rx="10" fill="none" stroke="currentColor" opacity=".4"/>
+        <text x="655" y="192" text-anchor="middle" font-size="13">Supporting Content</text>
+
+        <line x1="350" y1="76" x2="120" y2="154" stroke="currentColor" marker-end="url(#entityArrow)" opacity=".45"/>
+        <line x1="370" y1="76" x2="292" y2="154" stroke="currentColor" marker-end="url(#entityArrow)" opacity=".45"/>
+        <line x1="390" y1="76" x2="468" y2="154" stroke="currentColor" marker-end="url(#entityArrow)" opacity=".45"/>
+        <line x1="410" y1="76" x2="640" y2="154" stroke="currentColor" marker-end="url(#entityArrow)" opacity=".45"/>
+      </svg>
+    </div>
+
+    <h3>Material findings only</h3>
+    <p class="small">Schema type counts do not become findings by themselves. A structured-data change should be prioritized only when it materially improves understanding of a real business, service, person, location, or supporting content relationship.</p>
+
+    <h3>Unavailable or partial evidence</h3>
+    <p class="small">Structured-data evidence was available for the observed types shown above. External knowledge-graph inclusion and actual AI/search retrieval were not assessed.</p>
+  </section>
+      
+  <section id="performance" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your most important pages fast enough for visitors?</p>
+    <p class="muted small">Performance · Performance Detail</p>
+
+    <h3>Direct answer</h3>
+    <p>The tested experience is usable but leaves measurable performance headroom on at least one profile.</p>
+
+    <h3>Priority-page mobile / desktop performance</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Profile</th>
+          <th>Performance</th>
+          <th>LCP</th>
+          <th>CLS</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+        <td>Mobile</td>
+        <td>62</td>
+        <td>2.4s</td>
+        <td>0.040</td>
+        <td><span class="chip cap-ok">PASS</span></td>
+      </tr><tr>
+        <td>Desktop</td>
+        <td>91</td>
+        <td>1.3s</td>
+        <td>0.010</td>
+        <td><span class="chip cap-ok">PASS</span></td>
+      </tr></tbody>
+    </table></div>
+
+    
+
+    <h3>What does the visitor actually experience?</h3>
+    <p class="small">LCP (largest contentful paint) is when the main content becomes visible; CLS (cumulative layout shift) measures unexpected movement; TBT (total blocking time) measures how long the page was prevented from responding during the test. These are lab measurements, not real-user field performance. They support the conclusion; they are not the conclusion.</p>
+
+    <h3>Lab performance</h3>
+    <div class="pillar-grid">
+    
+    <div class="pillar">
+      <h4>Mobile</h4>
+
+      <p class="small">Tested URL: https://x.com/<br>
+        Availability: Measured in the tested profile<br>
+        Provider (technical diagnostic): pagespeed-insights · Lab data</p>
+
+      
+
+      <div class="table-wrap"><table>
+        <thead><tr><th>Score</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Performance</td><td>62</td></tr>
+          <tr><td>Accessibility</td><td>88</td></tr>
+          <tr><td>Best Practices</td><td>75</td></tr>
+          <tr><td>SEO</td><td>90</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="table-wrap"><table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>FCP</td><td>1800 ms</td></tr>
+          <tr><td>LCP</td><td>2.4 s</td></tr>
+          <tr><td>TBT</td><td>220 ms</td></tr>
+          <tr><td>CLS</td><td>0.04</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    
+    <div class="pillar">
+      <h4>Desktop</h4>
+
+      <p class="small">Tested URL: https://x.com/<br>
+        Availability: Measured in the tested profile<br>
+        Provider (technical diagnostic): pagespeed-insights · Lab data</p>
+
+      
+
+      <div class="table-wrap"><table>
+        <thead><tr><th>Score</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Performance</td><td>91</td></tr>
+          <tr><td>Accessibility</td><td>90</td></tr>
+          <tr><td>Best Practices</td><td>80</td></tr>
+          <tr><td>SEO</td><td>92</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="table-wrap"><table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>FCP</td><td>900 ms</td></tr>
+          <tr><td>LCP</td><td>1.3 s</td></tr>
+          <tr><td>TBT</td><td>40 ms</td></tr>
+          <tr><td>CLS</td><td>0.01</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+    <h3>Field performance</h3>
+    <p><span class="chip cap-neutral">UNAVAILABLE</span> CrUX field data was not available. Lab results remain valid as lab evidence, but they are not treated as real-user field performance.</p><p class="small"><strong>What to collect next:</strong> Real-user field performance data, such as CrUX data for the site or origin. Connect or enable an eligible field-data source and collect a representative measurement window. <strong>Then:</strong> PRYSM could report real-user experience alongside, and separately from, lab measurements.</p>
+
+    <h3>What is already performing well</h3>
+    <ul><li>Desktop lab performance scored 91/100.</li><li>Mobile CLS was 0.04, indicating stable layout in the tested run.</li><li>Desktop CLS was 0.01, indicating stable layout in the tested run.</li></ul>
+
+    <h3>Material performance findings</h3>
+    <p>No material governed performance finding was produced from the assessed evidence.</p>
+
+    <h3>Rendering integrity</h3>
+    <p>Rendering integrity was assessed and no diagnostic was raised.</p>
+
+    <h3>Partial or unavailable evidence</h3>
+    <p>Field performance was unavailable. This limits conclusions about real-user experience but does not invalidate the available lab measurements.</p>
+  </section>
+      
+  <section id="accessibility-mobile" class="card">
+    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can visitors comfortably understand, navigate, and act on your site?</p>
+    <p class="muted small">Accessibility &amp; Mobile Usability Readiness</p>
+
+    <h3>Readiness summary</h3>
+    <p>1 observable accessibility or usability barrier was identified in fully assessed evidence available to this report. Several deeper mobile-usability checks remain unavailable or partial.</p>
+
+    <h3>Material barriers</h3>
+    <ul><li><strong>Image alternative text:</strong> 1 of 4 observed image(s) were missing alternative text. Alternative text supports non-visual understanding of meaningful images when correctly written.</li></ul>
+
+    <h3>Coverage notes</h3>
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Status</th>
+          <th>What was available</th>
+          <th>What it means</th>
+          <th>What to collect next</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+            <td><strong>Mobile viewport</strong></td>
+            <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+            <td class="small">A dedicated viewport configuration result is not carried in the current report model.</td>
+            <td class="small">PRYSM withholds a viewport conclusion rather than treating missing evidence as a failure.</td>
+            <td class="small">A rendered mobile and responsive interaction assessment across representative pages. Enable a browser-based mobile/responsive assessment for the priority pages and repeat it at the key viewport sizes. PRYSM could report observed viewport, layout, legibility, and tap-target results for the assessed pages.</td>
+          </tr><tr>
+            <td><strong>Responsive layout</strong></td>
+            <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+            <td class="small">A dedicated responsive-layout result is not carried in the current report model.</td>
+            <td class="small">Layout behavior across breakpoints cannot be determined from the available report evidence.</td>
+            <td class="small">A rendered mobile and responsive interaction assessment across representative pages. Enable a browser-based mobile/responsive assessment for the priority pages and repeat it at the key viewport sizes. PRYSM could report observed viewport, layout, legibility, and tap-target results for the assessed pages.</td>
+          </tr><tr>
+            <td><strong>Font legibility</strong></td>
+            <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+            <td class="small">A dedicated font-legibility audit result is not carried in the current report model.</td>
+            <td class="small">PRYSM does not infer readability from unrelated performance metrics.</td>
+            <td class="small">A rendered mobile and responsive interaction assessment across representative pages. Enable a browser-based mobile/responsive assessment for the priority pages and repeat it at the key viewport sizes. PRYSM could report observed viewport, layout, legibility, and tap-target results for the assessed pages.</td>
+          </tr><tr>
+            <td><strong>Tap-target sizing</strong></td>
+            <td><span class="chip cap-neutral">UNAVAILABLE</span></td>
+            <td class="small">A dedicated tap-target result is not carried in the current report model.</td>
+            <td class="small">Touch-target usability cannot be concluded from missing evidence.</td>
+            <td class="small">A rendered mobile and responsive interaction assessment across representative pages. Enable a browser-based mobile/responsive assessment for the priority pages and repeat it at the key viewport sizes. PRYSM could report observed viewport, layout, legibility, and tap-target results for the assessed pages.</td>
+          </tr><tr>
+            <td><strong>Accessibility readiness</strong></td>
+            <td><span class="chip cap-neutral">PARTIAL</span></td>
+            <td class="small">Lowest available Lighthouse accessibility score: 88/100; mobile 88/100; desktop 90/100.</td>
+            <td class="small">The automated score indicates potential accessibility risk that requires issue-level evidence before PRYSM treats it as a material barrier; it does not establish legal or standards compliance.</td>
+            <td class="small">A rendered mobile and responsive interaction assessment across representative pages. Enable a browser-based mobile/responsive assessment for the priority pages and repeat it at the key viewport sizes. PRYSM could report observed viewport, layout, legibility, and tap-target results for the assessed pages.</td>
+          </tr><tr>
+            <td><strong>Image alternative text</strong></td>
+            <td><span class="chip cap-missing">FINDING</span></td>
+            <td class="small">1 of 4 observed image(s) were missing alternative text.</td>
+            <td class="small">Alternative text supports non-visual understanding of meaningful images when correctly written.</td>
+            <td class="small"></td>
+          </tr></tbody>
+    </table></div>
+
+    <div class="note"><strong>PARTIAL / UNAVAILABLE:</strong> Mobile viewport, Responsive layout, Font legibility, Tap-target sizing, Accessibility readiness could not be fully assessed from the current report model. These gaps reduce accessibility/mobile coverage but are not treated as complete negative site findings.</div>
+
+    <div class="note"><strong>Accessibility disclaimer:</strong> Accessibility Readiness identifies observable barriers and risks. It does not certify legal compliance with AODA, WCAG, or other accessibility standards.</div>
+  </section>
+      
+  <section id="machine-readiness" class="card">
+    <h2>Machine Readability</h2>
+    <p class="muted small">This measures how readable the site's structure is to automated systems —
+      structured data, heading hierarchy, and content depth. It is a structural machine-readability signal
+      and is <strong>not</strong> a measurement of whether the site actually appears in, or is retrieved by,
+      any AI assistant or AI search product.</p>
+    <p><strong>Structural machine-readability score:</strong> 49/100</p>
+    
+  </section>
+      
+  <section id="cms" class="card">
+    <h2>CMS &amp; Platform Constraints</h2>
+    <h3>Observed from the crawl</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Signal</th><th>Value</th></tr></thead>
+      <tbody><tr><td>Platform</td><td>WordPress</td></tr><tr><td>Server / delivery</td><td>nginx</td></tr><tr><td>Migration risk</td><td>Low to Medium — implementation depends on hosting and theme controls</td></tr></tbody>
+    </table></div>
+    <h3>Implementation questions — generic verification checklist</h3>
+    <p class="muted small">The questions below are a generic checklist, not findings about this site. None of them has been verified: platform administration access is required to confirm the answers.</p>
+    <ul class="small"><li>Can page-level titles, descriptions, and canonical URLs be edited?</li><li>Can JSON-LD structured data be added globally and per service page?</li><li>Can semantic heading levels be chosen independently of visual styling?</li><li>Does the current plan allow dedicated service, FAQ, and policy pages?</li><li>Can response headers be configured at the host, CDN, or platform layer?</li><li>Can a lead-capture form be embedded on the pages that need it?</li></ul>
+  </section>
+      
+  <section id="internal-links" class="card">
+    <h2>Internal-Link Opportunities</h2>
+    <p class="muted small">Summary: 8 total internal links, 0 broken. 0 pages evaluated. 0 recommendation(s).</p>
+    <p>Not available: internal-link opportunities were not computed for this audit.</p>
+    
+    
+    
+  </section>
+      
+  <section id="strengths" class="card">
+    <h2>What Is Already Good</h2>
+    <p class="muted small">Only items whose supporting capability was actually assessed appear here.</p>
+    <ul class="small"><li><strong>Site availability</strong> — The site responded and 3 page(s) were retrieved during the crawl.</li><li><strong>HTTPS (URL scheme)</strong> — The audited URL was served over HTTPS. Certificate validity and expiry were not assessed in Phase 1.</li><li><strong>Google indexability</strong> — No crawled page was found blocking search-engine indexing.</li><li><strong>XML sitemap</strong> — 1 sitemap URL(s) were discovered and used to seed the crawl.</li><li><strong>Canonical tags</strong> — Every crawled page declared a canonical URL.</li><li><strong>Conversion mechanism</strong> — 1 call(s) to action and 1 form(s) were detected on the assessed pages. A conversion action was observed, but the assessed path to complete it is weak; mechanism presence does not establish usable path completion.</li><li><strong>Primary contact information</strong> — Direct phone and email contact link(s) were detected.</li><li><strong>Mobile experience (performance signal)</strong> — The mobile performance score was 62/100 in lab testing. Mobile usability itself was not assessed.</li><li><strong>Structured data present</strong> — Detected type(s): Organization.</li><li><strong>Trust signals detected</strong> — Detected on crawled pages: testimonials, credentials, policies, contact.</li><li><strong>Desktop performance</strong> — Desktop performance scored 91/100 in lab testing.</li><li><strong>Internal links resolve</strong> — 8 internal link(s) detected with none broken.</li></ul>
+  </section>
+      
+  <section id="action-plan" class="card">
+    <h2>Client Action Plan</h2>
+
+    <p class="muted small">Derived from the same governed priorities as Section E. Sequence only — no business
+      outcome, revenue figure, or performance projection is stated.</p>
+
+    
+
+    <h3>DO NOW</h3>
+        <p class="muted small">Verified foundations and the highest-confidence conversion work.</p>
+        <div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>What we change</th>
+        <th>Why</th>
+        <th>Class</th>
+        <th>Effort</th>
+        <th>How we verify it</th>
+      </tr>
+    </thead>
+
+    <tbody><tr>
+          <td>1</td>
+          <td><strong>Pricing or investment context is absent</strong><br><span class="small">State pricing, starting price, or the process used to determine cost</span></td>
+          <td class="small">Missing pricing context may leave commitment expectations unclear before contact.</td>
+          <td class="small">HIGH_CONVERSION</td>
+          <td class="small">L</td>
+          <td class="small">Re-crawl and confirm pricing information is visible on relevant pages.</td>
+        </tr></tbody>
+  </table></div><h3>DO NEXT</h3>
+        <p class="muted small">Material conversion improvements once the items above are in progress.</p>
+        <div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>What we change</th>
+        <th>Why</th>
+        <th>Class</th>
+        <th>Effort</th>
+        <th>How we verify it</th>
+      </tr>
+    </thead>
+
+    <tbody><tr>
+          <td>2</td>
+          <td><strong>No buyer-question content detected</strong><br><span class="small">Add an FAQ based on the questions prospects ask before booking</span></td>
+          <td class="small">Missing buyer-question content may leave common objections unresolved before a visitor acts.</td>
+          <td class="small">OPTIMIZATION</td>
+          <td class="small">M</td>
+          <td class="small">Re-crawl and confirm FAQ content is present with structured data where applicable.</td>
+        </tr><tr>
+          <td>3</td>
+          <td><strong>Missing meta descriptions</strong><br><span class="small">Write a unique 150–160 character description for each important page</span></td>
+          <td class="small">Missing meta descriptions may reduce control over search-result messaging for these pages.</td>
+          <td class="small">OPTIMIZATION</td>
+          <td class="small">L</td>
+          <td class="small">Re-crawl the URLs and confirm descriptions are present.</td>
+        </tr><tr>
+          <td>4</td>
+          <td><strong>Security headers are incomplete</strong><br><span class="small">Configure the missing response headers at the hosting layer</span></td>
+          <td class="small">Missing browser protections may weaken technical trust.</td>
+          <td class="small">OPTIMIZATION</td>
+          <td class="small">L</td>
+          <td class="small">Re-crawl and confirm security headers are present in response.</td>
+        </tr></tbody>
+  </table></div><h3>LATER / OPTIMIZE</h3>
+        <p class="muted small">Refinement and optimization after the core issues are resolved.</p>
+        <div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>What we change</th>
+        <th>Why</th>
+        <th>Class</th>
+        <th>Effort</th>
+        <th>How we verify it</th>
+      </tr>
+    </thead>
+
+    <tbody><tr>
+          <td>5</td>
+          <td><strong>Images are missing alternative text</strong><br><span class="small">Add concise descriptive alt text to meaningful images</span></td>
+          <td class="small">Missing alternative text may reduce accessibility and image understanding.</td>
+          <td class="small">OPTIMIZATION</td>
+          <td class="small">L</td>
+          <td class="small">Re-crawl and verify alt text on all images.</td>
+        </tr></tbody>
+  </table></div>
+
+    <h3>MEASURE</h3>
+
+    <p class="muted small">Evidence to compare in the next audit:</p>
+
+    <ul class="small"><li>Re-crawl and confirm pricing information is visible on relevant pages.</li><li>Re-crawl and confirm FAQ content is present with structured data where applicable.</li><li>Re-crawl the URLs and confirm descriptions are present.</li><li>Re-crawl and confirm security headers are present in response.</li><li>Re-crawl and verify alt text on all images.</li></ul>
+  </section>
+      
+  <section id="phase2" class="card">
+    <h2>Beyond This Audit — Outside Phase 1 Scope</h2>
+
+    <p class="muted small">These areas were outside the scope of this audit. They are listed so the scope is explicit;
+      nothing below is a finding, and none of them affects the Conversion Readiness score.</p>
+
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Evidence that would be required</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+
+      <tbody><tr>
+              <td>Backlinks and referring domains</td>
+              <td class="small">Off-site authority evidence</td>
+              <td><span class="chip cap-neutral">NOT APPLICABLE</span></td>
+            </tr><tr>
+              <td>Third-party reviews</td>
+              <td class="small">Review-platform evidence</td>
+              <td><span class="chip cap-neutral">NOT APPLICABLE</span></td>
+            </tr><tr>
+              <td>External entity mentions</td>
+              <td class="small">Entity corroboration across external sources</td>
+              <td><span class="chip cap-neutral">NOT APPLICABLE</span></td>
+            </tr><tr>
+              <td>Long-term authority growth</td>
+              <td class="small">Trend evidence across repeated audits</td>
+              <td><span class="chip cap-neutral">NOT APPLICABLE</span></td>
+            </tr></tbody>
+    </table></div>
+  </section>
+      
+  <section id="evidence" class="card">
+    <h2>Evidence detail</h2>
+    <h3>Findings (5)</h3>
+    <ul class="findings">
+      <li>
+        <strong>VAN-TECH-001</strong> — Missing meta descriptions
+        <span class="small">(deterministic, priority 76, score-bearing)</span>
+        <ul class="small">
+          <li>dataforseo_onpage · meta_description · null · AVAILABLE</li>
+        </ul>
+      </li>
+      <li>
+        <strong>VAN-TRUST-002</strong> — Pricing or investment context is absent
+        <span class="small">(strongly_supported, priority 59, score-bearing)</span>
+        <ul class="small">
+          <li>dataforseo_onpage · trust.pricing · false · AVAILABLE</li>
+        </ul>
+      </li>
+      <li>
+        <strong>VAN-TECH-003</strong> — Security headers are incomplete
+        <span class="small">(deterministic, priority 45, score-bearing)</span>
+        <ul class="small">
+          <li>dataforseo_onpage · security_headers · referrerPolicy, contentSecurityPolicy · AVAILABLE</li>
+        </ul>
+      </li>
+      <li>
+        <strong>VAN-CONTENT-002</strong> — No buyer-question content detected
+        <span class="small">(supported, priority 41, score-bearing)</span>
+        <ul class="small">
+          <li>dataforseo_onpage · trust.faq · false · AVAILABLE</li>
+        </ul>
+      </li>
+      <li>
+        <strong>VAN-TECH-004</strong> — Images are missing alternative text
+        <span class="small">(deterministic, priority 32, score-bearing)</span>
+        <ul class="small">
+          <li>dataforseo_onpage · images_missing_alt · 1 · AVAILABLE</li>
+        </ul>
+      </li></ul>
+
+    <h3>Source statuses</h3>
+    <ul class="small"><li>site: AVAILABLE (2026-01-15T12:00:00.000Z)</li><li>performance: AVAILABLE (2026-01-15T12:00:00.000Z)</li><li>competitors: not collected</li><li>backlinks: not collected</li><li>ga4: NOT_APPLICABLE (2026-01-15T12:00:00.000Z)</li><li>gsc: not collected</li></ul>
+
+    <h3>Evidence capabilities</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Capability</th><th>Status</th><th>Limitations</th><th>Kind</th></tr></thead>
+      <tbody><tr><td>content.body</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>offer.clarity</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>trust.proof</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>conversion.cta</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>conversion.form</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>conversion.path</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>technical.indexability</td><td><span class="chip cap-partial">PARTIAL</span></td><td class="small">Page-level indexable flags only — non-indexable endpoint not collected</td><td class="small">inferred</td></tr><tr><td>technical.redirects</td><td><span class="chip cap-neutral">UNAVAILABLE</span></td><td class="small">Redirect evidence was not collected</td><td class="small">inferred</td></tr><tr><td>technical.resources</td><td><span class="chip cap-neutral">UNAVAILABLE</span></td><td class="small">Resource evidence was not collected</td><td class="small">inferred</td></tr><tr><td>technical.headers</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>schema.structured_data</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>performance.lab</td><td><span class="chip cap-ok">AVAILABLE</span></td><td class="small"></td><td class="small">inferred</td></tr><tr><td>performance.field</td><td><span class="chip cap-neutral">UNAVAILABLE</span></td><td class="small">CrUX field data was not returned for this site (not populated or not collected)</td><td class="small">inferred</td></tr></tbody>
+    </table></div>
+
+    <h3>Deferred &amp; unavailable analysis</h3><p class="small">None deferred: all analyses with eligible evidence are rendered above; unavailable sources are shown in Source statuses.</p>
+  </section>
+    </main>
+  </div>
+
+  <aside class="viewer-sidebar no-print" aria-label="Report sections">
+    <p class="viewer-sidebar-title">Report sections</p>
+    <nav class="viewer-nav">
+    <a class="viewer-nav-link" href="#executive-scorecard" data-viewer-page="executive-scorecard">
+      <span class="viewer-nav-num">01</span>
+      <span>Executive Scorecard</span>
+    </a>
+    <a class="viewer-nav-link" href="#priority-fixes" data-viewer-page="priority-fixes">
+      <span class="viewer-nav-num">02</span>
+      <span>Priority Fixes</span>
+    </a>
+    <a class="viewer-nav-link" href="#conversion-paths" data-viewer-page="conversion-paths">
+      <span class="viewer-nav-num">03</span>
+      <span>Conversion Path Architecture</span>
+    </a>
+    <a class="viewer-nav-link" href="#readiness-map" data-viewer-page="readiness-map">
+      <span class="viewer-nav-num">04</span>
+      <span>Conversion Readiness Map</span>
+    </a>
+    <a class="viewer-nav-link" href="#content-ideas" data-viewer-page="content-ideas">
+      <span class="viewer-nav-num">05</span>
+      <span>Topical Map &amp; Qualified Content Opportunities</span>
+    </a>
+    <a class="viewer-nav-link" href="#competitor-benchmark" data-viewer-page="competitor-benchmark">
+      <span class="viewer-nav-num">06</span>
+      <span>Competitor Benchmarking</span>
+    </a>
+    <a class="viewer-nav-link" href="#trust-eeat" data-viewer-page="trust-eeat">
+      <span class="viewer-nav-num">07</span>
+      <span>Trust &amp; E-E-A-T Readiness</span>
+    </a>
+    <a class="viewer-nav-link" href="#cms-constraints" data-viewer-page="cms-constraints">
+      <span class="viewer-nav-num">08</span>
+      <span>CMS &amp; Platform Constraints</span>
+    </a>
+    <a class="viewer-nav-link" href="#technical-seo" data-viewer-page="technical-seo">
+      <span class="viewer-nav-num">09</span>
+      <span>Technical SEO Hygiene</span>
+    </a>
+    <a class="viewer-nav-link" href="#headings" data-viewer-page="headings">
+      <span class="viewer-nav-num">10</span>
+      <span>Heading &amp; Semantic Structure</span>
+    </a>
+    <a class="viewer-nav-link" href="#schema" data-viewer-page="schema">
+      <span class="viewer-nav-num">11</span>
+      <span>Schema &amp; Entity Clarity</span>
+    </a>
+    <a class="viewer-nav-link" href="#performance" data-viewer-page="performance">
+      <span class="viewer-nav-num">12</span>
+      <span>Performance</span>
+    </a>
+    <a class="viewer-nav-link" href="#accessibility-mobile" data-viewer-page="accessibility-mobile">
+      <span class="viewer-nav-num">13</span>
+      <span>Accessibility &amp; Mobile Usability Readiness</span>
+    </a>
+    <a class="viewer-nav-link" href="#internal-links" data-viewer-page="internal-links">
+      <span class="viewer-nav-num">14</span>
+      <span>Internal-Link Opportunities</span>
+    </a>
+    <a class="viewer-nav-link" href="#evidence-appendix" data-viewer-page="evidence-appendix">
+      <span class="viewer-nav-num">15</span>
+      <span>Evidence Appendix</span>
+    </a>
+    <a class="viewer-nav-link" href="#deferred" data-viewer-page="deferred">
+      <span class="viewer-nav-num">16</span>
+      <span>Deferred &amp; Unavailable Analysis</span>
+    </a></nav>
+  </aside>
+</div>
+
+<footer>
+  Generated by Prysm (Omnipressence) · Report design v2.0.0 · Viewer v2.2.0 · Evidence-grounded conversion-readiness assessment
+</footer>
+
+<script>
+(() => {
+  const pages = [{"pageId":"executive-scorecard","title":"Executive Scorecard","sectionIds":["executive","strengths"]},{"pageId":"priority-fixes","title":"Priority Fixes","sectionIds":["blockers","foundations","action-plan"]},{"pageId":"conversion-paths","title":"Conversion Path Architecture","sectionIds":["paths"]},{"pageId":"readiness-map","title":"Conversion Readiness Map","sectionIds":["pillars"]},{"pageId":"content-ideas","title":"Topical Map & Qualified Content Opportunities","sectionIds":["content-ideas"]},{"pageId":"competitor-benchmark","title":"Competitor Benchmarking","sectionIds":["competitors"]},{"pageId":"trust-eeat","title":"Trust & E-E-A-T Readiness","sectionIds":["eeat"]},{"pageId":"cms-constraints","title":"CMS & Platform Constraints","sectionIds":["cms"]},{"pageId":"technical-seo","title":"Technical SEO Hygiene","sectionIds":["technical"]},{"pageId":"headings","title":"Heading & Semantic Structure","sectionIds":["headings"]},{"pageId":"schema","title":"Schema & Entity Clarity","sectionIds":["schema","machine-readiness"]},{"pageId":"performance","title":"Performance","sectionIds":["performance"]},{"pageId":"accessibility-mobile","title":"Accessibility & Mobile Usability Readiness","sectionIds":["accessibility-mobile"]},{"pageId":"internal-links","title":"Internal-Link Opportunities","sectionIds":["internal-links"]},{"pageId":"evidence-appendix","title":"Evidence Appendix","sectionIds":["evidence"]},{"pageId":"deferred","title":"Deferred & Unavailable Analysis","sectionIds":["phase2"]}];
+  const fallback = pages[0];
+    const businessName = "Example Business";
+  const byId = new Map(pages.map((page) => [page.pageId, page]));
+  const allSectionIds = new Set(
+    pages.flatMap((page) => page.sectionIds)
+  );
+
+  const title = document.getElementById("viewerPageTitle");
+  const content = document.getElementById("reportContent");
+  const links = Array.from(
+    document.querySelectorAll("[data-viewer-page]")
+  );
+  const narrativeSections = Array.from(
+    document.querySelectorAll(
+      "#narrative-layer > section[data-viewer-page]"
+    )
+  );
+
+  for (const id of allSectionIds) {
+    const section = document.getElementById(id);
+    if (section) section.classList.add("viewer-section");
+  }
+
+  for (const section of narrativeSections) {
+    section.classList.add("viewer-section");
+  }
+
+  function resolvePage() {
+    const requested = decodeURIComponent(
+      (window.location.hash || "").replace(/^#/, "")
+    );
+    return byId.get(requested) || fallback;
+  }
+
+  function activate(page, options = {}) {
+    const focus = options.focus === true;
+    document.body.classList.add("viewer-ready");
+
+    const activeIds = new Set(page.sectionIds);
+
+    for (const id of allSectionIds) {
+      const section = document.getElementById(id);
+      if (section) {
+        section.classList.toggle("viewer-active", activeIds.has(id));
+      }
+    }
+
+    for (const section of narrativeSections) {
+      section.classList.toggle(
+        "viewer-active",
+        section.dataset.viewerPage === page.pageId
+      );
+    }
+
+    for (const link of links) {
+      if (link.dataset.viewerPage === page.pageId) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    }
+
+    if (title) title.textContent = page.title;
+
+    document.title =
+      page.title + " — " + businessName;
+
+    if (focus && content) {
+      content.focus({ preventScroll: true });
+    }
+  }
+
+  function syncFromHash(options = {}) {
+    const page = resolvePage();
+
+    if (
+      window.location.hash !==
+      "#" + page.pageId
+    ) {
+      history.replaceState(null, "", "#" + page.pageId);
+    }
+
+    activate(page, options);
+  }
+
+  for (const link of links) {
+    link.addEventListener("click", (event) => {
+      const page = byId.get(
+        link.dataset.viewerPage
+      );
+
+      if (!page) return;
+
+      event.preventDefault();
+
+      history.pushState(
+        null,
+        "",
+        "#" + page.pageId
+      );
+
+      activate(page, { focus: true });
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
+  }
+
+  window.addEventListener(
+    "hashchange",
+    () => syncFromHash({ focus: true })
+  );
+
+  window.addEventListener(
+    "popstate",
+    () => syncFromHash({ focus: true })
+  );
+
+  syncFromHash();
+})();
+</script>
+</body>
+</html>

@@ -347,16 +347,17 @@ function pillarSection(pillars) {
       <div class="pillar">
         <h3>${e(p.label)}</h3>
         ${scoreHtml}
-        <p class="small"><strong>${e(bandLabel(p.score))}</strong></p>
+        <p class="small"><strong>${e(bandLabel(p.score))}</strong>${p.hasIncompleteFieldEvidence ? " · Real-user performance data was not available, so this result reflects lab measurements and is not a complete real-user readiness conclusion." : ""}</p>
         <ul class="pillar-modules">${modules}</ul>
         <div class="pillar-caps">${caps}</div>
       </div>`;
   }).join("");
 
+  const performanceLimited = (pillars || []).find((pillar) => pillar.id === "performance_experience")?.hasIncompleteFieldEvidence === true;
   const directAnswer = weak.length
     ? `Readiness is uneven. ${weak[0].label} is the weakest assessed dimension at ${weak[0].score}/100, while stronger dimensions provide a foundation to build on.`
     : available.length
-      ? "The assessed readiness dimensions are broadly adequate or strong, with no dimension currently below the Adequate band."
+      ? `The assessed readiness dimensions are broadly adequate or strong, with no dimension currently below the Adequate band.${performanceLimited ? " Real-user performance data was not available, so the Performance & Experience result is not a complete real-user readiness conclusion." : ""}`
       : "PRYSM could not produce dimension-level readiness scores from the available evidence.";
 
   return `<section id="pillars">

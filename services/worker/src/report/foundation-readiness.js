@@ -379,6 +379,12 @@ function conversionMechanism(model) {
    * browser validation that directly observed a conversion mechanism.
    */
   if (ctaPresent || formPresent) {
+    const pathClarity = model?.crossReportInterpretation
+      ? requireCrossReportInterpretation(model).constructs.conversionPathClarity
+      : null;
+    const pathQualification = pathClarity === "Weak"
+      ? " A conversion action was observed, but the assessed path to complete it is weak; mechanism presence does not establish usable path completion."
+      : "";
     if (browserCtaPresent || browserFormPresent) {
       const browserPages = Math.max(
         browserCta?.presentPages ?? 0,
@@ -389,7 +395,7 @@ function conversionMechanism(model) {
         "conversion_mechanism",
         "Conversion mechanism",
         FOUNDATION_STATUS.PASS,
-        `Browser conversion validation confirmed a conversion mechanism on ${browserPages} selected page(s).`,
+        `Browser conversion validation confirmed a conversion mechanism on ${browserPages} selected page(s).${pathQualification}`,
         {
           foundational: true,
           linkedRuleIds: ["VAN-PATH-001"],
@@ -401,7 +407,7 @@ function conversionMechanism(model) {
       "conversion_mechanism",
       "Conversion mechanism",
       FOUNDATION_STATUS.PASS,
-      `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
+      `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.${pathQualification}`,
       {
         foundational: true,
         linkedRuleIds: ["VAN-PATH-001"],

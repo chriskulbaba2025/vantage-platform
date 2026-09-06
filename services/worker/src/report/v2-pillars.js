@@ -80,6 +80,13 @@ export function computePillars(model) {
       key,
       status: caps[key]?.status ?? "NOT_ASSESSED",
     }));
+    // A missing capability is ordinarily shown in the dimension's existing
+    // capability list.  The one client-facing readiness qualification needed
+    // here is narrower: lab data cannot stand in for absent real-user field
+    // performance evidence.
+    const missingFieldPerformance =
+      def.id === "performance_experience" &&
+      caps["performance.field"]?.status !== "AVAILABLE";
 
     pillars.push({
       id: def.id,
@@ -92,6 +99,10 @@ export function computePillars(model) {
       ),
       modules,
       capabilities,
+      // This is a presentation qualifier, not a client-facing status. Keep
+      // the consumer contract boolean so governance vocabulary cannot leak
+      // into the rendered report.
+      hasIncompleteFieldEvidence: missingFieldPerformance,
     });
   }
 

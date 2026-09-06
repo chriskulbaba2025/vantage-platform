@@ -1615,33 +1615,33 @@ test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", (
 // ---------------------------------------------------------------------------
 
 const CHECKLIST_GOLDEN = {
-  assessed: "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  assessed: "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
   unassessed: "1ab14008b83d55af0d91ac2cb54b7fc187ece111f877c4f87154c2e9fe395693",
   "provider-failed": "bbe77121f8d4396c8a7e2e32834ccc49aff8e95caebd5ed9bbee0d83e2fb4bd0",
   "crawl-blocked": "f87770094b25d3395b99c38e73de66763cafbc4384d2b4ddc17fa0ad742b15eb",
-  "target-outage": "b249c5d0b671094d224ea4ac751292abea10af854b5e12bab199b79d90213698",
-  "outage-with-limitations": "61a260947f7d335d9b1fe6ba0342c579e18257530a987b14f4dace938f9cc317",
-  "http-and-noindex": "76514e6aa9b39b65708e0be60db0f4547ecb1d6489bbc597d6b205749be20496",
-  "robots-retrieved": "b149bb2618bfc8ce2eab16b815083ac5282b17810943c9c043f925020267855d",
-  "canonical-missing": "dc364988408a8465f436dd46d0d733a1a503484a5b59954288e7f97bcc71197d",
+  "target-outage": "4d7a3e205c3a95afb5b078d3448f5001d28fd7d3e5c5338db1e6a85f22f12f7f",
+  "outage-with-limitations": "f089366910448919119efd4aa4671467c8a1a10a2eb5c7c4584eec446b286e95",
+  "http-and-noindex": "83a3886e04f415194fab8ed4d2b7afd94177f13e12a14b12cd927b09fe6f959c",
+  "robots-retrieved": "af789c41d36fe53f8d0754e69f95a3bea30fcef2eee08e57f29211c8bf06194b",
+  "canonical-missing": "07029eac5e25593d814344e9232f21016d706ec34adce27c58e999d4c966658a",
   "no-conversion-mechanism": "b0ecd7cf4bc3f42fa56d8c18d69dbc27b8b11c26a52422df7f3c73b439cca830",
-  "no-contact": "71ffdb1e959c0a991535b23488ca8db7f9afbd6afa0893fd668d4df35c3f580f",
-  "headers-all-present": "689110ddd7776ede14ee9cd733228f8ae52fd529620928cc7e97bba15cf55190",
-  "ga4-ready": "c7bd6bd5a8c0bc0c0d68f8c2200038d66e9d8cbc7fcde6072fca4e6219b7cf31",
-  "ga4-issues": "1cbecf377ea5dd15895ac9564da53f7df1cba6e6e817961ce57b7263456aa45f",
-  "ga4-not-applicable": "0da4905e864c5efaf77e9c6a93508dad458e9841d0967577c321467f3ceb10c9",
-  "slow-mobile": "0c821d9be502fbeead3496dbe1e42fa7388d8b25cad88a77301f978184b06b0b",
-  "no-performance": "7e9ea2ca973838201bb61fd27c71084f228ec5e1cb56c1cecdd61f9c3cb7a31e",
-  "path-validated-blocker": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "competitor-present": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "proprietary-platform": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "untraced-broken-links": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "schema-confirmed-absent": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "headings-absent-h1": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "headings-multiple-h1": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "device-profile-failed": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "competitor-with-limitations": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
-  "perf-field-and-multipage": "be900ea0fea303049d978020c21f483f1d2839523f7d17df1cc694ba340e79ef",
+  "no-contact": "cdeb67e3932ba1f76ee3fdc93e60ee02f88fae070280c172c7244aede0f7ebcb",
+  "headers-all-present": "f116b3309ab6094b7c83e758885c0b14655b59d239bf80a47a2bda33b9363085",
+  "ga4-ready": "d1ee32bdc27b065cdaf2e42814951e05c0b34f42ba14b4c85d88e81491e2a6b7",
+  "ga4-issues": "3e8a0b52baa19af98c7c46e822806984830f86615d6ad386b1ba0b85b77a6d34",
+  "ga4-not-applicable": "2863263866b9b5075924b495cb1c796b84a53248a3dd46fe7c806ab3b08d251e",
+  "slow-mobile": "b080355132e45f828fd3ac6f0d6d60fcaa8761d1085df527ee9044eabfa27274",
+  "no-performance": "7edb24e4817aaaec6c69458ca6475779cfbd2a093f89c71224e507bd2b674e7b",
+  "path-validated-blocker": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "competitor-present": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "proprietary-platform": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "untraced-broken-links": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "schema-confirmed-absent": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "headings-absent-h1": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "headings-multiple-h1": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "device-profile-failed": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "competitor-with-limitations": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  "perf-field-and-multipage": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
 };
 
 test("CR-40: the complete foundation checklist is frozen for every branch", () => {
@@ -1700,33 +1700,33 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
 });
 
 const RENDER_GOLDEN = {
-  assessed: "02afd7fbc7249ca98d1f67196c42c31a5d569bffd231b1bc931af433c0062009",
-  unassessed: "bf6eb8f520fd4dde0ec6f05dc5a18116fef762c47a7f64f4cbb5238a382cb5d6",
-  "provider-failed": "62627f10dd5762d8a9101b192f303eed966612286abeab306c504a003f0f47b0",
-  "crawl-blocked": "2372abdd657a7025a7207647a4754e8b42817be2e7dc14d5e2752b7c8d2a05af",
-  "target-outage": "98229f2522cead3061fe100fd1a1768c0a472e07f9004736096fa8873afa91fc",
-  "outage-with-limitations": "46f058d9e155cb444828cec6d06d6abd33e078b9e6ada0ef722afdfcf47d7542",
-  "http-and-noindex": "7a19bdae036d2a3415b55d51dbdae813af38d161bd934da23a254cd6f3e801a0",
-  "robots-retrieved": "2e32d3893c79d0928b9f8e4efb03a47f7b4c3f9cfbf7957cf8152da6cd5772c3",
-  "canonical-missing": "3bea611269f4e660551bdad289e4b06125d08f464e2a3c54b06fd254d3249708",
-  "no-conversion-mechanism": "c42dd6f549eef6fedf13aea9c8d5dbaf48603b01f220b647765c4fdb9f50ec7b",
-  "no-contact": "a38c2fa5e452d6d8290a50a954375fa011476514fb2ddb84289a9a5229f119c3",
-  "headers-all-present": "8ac246dca79c201eb3c6e5668af82b43e33854b487657fca76b4eb16eced297c",
-  "ga4-ready": "249ec2c861c25945fac544dc7d901b251793048bd11f4edd0719907ab50373f4",
-  "ga4-issues": "630f3474176393c7fdf7e7f78f58a82f36afe380b1ee187223addb8cb13f6fa9",
-  "ga4-not-applicable": "7e908405e9708e855bb19e3fff53466f75ab4e78128b738e3258744c5c6329b6",
-  "slow-mobile": "f587df0ed6ae05efa70be872af4b54b9761cd6436220de8fef9ce9ccfc2a1627",
-  "no-performance": "71ec448010d3f6353b6e3f4133f6f04ff8f025835051d12083ccf8d68c9ade18",
-  "path-validated-blocker": "eb6fea3e6ffab7cfd307b428453d02d593c1bedfcbfc8f2fd7ee2ca211a3fe0b",
-  "competitor-present": "f441d416757afd4460b1f48b55227dd0f06d4de782712f092e359b8dd44c8e59",
-  "proprietary-platform": "c56f582e09118fe33f142fcd4a7db7d1730f233646a8297863c3419817c13bac",
-  "untraced-broken-links": "de6aaf05ef3e578f2c9ba83960c89c530d4425f0be3660fe3273141ec51180d6",
-  "schema-confirmed-absent": "e81748c8ac6009d26bbf9fd1ef9246ce0299096bce41530f5507d5d4970e4e27",
-  "headings-absent-h1": "8e31de8a28df19c07b2b880b48aa708d80010ab4ae0157f901f7d8cc336bd82c",
-  "headings-multiple-h1": "58b38140a108638e9567b4a0c1cf258822495b5381bcce0b2bac95cbfb642b23",
-  "perf-field-and-multipage": "fef0b1a6ab0eac2d5efea3cf414b20320c9a4800b6b0dbaf1868366e16978b6b",
-  "competitor-with-limitations": "d33102785385bacb4c2d56abe6c052da86d7089846fb610dda4dfb47faeb89d7",
-  "device-profile-failed": "7f7c8ee66907c2c14a04d8c26a92d463d150e011e6962042e6835de0c46187cd",
+  "assessed": "1f09e1fcd7942a8a40bab33de18b5dda18b3a0cf66d222494032a3972c2ed0fc",
+  "unassessed": "7f8839c28e3014b199a115280bf5c705fbe62cc2cd5ee0f45cc15fac4d437c9f",
+  "provider-failed": "c3872e90b9782147827a042c911d407fc74e44c603ee8e52acbe20cbaaff7fc2",
+  "crawl-blocked": "2f784cde85c469063b18569e02c78418f6eb2035225c8cb3c1d37b8c2abc9354",
+  "target-outage": "6f22797d69e6db97d61cdbf858d1c35fc1ad730ef560bcd8367d28ed1f743f10",
+  "outage-with-limitations": "cca7d2373b5741c1c03b04734634a0860e1bea993967d06725e5eee391887490",
+  "http-and-noindex": "c38da7f5218bd9e8dcfb3bad28500229f2d4a95ea67f20a24db7f1aeb784ea10",
+  "robots-retrieved": "b3637cede05fecc80ba5c3c020e07f204a1314de0e2725184112404b608f23e9",
+  "canonical-missing": "7a2cc24920dccfbc5599b262c67e12cdae2cce03d052d33b6722b4cf9363d00b",
+  "no-conversion-mechanism": "9981091afae94172cce824a67fef9e9cce353b510c946be6992a191261c7ef25",
+  "no-contact": "f097ef5fb27d783b03330d096e3136760bef2109bd0510d7f86c7b85ffafbec1",
+  "headers-all-present": "f0905558255369810b04ef9f448985c43de5ee956716f009854b9f6a85972e61",
+  "ga4-ready": "481151d50fb888527acc314d11309dfc4f403c6efdb718ec28b3ab75a30cb244",
+  "ga4-issues": "343276af78e54c4b77bd7a7d9b1b1f2971b073eb53fdbe83197bec4ac7fc9f5f",
+  "ga4-not-applicable": "6656e34203094153c0bf8904650f6734d4a0ba3b36d01dde1dfabcb1726f524c",
+  "slow-mobile": "8ba25398ebaa862ccc266a8ec894c123f18fc22d79b6e3673f14c49a616b6ed6",
+  "no-performance": "70611fa86827b67258d63b3aa963cbd2a72dae2f738e37ee7696011e0d50ed98",
+  "path-validated-blocker": "1beb31952a7386b6b49925b7f775b2c9c79e593ac4f7d71340f3e502fe40fc5c",
+  "competitor-present": "d917225005a66f2ea1b331a570ac67baab265edfd3b97144d2829c0e5fc6fe6d",
+  "proprietary-platform": "11f185ceeeeba05bf9c213005f035a6beaac689098ae7d23067a8ba9b798347c",
+  "untraced-broken-links": "bcbe872d680b2ded2887ec61540c0b5b002247fcd26512403abad49205342ce9",
+  "schema-confirmed-absent": "2fe53243eeb3cdd0f26837babbb2853d5852c15ba899661fa0d91c3a5eccd94d",
+  "headings-absent-h1": "96bb76a29ff16953b3f6047ba441375a3c1cd1a7f3bb5b8b2f29451b124a0d0a",
+  "headings-multiple-h1": "e635f4387b0d73a03187b4c988351c33d4bd9c2a758b1e583b29d52f85d904dd",
+  "perf-field-and-multipage": "93ce62c9ff8a779eaefbb36da7257a7341693ec1d68d94be74eee851ade35a30",
+  "competitor-with-limitations": "1476c7ed23acdc2588bc14ce5d6a726012bec2dfe01604fa35193ade0ebe045b",
+  "device-profile-failed": "da8a2047f50c626b208376efefef75e96b8037d3b46e259f79c37ceeee25a3fb",
 };
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
@@ -2407,6 +2407,37 @@ test("P1-CROSS-04: renderer consumes persisted interpretation and fails closed w
   assert.match(renderReportV2(tampered), /Persisted test value/);
   const { crossReportInterpretation, ...missingProjection } = model;
   assert.throws(() => renderReportV2({ ...missingProjection, competitors: tampered.competitors }), /persisted cross-report interpretation/);
+});
+
+test("P1-R2-CTA-01: a visible mechanism explains when its governed path remains weak", () => {
+  const model = scoreWith(assessedSite(), { pathValidationEvidence: OBSTRUCTED_PATH_EVIDENCE });
+  const html = renderReportV2(model);
+  const foundations = html.slice(html.indexOf('id="foundations"'), html.indexOf('id="paths"'));
+  assert.match(foundations, /conversion action was observed, but the assessed path to complete it is weak/i);
+  assert.match(foundations, /mechanism presence does not establish usable path completion/i);
+});
+
+test("P1-R2-TRUST-01: positive risk reassurance names only the observed signal", () => {
+  const html = renderReportV2(scoreWith(assessedSite({
+    trust: { testimonials: true, credentials: true, caseStudies: false, faq: false, pricing: false, policies: true, contact: true },
+  })));
+  const riskRow = html.slice(html.indexOf("What reduces my risk?"), html.indexOf("</tr>", html.indexOf("What reduces my risk?")));
+  assert.match(riskRow, /policy or terms content was observed/i);
+  assert.doesNotMatch(riskRow, /pricing or investment context was observed/i);
+  assert.doesNotMatch(riskRow, /guarantees/i);
+});
+
+test("P1-R2-PERFORMANCE-01: numeric lab performance stays explicitly qualified when field evidence is unavailable", () => {
+  const html = renderReportV2(scoreWith(assessedSite()));
+  const readinessMap = html.slice(html.indexOf('id="pillars"'), html.indexOf('id="blockers"'));
+  const trustCard = readinessMap.slice(
+    readinessMap.indexOf("<h3>Trust &amp; Proof</h3>"),
+    readinessMap.indexOf("<h3>Conversion Path</h3>"),
+  );
+  assert.match(readinessMap, /Performance &amp; Experience[\s\S]*Real-user performance data was not available/i);
+  assert.doesNotMatch(trustCard, /Real-user performance data was not available/i);
+  assert.match(html, /Lab results remain valid as lab evidence, but they are not treated as real-user field performance/i);
+  assert.doesNotMatch(html, /LIMITED_EVIDENCE|COMPLETE_EVIDENCE/);
 });
 
     test("CR-45: infrastructure URLs are excluded from client-facing report URLs", () => {

@@ -252,13 +252,23 @@ export function eeatSection(model) {
     ],
     [
       "What reduces my risk?",
-      "policies",
-      "Policies, pricing, guarantees, or other reassurance",
+      ["policies", "pricing"],
+      "reassurance",
     ],
   ];
 
   const questionRows = trustQuestions
-    .map(([question, flag, evidenceLabel]) => {
+    .map(([question, flags, evidenceLabel]) => {
+      const observedLabels = (Array.isArray(flags) ? flags : [flags])
+        .filter((flag) => trust[flag] === true)
+        .map((flag) => ({
+          policies: "policy or terms content",
+          pricing: "pricing or investment context",
+          credentials: "named credentials, qualifications, or expertise proof",
+          caseStudies: "case studies, examples, or documented outcomes",
+          testimonials: "independent validation such as testimonials",
+          contact: "clear contact information and next-step expectations",
+        })[flag] || flag);
       if (!trustAssessed) {
         return `<tr>
           <td><strong>${e(question)}</strong></td>
@@ -269,10 +279,7 @@ export function eeatSection(model) {
         </tr>`;
       }
 
-      const present =
-        trust[flag] === true ||
-        (question === "What reduces my risk?" &&
-          trust.pricing === true);
+      const present = observedLabels.length > 0;
 
       const status = trustPartial
         ? "PARTIAL"
@@ -280,12 +287,11 @@ export function eeatSection(model) {
           ? "PASS"
           : "FINDING";
 
+      const observedEvidence = observedLabels.join("; ");
       const detail = present
         ? trustPartial
-          ? `${e(
-              evidenceLabel,
-            )} was observed in the available partial assessment.`
-          : `${e(evidenceLabel)} was observed.`
+          ? `${e(observedEvidence)} was observed in the available partial assessment.`
+          : `${e(observedEvidence)} was observed.`
         : trustPartial
           ? `${e(
               evidenceLabel,
