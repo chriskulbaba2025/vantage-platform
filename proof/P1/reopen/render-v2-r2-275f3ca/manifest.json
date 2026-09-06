@@ -1,0 +1,245 @@
+[
+  {
+    "scenario": "assessed",
+    "file": "assessed.html",
+    "sha256": "1f09e1fcd7942a8a40bab33de18b5dda18b3a0cf66d222494032a3972c2ed0fc",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "unassessed",
+    "file": "unassessed.html",
+    "sha256": "7f8839c28e3014b199a115280bf5c705fbe62cc2cd5ee0f45cc15fac4d437c9f",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "provider-failed",
+    "file": "provider-failed.html",
+    "sha256": "c3872e90b9782147827a042c911d407fc74e44c603ee8e52acbe20cbaaff7fc2",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "crawl-blocked",
+    "file": "crawl-blocked.html",
+    "sha256": "2f784cde85c469063b18569e02c78418f6eb2035225c8cb3c1d37b8c2abc9354",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "target-outage",
+    "file": "target-outage.html",
+    "sha256": "6f22797d69e6db97d61cdbf858d1c35fc1ad730ef560bcd8367d28ed1f743f10",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "outage-with-limitations",
+    "file": "outage-with-limitations.html",
+    "sha256": "cca7d2373b5741c1c03b04734634a0860e1bea993967d06725e5eee391887490",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "http-and-noindex",
+    "file": "http-and-noindex.html",
+    "sha256": "c38da7f5218bd9e8dcfb3bad28500229f2d4a95ea67f20a24db7f1aeb784ea10",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "robots-retrieved",
+    "file": "robots-retrieved.html",
+    "sha256": "b3637cede05fecc80ba5c3c020e07f204a1314de0e2725184112404b608f23e9",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "canonical-missing",
+    "file": "canonical-missing.html",
+    "sha256": "7a2cc24920dccfbc5599b262c67e12cdae2cce03d052d33b6722b4cf9363d00b",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "no-conversion-mechanism",
+    "file": "no-conversion-mechanism.html",
+    "sha256": "9981091afae94172cce824a67fef9e9cce353b510c946be6992a191261c7ef25",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "no-contact",
+    "file": "no-contact.html",
+    "sha256": "f097ef5fb27d783b03330d096e3136760bef2109bd0510d7f86c7b85ffafbec1",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "headers-all-present",
+    "file": "headers-all-present.html",
+    "sha256": "f0905558255369810b04ef9f448985c43de5ee956716f009854b9f6a85972e61",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "ga4-ready",
+    "file": "ga4-ready.html",
+    "sha256": "481151d50fb888527acc314d11309dfc4f403c6efdb718ec28b3ab75a30cb244",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "ga4-issues",
+    "file": "ga4-issues.html",
+    "sha256": "343276af78e54c4b77bd7a7d9b1b1f2971b073eb53fdbe83197bec4ac7fc9f5f",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "ga4-not-applicable",
+    "file": "ga4-not-applicable.html",
+    "sha256": "6656e34203094153c0bf8904650f6734d4a0ba3b36d01dde1dfabcb1726f524c",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "slow-mobile",
+    "file": "slow-mobile.html",
+    "sha256": "8ba25398ebaa862ccc266a8ec894c123f18fc22d79b6e3673f14c49a616b6ed6",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "no-performance",
+    "file": "no-performance.html",
+    "sha256": "70611fa86827b67258d63b3aa963cbd2a72dae2f738e37ee7696011e0d50ed98",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "path-validated-blocker",
+    "file": "path-validated-blocker.html",
+    "sha256": "1beb31952a7386b6b49925b7f775b2c9c79e593ac4f7d71340f3e502fe40fc5c",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "competitor-present",
+    "file": "competitor-present.html",
+    "sha256": "d917225005a66f2ea1b331a570ac67baab265edfd3b97144d2829c0e5fc6fe6d",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "proprietary-platform",
+    "file": "proprietary-platform.html",
+    "sha256": "11f185ceeeeba05bf9c213005f035a6beaac689098ae7d23067a8ba9b798347c",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "untraced-broken-links",
+    "file": "untraced-broken-links.html",
+    "sha256": "bcbe872d680b2ded2887ec61540c0b5b002247fcd26512403abad49205342ce9",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "schema-confirmed-absent",
+    "file": "schema-confirmed-absent.html",
+    "sha256": "2fe53243eeb3cdd0f26837babbb2853d5852c15ba899661fa0d91c3a5eccd94d",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "headings-absent-h1",
+    "file": "headings-absent-h1.html",
+    "sha256": "96bb76a29ff16953b3f6047ba441375a3c1cd1a7f3bb5b8b2f29451b124a0d0a",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "headings-multiple-h1",
+    "file": "headings-multiple-h1.html",
+    "sha256": "e635f4387b0d73a03187b4c988351c33d4bd9c2a758b1e583b29d52f85d904dd",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "perf-field-and-multipage",
+    "file": "perf-field-and-multipage.html",
+    "sha256": "93ce62c9ff8a779eaefbb36da7257a7341693ec1d68d94be74eee851ade35a30",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "competitor-with-limitations",
+    "file": "competitor-with-limitations.html",
+    "sha256": "1476c7ed23acdc2588bc14ce5d6a726012bec2dfe01604fa35193ade0ebe045b",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  },
+  {
+    "scenario": "device-profile-failed",
+    "file": "device-profile-failed.html",
+    "sha256": "da8a2047f50c626b208376efefef75e96b8037d3b46e259f79c37ceeee25a3fb",
+    "hashNormalization": "LF",
+    "applicationSha": "275f3cabb6796f9d0c2e5a30df61e71c4e084b96",
+    "renderer": "renderReportV2",
+    "test": "CR-43"
+  }
+]
