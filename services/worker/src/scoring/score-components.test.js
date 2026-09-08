@@ -2219,7 +2219,7 @@ test(
 
     assert.equal(
       buyerQuestion.title,
-      "Buyer-question content was not detected in the available partial assessment",
+      "Explicit FAQ content was not detected in the available partial assessment",
     );
 
     assert.match(

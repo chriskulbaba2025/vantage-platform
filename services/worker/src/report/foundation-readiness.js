@@ -19,6 +19,8 @@
  * the exact evidence they would need.
  */
 
+import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
+
 export const FOUNDATION_STATUS = Object.freeze({
   PASS: "PASS",
   ACTION_REQUIRED: "ACTION_REQUIRED",
@@ -235,13 +237,24 @@ function availability(model) {
 
 function indexability(model) {
   const site = model?.evidence?.site || {};
+  // scoreAudit supplies the persisted projection before this material
+  // consumer runs. Isolated checklist callers intentionally exercise the
+  // evidence-only checklist contract and have no report projection.
+  const governed = model?.crossReportInterpretation
+    ? requireCrossReportInterpretation(model).constructs.indexability
+    : null;
+  if (governed === "Not Assessed") {
+    return item("indexability", "Google indexability", FOUNDATION_STATUS.NOT_ASSESSED,
+      "Page-level indexability signals were not collected for this audit.",
+      { requires: "crawl evidence including per-page robots directives and status codes", foundational: true });
+  }
   if (!capAvailable(model, "technical.indexability")) {
     return item("indexability", "Google indexability", FOUNDATION_STATUS.NOT_ASSESSED,
       "Page-level indexability signals were not collected for this audit.",
       { requires: "crawl evidence including per-page robots directives and status codes", foundational: true });
   }
   const blocked = Array.isArray(site.nonIndexablePages) ? site.nonIndexablePages : [];
-  if (blocked.length > 0) {
+  if (governed === "Needs attention" || (governed === null && blocked.length > 0)) {
     const sample = blocked.slice(0, 3).map((p) => `${p.url}${p.reason ? ` (${p.reason})` : ""}`).join("; ");
     return item("indexability", "Google indexability", FOUNDATION_STATUS.ACTION_REQUIRED,
       `${blocked.length} crawled page(s) cannot be indexed: ${sample}. Pages that cannot be indexed cannot be found in search.`,
@@ -302,8 +315,9 @@ function robots(model) {
       ROBOTS_DETAIL.REFUSED, { requires: ROBOTS_REQUIRES.REFUSED });
   }
   if (typeof site.robotsText === "string" && site.robotsText.trim().length > 0) {
-    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.PASS,
-      ROBOTS_DETAIL.RETRIEVED);
+    return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
+      "A robots.txt file was retrieved, but this assessment did not evaluate its directives for search-engine user agents.",
+      { requires: "parsed robots.txt directives for the relevant search-engine user agents" });
   }
   return item("robots_txt", "robots.txt configuration", FOUNDATION_STATUS.NOT_ASSESSED,
     ROBOTS_DETAIL.NOT_RETURNED, { requires: ROBOTS_REQUIRES.NOT_RETURNED });
@@ -365,6 +379,12 @@ function conversionMechanism(model) {
    * browser validation that directly observed a conversion mechanism.
    */
   if (ctaPresent || formPresent) {
+    const pathClarity = model?.crossReportInterpretation
+      ? requireCrossReportInterpretation(model).constructs.conversionPathClarity
+      : null;
+    const pathQualification = pathClarity === "Weak"
+      ? " A conversion action was observed, but the assessed path to complete it is weak; mechanism presence does not establish usable path completion."
+      : "";
     if (browserCtaPresent || browserFormPresent) {
       const browserPages = Math.max(
         browserCta?.presentPages ?? 0,
@@ -375,7 +395,7 @@ function conversionMechanism(model) {
         "conversion_mechanism",
         "Conversion mechanism",
         FOUNDATION_STATUS.PASS,
-        `Browser conversion validation confirmed a conversion mechanism on ${browserPages} selected page(s).`,
+        `Browser conversion validation confirmed a conversion mechanism on ${browserPages} selected page(s).${pathQualification}`,
         {
           foundational: true,
           linkedRuleIds: ["VAN-PATH-001"],
@@ -387,7 +407,7 @@ function conversionMechanism(model) {
       "conversion_mechanism",
       "Conversion mechanism",
       FOUNDATION_STATUS.PASS,
-      `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.`,
+      `${ctas} call(s) to action and ${forms} form(s) were detected on the assessed pages.${pathQualification}`,
       {
         foundational: true,
         linkedRuleIds: ["VAN-PATH-001"],

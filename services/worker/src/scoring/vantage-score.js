@@ -24,7 +24,10 @@ import {
   contentIdeas,
   competitorComparison,
 } from "./report-model.js";
-import { buildCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
+import {
+  attachClientTruthActions,
+  buildCrossReportInterpretation,
+} from "../report-model/cross-report-interpretation.js";
 import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { scopeSiteForDecision } from "./decision-scope.js";
@@ -1257,6 +1260,19 @@ export function scoreAudit(
           .conversionReadiness
       : null;
 
+  // Build once before any material deterministic consumer so foundation,
+  // detail, and renderer conclusions all receive the same persisted authority.
+  const crossReportInterpretation = buildCrossReportInterpretation({
+    site: decisionSite,
+    performance,
+    scores: legacyScores,
+    bands: {
+      trust: legacyScores.trust !== null ? band(legacyScores.trust) : "Not Assessed",
+    },
+    conversionPaths: buildConversionPaths(decisionSite, capabilities),
+    capabilities,
+  });
+
   // ── Root cause ─────────────────────────────────────────────────────
 
   const rootCauseContext = {
@@ -1264,6 +1280,7 @@ export function scoreAudit(
     evidence,
     capabilityEvidence,
     scores: legacyScores,
+    crossReportInterpretation,
   };
 
   const rootCausePlan =
@@ -1272,6 +1289,28 @@ export function scoreAudit(
       buildFoundationChecklist(
         rootCauseContext,
       ),
+    );
+
+  const clientTruthWithActions =
+    attachClientTruthActions(
+      crossReportInterpretation,
+      rootCausePlan.actions.map((action) => ({
+        findingId: action.finding.findingId,
+        ruleId: action.finding.ruleId,
+        rank: action.rank,
+        group: action.group,
+        impactLabel:
+          action.finding.businessImpact ||
+          "Material business impact identified in governed evidence.",
+        businessReason:
+          action.finding.businessImpact ||
+          action.finding.title ||
+          "This governed finding affects conversion readiness.",
+        recommendation:
+          action.finding.recommendation || null,
+        verificationMethod:
+          action.finding.verificationMethod || null,
+      })),
     );
 
   const primaryFinding =
@@ -1576,12 +1615,8 @@ export function scoreAudit(
           [],
       ),
 
-    crossReportInterpretation: buildCrossReportInterpretation({
-      site: decisionSite,
-      scores: legacyScores,
-      bands,
-      conversionPaths: buildConversionPaths(decisionSite, capabilities),
-    }),
+    crossReportInterpretation:
+      clientTruthWithActions,
 
     competitorOpportunities:
       evidence

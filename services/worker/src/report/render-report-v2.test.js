@@ -66,6 +66,40 @@ function model() {
   return scoreAudit(INPUT, evidence());
 }
 
+function priorityModel() {
+  const m = model();
+  m.findings = [
+    ...m.findings,
+    {
+      id: "VAN-TECH-002",
+      ruleId: "VAN-TECH-002",
+      title: "Heading structure is inconsistent",
+      businessImpact: "Clear headings help visitors understand each page.",
+      recommendation: "Use one clear main heading per page followed by a consistent heading structure.",
+      scoreBearing: true,
+      confidence: "supported",
+      finalPriority: -2,
+      implementationEffort: "M",
+      affectedUrls: [],
+      verificationMethod: "Review the assessed pages and confirm headings follow a clear structure.",
+    },
+    {
+      id: "VAN-TECH-003",
+      ruleId: "VAN-TECH-003",
+      title: "Security headers are incomplete",
+      businessImpact: "Some browser protections were not detected in the assessed response.",
+      recommendation: "Add the missing browser protections.",
+      scoreBearing: true,
+      confidence: "supported",
+      finalPriority: -3,
+      implementationEffort: "M",
+      affectedUrls: [],
+      verificationMethod: "Run the security check again.",
+    },
+  ];
+  return m;
+}
+
 // ---------------------------------------------------------------------------
 // WP-G-01 — design registry
 // ---------------------------------------------------------------------------
@@ -114,16 +148,29 @@ test("WP-G-02: suppressed modules yield null pillar scores, never imputed", () =
 test("WP-G-03: v2 report answers A–E with required sections", () => {
   const html = renderReportV2(model());
   // A/B/C — executive scorecard
-  assert.match(html, /A\. Conversion Readiness/);
-  assert.match(html, /B\. Evidence Confidence/);
-  assert.match(html, /C\. Evidence Coverage/);
+  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
+  const headings = ["How ready is your website to convert visitors?", "What should you improve first?", "What is already working?", "What could we not determine?", "Where to find supporting detail"];
+  let previous = -1;
+  for (const heading of headings) {
+    const next = executive.indexOf(heading);
+    assert.ok(next > previous, `executive heading order includes ${heading}`);
+    previous = next;
+  }
+  assert.match(executive, /Conversion Readiness/);
+  assert.match(executive, /Assessment coverage/);
+  assert.match(executive, /Supporting Detail/);
+  assert.equal((executive.match(/What is already working\?/g) || []).length, 1);
+  assert.equal((executive.match(/<strong>Problem:<\/strong>/g) || []).length, (executive.match(/<strong>Why it matters:<\/strong>/g) || []).length);
+  assert.equal((executive.match(/<strong>Problem:<\/strong>/g) || []).length, (executive.match(/<strong>Action:<\/strong>/g) || []).length);
+  assert.ok((executive.match(/<strong>Problem:<\/strong>/g) || []).length <= 3);
+  assert.ok(!/What Is Already Good|render-blocking|largest contentful paint|meta descriptions|partial assessment|evidence capability|supporting capability|JSON-LD|browser validation|Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/i.test(executive));
   // D — pillars
-  assert.match(html, /D\. Where are the problems\?/);
+  assert.match(html, /Where are the problems\?/);
   for (const label of ["Offer &amp; Content", "Trust &amp; Proof", "Conversion Path", "Technical Health", "Performance &amp; Experience"]) {
     assert.ok(html.includes(label), `pillar ${label} present`);
   }
-  // E — blockers
-  assert.match(html, /E\. What should be fixed first\?/);
+  // E — one authoritative client priority sequence
+  assert.match(html, /What should you fix first\?/);
   // Deep evidence layer
   assert.match(html, /Evidence detail/);
   assert.match(html, /Findings/);
@@ -131,53 +178,61 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   assert.match(html, /Evidence capabilities/);
   // CRIT 8a — conversion-path architecture + competitive context are part
   // of the governed section set (rendered from the model, never invented).
-  assert.match(html, /Conversion path architecture/);
+  assert.match(html, /Can visitors move easily from interest to action\?/);
+  assert.match(html, /The assessed path to action is clear, but there are opportunities to make that journey faster and more reassuring\.|The assessed path needs attention before it can be described as clear\.|The available path evidence is incomplete, so a clear route cannot be confirmed\./);
   assert.match(html, /Competitive context/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
   assert.ok(html.includes("Scoring version 4.1.1"));
 });
 
-test("WP-G-03: blocker rows carry priority/problem/consequence/evidence/action/impact/effort/confidence", () => {
-  const html = renderReportV2(model());
-  const rows = html.match(/<tbody>([\s\S]*?)<\/tbody>/g) || [];
-  const blockerRows = rows.find((r) => r.includes("VAN-"));
-  assert.ok(blockerRows, "blocker table exists");
-  const firstFinding = model().findings.find((f) => f.scoreBearing === true);
-  assert.ok(firstFinding, "fixture has score-bearing findings");
-  // Every blocker column family appears: priority number, ruleId evidence,
-  // recommendation text, effort label, confidence value.
-  assert.ok(html.includes(String(firstFinding.finalPriority)));
-  assert.ok(html.includes(firstFinding.ruleId));
-  assert.ok(html.includes(firstFinding.title));
-  assert.ok(html.includes(firstFinding.businessImpact));
-  assert.ok(html.includes(firstFinding.recommendation));
-  assert.ok(html.includes(firstFinding.confidence));
+test("S02: Priority Fixes is one ranked client sequence with bounded fields", () => {
+  const html = renderReportV2(priorityModel());
+  const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  assert.match(blockers, /What should you fix first\?/);
+  assert.match(blockers, /Start with #1 and work down the list\. Supporting Detail contains the deeper evidence and technical checks\./);
+  assert.doesNotMatch(blockers, /These actions follow the governed priority order\./);
+  assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
+  assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
+  for (const label of [
+    "What needs attention",
+    "Why it matters",
+    "What to change",
+    "Where it applies",
+    "How to confirm it improved",
+  ]) {
+    assert.match(blockers, new RegExp(label), `required client field: ${label}`);
+  }
+  const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)">([\s\S]*?)<\/article>/g)];
+  assert.equal(cards.length, 5, "exactly five priority cards are rendered");
+  const ranks = cards.map((match) => Number(match[1]));
+  assert.deepEqual(ranks, [1, 2, 3, 4, 5], "governed plan order is rendered once in rank order");
+  assert.match(cards[0][2], /Start here/);
+  for (const card of cards.slice(1)) assert.doesNotMatch(card[2], /Start here/);
+  assert.match(cards[1][2], /Material uncertainty/);
+  assert.match(cards[4][2], /Some basic browser protections were not detected in the website response we tested\./);
+  assert.match(cards[4][2], /These protections help reduce avoidable security risk in the browser\./);
+  assert.match(cards[4][2], /Ask your developer or hosting provider to add the missing browser protections\./);
+  assert.match(cards[4][2], /Website response tested/);
+  assert.match(cards[4][2], /Run the security check again and confirm the protections are present\./);
+  assert.doesNotMatch(cards[4][2], /assessed response/i);
+  assert.doesNotMatch(blockers, /First Things First|Do Now|Do Next|Action Plan|governed priority order/i);
+  assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 5, "no second action sequence is introduced");
 });
 
-test("P9: conversion workflow diagram wraps complete labels without truncation", () => {
-  const longLabels = [
-    "Landing page discovery and orientation",
-    "Detailed service understanding",
-    "Customer proof and reassurance",
-    "Primary consultation request action",
-    "Completed conversion destination",
-  ];
+test("P9: conversion journey visual presents three complete client stages", () => {
   const fixture = model();
   fixture.conversionPaths = [{
     name: "Primary path",
     status: "Weak",
-    steps: longLabels,
+    steps: ["Internal stage one", "Internal stage two", "Internal stage three"],
     blockers: ["Trust proof is limited"],
   }];
   const html = renderReportV2(fixture);
-  assert.match(html, /viewBox="0 0 1160 190"/);
-  assert.ok(!html.includes("slice(0, 26)"));
-  for (const label of longLabels) {
-    for (const word of label.split(" ")) assert.ok(html.includes(word), `label word is preserved: ${word}`);
-  }
-  assert.equal((html.match(/<rect x="\d+" y="42"/g) || []).length, 5);
-  assert.equal((html.match(/marker-end="url\(#pathArrow\)"/g) || []).length, 4);
+  assert.match(html, /class="conversion-journey-visual"/);
+  assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 3);
+  for (const label of ["Reach the key pages", "See a clear next step", "Move toward action"]) assert.match(html, new RegExp(label));
+  assert.doesNotMatch(html, /Internal stage one|Internal stage two|Internal stage three/);
 });
 
 test("P2: blocker location lists client-owned affected URLs when available", () => {
@@ -185,7 +240,9 @@ test("P2: blocker location lists client-owned affected URLs when available", () 
   const finding = m.findings.find((f) => f.scoreBearing === true);
   finding.affectedUrls = ["https://x.com/services/consulting"];
   const html = renderReportV2(m);
-  assert.match(html, /Affected page: https:\/\/x\.com\/services\/consulting/);
+  const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  assert.match(blockers, /Where it applies/);
+  assert.doesNotMatch(blockers, /https:\/\/x\.com\/services\/consulting/);
 });
 
 test("P2: blocker location falls back to the governed evidence source when no URL is available", () => {
@@ -194,14 +251,60 @@ test("P2: blocker location falls back to the governed evidence source when no UR
   finding.affectedUrls = [];
   finding.evidence = [{ field: "site.imagesMissingAlt" }];
   const html = renderReportV2(m);
-  assert.match(html, /Evidence location: site\.imagesMissingAlt/);
+  const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  assert.match(blockers, /Pages covered by the available evidence|Pages where the issue was detected/);
+  assert.doesNotMatch(blockers, /site\.imagesMissingAlt/);
 });
 
 test("P2: no-action PASS states the current evidence-scope criterion", () => {
   const m = model();
   m.findings = [];
   const html = renderReportV2(m);
-  assert.match(html, /under the current evidence scope, no prioritized action is required/);
+  assert.match(html, /No prioritized action was produced from the available evidence/);
+});
+
+test("S03: conversion journey tells a bounded CRO story", () => {
+  const fixture = model();
+  fixture.conversionPaths = [{
+    name: "Primary conversion path",
+    status: "Clear",
+    steps: [
+      "Browser validation assessed conversion actions on 6 of 6 selected page(s).",
+      "A conversion action was observed on 6 assessed page(s).",
+      "A visible, interactable, unobstructed action was confirmed on 6 assessed page(s).",
+    ],
+    blockers: [],
+  }];
+  fixture.findings = [
+    ...(fixture.findings || []),
+    { ruleId: "VAN-PERF-001" },
+    { ruleId: "VAN-CONTENT-002" },
+  ];
+  const html = renderReportV2(fixture);
+  for (const text of [
+    "Reach the key pages",
+    "See a clear next step",
+    "Move toward action",
+    "Where the journey is strong",
+    "Where visitors may lose momentum",
+    "What this means for conversion",
+    "What to improve around the journey",
+    "Conversion takeaway",
+    "The assessed route is already clear. The best opportunity is not to redesign the path",
+    "What we could not determine",
+    "completed enquiries",
+  ]) assert.match(html, new RegExp(text));
+  assert.match(html, /Main content takes too long to appear on mobile\./);
+  assert.match(html, /Buyer-question content was not found on the pages we could assess\./);
+  assert.equal((html.match(/class="conversion-journey-bridge-card"/g) || []).length, 3);
+  assert.match(html, /What supports this journey\?/);
+  assert.match(html, /Content that answers buyer questions/);
+  assert.match(html, /href="#content-ideas"/);
+  assert.match(html, /Trust that reduces hesitation/);
+  assert.match(html, /href="#trust-eeat"/);
+  assert.match(html, /Performance that keeps momentum/);
+  assert.match(html, /href="#priority-fixes"/);
+  assert.doesNotMatch(html, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
 });
 
 test("WP-G-03: no invented evidence — every displayed ruleId exists in the model", () => {
@@ -248,5 +351,5 @@ test("WP-G-05: v1 renderer still renders the same model (locked path unchanged)"
   assert.ok(v1.length > 0);
   assert.match(v1, /Prysm Phase 1 Audit/);
   // v1 must NOT contain the v2 design markers.
-  assert.doesNotMatch(v1, /D\. Where are the problems\?/);
+  assert.doesNotMatch(v1, /Where are the problems\?/);
 });

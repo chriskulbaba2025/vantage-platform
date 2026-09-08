@@ -59,6 +59,7 @@ const SCORE_GOVERNANCE_FIELDS = Object.freeze([
 ]);
 
 const DETERMINISTIC_ANALYSIS_FIELDS = Object.freeze([
+  "crossReportInterpretation",
   "conversionPaths",
   "readinessMap",
   "contentIdeas",

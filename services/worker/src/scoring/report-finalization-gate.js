@@ -13,6 +13,7 @@ import { SOURCE_STATUS } from "./evidence-contracts.js";
 import { DIAGNOSTIC_CATEGORY } from "./diagnostic-contracts.js";
 import { buildFoundationChecklist } from "../report/foundation-readiness.js";
 import { buildActionPlan } from "../report/action-priority.js";
+import { validateClientTruth } from "../report-model/client-truth-gate.js";
 
 // ---------------------------------------------------------------------------
 // Gate entry point
@@ -37,6 +38,22 @@ export function runFinalizationGate(model, evidence) {
 
   // ── 2. Contradiction detection ──────────────────────────────────────
   _checkContradictions(model, evidence, errors, warnings);
+
+  // Client Truth is the final semantic boundary for client-facing output.
+  // Keep failures attached to the existing finalization gate so renderers
+  // cannot receive an invalid projection.
+  if (model?.crossReportInterpretation) {
+    const clientTruthValidation = validateClientTruth(model.crossReportInterpretation);
+    if (!clientTruthValidation.valid) {
+      for (const error of clientTruthValidation.errors) {
+        errors.push(_err(
+          error.path || "crossReportInterpretation",
+          "client-truth",
+          error.message,
+        ));
+      }
+    }
+  }
 
   // ── 3. Recalculate confidence from actual assessed evidence ──────────
   const recalculatedConfidence = _recalculateConfidence(evidence, model);

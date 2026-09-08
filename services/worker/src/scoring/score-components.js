@@ -6,18 +6,18 @@ import {
 } from "./business-impact-policy.js";
 
 // ---------------------------------------------------------------------------
-// Scoring version (PRD v3.0 §15.1 + PRYSM-NEXT-01 WP-D/WP-J)
+// Scoring version (PRD v3.0 Â§15.1 + PRYSM-NEXT-01 WP-D/WP-J)
 //
 // CHANGELOG
-//   3.0.0 — PRD v3.0 launch scoring (superseded).
-//   4.0.0 — capability-level module eligibility; assessed-weight-weighted
+//   3.0.0 â€” PRD v3.0 launch scoring (superseded).
+//   4.0.0 â€” capability-level module eligibility; assessed-weight-weighted
 //           readiness (CRIT weighting defect corrected); business context
 //           into scoring; page-purpose funnel stages; structural-only
 //           AI-readiness; findings capability-gated; confidence unknown-
 //           factor exclusion.
-//   4.1.0 — validated conversion-path evidence (WP-E): bounded validated
+//   4.1.0 â€” validated conversion-path evidence (WP-E): bounded validated
 //           bonus/penalty, VAN-PATH-001 obstruction finding.
-//   4.1.1 — CRIT integrity fix (unknown ≠ full credit): scoreTechnicalV4
+//   4.1.1 â€” CRIT integrity fix (unknown â‰  full credit): scoreTechnicalV4
 //           meta/images sub-rules are EXCLUDED when their counter inputs
 //           are null/unknown instead of silently granting full points.
 //           Mathematical/eligibility correctness proven by
@@ -48,7 +48,7 @@ export function confidenceBand(score) {
 }
 
 // ---------------------------------------------------------------------------
-// PRD §15.1 — Readiness dimensions and default weights
+// PRD Â§15.1 â€” Readiness dimensions and default weights
 // ---------------------------------------------------------------------------
 
 export const DIMENSIONS = Object.freeze({
@@ -80,7 +80,7 @@ export const DIMENSIONS = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
-// PRD §15.2 — Module definitions with source dependencies
+// PRD Â§15.2 â€” Module definitions with source dependencies
 // ---------------------------------------------------------------------------
 
 /**
@@ -98,7 +98,7 @@ export const DIMENSIONS = Object.freeze({
  *  - scorer:                (site, perf, modelDeps) => 0-100 or null
  */
 export const MODULES = Object.freeze({
-  // ── Conversion Pathways and Offer Clarity (25%) ──────────────────────
+  // â”€â”€ Conversion Pathways and Offer Clarity (25%) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   conversion_paths: {
     id: "conversion_paths",
     dimension: "conversion_pathways",
@@ -118,7 +118,7 @@ export const MODULES = Object.freeze({
     scorer: (_site, _perf, modelDeps) => scoreOfferClarityV4(modelDeps),
   },
 
-  // ── Trust, E-E-A-T, and Risk Reduction (25%) ────────────────────────
+  // â”€â”€ Trust, E-E-A-T, and Risk Reduction (25%) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   trust_signals: {
     id: "trust_signals",
     dimension: "trust_eeat",
@@ -138,7 +138,7 @@ export const MODULES = Object.freeze({
     scorer: (_site, _perf, modelDeps) => scoreRiskReductionV4(modelDeps),
   },
 
-  // ── Content and Funnel Coverage (20%) ────────────────────────────────
+  // â”€â”€ Content and Funnel Coverage (20%) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   content_depth: {
     id: "content_depth",
     dimension: "content_funnel",
@@ -158,7 +158,7 @@ export const MODULES = Object.freeze({
     scorer: (_site, _perf, modelDeps) => scoreFunnelCoverageV4(modelDeps),
   },
 
-  // ── Technical and Performance Readiness (20%) ────────────────────────
+  // â”€â”€ Technical and Performance Readiness (20%) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   technical_hygiene: {
     id: "technical_hygiene",
     dimension: "technical_performance",
@@ -181,7 +181,7 @@ export const MODULES = Object.freeze({
     scorer: (_site, perf, _modelDeps) => scorePerformance(perf),
   },
 
-  // ── Entity, Schema, and AI-Search Readiness (10%) ────────────────────
+  // â”€â”€ Entity, Schema, and AI-Search Readiness (10%) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   schema_entity: {
     id: "schema_entity",
     dimension: "entity_schema_ai",
@@ -203,7 +203,7 @@ export const MODULES = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
-// Source → module index (built once)
+// Source â†’ module index (built once)
 // ---------------------------------------------------------------------------
 
 const _moduleList = Object.values(MODULES);
@@ -217,7 +217,7 @@ export function modulesForSource(sourceKey) {
 }
 
 // ---------------------------------------------------------------------------
-// PRD §15.4 — Confidence modifiers
+// PRD Â§15.4 â€” Confidence modifiers
 // ---------------------------------------------------------------------------
 
 export const CONFIDENCE_MODIFIERS = Object.freeze({
@@ -237,7 +237,7 @@ export const CONFIDENCE_LEVELS = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
-// Individual module scorers (0–100)
+// Individual module scorers (0â€“100)
 // ---------------------------------------------------------------------------
 
 export function scoreTrust(site) {
@@ -289,12 +289,12 @@ export function scorePerformance(performance) {
 }
 
 // ---------------------------------------------------------------------------
-// PRYSM-NEXT-01 WP-D — v4 module scorers
+// PRYSM-NEXT-01 WP-D â€” v4 module scorers
 //
 // Every v4 scorer receives modelDeps = { site, performance, input,
 // capabilities } and executes ONLY under capability-gated eligibility
 // (checkModuleEligibility v2).  Inside an eligible module, false/empty
-// values mean CONFIRMED ABSENCE — unknown evidence was filtered at the gate.
+// values mean CONFIRMED ABSENCE â€” unknown evidence was filtered at the gate.
 // ---------------------------------------------------------------------------
 
 function businessServices(site, input) {
@@ -1801,23 +1801,23 @@ function scoreTechnicalV4({
 }
 
 // ---------------------------------------------------------------------------
-// PRD §15.4 — Finding priority calculation
+// PRD Â§15.4 â€” Finding priority calculation
 // ---------------------------------------------------------------------------
 
 /**
- * PRYSM-V2-REPORT-DEPTH-01 — conversion-first ACTION priority.
+ * PRYSM-V2-REPORT-DEPTH-01 â€” conversion-first ACTION priority.
  *
- * Raw Priority = Conversion Impact           × 0.40
- *              + Business Relevance          × 0.20
- *              + Gap Severity                × 0.15
- *              + Implementation Practicality × 0.15
- *              + Competitive Signal          × 0.10
+ * Raw Priority = Conversion Impact           Ã— 0.40
+ *              + Business Relevance          Ã— 0.20
+ *              + Gap Severity                Ã— 0.15
+ *              + Implementation Practicality Ã— 0.15
+ *              + Competitive Signal          Ã— 0.10
  *
- * Final Priority = Raw Priority × Confidence Modifier   (UNCHANGED)
+ * Final Priority = Raw Priority Ã— Confidence Modifier   (UNCHANGED)
  *
  * This governs recommendation/action ordering only.  Conversion Readiness is
  * produced by the module scorers and DIMENSIONS weights, which are frozen and
- * untouched — no readiness score depends on this function.
+ * untouched â€” no readiness score depends on this function.
  *
  * Superseded weighting (report design v1): 0.30 / 0.25 / 0.20 / 0.15 / 0.10.
  */
@@ -1846,7 +1846,7 @@ export function calculateFindingPriority(fields) {
 }
 
 // ---------------------------------------------------------------------------
-// PRD §16 — Deterministic finding ID
+// PRD Â§16 â€” Deterministic finding ID
 // ---------------------------------------------------------------------------
 
 /**
@@ -1876,27 +1876,27 @@ export function generateFindingId(ruleId, affectedUrls, evidenceRecords) {
 }
 
 // ---------------------------------------------------------------------------
-// PRD §15.5 — Evidence confidence calculation
+// PRD Â§15.5 â€” Evidence confidence calculation
 // ---------------------------------------------------------------------------
 
 /**
  * Calculate evidence confidence from eight factors.
  *
- *  1. source availability   — are required sources present?
- *  2. data completeness      — did we get expected record counts?
- *  3. source validity        — did evidence pass envelope validation?
- *  4. data freshness         — is evidence recent enough?
- *  5. URL matching           — does evidence match the target?
- *  6. cross-source agreement — do independent sources corroborate?
- *  7. competitor relevance   — are competitor comparisons meaningful?
- *  8. rule certainty         — how certain are the rules applied?
+ *  1. source availability   â€” are required sources present?
+ *  2. data completeness      â€” did we get expected record counts?
+ *  3. source validity        â€” did evidence pass envelope validation?
+ *  4. data freshness         â€” is evidence recent enough?
+ *  5. URL matching           â€” does evidence match the target?
+ *  6. cross-source agreement â€” do independent sources corroborate?
+ *  7. competitor relevance   â€” are competitor comparisons meaningful?
+ *  8. rule certainty         â€” how certain are the rules applied?
  *
- * Returns 0–100.
+ * Returns 0â€“100.
  */
 export function calculateEvidenceConfidence(evidence, findings, now = null) {
   const factors = {};
 
-  // 1. Source availability (0–100)
+  // 1. Source availability (0â€“100)
   const sources = [
     { key: "site", required: true },
     { key: "performance", required: true },
@@ -1930,7 +1930,7 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     ? Math.round(sourceScore / sourceCount)
     : 0;
 
-  // 2. Data completeness (0–100; null when unknown — WP-D-12)
+  // 2. Data completeness (0â€“100; null when unknown â€” WP-D-12)
   const completenessScores = [];
   for (const src of sources) {
     const ev = evidence[src.key];
@@ -1942,9 +1942,9 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
   }
   factors.dataCompleteness = completenessScores.length
     ? Math.round(completenessScores.reduce((a, b) => a + b, 0) / completenessScores.length)
-    : null; // unknown — excluded from the weighted average
+    : null; // unknown â€” excluded from the weighted average
 
-  // 3. Source validity (0–100)
+  // 3. Source validity (0â€“100)
   const validityScores = [];
   for (const src of sources) {
     const ev = evidence[src.key];
@@ -1953,14 +1953,14 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     if (status === SOURCE_STATUS.AVAILABLE) validityScores.push(100);
     else if (status === SOURCE_STATUS.PARTIAL) validityScores.push(70);
     else if (status === SOURCE_STATUS.NOT_CONNECTED || status === SOURCE_STATUS.NOT_APPLICABLE) {
-      // Don't penalize — source wasn't expected to deliver
+      // Don't penalize â€” source wasn't expected to deliver
     } else {
       validityScores.push(0);
     }
   }
   // Only score sources that were expected to deliver
   if (validityScores.length === 0) {
-    // All optional sources are not connected — validity is neutral
+    // All optional sources are not connected â€” validity is neutral
     const requiredValid = sources
       .filter((s) => s.required)
       .every((s) => {
@@ -1974,7 +1974,7 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     );
   }
 
-  // 4. Data freshness (0–100)
+  // 4. Data freshness (0â€“100)
   const scoringNow = now ? new Date(now).getTime() : Date.now();
   const freshnessScores = [];
   for (const src of sources) {
@@ -1991,14 +1991,14 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
   }
   factors.dataFreshness = freshnessScores.length
     ? Math.round(freshnessScores.reduce((a, b) => a + b, 0) / freshnessScores.length)
-    : null; // unknown — excluded from the weighted average
+    : null; // unknown â€” excluded from the weighted average
 
-  // 5. URL matching (0–100)
+  // 5. URL matching (0â€“100)
   // Evidence matches when crawl target equals the input URL domain
   const siteTarget = evidence.site?.targetUrl || evidence.site?.domain || "";
   factors.urlMatching = siteTarget ? 100 : null; // Present = match; missing = unknown
 
-  // 6. Cross-source agreement (0–100)
+  // 6. Cross-source agreement (0â€“100)
   // When crawl and performance both available, agreement is higher
   const crawlOk = evidence.site?.sourceStatus === SOURCE_STATUS.AVAILABLE ||
     evidence.site?.sourceStatus === SOURCE_STATUS.PARTIAL;
@@ -2008,19 +2008,19 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
   else if (crawlOk || perfOk) factors.crossSourceAgreement = 60;
   else factors.crossSourceAgreement = 0;
 
-  // 7. Competitor relevance (0–100)
+  // 7. Competitor relevance (0â€“100)
   const competitors = evidence.competitors || [];
   const competitorAvailable = competitors.some(
     (c) => c.status === SOURCE_STATUS.AVAILABLE,
   );
   factors.competitorRelevance = competitorAvailable ? 100
     : competitors.length > 0 ? 40
-    : 50; // neutral — user didn't supply any
+    : 50; // neutral â€” user didn't supply any
 
-  // 8. Rule certainty (0–100)
+  // 8. Rule certainty (0â€“100)
   // Based on finding confidence levels
   if (!findings || findings.length === 0) {
-    factors.ruleCertainty = null; // unknown — excluded from the weighted average
+    factors.ruleCertainty = null; // unknown â€” excluded from the weighted average
   } else {
     const certaintyMap = {
       [CONFIDENCE_LEVELS.DETERMINISTIC]: 100,
@@ -2049,7 +2049,7 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     ruleCertainty: 0.10,
   };
 
-  // WP-D-12 — no silent imputation: unknown factors (null) are excluded from
+  // WP-D-12 â€” no silent imputation: unknown factors (null) are excluded from
   // the weighted average and reported in factorAvailability.
   let totalWeight = 0;
   let weightedSum = 0;
@@ -2065,14 +2065,14 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     totalWeight += weight;
   }
 
-  // All factors unknown ⇒ neutral 50 with empty availability (no evidence to
+  // All factors unknown â‡’ neutral 50 with empty availability (no evidence to
   // prefer either direction).
   const score = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 50;
   return { score: clamp(score), factors, factorAvailability };
 }
 
 // ---------------------------------------------------------------------------
-// Module eligibility check (PRD §15.2)
+// Module eligibility check (PRD Â§15.2)
 // ---------------------------------------------------------------------------
 
 /**
@@ -2080,11 +2080,11 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
  *
  * Two-layer gate:
  *  1. source-level: every declared evidence source must be viable
- *     (AVAILABLE or PARTIAL) — unchanged semantics;
+ *     (AVAILABLE or PARTIAL) â€” unchanged semantics;
  *  2. capability-level: every `requiredCapabilities` entry must have status
  *     AVAILABLE or PARTIAL in the capability map.  Status derivation itself
- *     encodes whether required fields were collected (UNAVAILABLE ⇒ nothing
- *     usable collected; PARTIAL ⇒ some real fields exist), so unknown
+ *     encodes whether required fields were collected (UNAVAILABLE â‡’ nothing
+ *     usable collected; PARTIAL â‡’ some real fields exist), so unknown
  *     evidence can never make a module eligible.
  *
  * Returns { eligible, reason }.
@@ -2127,20 +2127,20 @@ export function checkModuleEligibility(moduleDef, evidence, capabilities) {
     }
 
     reasons.push(
-      `Source "${sourceKey}" status is ${status} — module suppressed`,
+      `Source "${sourceKey}" status is ${status} â€” module suppressed`,
     );
   }
 
   for (const capKey of moduleDef.requiredCapabilities || []) {
     const cap = capabilities?.[capKey];
     if (!cap) {
-      reasons.push(`Capability "${capKey}" not assessed — module suppressed`);
+      reasons.push(`Capability "${capKey}" not assessed â€” module suppressed`);
       continue;
     }
     const status = cap.status;
     if (status !== SOURCE_STATUS.AVAILABLE && status !== SOURCE_STATUS.PARTIAL) {
       reasons.push(
-        `Capability "${capKey}" is ${status} — module suppressed`,
+        `Capability "${capKey}" is ${status} â€” module suppressed`,
       );
     }
   }
@@ -2152,7 +2152,7 @@ export function checkModuleEligibility(moduleDef, evidence, capabilities) {
 }
 
 // ---------------------------------------------------------------------------
-// PRD §16 — Finding contract builder
+// PRD Â§16 â€” Finding contract builder
 // ---------------------------------------------------------------------------
 
 // Rule ID registry
@@ -2160,7 +2160,7 @@ const RULE_PREFIX = "VAN";
 const RULE_VERSION = SCORING_VERSION;
 
 /**
- * Build findings compliant with PRD v3.0 §16.
+ * Build findings compliant with PRD v3.0 Â§16.
  *
  * Each finding includes:
  *  - findingId (deterministic UUID)
@@ -2527,7 +2527,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         ? CONFIDENCE_LEVELS.STRONGLY_SUPPORTED
         : CONFIDENCE_LEVELS.SUPPORTED;
 
-  // ── Crawl-dependent findings ──────────────────────────────────────
+  // â”€â”€ Crawl-dependent findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     if (
     !site.trust.testimonials &&
@@ -2626,7 +2626,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         site.sourceStatus === SOURCE_STATUS.PARTIAL
           ? "Meta descriptions were not detected on some assessed pages, which may reduce control over search-result messaging for those pages; unassessed pages remain unknown."
           : "Missing meta descriptions may reduce control over search-result messaging for these pages.",
-      recommendation: "Write a unique 150–160 character description for each important page",
+      recommendation: "Write a unique 150â€“160 character description for each important page",
       effort: "L",
       conversionImpact: 75,
       gapSeverity: 70,
@@ -2689,7 +2689,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  // ── Performance-dependent findings ────────────────────────────────
+  // â”€â”€ Performance-dependent findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const lcp = performance?.mobile?.metrics?.lcpMs;
   if (Number.isFinite(lcp) && lcp > 4000) {
     add({
@@ -2722,7 +2722,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  // ── Additional crawl-dependent findings ──────────────────────────
+  // â”€â”€ Additional crawl-dependent findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (site.pageCount <= 1 || site.services.length > site.pageCount * 2) {
     add({
@@ -2882,11 +2882,11 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       ],
       absenceFinding: true,
       partialTitle:
-        "Buyer-question content was not detected in the available partial assessment",
+        "Explicit FAQ content was not detected in the available partial assessment",
       partialEvidenceText:
-        "FAQ or common-question content was not detected in the available partial assessment",
+        "No explicit FAQ content was detected in the available partial assessment",
       partialBusinessImpact:
-        "The available partial assessment did not detect buyer-question content on the assessed pages, so some buyer questions may remain unsupported there; unassessed pages remain unknown.",
+        "The available partial assessment did not detect an explicit FAQ on the assessed pages, which may make recurring pre-contact questions less easy to find there. This does not establish whether buyer questions are answered elsewhere; unassessed pages remain unknown.",
       partialConfidence:
         CONFIDENCE_LEVELS.SUPPORTED,
       partialAffectedUrls:
@@ -2894,7 +2894,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       dimension: "content_funnel",
       module: "funnel_coverage",
       title:
-        "No buyer-question content detected",
+        "No explicit FAQ content detected",
       severity: "Medium",
       key: "faq",
       confidence:
@@ -2910,11 +2910,11 @@ export function buildFindings(site, performance, gsc, opts = {}) {
         },
       ],
       evidenceText:
-        "No FAQ or common-question section found",
+        "No explicit FAQ section detected",
       businessImpact:
-        "Missing buyer-question content may leave common objections unresolved before a visitor acts.",
+        "No explicit FAQ was detected in the assessed scope. This may make recurring pre-contact questions less easy to find in one place, but it does not establish that buyer questions are unanswered elsewhere.",
       recommendation:
-        "Add an FAQ based on the questions prospects ask before booking",
+        "Add an FAQ for recurring pre-contact questions that are not already answered clearly elsewhere",
       effort: "M",
       conversionImpact: 55,
       gapSeverity: 45,
@@ -2922,10 +2922,9 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       competitiveSignal: 35,
       implementationPracticality: 65,
       verificationMethod:
-        "Re-crawl and confirm FAQ content is present with structured data where applicable.",
+        "Re-crawl and confirm explicit FAQ content is present on the intended page(s).",
     });
   }
-
   if (!site.trust.pricing) {
     add({
       ruleId: "VAN-TRUST-002",
@@ -2976,7 +2975,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  // ── PRYSM-NEXT-01 WP-E — validated-path findings ────────────────────
+  // â”€â”€ PRYSM-NEXT-01 WP-E â€” validated-path findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pathValidation = capabilities["conversion.path"]?.validationSummary;
   if (pathValidation && (pathValidation.obstructionCount ?? 0) > 0) {
     add({
@@ -3066,7 +3065,7 @@ export function buildFindings(site, performance, gsc, opts = {}) {
     });
   }
 
-  // ── GSC-dependent findings ──────────────────────────────────────────
+  // â”€â”€ GSC-dependent findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (gsc && gsc.sourceStatus === SOURCE_STATUS.AVAILABLE) {
     const gscThreshold = gsc.sufficiency?.threshold || 100;
     const sufficient = gsc.sufficiency?.sufficient !== false;

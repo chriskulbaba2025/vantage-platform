@@ -887,7 +887,7 @@ test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judg
   assert.equal(orchestration.status, "RELEASE_CANDIDATE");
   assert.equal(orchestration.passCount, 1);
   assert.match(html, /id="narrative-layer"/);
-  assert.match(html, /A\. Conversion Readiness/);
+  assert.match(html, /Executive Scorecard/);
   assert.match(html, /Evidence detail/);
   for (const action of judgeExecutionOutput.actionPlan) assert.match(html, new RegExp(action.title));
   assert.equal(await artifactStore.exists(oldNarrativeKey), false, "Narrative v2 must not run/persist the legacy WP9 narrative artifact");

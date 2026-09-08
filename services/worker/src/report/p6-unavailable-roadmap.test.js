@@ -15,6 +15,10 @@ const availableLabProfile = {
 test("P6: unavailable CrUX with available lab data keeps the distinction and supplies a collection path", () => {
   const html = performanceDetailSection({
     evidence: { performance: { sourceStatus: "AVAILABLE", mobile: availableLabProfile, desktop: availableLabProfile, fieldData: {} } },
+    crossReportInterpretation: { version: "1.0.0", constructs: {
+      offerClarity: "Not Assessed", ctaClarity: "Not Assessed", conversionPathClarity: "Not Assessed",
+      trustProof: "Not Assessed", mobileUsability: "Strong", indexability: "Not Assessed",
+    } },
   });
   assert.match(html, /CrUX field data was not available/);
   assert.match(html, /Lab results remain valid as lab evidence/);
