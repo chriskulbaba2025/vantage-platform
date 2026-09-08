@@ -617,6 +617,29 @@ test("V4 scoring version is exposed (PRYSM-NEXT-01 WP-D-08 / WP-E-05 / WP-J: 4.1
   assert.equal(model.capabilityEvidence.capabilityEvidenceVersion, "2.0.0");
 });
 
+test("Client Truth receives normal-path capability and lab-performance evidence", () => {
+  const model = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence(),
+  );
+
+  const truth = model.crossReportInterpretation.truth;
+
+  // Capability evidence keeps offer truth assessed instead of falling back to
+  // the fail-closed unavailable state.
+  assert.notEqual(truth.offerClarity.state, "unavailable");
+
+  // The real lab sample is preserved, while the absent field sample remains
+  // explicitly partial rather than being upgraded to real-user evidence.
+  assert.equal(truth.performanceReadiness.state, "partial");
+  assert.match(truth.performanceReadiness.observation, /desktop lab score 96/);
+  assert.match(truth.performanceReadiness.observation, /mobile lab score 55/);
+  assert.match(
+    truth.performanceReadiness.clientConclusion,
+    /Real-user field performance was not available/,
+  );
+});
+
 // ---------------------------------------------------------------------------
 // B. PRD §15.3 — No silent reweighting / assessed weight
 // ---------------------------------------------------------------------------

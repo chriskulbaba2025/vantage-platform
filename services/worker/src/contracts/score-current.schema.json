@@ -46,7 +46,11 @@
         "tofu": { "$ref": "#/$defs/opportunityRows" },
         "mofu": { "$ref": "#/$defs/opportunityRows" },
         "bofu": { "$ref": "#/$defs/opportunityRows" },
-        "leading": { "$ref": "#/$defs/opportunityRows" }
+        "leading": { "$ref": "#/$defs/opportunityRows" },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
       }
     },
     "opportunityRows": {

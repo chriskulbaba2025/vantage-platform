@@ -464,14 +464,14 @@ test(
     });
 
     for (const required of [
-      "A. Conversion Readiness",
-      "B. Evidence Confidence",
-      "C. Evidence Coverage",
-      "D. Where are the problems?",
-      "E. What should be fixed first?",
-      "Conversion path architecture",
+      "How ready is your website to convert visitors?",
+      "What should you improve first?",
+      "What is already working?",
+      "Where are the problems?",
+      "What should you fix first?",
+      "Can visitors move easily from interest to action?",
       "Competitive context",
-      "Topical Map &amp; Content Opportunities",
+      "What content would help buyers move forward?",
       "Internal-Link Opportunities",
       "Evidence detail",
       "Source statuses",
@@ -601,14 +601,53 @@ test(
     assert.match(first, /@media print/);
     assert.match(first, /narrative-decision-grid/);
 
+    assert.equal(
+      (first.match(/class="narrative-supporting-disclosure"/g) || []).length,
+      1,
+    );
     assert.match(
       first,
-      /id="narrative-action-plan"[^>]*data-viewer-page="priority-fixes"/,
+      /<details class="narrative-supporting-disclosure" data-viewer-page="supporting-detail">\s*<summary>Additional interpretation and evidence context<\/summary>/,
+    );
+    assert.doesNotMatch(first, /narrative-supporting-disclosure"[^>]* open/);
+    const clientBody = first.slice(
+      first.indexOf("<summary>Additional interpretation and evidence context</summary>"),
+      first.indexOf('<div id="narrative-diagnostic-layer"'),
+    );
+    assert.equal((clientBody.match(/class="narrative-summary-block"/g) || []).length, 3);
+    assert.doesNotMatch(clientBody, /class="narrative-actions"/);
+    assert.doesNotMatch(clientBody, /narrative-funnel|narrative-ai-search|narrative-eeat|narrative-competitors/);
+    assert.doesNotMatch(first, /Show deeper diagnostic interpretation/);
+    assert.match(first, /<div id="narrative-diagnostic-layer" class="narrative-diagnostic-layer" data-audit-only="true" hidden aria-hidden="true">/);
+    assert.doesNotMatch(first, /narrative-diagnostic-layer[^>]*<summary/);
+    assert.match(first, /id="narrative-action-plan"[^>]*data-viewer-page="supporting-detail"/);
+    assert.match(first, /id="narrative-funnel"[^>]*data-viewer-page="supporting-detail"/);
+    assert.match(first, /id="narrative-ai-search"[^>]*data-viewer-page="supporting-detail"/);
+    assert.match(first, /id="narrative-eeat"[^>]*data-viewer-page="supporting-detail"/);
+    assert.match(first, /id="narrative-competitors"[^>]*data-viewer-page="supporting-detail"/);
+    assert.doesNotMatch(
+      first,
+      /<details class="narrative-supporting-disclosure"(?! data-viewer-page="supporting-detail")/,
     );
 
     assert.match(
       first,
-      /id="narrative-content"[^>]*data-viewer-page="content-ideas"/,
+      /id="narrative-action-plan"[^>]*data-viewer-page="supporting-detail"/,
+    );
+
+    assert.match(
+      first,
+      /id="narrative-root-cause"[^>]*data-viewer-page="supporting-detail"/,
+    );
+
+    assert.match(
+      first,
+      /id="narrative-conversion"[^>]*data-viewer-page="supporting-detail"/,
+    );
+
+    assert.match(
+      first,
+      /id="narrative-content"[^>]*data-viewer-page="supporting-detail"/,
     );
 
     assert.match(

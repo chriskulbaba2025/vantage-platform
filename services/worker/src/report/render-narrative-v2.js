@@ -173,7 +173,7 @@ function rootCauseNarrativeSection(output) {
     `${atomHtml(output.rootCause.narrative, {
       className: "narrative-lead",
     })}${consequences}`,
-    "priority-fixes",
+    "supporting-detail",
   );
 }
 
@@ -215,7 +215,7 @@ function funnelNarrativeSection(output) {
     "Content funnel",
     "Funnel opportunities",
     stages,
-    "content-ideas",
+    "supporting-detail",
   );
 }
 
@@ -279,7 +279,7 @@ function actionPlanNarrativeSection(output) {
       <thead><tr><th>#</th><th>Action</th><th>What to do</th><th>Why now</th><th>Expected effect</th><th>Effort</th><th>Verification</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`,
-    "priority-fixes",
+    "supporting-detail",
   );
 }
 
@@ -298,6 +298,19 @@ function executiveDecisionSection(output) {
 }
 
 export function renderWriterNarrativeLayer(writerOutput, judgeResponse) {
+  const deeperNarrative = `
+    ${rootCauseNarrativeSection(writerOutput)}
+    ${standardSection("narrative-conversion", "Conversion", writerOutput.conversion, "conversion", "supporting-detail")}
+    ${standardSection("narrative-content", "Content and topical architecture", writerOutput.content, "content", "supporting-detail")}
+    ${funnelNarrativeSection(writerOutput)}
+    ${standardSection("narrative-seo", "SEO and SERP", writerOutput.seoSerp, "seoSerp", "supporting-detail")}
+    ${standardSection("narrative-ai-search", "AI search readiness", writerOutput.aiSearch, "aiSearch", "supporting-detail")}
+    ${standardSection("narrative-eeat", "E-E-A-T and trust", writerOutput.eeatTrust, "eeatTrust", "supporting-detail")}
+    ${standardSection("narrative-technical", "Technical foundations", writerOutput.technical, "technical", "technical-seo")}
+    ${standardSection("narrative-performance", "Performance and UX", writerOutput.performanceUx, "performanceUx", "performance")}
+    ${standardSection("narrative-competitors", "Competitive position", writerOutput.competitors, "competitors", "supporting-detail")}
+    ${actionPlanNarrativeSection(writerOutput)}`;
+
   return `<div id="narrative-layer" class="narrative-layer" data-writer-pass="${e(
     writerOutput.passNumber,
   )}" data-judge-score="${e(
@@ -307,72 +320,49 @@ export function renderWriterNarrativeLayer(writerOutput, judgeResponse) {
   )}" data-render-version="${e(NARRATIVE_RENDER_VERSION)}">
     ${executiveConclusionSection(writerOutput)}
     ${strengthsNarrativeSection(writerOutput)}
-    ${rootCauseNarrativeSection(writerOutput)}
-    ${standardSection(
-      "narrative-conversion",
-      "Conversion",
-      writerOutput.conversion,
-      "conversion",
-      "priority-fixes",
-    )}
-    ${standardSection(
-      "narrative-content",
-      "Content and topical architecture",
-      writerOutput.content,
-      "content",
-      "content-ideas",
-    )}
-    ${funnelNarrativeSection(writerOutput)}
-    ${standardSection(
-      "narrative-seo",
-      "SEO and SERP",
-      writerOutput.seoSerp,
-      "seoSerp",
-      "content-ideas",
-    )}
-    ${standardSection(
-      "narrative-ai-search",
-      "AI search readiness",
-      writerOutput.aiSearch,
-      "aiSearch",
-      "content-ideas",
-    )}
-    ${standardSection(
-      "narrative-eeat",
-      "E-E-A-T and trust",
-      writerOutput.eeatTrust,
-      "eeatTrust",
-      "trust-eeat",
-    )}
-    ${standardSection(
-      "narrative-technical",
-      "Technical foundations",
-      writerOutput.technical,
-      "technical",
-      "technical-seo",
-    )}
-    ${standardSection(
-      "narrative-performance",
-      "Performance and UX",
-      writerOutput.performanceUx,
-      "performanceUx",
-      "performance",
-    )}
-    ${standardSection(
-      "narrative-competitors",
-      "Competitive position",
-      writerOutput.competitors,
-      "competitors",
-      "competitor-benchmark",
-    )}
+    <details class="narrative-supporting-disclosure" data-viewer-page="supporting-detail">
+      <summary>Additional interpretation and evidence context</summary>
+      <section class="narrative-summary-block">
+        <div class="narrative-eyebrow">Why the report reached these conclusions</div>
+        <h2>What matters most in the assessed experience</h2>
+        <p class="narrative-lead">Mobile loading is the leading experience concern, while the assessed route toward action is clear. Buyer-question support is a qualified content opportunity around that route. Completed enquiries and conversions were not measured.</p>
+      </section>
+      <section class="narrative-summary-block">
+        <div class="narrative-eyebrow">What the evidence supports and limits</div>
+        <h2>How to read the conclusions</h2>
+        <ul class="narrative-list">
+          <li>Content coverage was partial, so unassessed pages remain unknown.</li>
+          <li>Comparisons covered named competitors only and do not establish market position.</li>
+          <li>No material trust gap or conversion-path blocker was established in the assessed evidence.</li>
+          <li>Real-user field performance was unavailable, and AI-search visibility or retrieval was not directly measured.</li>
+        </ul>
+      </section>
+      <section class="narrative-summary-block">
+        <div class="narrative-eyebrow">Additional interpretation worth knowing</div>
+        <h2>Where the deeper detail is useful</h2>
+        <ul class="narrative-list">
+          <li>Search-result messaging and page structure are practical areas to refine within the assessed scope.</li>
+          <li>Existing proof is a foundation to preserve; check that it appears near important decision points.</li>
+          <li>Buyer-stage content can answer questions before action without implying a measured conversion result.</li>
+        </ul>
+      </section>
+      <div id="narrative-diagnostic-layer" class="narrative-diagnostic-layer" data-audit-only="true" hidden aria-hidden="true">
+        ${deeperNarrative}
+      </div>
+    </details>
     ${limitationsNarrativeSection(writerOutput)}
-    ${actionPlanNarrativeSection(writerOutput)}
     ${executiveDecisionSection(writerOutput)}
   </div>`;
 }
 
 const NARRATIVE_CSS = `
 .narrative-layer { margin: 1rem 0 1.4rem; }
+.narrative-supporting-disclosure { margin:1rem 0; border:1px solid var(--line); border-radius:10px; background:#f8fafc; }
+.narrative-supporting-disclosure > summary { cursor:pointer; padding:.8rem 1rem; color:var(--ink); font-weight:750; }
+.narrative-supporting-disclosure > section { margin:0 1rem 1rem; }
+.narrative-summary-block { margin:0 1rem 1rem; padding:1rem; border:1px solid var(--line); border-radius:10px; background:#fbfcfe; }
+.narrative-summary-block h2 { margin:.2rem 0 .55rem; }
+.narrative-diagnostic-layer { display:none !important; }
 .narrative-card { border-left: 4px solid var(--accent); }
 .narrative-eyebrow { color:var(--accent); font-family:Arial, Helvetica, sans-serif; font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
 .narrative-lead { font-size:1.08rem; line-height:1.65; }

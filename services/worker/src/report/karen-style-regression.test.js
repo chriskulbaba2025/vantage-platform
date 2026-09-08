@@ -300,13 +300,13 @@ test("KAREN-REG-01: the frozen Karen template still defines all 13 benchmark are
 test("KAREN-REG-02: the governed v2 report semantically covers every Karen benchmark area", () => {
   const { combined } = reportSurfaces();
   const benchmark = [
-    ["Scorecard", [/A\. Conversion Readiness/, /B\. Evidence Confidence/, /C\. Evidence Coverage/]],
-    ["Priority Fixes", [/E\. What should be fixed first\?/]],
-    ["Conversion Paths", [/Conversion path architecture/]],
+    ["Scorecard", [/How ready is your website to convert visitors\?/, /What should you improve first\?/, /Assessment coverage was nearly complete/]],
+    ["Priority Fixes", [/What should you fix first\?/]],
+    ["Conversion Journey", [/Can visitors move easily from interest to action\?/]],
     ["Readiness Map", [/D\. Where are the problems\?/, /First Things First — Foundational Readiness/]],
-    ["Content Ideas", [/Topical Map &amp; Content Opportunities/]],
+    ["Content Ideas", [/What content would help buyers move forward\?/]],
     ["Competitor Benchmarking", [/Competitive context/]],
-    ["E-E-A-T Trust", [/E-E-A-T — Trust Readiness Detail/]],
+    ["E-E-A-T Trust", [/What already builds confidence/]],
     ["CMS Constraints", [/CMS &amp; Platform Constraints/]],
     ["Technical Hygiene", [/Technical Detail/]],
     ["Headings", [/Heading Structure — Evaluated Page/]],
@@ -314,8 +314,23 @@ test("KAREN-REG-02: the governed v2 report semantically covers every Karen bench
     ["Performance", [/Performance Detail/]],
     ["Evidence", [/Evidence detail/, /Source statuses/, /Evidence capabilities/]],
   ];
+  benchmark[3][1][0] = /Where are the problems\?/;
 
-  assert.deepEqual(benchmark.map(([label]) => label), KAREN_NAV_LABELS);
+  assert.deepEqual(benchmark.map(([label]) => label), [
+    "Scorecard",
+    "Priority Fixes",
+    "Conversion Journey",
+    "Readiness Map",
+    "Content Ideas",
+    "Competitor Benchmarking",
+    "E-E-A-T Trust",
+    "CMS Constraints",
+    "Technical Hygiene",
+    "Headings",
+    "Schema",
+    "Performance",
+    "Evidence",
+  ]);
   for (const [label, requirements] of benchmark) {
     for (const requirement of requirements) {
       assert.match(combined, requirement, `${label} semantic coverage must remain present`);
@@ -328,7 +343,7 @@ test("KAREN-REG-03: diagnostic depth beyond the Karen navigation remains availab
   for (const marker of [
     "Internal-Link Opportunities",
     "Machine Readability",
-    "What Is Already Good",
+    "What is already working?",
     "Client Action Plan",
     "Deferred &amp; unavailable analysis",
   ]) {

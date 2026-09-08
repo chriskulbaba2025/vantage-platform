@@ -1,10 +1,20 @@
 import { e, severityClass, scoreCard, section, table } from "./html-helpers.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
-import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
+import {
+  requireClientTruth,
+  requireCrossReportInterpretation,
+} from "../report-model/cross-report-interpretation.js";
+
+function interpretationFor(model) {
+  return model?.crossReportInterpretation?.version === "2.0.0"
+    ? requireClientTruth(model)
+    : requireCrossReportInterpretation(model);
+}
+
 
 function scorecard(model) {
   const { scores, bands, evidenceConfidenceScore, rootCause, evidence } = model;
-  const interpretation = requireCrossReportInterpretation(model);
+  const interpretation = interpretationFor(model);
   const site = evidence.site;
 
   const assessedWeight = model.assessedWeight ?? 100;
@@ -101,7 +111,7 @@ function competitorBenchmark(model) {
     : '<div class="note"><strong>Limitation:</strong> No competitor URLs were supplied. The audit continued without a competitor benchmark.</div>';
 
   const comparisons = competitors.comparisons || [];
-  const interpretation = requireCrossReportInterpretation(model);
+  const interpretation = interpretationFor(model);
   const headers = ["Signal", site.domain, ...comparisons.map((competitor) => competitor.name)];
   const value = (label, target, key) => [e(label), e(target), ...comparisons.map((competitor) => e(competitor[key] || "Unavailable"))];
   const rows = [

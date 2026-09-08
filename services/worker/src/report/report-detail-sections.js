@@ -18,7 +18,16 @@
 import { FOUNDATION_STATUS } from "./foundation-readiness.js";
 import { ACTION_CLASS, ACTION_GROUP } from "./action-priority.js";
 import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
-import { requireCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
+import {
+  requireClientTruth,
+  requireCrossReportInterpretation,
+} from "../report-model/cross-report-interpretation.js";
+
+function interpretationFor(model) {
+  return model?.crossReportInterpretation?.version === "2.0.0"
+    ? requireClientTruth(model)
+    : requireCrossReportInterpretation(model);
+}
 
 function e(value) {
   return String(value ?? "")
@@ -117,7 +126,7 @@ export function foundationSection(checklist) {
   }, {});
 
   return `
-  <section id="foundations" class="card">
+  <section id="foundations" class="card" data-supporting-section="foundations">
     <h2>First Things First — Foundational Readiness</h2>
     <p class="muted small">Before optimizing content and conversion, these fundamentals need to be in place.
       An item is marked FINDING only when collected evidence proves a deficiency; where evidence was
@@ -128,10 +137,10 @@ export function foundationSection(checklist) {
       ${e(counts[FOUNDATION_STATUS.NOT_ASSESSED] || 0)} unavailable ·
       ${e(counts[FOUNDATION_STATUS.NOT_APPLICABLE] || 0)} not applicable
     </p>
-    <div class="table-wrap"><table>
+    <details class="supporting-detail-disclosure"><summary>Show full foundational assessment</summary><div class="table-wrap"><table>
       <thead><tr><th>Foundation</th><th>Status</th><th>What the evidence shows</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>
+    </table></div></details>
   </section>`;
 }
 
@@ -262,12 +271,12 @@ export function eeatSection(model) {
       const observedLabels = (Array.isArray(flags) ? flags : [flags])
         .filter((flag) => trust[flag] === true)
         .map((flag) => ({
-          policies: "policy or terms content",
+          policies: "Policy or terms content",
           pricing: "pricing or investment context",
-          credentials: "named credentials, qualifications, or expertise proof",
-          caseStudies: "case studies, examples, or documented outcomes",
-          testimonials: "independent validation such as testimonials",
-          contact: "clear contact information and next-step expectations",
+          credentials: "Named credentials, qualifications, or expertise proof",
+          caseStudies: "Case studies, examples, or documented outcomes",
+          testimonials: "Independent validation such as testimonials",
+          contact: "Clear contact information and next-step expectations",
         })[flag] || flag);
       if (!trustAssessed) {
         return `<tr>
@@ -287,11 +296,12 @@ export function eeatSection(model) {
           ? "PASS"
           : "FINDING";
 
-      const observedEvidence = observedLabels.join("; ");
+      const observedEvidence = observedLabels.join(observedLabels.length > 1 ? " and " : "");
+      const pluralObserved = observedLabels.length > 1 || [flags].flat().some((flag) => ["credentials", "caseStudies", "contact"].includes(flag));
       const detail = present
         ? trustPartial
-          ? `${e(observedEvidence)} was observed in the available partial assessment.`
-          : `${e(observedEvidence)} was observed.`
+          ? `${e(observedEvidence)} ${pluralObserved ? "were" : "was"} observed in the available partial assessment.`
+          : `${e(observedEvidence)} ${pluralObserved ? "were" : "was"} observed.`
         : trustPartial
           ? `${e(
               evidenceLabel,
@@ -372,7 +382,14 @@ export function eeatSection(model) {
     ? `<ul>${foundSignals
         .map(
           (signal) =>
-            `<li>${e(signal)}${
+            `<li>${e(({
+              credentials: "Credentials and qualifications",
+              caseStudies: "Case studies and documented outcomes",
+              testimonials: "Testimonials and client validation",
+              contact: "Contact information",
+              policies: "Policies and terms",
+              pricing: "Pricing or investment context",
+            })[signal] || signal)}${
               trustPartial
                 ? " — observed within partial coverage"
                 : ""
@@ -405,18 +422,37 @@ export function eeatSection(model) {
             }</li>`,
         )
         .join("")}</ul>`
-    : '<p class="small">No material governed trust finding was produced from the assessed evidence.</p>';
+    : '<p class="small">No material trust finding was produced from the assessed evidence.</p>';
 
-  return `
-  <section id="eeat" class="card">
-    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can a buyer find enough proof to feel confident taking the next step?</p>
+  const proofGroups = [
+    ["Experience and results", trust.caseStudies === true, "Case studies or documented outcomes were observed."],
+    ["Expertise", trust.credentials === true, "Credentials, qualifications, or certifications were observed."],
+    ["Independent proof", trust.testimonials === true, "Testimonials or client validation were observed."],
+    ["Risk reduction", [trust.contact, trust.policies, trust.pricing].some((value) => value === true), "Contact information, policies or terms, and pricing or investment context were observed."],
+  ];
+  const primaryVerdict = !trustAssessed
+    ? "Trust-proof page content was not available, so the assessment cannot establish whether enough visible proof is present."
+    : trustPartial
+      ? "The assessed trust foundation is useful, but content coverage is partial. Observed proof is retained; unobserved proof remains unknown."
+      : "The assessed site has a useful trust foundation. The main opportunity is not adding proof for its own sake, but making sure the right proof appears where buyers need reassurance before acting.";
+  const confidenceNote = trustPartial
+    ? "The available trust-proof assessment is partial, so no conclusion is made about unobserved signals or pages."
+    : "No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.";
+  const limitation = trustComplete
+    ? "This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources."
+    : trustPartial
+      ? "Trust-proof content coverage was incomplete. Observed proof is retained, but unobserved proof is not treated as established absence."
+      : "Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.";
+
+  const rendered = `
+  <section id="eeat" class="card" data-supporting-section="trust-evidence">
+    <p class="muted small">Trust &amp; Credibility</p>
+    <h2>Can buyers find enough proof to feel confident taking the next step?</h2>
+    <p class="trust-verdict">${e(primaryVerdict)}</p>
     <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>
 
-    <h3>Governed E-E-A-T dimensions</h3>
-    <div class="pillar-grid">${dimensionCards}</div>
-
-    <h3>Confidence verdict</h3>
-    <p>${e(verdict)}</p>
+    <h3>What already builds confidence</h3>
+    <div class="pillar-grid">${proofGroups.map(([title, present, copy]) => `<div class="pillar"><h4>${e(title)}</h4><p class="small">${e(present ? copy : "This proof signal was not established in the assessed content.")}</p></div>`).join("")}</div>
 
     <h3>Buyer trust questions</h3>
     <div class="table-wrap"><table>
@@ -467,6 +503,13 @@ export function eeatSection(model) {
             )}</span> Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.</p>`
     }
   </section>`;
+  return rendered
+    .replace(/<p class="muted small">Trust, E-E-A-T[\s\S]*?<\/p>/, "")
+    .replace(/<h3>How confidence should build<\/h3>[\s\S]*?<h3>Where confidence breaks down<\/h3>/, "<h3>Where confidence may still need strengthening</h3><p>No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.</p>")
+    .replace(/<p>No checked trust-proof signal was absent from the assessed content\.<\/p>/, "")
+    .replace(/<h3>Proof already available but underused<\/h3>/, "<h3>Proof already available</h3>")
+    .replace(/<h3>Material trust findings<\/h3>[\s\S]*?<h3>Assessment limitations<\/h3>/, "<h3>What to check or improve first</h3><ol class=\"trust-actions\"><li>Keep the existing proof assets.</li><li>Check that testimonials, case studies, credentials, pricing or investment context, and reassurance appear near the pages and actions where buyers make decisions.</li><li>Add or reposition proof only where that page-level review shows a real gap.</li></ol><h3>Assessment limitations</h3>")
+    + `<section id="eeat-detail" class="card" data-supporting-section="trust-evidence"><p class="muted small">Supporting Detail</p><h2>E-E-A-T Trust Readiness Detail</h2><details class="supporting-detail-disclosure"><summary>Show detailed trust dimensions</summary><h3>Governed E-E-A-T dimensions</h3><div class="pillar-grid">${dimensionCards}</div><h3>Detailed trust interpretation</h3><p>${e(verdict)}</p>${findingBlock}</details></section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -815,7 +858,7 @@ export function technicalDetailSection(model) {
         : "PRYSM could not establish a dependable technical SEO verdict because the required crawl and technical evidence was unavailable.";
 
   return `
-  <section id="technical" class="card">
+  <section id="technical" class="card" data-supporting-section="search-technical-evidence">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can search engines reliably discover, understand, and trust your important pages?</p>
     <p class="muted small">Technical SEO Hygiene · Technical Detail</p>
     <!-- Not Assessed compatibility anchor -->
@@ -841,6 +884,7 @@ export function technicalDetailSection(model) {
         : "<p>No material blocker was established from the fully assessed technical evidence.</p>"
     }
 
+    <details class="supporting-detail-disclosure"><summary>Show evaluated-page and coverage evidence</summary>
     <h3>Evaluated-page technical health</h3>
     ${
       priorityPages.length
@@ -868,6 +912,8 @@ export function technicalDetailSection(model) {
       <tbody>${coverageRows}</tbody>
     </table></div>
 
+    </details>
+
     <h3>Material findings</h3>
     ${
       material.length
@@ -884,7 +930,7 @@ export function technicalDetailSection(model) {
         : "<p>No material technical finding was created from fully assessed coverage.</p>"
     }
 
-    <h3>Server &amp; security headers</h3>
+    <details class="supporting-detail-disclosure"><summary>Show server and security-header evidence</summary><h3>Server &amp; security headers</h3>
     <div class="table-wrap"><table>
       <thead>
         <tr>
@@ -894,7 +940,7 @@ export function technicalDetailSection(model) {
         </tr>
       </thead>
       <tbody>${headerRows}</tbody>
-    </table></div>
+    </table></div></details>
 
     <h3>Secondary observations</h3>
     <p class="small">Technical metrics and counts are supporting evidence, not conclusions by themselves. Items such as HTTP→HTTPS validation, redirect chains/loops, mixed content, compression diagnostics, material JavaScript errors, and Open Graph metadata are only stated when corresponding evidence exists in the report model.</p>
@@ -957,7 +1003,7 @@ export function headingSection(model) {
     relevantPages.length === 0
   ) {
     return `
-    <section id="headings" class="card">
+    <section id="headings" class="card" data-supporting-section="search-technical-evidence">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your important pages structured clearly for visitors and search engines?</p>
       <p class="muted small">Heading &amp; Semantic Structure · Heading Structure — Evaluated Page</p>
       <!-- Not Assessed compatibility anchor -->
@@ -1156,9 +1202,9 @@ export function headingSection(model) {
         relevantPages.length
       } relevant evaluated page${
         relevantPages.length === 1
-          ? ""
-          : "s"
-      } has a primary-heading issue that merits review.`
+          ? " has"
+          : "s have"
+      } a primary-heading issue that merits review.`
     : `The ${
         relevantPages.length
       } relevant evaluated page${
@@ -1168,13 +1214,14 @@ export function headingSection(model) {
       } shown here each has one observed H1, providing a clear primary semantic signal.`;
 
   return `
-  <section id="headings" class="card">
+  <section id="headings" class="card" data-supporting-section="search-technical-evidence">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your important pages structured clearly for visitors and search engines?</p>
     <p class="muted small">Heading &amp; Semantic Structure · Heading Structure — Evaluated Page</p>
 
     <h3>Direct answer</h3>
     <p>${e(verdict)}</p>
 
+    <details class="supporting-detail-disclosure"><summary>Show evaluated-page heading evidence</summary>
     <h3>Relevant evaluated-page heading health</h3>
     <div class="table-wrap"><table>
       <thead>
@@ -1244,6 +1291,8 @@ export function headingSection(model) {
             .join("")}</ul>`
         : "<p>No relevant page met the simple one-H1 supporting condition.</p>"
     }
+
+    </details>
 
     <h3>Secondary observations</h3>
     <p class="small">Raw H1/H2/H3 counts support the assessment but do not determine page quality on their own. Low-value utility URLs are excluded from this presentation when identifiable from their URL.</p>
@@ -1508,7 +1557,7 @@ export function schemaSection(model) {
           : "The fully assessed pages did not expose structured-data types, so search systems must rely more heavily on ordinary page content and links to understand the business and its offers.";
 
   return `
-  <section id="schema" class="card">
+  <section id="schema" class="card" data-supporting-section="search-technical-evidence">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can search engines clearly understand who you are and what you offer?</p>
     <p class="muted small">Schema &amp; Entity Clarity · Schema &amp; Entity Signals</p>
 
@@ -1517,6 +1566,7 @@ export function schemaSection(model) {
       directAnswer,
     )}</p>
 
+    <details class="supporting-detail-disclosure"><summary>Show structured-data and entity evidence</summary>
     <h3>Observed structured data</h3>
     ${observedBlock}
 
@@ -1582,6 +1632,8 @@ export function schemaSection(model) {
         )
         .join("")}</tbody>
     </table></div>
+
+    </details>
 
     <h3>Entity relationship view</h3>
     <div style="overflow-x:auto;margin:16px 0">
@@ -1770,12 +1822,12 @@ function deviceCard(label, data) {
 }
 
 export function performanceDetailSection(model) {
-  const interpretation = requireCrossReportInterpretation(model);
+  const interpretation = interpretationFor(model);
   const perf =
     model?.evidence?.performance;
 
   if (!perf) {
-    return `<section id="performance" class="card">
+    return `<section id="performance" class="card" data-supporting-section="performance-accessibility">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your most important pages fast enough for visitors?</p>
       <p class="muted small">Performance · Performance Detail</p>
       <p><span class="chip cap-neutral">UNAVAILABLE</span> No performance evidence was collected. PRYSM cannot conclude that the site is fast or slow from missing evidence.</p>
@@ -2047,7 +2099,7 @@ export function performanceDetailSection(model) {
       : [];
 
   return `
-  <section id="performance" class="card">
+  <section id="performance" class="card" data-supporting-section="performance-accessibility">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Are your most important pages fast enough for visitors?</p>
     <p class="muted small">Performance · Performance Detail</p>
 
@@ -2055,6 +2107,7 @@ export function performanceDetailSection(model) {
     <p>${e(
       verdict,
     )}</p>
+    ${fieldKeys.length === 0 ? '<p class="small"><strong>Evidence limitation:</strong> Real-user field performance data was unavailable. The performance conclusion therefore relies on lab measurements; this does not establish real-user field performance.</p>' : ""}
 
     <h3>Priority-page mobile / desktop performance</h3>
     <div class="table-wrap"><table>
@@ -2079,10 +2132,11 @@ export function performanceDetailSection(model) {
             1
               ? " was"
               : "s were"
-          } returned. The summary above presents the governed mobile/desktop profiles; raw page-result provenance remains secondary evidence.</p>`
+          } returned. The summary above presents the tested mobile/desktop profiles; detailed page results remain secondary evidence.</p>`
         : ""
     }
 
+    <details class="supporting-detail-disclosure"><summary>Show detailed performance evidence</summary>
     <h3>What does the visitor actually experience?</h3>
     <p class="small">${PERFORMANCE_METRIC_DEFINITIONS} These are lab measurements, not real-user field performance. They support the conclusion; they are not the conclusion.</p>
 
@@ -2137,7 +2191,7 @@ export function performanceDetailSection(model) {
                 }</li>`,
             )
             .join("")}</ul>`
-        : "<p>No material governed performance finding was produced from the assessed evidence.</p>"
+        : "<p>No material performance finding was produced from the assessed evidence.</p>"
     }
 
     <h3>Rendering integrity</h3>
@@ -2174,30 +2228,17 @@ export function performanceDetailSection(model) {
           : "<p>Rendering integrity was assessed and no diagnostic was raised.</p>"
     }
 
+    </details>
+
     <h3>Partial or unavailable evidence</h3>
-    ${
-      (
-        perf.limitations ||
-        []
-      ).length
-        ? `<ul>${(
-            perf.limitations ||
-            []
-          )
-            .map(
-              (
-                limitation,
-              ) =>
-                `<li>${e(
-                  limitation,
-                )}</li>`,
-            )
-            .join("")}</ul>`
+    ${fieldKeys.length === 0
+      ? `<p class="small"><strong>Evidence limitation:</strong> Real-user field performance data was unavailable. The performance conclusion therefore relies on lab measurements; this does not establish real-user field performance.</p>
+         <details class="supporting-detail-disclosure"><summary>Show detailed performance limitations</summary>${(perf.limitations || []).length ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>` : "<p>No additional limitation detail was recorded.</p>"}</details>`
+      : (perf.limitations || []).length
+        ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>`
         : performancePartial
           ? '<p><span class="chip cap-neutral">PARTIAL</span> At least one performance source or tested profile had incomplete coverage. Available measurements remain valid within that scope.</p>'
-          : fieldKeys.length
-            ? "<p>No additional provider limitation was recorded.</p>"
-            : "<p>Field performance was unavailable. This limits conclusions about real-user experience but does not invalidate the available lab measurements.</p>"
+          : "<p>No additional evidence limitation was recorded.</p>"
     }
   </section>`;
 }
@@ -2439,7 +2480,7 @@ export function accessibilityMobileSection(model) {
           : "PRYSM does not have enough accessibility or mobile-usability evidence in the current report model to make a readiness judgment.";
 
   return `
-  <section id="accessibility-mobile" class="card">
+  <section id="accessibility-mobile" class="card" data-supporting-section="performance-accessibility">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Can visitors comfortably understand, navigate, and act on your site?</p>
     <p class="muted small">Accessibility &amp; Mobile Usability Readiness</p>
 
@@ -2468,7 +2509,7 @@ export function accessibilityMobileSection(model) {
         : "<p>No material barrier was established from fully assessed evidence currently available.</p>"
     }
 
-    <h3>Coverage notes</h3>
+    <details class="supporting-detail-disclosure"><summary>Show detailed accessibility and mobile evidence</summary><h3>Coverage notes</h3>
     <div class="table-wrap"><table>
       <thead>
         <tr>
@@ -2508,7 +2549,7 @@ export function accessibilityMobileSection(model) {
           </tr>`,
         )
         .join("")}</tbody>
-    </table></div>
+    </table></div></details>
 
     ${
       unavailable.length
@@ -2564,7 +2605,7 @@ export function machineReadinessSection(model) {
       : UNAVAILABLE;
 
   return `
-  <section id="machine-readiness" class="card">
+  <section id="machine-readiness" class="card" data-supporting-section="search-technical-evidence">
     <h2>Machine Readability</h2>
     <p class="muted small">This measures how readable the site's structure is to automated systems —
       structured data, heading hierarchy, and content depth. It is a structural machine-readability signal
@@ -2843,11 +2884,12 @@ export function actionPlanSection(plan, checklist) {
       );
 
   return `
-  <section id="action-plan" class="card">
+  <section id="action-plan" class="card" data-supporting-section="conversion-content-evidence">
     <h2>Client Action Plan</h2>
 
-    <p class="muted small">Derived from the same governed priorities as Section E. Sequence only — no business
-      outcome, revenue figure, or performance projection is stated.</p>
+    <p class="small">Implementation detail follows the same existing priority order shown in <a href="#priority-fixes">Priority Fixes</a>. This section adds verification detail; it does not create a second action sequence.</p>
+
+    <details class="supporting-detail-disclosure"><summary>Show detailed implementation sequence</summary>
 
     ${
       foundationsToFix.length
@@ -2877,6 +2919,7 @@ export function actionPlanSection(plan, checklist) {
             .join("")}</ul>`
         : '<p class="small">No verification step is available because no score-bearing action was produced.</p>'
     }
+    </details>
   </section>`;
 }
 
@@ -2905,13 +2948,13 @@ const PHASE_2_ITEMS = [
 
 export function phase2Section() {
   return `
-  <section id="phase2" class="card">
+  <section id="phase2" class="card" data-supporting-section="evidence-limitations">
     <h2>Beyond This Audit — Outside Phase 1 Scope</h2>
 
     <p class="muted small">These areas were outside the scope of this audit. They are listed so the scope is explicit;
       nothing below is a finding, and none of them affects the Conversion Readiness score.</p>
 
-    <div class="table-wrap"><table>
+    <details class="supporting-detail-disclosure"><summary>Show areas outside this assessment</summary><div class="table-wrap"><table>
       <thead>
         <tr>
           <th>Area</th>
@@ -2939,7 +2982,7 @@ export function phase2Section() {
             </tr>`,
         )
         .join("")}</tbody>
-    </table></div>
+    </table></div></details>
   </section>`;
 }
 

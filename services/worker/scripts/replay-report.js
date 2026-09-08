@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { contentIdeas as deriveContentIdeas } from "../src/scoring/report-model.js";
+import { scoreAudit as deriveCurrentReplayModel } from "../src/scoring/vantage-score.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -354,6 +356,267 @@ async function loadFixture(directory) {
       finalPassOrchestration ||
       baseOrchestration,
   };
+}
+
+const LEGACY_CONTENT_IDEA_KEYS = Object.freeze({
+  tofu: ["idea", "frame", "type", "question", "priority"],
+  mofu: ["idea", "frame", "type", "question", "priority"],
+  bofu: ["idea", "frame", "type", "question", "priority"],
+  leading: ["query", "rationale", "priority"],
+});
+
+const CURRENT_CONTENT_IDEA_KEYS = Object.freeze([
+  "stage",
+  "topic",
+  "whyItMatters",
+  "currentEvidence",
+  "gap",
+  "recommendedAsset",
+  "placement",
+  "objective",
+  "internalLinks",
+  "funnelStage",
+  "evidenceStatus",
+]);
+
+function rowHasExactKeys(row, keys) {
+  return (
+    row &&
+    typeof row === "object" &&
+    !Array.isArray(row) &&
+    Object.keys(row).length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(row, key))
+  );
+}
+
+function rowHasCurrentShape(row) {
+  return (
+    row &&
+    typeof row === "object" &&
+    !Array.isArray(row) &&
+    CURRENT_CONTENT_IDEA_KEYS.every((key) =>
+      Object.prototype.hasOwnProperty.call(row, key),
+    )
+  );
+}
+
+function assertLegacySemanticEquality(persisted, derived) {
+  for (const group of Object.keys(LEGACY_CONTENT_IDEA_KEYS)) {
+    const keys = LEGACY_CONTENT_IDEA_KEYS[group];
+    const persistedRows = persisted[group];
+    const derivedRows = derived[group];
+
+    if (persistedRows.length !== derivedRows.length) {
+      throw new Error(
+        `Historical contentIdeas ${group} row count changed during deterministic re-derivation`,
+      );
+    }
+
+    for (let index = 0; index < persistedRows.length; index += 1) {
+      for (const key of keys) {
+        if (persistedRows[index][key] !== derivedRows[index][key]) {
+          throw new Error(
+            `Historical contentIdeas semantic field changed during deterministic re-derivation: ${group}[${index}].${key}`,
+          );
+        }
+      }
+    }
+  }
+}
+
+function stableSerialize(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableSerialize).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function assertStableEquality(label, expected, actual) {
+  if (stableSerialize(expected) !== stableSerialize(actual)) {
+    throw new Error(
+      `Current replay cross-report compatibility invariant failed: ${label} mismatch`,
+    );
+  }
+}
+
+function normalizeCrossReportInterpretationCompatibility({
+  scoreSet,
+  auditRequest,
+  capabilityEvidence,
+  decisionEvidence,
+  findings,
+}) {
+  if (Object.prototype.hasOwnProperty.call(scoreSet, "crossReportInterpretation")) {
+    if (!scoreSet.crossReportInterpretation || typeof scoreSet.crossReportInterpretation !== "object") {
+      throw new Error(
+        "Current replay cross-report compatibility boundary rejects malformed persisted crossReportInterpretation",
+      );
+    }
+    return scoreSet;
+  }
+
+  if (scoreSet.contractVersion !== "2.0.0") return scoreSet;
+
+  const auditId = auditRequest?.auditId;
+  if (
+    typeof auditId !== "string" ||
+    auditId.length === 0 ||
+    capabilityEvidence?.auditId !== auditId ||
+    !decisionEvidence?.site ||
+    !decisionEvidence?.performance ||
+    !capabilityEvidence?.capabilities ||
+    typeof capabilityEvidence.capabilities !== "object" ||
+    !Array.isArray(findings) ||
+    typeof scoreSet.generatedAt !== "string" ||
+    !scoreSet.scores ||
+    !scoreSet.decisionHierarchy
+  ) {
+    throw new Error(
+      "Current replay cross-report compatibility boundary requires complete persisted canonical inputs",
+    );
+  }
+
+  const reconstructed = deriveCurrentReplayModel(
+    auditRequest,
+    decisionEvidence,
+    {
+      capabilityEvidence,
+      scoredAt: scoreSet.generatedAt,
+    },
+  );
+
+  assertStableEquality("audit identity", auditId, reconstructed.input?.auditId || auditId);
+  assertStableEquality("score map", scoreSet.scores, reconstructed.scores);
+  assertStableEquality(
+    "root-cause identity",
+    scoreSet.rootCauseRuleId,
+    reconstructed.rootCauseRuleId,
+  );
+  assertStableEquality(
+    "decision hierarchy",
+    scoreSet.decisionHierarchy,
+    reconstructed.decisionHierarchy,
+  );
+
+  if (
+    reconstructed.findings.length !== findings.length ||
+    reconstructed.findings.length !== scoreSet.findingCount
+  ) {
+    throw new Error(
+      "Current replay cross-report compatibility invariant failed: finding count mismatch",
+    );
+  }
+
+  assertStableEquality(
+    "finding IDs",
+    scoreSet.findingIds,
+    reconstructed.findings.map((finding) => finding.findingId),
+  );
+  assertStableEquality(
+    "persisted finding IDs",
+    findings.map((finding) => finding.findingId),
+    reconstructed.findings.map((finding) => finding.findingId),
+  );
+
+  return {
+    ...scoreSet,
+    crossReportInterpretation:
+      reconstructed.crossReportInterpretation,
+  };
+}
+
+function normalizeCurrentScoreSetCompatibility({
+  scoreSet,
+  auditRequest,
+  capabilityEvidence,
+  decisionEvidence,
+  findings,
+}) {
+  if (scoreSet?.contractVersion !== "2.0.0") return scoreSet;
+
+  const content = scoreSet.contentIdeas;
+  const groups = Object.keys(LEGACY_CONTENT_IDEA_KEYS);
+
+  if (!content || typeof content !== "object" || Array.isArray(content)) {
+    throw new Error(
+      "Current replay contentIdeas compatibility boundary requires an object with tofu, mofu, bofu, and leading arrays",
+    );
+  }
+
+  if (!groups.every((group) => Array.isArray(content[group]))) {
+    throw new Error(
+      "Current replay contentIdeas compatibility boundary rejects unsupported group shape",
+    );
+  }
+
+  const rows = groups.flatMap((group) => content[group]);
+  const allCurrent = rows.every(rowHasCurrentShape);
+  const allLegacy = groups.every((group) =>
+    content[group].every((row) =>
+      rowHasExactKeys(row, LEGACY_CONTENT_IDEA_KEYS[group]),
+    ),
+  );
+
+  if (rows.length === 0 || allCurrent) {
+    return normalizeCrossReportInterpretationCompatibility({
+      scoreSet,
+      auditRequest,
+      capabilityEvidence,
+      decisionEvidence,
+      findings,
+    });
+  }
+
+  if (!allLegacy) {
+    throw new Error(
+      "Current replay contentIdeas compatibility boundary rejects mixed, malformed, or unsupported row shapes",
+    );
+  }
+
+  for (const group of groups) {
+    for (const row of content[group]) {
+      if (!rowHasExactKeys(row, LEGACY_CONTENT_IDEA_KEYS[group])) {
+        throw new Error(
+          `Current replay contentIdeas compatibility boundary rejects unsupported ${group} row shape`,
+        );
+      }
+      for (const key of LEGACY_CONTENT_IDEA_KEYS[group]) {
+        if (typeof row[key] !== "string" || row[key].trim().length === 0) {
+          throw new Error(
+            `Current replay contentIdeas compatibility boundary rejects empty legacy field: ${group}.${key}`,
+          );
+        }
+      }
+    }
+  }
+
+  if (!auditRequest || !decisionEvidence?.site) {
+    throw new Error(
+      "Current replay contentIdeas compatibility boundary requires persisted audit-request and decision-evidence site inputs",
+    );
+  }
+
+  const derived = deriveContentIdeas(decisionEvidence.site, auditRequest);
+  assertLegacySemanticEquality(content, derived);
+
+  return normalizeCrossReportInterpretationCompatibility({
+    scoreSet: {
+    ...scoreSet,
+    contentIdeas: derived,
+    },
+    auditRequest,
+    capabilityEvidence,
+    decisionEvidence,
+    findings,
+  });
 }
 
 function assertIdentity(inputs) {
@@ -745,9 +1008,16 @@ async function replayFixture({
   outputRoot,
   validateContract,
 }) {
-  const inputs = await loadFixture(
+  const loadedInputs = await loadFixture(
     fixtureDirectory,
   );
+
+  const inputs = LEGACY_COMPAT_MODE
+    ? loadedInputs
+    : {
+        ...loadedInputs,
+        scoreSet: normalizeCurrentScoreSetCompatibility(loadedInputs),
+      };
 
   assertReplayContracts(
     inputs,
@@ -1051,4 +1321,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   });
 }
 
-export { buildV2Model };
+export {
+  buildV2Model,
+  normalizeCurrentScoreSetCompatibility,
+};

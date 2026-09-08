@@ -105,34 +105,26 @@ function model() {
   return scoreAudit(INPUT, evidence());
 }
 
-const EXPECTED_PAGES = [
-  "Executive Scorecard",
-  "Priority Fixes",
-  "Conversion Path Architecture",
-  "Conversion Readiness Map",
-  "Topical Map & Qualified Content Opportunities",
-  "Competitor Benchmarking",
-  "Trust & E-E-A-T Readiness",
-  "CMS & Platform Constraints",
-  "Technical SEO Hygiene",
-  "Heading & Semantic Structure",
-  "Schema & Entity Clarity",
-  "Performance",
-  "Accessibility & Mobile Usability Readiness",
-  "Internal-Link Opportunities",
-  "Evidence Appendix",
-  "Deferred & Unavailable Analysis",
+const EXPECTED_PRIMARY_PAGES = [
+  "Executive Scorecard", "Priority Fixes", "Conversion Journey",
+  "Content Opportunities", "Competitor Comparison", "Trust & Credibility",
+];
+
+const EXPECTED_SUPPORTING_PAGES = [
+  "Supporting Detail",
 ];
 
 const EXPECTED_SECTION_IDS = [
   "executive",
-  "strengths",
   "blockers",
   "foundations",
   "action-plan",
   "paths",
   "pillars",
   "content-ideas",
+  "content-opportunities-detail",
+  "competitor-detail",
+  "eeat-detail",
   "competitors",
   "eeat",
   "cms",
@@ -147,12 +139,16 @@ const EXPECTED_SECTION_IDS = [
   "phase2",
 ];
 
-test("PRYSM-V2-SECTION-VIEWER-02: viewer is versioned and has exactly 16 governed pages", () => {
-  assert.equal(REPORT_V2_VIEWER_VERSION, "2.2.0");
-  assert.equal(REPORT_V2_VIEWER_PAGES.length, 16);
+test("PRYSM-V2-SECTION-VIEWER-03: viewer keeps six peer destinations and one supporting destination", () => {
+  assert.equal(REPORT_V2_VIEWER_VERSION, "2.3.0");
+  assert.equal(REPORT_V2_VIEWER_PAGES.length, 7);
   assert.deepEqual(
-    REPORT_V2_VIEWER_PAGES.map((page) => page.title),
-    EXPECTED_PAGES,
+    REPORT_V2_VIEWER_PAGES.filter((page) => page.tier === "PRIMARY").map((page) => page.title),
+    EXPECTED_PRIMARY_PAGES,
+  );
+  assert.deepEqual(
+    REPORT_V2_VIEWER_PAGES.filter((page) => page.tier === "SUPPORTING").map((page) => page.title),
+    EXPECTED_SUPPORTING_PAGES,
   );
 });
 
@@ -175,24 +171,53 @@ test("PRYSM-V2-SECTION-VIEWER-02: every existing top-level report section is ass
   );
 });
 
-test("PRYSM-V2-SECTION-VIEWER-02: accessibility and mobile usability is a standalone governed page", () => {
+test("PRYSM-V2-SECTION-VIEWER-03: supporting detail contains technical and evidence sections", () => {
   const page = REPORT_V2_VIEWER_PAGES.find(
-    (item) => item.pageId === "accessibility-mobile",
+    (item) => item.pageId === "supporting-detail",
   );
 
   assert.deepEqual(page, {
-    pageId: "accessibility-mobile",
-    title: "Accessibility & Mobile Usability Readiness",
-    sectionIds: ["accessibility-mobile"],
+    pageId: "supporting-detail",
+    title: "Supporting Detail",
+    tier: "SUPPORTING",
+    sectionIds: [
+      "pillars",
+      "foundations",
+      "action-plan",
+      "content-opportunities-detail",
+      "competitor-detail",
+      "eeat-detail",
+      "performance",
+      "accessibility-mobile",
+      "cms",
+      "technical",
+      "headings",
+      "schema",
+      "machine-readiness",
+      "internal-links",
+      "evidence",
+      "phase2",
+    ],
   });
 });
-test("PRYSM-V2-SECTION-VIEWER-02: rendered report has left sticky navigation and one link per page", () => {
+
+test("S02: Priority Fixes owns only the authoritative blockers sequence", () => {
+  const priority = REPORT_V2_VIEWER_PAGES.find((item) => item.pageId === "priority-fixes");
+  const supporting = REPORT_V2_VIEWER_PAGES.find((item) => item.pageId === "supporting-detail");
+  assert.deepEqual(priority.sectionIds, ["blockers"]);
+  assert.ok(supporting.sectionIds.includes("foundations"));
+  assert.ok(supporting.sectionIds.includes("action-plan"));
+});
+test("PRYSM-V2-SECTION-VIEWER-03: rendered report has six peer links and one reachable subordinate link", () => {
   const html = renderReportV2(model());
 
   assert.equal(
-    (html.match(/data-viewer-page=/g) || []).length,
-    16,
+    (html.match(/class="viewer-nav-link viewer-nav-primary"/g) || []).length,
+    6,
   );
+  assert.equal((html.match(/class="viewer-nav-link viewer-nav-supporting"/g) || []).length, 1);
+  assert.match(html, />Supporting Detail<\/span>/);
+  for (const page of REPORT_V2_VIEWER_PAGES) assert.match(html, new RegExp(`data-viewer-page="${page.pageId}"`));
 
   assert.match(
     html,
@@ -215,6 +240,23 @@ test("PRYSM-V2-SECTION-VIEWER-02: rendered report has left sticky navigation and
   );
 });
 
+test("SUPPORTING-DETAIL-IA-01: Supporting Detail has a subordinate treatment and grouped local navigation", () => {
+  const html = renderReportV2(model());
+
+  assert.match(html, /class="viewer-supporting-nav"/);
+  assert.match(html, /data-supporting-detail-nav/);
+  assert.match(html, /Readiness Overview/);
+  assert.match(html, /Foundations/);
+  assert.match(html, /Conversion &amp; Content Evidence/);
+  assert.match(html, /Competitive &amp; Trust Evidence/);
+  assert.match(html, /Search &amp; Technical Evidence/);
+  assert.match(html, /Performance &amp; Accessibility/);
+  assert.match(html, /Platform &amp; Internal Links/);
+  assert.match(html, /Evidence &amp; Limitations/);
+  assert.match(html, /id="supporting-detail-orientation"/);
+  assert.doesNotMatch(html, />07<|Page 7/i);
+});
+
 test("PRYSM-V2-SECTION-VIEWER-02: hash navigation is deterministic and invalid hashes fall back safely", () => {
   const html = renderReportV2(model());
 
@@ -225,7 +267,7 @@ test("PRYSM-V2-SECTION-VIEWER-02: hash navigation is deterministic and invalid h
 
   assert.match(
     html,
-    /return byId\.get\(requested\) \|\| fallback/,
+    /const ownerPageId = sectionOwners\.get\(requested\)/,
   );
 
   assert.match(
@@ -242,6 +284,32 @@ test("PRYSM-V2-SECTION-VIEWER-02: hash navigation is deterministic and invalid h
     html,
     /classList\.toggle\("viewer-active", activeIds\.has\(id\)\)/,
   );
+});
+
+test("SUPPORTING-DETAIL-NAV-01: all local Supporting Detail hashes stay on Supporting Detail", () => {
+  const html = renderReportV2(model());
+  const targets = [
+    "pillars",
+    "foundations",
+    "content-opportunities-detail",
+    "competitor-detail",
+    "technical",
+    "performance",
+    "cms",
+    "phase2",
+  ];
+
+  for (const target of targets) {
+    assert.match(html, new RegExp(`href="#${target}"`));
+    assert.match(html, new RegExp(`"${target}"`));
+  }
+
+  assert.match(html, /const sectionOwners = new Map\(/);
+  assert.match(html, /const ownerPageId = sectionOwners\.get\(requested\)/);
+  assert.match(html, /return \{ page: byId\.get\(ownerPageId\), targetId: requested \}/);
+  assert.match(html, /if \(!route\.targetId &&/);
+  assert.match(html, /target\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.doesNotMatch(html, /route\.targetId[\s\S]{0,300}#executive-scorecard/);
 });
 
 test("PRYSM-V2-SECTION-VIEWER-02: current page has browser print/PDF control and print isolation", () => {
@@ -319,7 +387,7 @@ test("PRYSM-V2-SECTION-VIEWER-02: all governed section content remains in the si
 
   assert.match(
     html,
-    /data-viewer-version="2\.2\.0"/,
+    /data-viewer-version="2\.3\.0"/,
   );
 });
 

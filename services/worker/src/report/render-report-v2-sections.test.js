@@ -140,10 +140,20 @@ async function render(model) {
 // V2R-01 — Topical/content opportunities
 // ---------------------------------------------------------------------------
 
-test("V2R-01: topical/content opportunities section renders canonical ideas from the model", async () => {
+test("V2R-01: content opportunities presents governed ideas in the client story", async () => {
   const m = scoreAudit(INPUT, richEvidence());
   const html = await render(m);
-  assert.match(html, /Topical Map/i, "section heading present");
+  assert.match(html, /What content would help buyers move forward\?/i, "client heading present");
+  assert.match(html, /What is already helping buyers/);
+  assert.match(html, /Where decision support is thin/);
+  assert.match(html, /What to create or improve first/);
+  assert.match(html, /content-opportunity-card/);
+  const primaryContent = html.slice(html.indexOf('<section id="content-ideas"'), html.indexOf('<section id="content-opportunities-detail"'));
+  assert.equal((primaryContent.match(/class="content-opportunity-card(?: |")/g) || []).length, 5, "primary S05 shows only the first five governed opportunities");
+  assert.match(html, /id="content-opportunities-detail"/);
+  assert.match(html, /Qualified opportunity — partial content coverage|Supported within assessed content/);
+  assert.doesNotMatch(primaryContent, /Connect this to the relevant service page and the next-step action used in the assessed journey\./);
+  assert.match(primaryContent, /early-stage buyer|buyer recognize|meaningful result|evaluate the service/i);
   // Canonical ideas derived from services + topicKeywords ("coaching support").
   // scoreAudit's contentIdeas() titles the leading topic from the first
   // candidate ("Coaching") — assert the exact generated idea text.
@@ -206,7 +216,10 @@ test("IL-03: traced broken links render actual source and target", async () => {
   const html = await render(scoreAudit(INPUT, ev));
   assert.match(html, /https:\/\/x\.com\/old/, "actual source rendered");
   assert.match(html, /https:\/\/x\.com\/missing/, "actual target rendered");
-  assert.ok(!html.includes("unknown"), "no unknown → unknown rendering for traced records");
+  const internalLinksStart = html.indexOf('<section id="internal-links"');
+  const internalLinksEnd = html.indexOf('<section id="phase2"', internalLinksStart);
+  const internalLinks = html.slice(internalLinksStart, internalLinksEnd === -1 ? undefined : internalLinksEnd);
+  assert.doesNotMatch(internalLinks, /unknown/i, "no unknown → unknown rendering inside internal-link surface");
 });
 
 test("IL-04: historical string broken links render an honest count-only state", async () => {
@@ -216,8 +229,11 @@ test("IL-04: historical string broken links render an honest count-only state", 
     internalLinkOpportunities: null,
   };
   const html = await render(scoreAudit(INPUT, ev));
-  assert.ok(!html.includes("unknown"), "no unknown → unknown rendering for historical strings");
-  assert.match(html, /could not be traced to a source page|not traced|count-only/i, "honest count-only limitation rendered");
+  const internalLinksStart = html.indexOf('<section id="internal-links"');
+  const internalLinksEnd = html.indexOf('<section id="phase2"', internalLinksStart);
+  const internalLinks = html.slice(internalLinksStart, internalLinksEnd === -1 ? undefined : internalLinksEnd);
+  assert.doesNotMatch(internalLinks, /unknown/i, "no unknown → unknown rendering inside internal-link surface");
+  assert.match(internalLinks, /could not be traced to a source page|not traced|count-only/i, "honest count-only limitation rendered");
 });
 
 // ---------------------------------------------------------------------------
@@ -265,7 +281,7 @@ test("V2R-03: internal-link opportunities render canonical source/target/anchor/
 test("V2R-04: absent data renders explicit governed unavailable states, never silent omission", async () => {
   const m = scoreAudit(INPUT, baseEvidence());
   const html = await render(m);
-  assert.match(html, /Topical Map/i, "topical section still present");
+  assert.match(html, /What content would help buyers move forward\?/i, "content section still present");
   assert.match(html, /not available|none available|not computed|unavailable/i, "explicit topical unavailable state");
   assert.match(html, /CMS[\s&]*(&amp;)?[\s/]*Platform Constraints/i, "CMS section still present");
   assert.match(html, /Internal-Link Opportunities/i, "links section still present");
@@ -302,16 +318,51 @@ test("V2R-06: existing executive sections remain intact", async () => {
   const m = scoreAudit(INPUT, richEvidence());
   const html = await render(m);
   for (const golden of [
-    "A. Conversion Readiness",
-    "B. Evidence Confidence",
-    "C. Evidence Coverage",
-    "D. Where are the problems?",
-    "E. What should be fixed first?",
+    "How ready is your website to convert visitors?",
+    "What should you improve first?",
+    "What is already working?",
+    "What could we not determine?",
+    "Where to find supporting detail",
+    "Where are the problems?",
+    "What should you fix first?",
     "Evidence detail",
     "Source statuses",
   ]) {
     assert.ok(html.includes(golden), `golden substring present: ${golden}`);
   }
+});
+
+test("SUPPORTING-DETAIL-EVIDENCE-01: detail keeps visuals, deterministic samples, counts, and material limits visible", async () => {
+  const html = await render(scoreAudit(INPUT, richEvidence()));
+  const supporting = html.slice(html.indexOf('id="supporting-detail-orientation"'));
+
+  assert.match(supporting, /Supporting Detail proves and explains the six primary-page conclusions/);
+  assert.match(supporting, /aria-label="Five-axis conversion readiness map"/);
+  assert.match(supporting, /aria-label="Business entity relationship diagram"/);
+  assert.match(supporting, /Representative examples|additional supporting evidence/i);
+  assert.match(supporting, /PARTIAL|UNAVAILABLE|NOT_ASSESSED|limitations/i);
+  assert.match(supporting, /<details[^>]*class="supporting-detail-disclosure"/);
+  assert.match(supporting, /data-supporting-section="internal-links"/);
+});
+
+test("SUPPORTING-DETAIL-PERFORMANCE-02: raw performance diagnostics stay behind disclosure", async () => {
+  const html = await render(scoreAudit(INPUT, richEvidence()));
+  const start = html.indexOf('<section id="performance"');
+  const end = html.indexOf('<section id="accessibility-mobile"', start);
+  const performance = html.slice(start, end);
+  const defaultOpen = performance.slice(0, performance.indexOf("<details"));
+
+  for (const rawDiagnostic of [
+    "Screenshot persistence failed",
+    "runId is required",
+    "CrUX PHONE failed (403)",
+    "CrUX DESKTOP failed (403)",
+  ]) {
+    assert.doesNotMatch(defaultOpen, new RegExp(rawDiagnostic.replace(/[()]/g, "\\$&")));
+  }
+
+  assert.match(performance, /Show detailed performance evidence/);
+  assert.match(performance, /Real-user field performance data was unavailable/);
 });
 
 // ---------------------------------------------------------------------------
@@ -338,11 +389,11 @@ test("V2R-08: v2 draft represents the complete 15-area required-section contract
   const m = scoreAudit(INPUT, richEvidence());
   const html = await render(m);
   const areas = [
-    ["1 executive scorecard", /A\. Conversion Readiness/],
-    ["2 priority fixes", /E\. What should be fixed first\?/],
-    ["3 conversion path architecture", /Conversion path architecture/],
-    ["4 conversion readiness map", /D\. Where are the problems\?/],
-    ["5 topical map + content opportunities", /Topical Map/],
+    ["1 executive scorecard", /How ready is your website to convert visitors\?/],
+    ["2 priority fixes", /What should you fix first\?/],
+    ["3 conversion journey", /Can visitors move easily from interest to action\?/],
+    ["4 conversion readiness map", /Where are the problems\?/],
+    ["5 content opportunities", /What content would help buyers move forward\?/],
     ["6 competitor benchmark", /Competitive context/],
     ["7 trust and E-E-A-T", /Trust &amp; Proof|Trust & Proof/],
     ["8 CMS and platform constraints", /CMS[\s&]*(&amp;)?[\s/]*Platform Constraints/],

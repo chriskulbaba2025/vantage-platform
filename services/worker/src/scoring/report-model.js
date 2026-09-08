@@ -530,25 +530,48 @@ function contentIdeas(site, input = {}) {
   // services), then crawl services, then multi-word topicKeywords.
   // Single short words (like "foot") are rejected because they produce
   // nonsensical content ideas such as "What Is Foot?".
+  const limitations = [];
+  const invalidClientText = /\b(?:undefined|null|nan)\b/i;
+  const isSafeText = (value) =>
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    !invalidClientText.test(value);
+  const sourceServices = Array.isArray(input.services) ? input.services : [];
+  const siteServices = Array.isArray(site.services) ? site.services : [];
+  const topicKeywords = Array.isArray(site.topicKeywords) ? site.topicKeywords : [];
   const candidates = [
-    ...(input.services || []),
-    ...site.services,
-    ...site.topicKeywords.filter((t) => t.split(/\s+/).length >= 2),
+    ...sourceServices,
+    ...siteServices,
+    ...topicKeywords.filter(
+      (topic) =>
+        isSafeText(topic) &&
+        topic.trim().split(/\s+/).length >= 2,
+    ),
   ];
-  const deduped = [...new Set(candidates.map((s) => s.toLowerCase()))];
+  const safeCandidates = candidates.filter(isSafeText);
+  if (safeCandidates.length !== candidates.length) {
+    limitations.push("A malformed content topic was omitted from recommendations.");
+  }
+  const deduped = [...new Set(safeCandidates.map((s) => s.trim().toLowerCase()))];
   const topics = deduped.slice(0, 3);
   // Business-context primary goal (WP-D-05) — used only to frame the
   // generated idea text; never invents evidence or changes scores.
-  const goal = typeof input.primaryGoal === "string" && input.primaryGoal.trim()
+  const goal = isSafeText(input.primaryGoal)
     ? input.primaryGoal.trim()
     : null;
+  if (input.primaryGoal != null && !goal) {
+    limitations.push("A malformed content goal was omitted from recommendations.");
+  }
   const goalPhrase = goalPhrases(goal);
 
   // Fallback when no meaningful topics are available — use multi-word
   // placeholders so generated ideas are still useful.
-  const safeTopics = topics.length
-    ? topics
-    : ["your service", "the process", "your goals"];
+  const safeTopics = [
+    ...topics,
+    "your service",
+    "the process",
+    "your goals",
+  ].slice(0, 3);
 
   const pretty = (s) => {
     const titleCase = String(s).replace(/\b\w/g, (c) => c.toUpperCase());
@@ -596,6 +619,10 @@ function contentIdeas(site, input = {}) {
       evidenceStatus: evidence.status,
     };
   };
+  const isSafeRow = (row) => {
+    const clientText = row?.idea || row?.query;
+    return isSafeText(clientText) && !invalidClientText.test(JSON.stringify(row));
+  };
   const result = {
     tofu: [
       { idea: `What Is ${t0}?`, frame: "Answer-first", type: "Guide", question: "What is this?", priority: "H" },
@@ -636,10 +663,19 @@ function contentIdeas(site, input = {}) {
       { query: `${t0} results and process`, rationale: "Combines proof and buyer intent", priority: "M" },
     ],
   };
-  result.tofu = result.tofu.map((row) => enrich(row, "TOFU"));
-  result.mofu = result.mofu.map((row) => enrich(row, "MOFU"));
-  result.bofu = result.bofu.map((row) => enrich(row, "BOFU"));
-  result.leading = result.leading.map((row) => enrich(row, "LEADING"));
+  for (const [stage, rows] of Object.entries({
+    tofu: "TOFU",
+    mofu: "MOFU",
+    bofu: "BOFU",
+    leading: "LEADING",
+  })) {
+    const enriched = result[stage].map((row) => enrich(row, rows));
+    result[stage] = enriched.filter(isSafeRow);
+    if (result[stage].length !== enriched.length) {
+      limitations.push(`A malformed ${rows} recommendation was omitted.`);
+    }
+  }
+  result.limitations = limitations;
   return result;
 }
 
