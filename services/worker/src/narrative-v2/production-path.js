@@ -39,6 +39,13 @@ const UAT_RERENDER_AUDIT_ID = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
 const FINAL_PASS_ORCHESTRATION_ARTIFACT =
   "narrative-v2/orchestration-final-pass.json";
 
+export function hasRequiredNarrativeV2ReportStructure(html) {
+  return typeof html === "string"
+    && /^<!doctype html>/i.test(html)
+    && html.includes("Where are the problems?")
+    && html.includes('id="narrative-layer"');
+}
+
 function defaultClock() {
   return { now: () => new Date().toISOString() };
 }
@@ -1281,7 +1288,7 @@ async function renderNarrativeV2Draft({
     });
   }
 
-  if (!/^<!doctype html>/i.test(html) || !html.includes("D. Where are the problems?") || !html.includes('id="narrative-layer"')) {
+  if (!hasRequiredNarrativeV2ReportStructure(html)) {
     await transition({
       lifecycleService,
       auditRequest,

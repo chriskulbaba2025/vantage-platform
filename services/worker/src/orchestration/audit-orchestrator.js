@@ -28,6 +28,13 @@ import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 
 const T = LIFECYCLE_STATE;
 
+export function hasRequiredReportV2Structure(html, { requireNarrativeLayer = false } = {}) {
+  return typeof html === "string"
+    && /^<!doctype html>/i.test(html)
+    && html.includes("Where are the problems?")
+    && (!requireNarrativeLayer || html.includes('id="narrative-layer"'));
+}
+
 const SOURCE_EVIDENCE_MAP = Object.freeze({
   "dataforseo-onpage": "website",
   "pagespeed":           "performance",
@@ -1109,7 +1116,9 @@ export function createAuditOrchestrator({
     }
 
     // v2 finalization: structural check (doctype + required sections).
-    if (!/^<!doctype html>/i.test(html) || !html.includes("D. Where are the problems?")) {
+    if (!hasRequiredReportV2Structure(html, {
+      requireNarrativeLayer: auditRequest.report?.narrativeVersion === "2.0.0",
+    })) {
       await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
         "render-v2-finalization-failed", null);
       throw new Error("Report v2 finalization failed: required structure missing");

@@ -22,12 +22,37 @@ import {
 import {
   buildV2Model,
   createNarrativeV2ProductionPath,
+  hasRequiredNarrativeV2ReportStructure,
 } from "../narrative-v2/production-path.js";
+import { hasRequiredReportV2Structure } from "../orchestration/audit-orchestrator.js";
 
 const T = LIFECYCLE_STATE;
 const tenantId = "narrative-v2-prod-tenant";
 const testBaseDir = mkdtempSync(join(tmpdir(), "prysm-narrative-v2-prod-"));
 const FIXED_TS = "2026-08-20T04:30:00.000Z";
+
+test("NV2-PROD-STRUCTURE: finalization accepts the current report heading and rejects malformed output", () => {
+  const valid = '<!doctype html><html><body><main id="narrative-layer"><h2>Where are the problems?</h2></main></body></html>';
+  const missingDoctype = '<html><main id="narrative-layer"><h2>Where are the problems?</h2></main></html>';
+  const missingLayer = '<!doctype html><h2>Where are the problems?</h2>';
+  const malformed = "not a report";
+
+  for (const guard of [
+    hasRequiredNarrativeV2ReportStructure,
+    (html) => hasRequiredReportV2Structure(html, { requireNarrativeLayer: true }),
+  ]) {
+    assert.equal(guard(valid), true);
+    assert.equal(guard(missingDoctype), false);
+    assert.equal(guard(missingLayer), false);
+    assert.equal(guard(malformed), false);
+  }
+
+  assert.equal(
+    hasRequiredReportV2Structure('<!doctype html><h2>Where are the problems?</h2>'),
+    true,
+    "the established non-Narrative-v2 report path does not own narrative-layer",
+  );
+});
 
 function baseConfig() {
   return {
