@@ -430,7 +430,7 @@ async function releaseCandidate() {
 }
 
 test(
-  "NARRATIVE-RENDER-01: release candidate renders the complete client-facing Writer layer",
+  "NARRATIVE-RENDER-01: release candidate renders canonical report without Writer HTML",
   async () => {
     const result = await releaseCandidate();
 
@@ -446,30 +446,62 @@ test(
       date: "2026-08-20",
     });
 
-    for (const required of [
-      "Executive conclusion",
-      "Verified strengths",
-      "Root cause",
-      "Conversion",
-      "Content and topical architecture",
-      "Funnel opportunities",
-      "SEO and SERP",
-      "AI search readiness",
-      "E-E-A-T and trust",
-      "Technical foundations",
-      "Performance and UX",
-      "Competitive position",
-      "Limitations",
-      "Action plan",
-      "Preserve, change, do next",
-    ]) {
-      assert.ok(
-        html.includes(required),
-        `client narrative includes ${required}`,
-      );
-    }
+    assert.match(html, /Executive Scorecard/);
+    assert.match(html, /Priority Fixes/);
+    assert.match(html, /data-solution-id=/);
+    for (const marker of [
+      /id="narrative-layer"/,
+      /id="narrative-action-plan"/,
+      /id="narrative-decision"/,
+      /id="narrative-diagnostic-layer"/,
+      /data-writer-pass/,
+      /data-judge-score/,
+      /data-judge-decision/,
+      /practical areas to refine/,
+      /check that it appears/,
+      /data-viewer-page="technical-seo"/,
+      /data-viewer-page="performance"/,
+      /data-viewer-page="evidence-appendix"/,
+    ]) assert.doesNotMatch(html, marker);
   },
 );
+
+test("NARRATIVE-RENDER-01A: Writer remedy mutations cannot alter serialized client remediation", async () => {
+  const result = await releaseCandidate();
+  const args = {
+    model: deterministicModel(),
+    writerInput: writerInput(),
+    orchestrationResult: result,
+    date: "2026-08-20",
+  };
+  const baseline = renderGovernedNarrativeReportV2(args);
+  const mutations = [
+    (output) => { output.actionPlan[0].action.text = "MUTATED ACTION"; },
+    (output) => { output.executiveDecision.change.text = "MUTATED CHANGE"; output.executiveDecision.doNext.text = "MUTATED NEXT"; },
+    (output) => { output.executiveDecision.preserve.text = "MUTATED PRESERVE"; },
+    (output) => { output.conversion.priority.text = "MUTATED CONVERSION PRIORITY"; },
+    (output) => { output.seoSerp.priority.text = "MUTATED SEO PRIORITY"; },
+    (output) => { output.aiSearch.opportunity.text = "MUTATED AI OPPORTUNITY"; },
+    (output) => { output.funnelOpportunities.awareness[0].nextAction.text = "MUTATED NEXT ACTION"; },
+    (output) => { output.content.importantGaps.text = "MUTATED CONTENT GAP"; },
+    (output) => { output.eeatTrust.proofGaps.text = "MUTATED PROOF GAP"; },
+    (output) => { output.technical.materialIssues.text = "MUTATED TECHNICAL ISSUE"; },
+    (output) => { output.executiveConclusion.narrative.text = "MUTATED CONCLUSION"; },
+    (output) => { output.strengths[0].narrative.text = "MUTATED STRENGTH"; },
+    (output) => { output.rootCause.narrative.text = "MUTATED ROOT CAUSE"; },
+    (output) => { output.limitations[0].clientExplanation.text = "MUTATED LIMITATION"; },
+  ];
+
+  for (const mutate of mutations) {
+    const mutated = structuredClone(result);
+    mutate(mutated.finalWriterOutput);
+    const html = renderGovernedNarrativeReportV2({
+      ...args,
+      orchestrationResult: mutated,
+    });
+    assert.equal(html, baseline);
+  }
+});
 
 test(
   "NARRATIVE-RENDER-02: existing deterministic Karen-style evidence/detail layer remains present",
@@ -502,7 +534,7 @@ test(
 );
 
 test(
-  "NARRATIVE-RENDER-03: evidence lineage is audit metadata, not visible citation prose",
+  "NARRATIVE-RENDER-03: Writer and Judge metadata are not serialized",
   async () => {
     const html = renderGovernedNarrativeReportV2({
       model: deterministicModel(),
@@ -510,40 +542,8 @@ test(
       orchestrationResult: await releaseCandidate(),
     });
 
-    assert.match(
-      html,
-      /data-evidence-refs="finding:F-001"/,
-    );
-
-    assert.match(
-      html,
-      /data-evidence-refs="source:offsite"/,
-    );
-
-    assert.doesNotMatch(
-      html,
-      />finding:F-001</,
-    );
-
-    assert.doesNotMatch(
-      html,
-      />source:offsite</,
-    );
-
-    assert.match(
-      html,
-      /data-judge-score="100"/,
-    );
-
-    assert.match(
-      html,
-      /data-writer-pass="1"/,
-    );
-
-    assert.match(
-      html,
-      /data-render-version="1\.0\.0"/,
-    );
+    assert.doesNotMatch(html, /data-evidence-refs=/);
+    assert.doesNotMatch(html, /data-judge-score|data-writer-pass|data-judge-decision|data-render-version/);
   },
 );
 
@@ -615,67 +615,9 @@ test(
     const second = renderGovernedNarrativeReportV2(args);
 
     assert.equal(first, second);
-    assert.match(first, /@media print/);
-    assert.match(first, /narrative-decision-grid/);
-
-    assert.equal(
-      (first.match(/class="narrative-supporting-disclosure"/g) || []).length,
-      1,
-    );
-    assert.match(
-      first,
-      /<details class="narrative-supporting-disclosure" data-viewer-page="supporting-detail">\s*<summary>Additional interpretation and evidence context<\/summary>/,
-    );
-    assert.doesNotMatch(first, /narrative-supporting-disclosure"[^>]* open/);
-    const clientBody = first.slice(
-      first.indexOf("<summary>Additional interpretation and evidence context</summary>"),
-      first.indexOf('<div id="narrative-diagnostic-layer"'),
-    );
-    assert.equal((clientBody.match(/class="narrative-summary-block"/g) || []).length, 3);
-    assert.doesNotMatch(clientBody, /class="narrative-actions"/);
-    assert.doesNotMatch(clientBody, /narrative-funnel|narrative-ai-search|narrative-eeat|narrative-competitors/);
-    assert.doesNotMatch(first, /Show deeper diagnostic interpretation/);
-    assert.match(first, /<div id="narrative-diagnostic-layer" class="narrative-diagnostic-layer" data-audit-only="true" hidden aria-hidden="true">/);
-    assert.doesNotMatch(first, /narrative-diagnostic-layer[^>]*<summary/);
-    assert.match(first, /id="narrative-action-plan"[^>]*data-viewer-page="supporting-detail"/);
-    assert.match(first, /id="narrative-funnel"[^>]*data-viewer-page="supporting-detail"/);
-    assert.match(first, /id="narrative-ai-search"[^>]*data-viewer-page="supporting-detail"/);
-    assert.match(first, /id="narrative-eeat"[^>]*data-viewer-page="supporting-detail"/);
-    assert.match(first, /id="narrative-competitors"[^>]*data-viewer-page="supporting-detail"/);
-    assert.doesNotMatch(
-      first,
-      /<details class="narrative-supporting-disclosure"(?! data-viewer-page="supporting-detail")/,
-    );
-
-    assert.match(
-      first,
-      /id="narrative-action-plan"[^>]*data-viewer-page="supporting-detail"/,
-    );
-
-    assert.match(
-      first,
-      /id="narrative-root-cause"[^>]*data-viewer-page="supporting-detail"/,
-    );
-
-    assert.match(
-      first,
-      /id="narrative-conversion"[^>]*data-viewer-page="supporting-detail"/,
-    );
-
-    assert.match(
-      first,
-      /id="narrative-content"[^>]*data-viewer-page="supporting-detail"/,
-    );
-
-    assert.match(
-      first,
-      /id="narrative-decision"[^>]*data-viewer-page="executive-scorecard"/,
-    );
-
-    assert.doesNotMatch(
-      first,
-      /class="nav-jump no-print"/,
-    );
+    assert.doesNotMatch(first, /id="narrative-|class="narrative-/);
+    assert.doesNotMatch(first, /data-writer-pass|data-judge-score|data-judge-decision/);
+    assert.match(first, /data-viewer-version="2\.3\.0"/);
   },
 );
 test(
@@ -745,14 +687,6 @@ test(
         date: "2026-08-20",
       });
 
-    assert.match(
-      html,
-      /data-writer-pass="3"/,
-    );
-
-    assert.match(
-      html,
-      /resolves the final governed defect/,
-    );
+    assert.doesNotMatch(html, /data-writer-pass|resolves the final governed defect/);
   },
 );

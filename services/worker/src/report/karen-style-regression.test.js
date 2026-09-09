@@ -10,7 +10,6 @@ import {
 } from "../narrative-v2/writer-output.js";
 import { renderReportV2 as renderReportV2Base } from "./render-report-v2.js";
 import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
-import { renderWriterNarrativeLayer } from "./render-narrative-v2.js";
 
 const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 const FIXED_TS = "2026-08-20T04:00:00.000Z";
@@ -305,8 +304,7 @@ function reportSurfaces() {
     expectedPassNumber: 1,
   });
   assert.deepEqual(validation, { valid: true, errors: [] }, "regression fixture must satisfy the real Writer v2 contract");
-  const narrative = renderWriterNarrativeLayer(output, { totalScore: 100, decision: "PASS" });
-  return { deterministic, narrative, combined: `${narrative}\n${deterministic}` };
+  return { deterministic, combined: deterministic };
 }
 
 test("KAREN-REG-01: the frozen Karen template still defines all 13 benchmark areas", () => {
@@ -370,38 +368,22 @@ test("KAREN-REG-03: diagnostic depth beyond the Karen navigation remains availab
   }
 });
 
-test("KAREN-REG-04: Narrative v2 adds decision usefulness instead of replacing diagnostic depth", () => {
-  const { narrative } = reportSurfaces();
-  for (const marker of [
-    "Executive conclusion",
-    "Verified strengths",
-    "Root cause",
-    "Business meaning",
-    "Funnel opportunities",
-    "Evidence boundaries",
-    "Action plan",
-    "Preserve, change, do next",
-  ]) {
-    assert.ok(narrative.includes(marker), `decision-usefulness layer present: ${marker}`);
-  }
+test("KAREN-REG-04: deterministic report remains the client decision surface", () => {
+  const { deterministic } = reportSurfaces();
+  assert.match(deterministic, /Priority Fixes/);
+  assert.match(deterministic, /data-solution-id=/);
+  assert.doesNotMatch(deterministic, /id="narrative-action-plan"|id="narrative-decision"/);
 });
 
-test("KAREN-REG-05: every rendered narrative atom retains exact evidence lineage metadata", () => {
-  const { narrative } = reportSurfaces();
-  const refs = [...narrative.matchAll(/data-evidence-refs="([^"]*)"/g)].map((match) => match[1]);
-  const governedRefs = new Set([REF, SOURCE_REF]);
-  assert.ok(refs.length >= 40, "substantive narrative atoms expose evidence metadata");
-  assert.ok(refs.every((value) => governedRefs.has(value)), "every narrative atom remains tied to an exact governed evidence ID");
-  assert.ok(refs.includes(REF), "finding evidence lineage remains present");
-  assert.ok(refs.includes(SOURCE_REF), "source-status evidence lineage remains present");
-  assert.doesNotMatch(narrative, />finding:F-001</, "internal finding IDs are not rendered as client prose");
-  assert.doesNotMatch(narrative, />source:backlinks</, "internal source IDs are not rendered as client prose");
+test("KAREN-REG-05: Writer evidence metadata is not serialized into client HTML", () => {
+  const { deterministic } = reportSurfaces();
+  assert.doesNotMatch(deterministic, /data-evidence-refs=/);
+  assert.match(deterministic, /Evidence detail/);
 });
 
-test("KAREN-REG-06: regression gate requires both client narrative and deterministic evidence surfaces", () => {
-  const { deterministic, narrative } = reportSurfaces();
-  assert.match(narrative, /data-judge-decision="PASS"/);
+test("KAREN-REG-06: regression gate requires canonical client and deterministic evidence surfaces", () => {
+  const { deterministic } = reportSurfaces();
   assert.match(deterministic, /Evidence detail/);
   assert.match(deterministic, /Deferred &amp; unavailable analysis/);
-  assert.match(narrative, /Executive decision/);
+  assert.doesNotMatch(deterministic, /data-judge-decision|data-writer-pass/);
 });

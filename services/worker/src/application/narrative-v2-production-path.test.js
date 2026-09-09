@@ -32,20 +32,16 @@ const testBaseDir = mkdtempSync(join(tmpdir(), "prysm-narrative-v2-prod-"));
 const FIXED_TS = "2026-08-20T04:30:00.000Z";
 
 test("NV2-PROD-STRUCTURE: finalization accepts the current report heading and rejects malformed output", () => {
-  const valid = '<!doctype html><html><body><main id="narrative-layer"><h2>Where are the problems?</h2></main></body></html>';
-  const missingDoctype = '<html><main id="narrative-layer"><h2>Where are the problems?</h2></main></html>';
-  const missingLayer = '<!doctype html><h2>Where are the problems?</h2>';
+  const valid = '<!doctype html><html><body><main id="reportContent" tabindex="-1"><h2>Where are the problems?</h2></main></body></html>';
+  const missingDoctype = '<html><main id="reportContent" tabindex="-1"><h2>Where are the problems?</h2></main></html>';
+  const missingLayer = '<!doctype html><main><h2>Where are the problems?</h2></main>';
   const malformed = "not a report";
 
-  for (const guard of [
-    hasRequiredNarrativeV2ReportStructure,
-    (html) => hasRequiredReportV2Structure(html, { requireNarrativeLayer: true }),
-  ]) {
-    assert.equal(guard(valid), true);
-    assert.equal(guard(missingDoctype), false);
-    assert.equal(guard(missingLayer), false);
-    assert.equal(guard(malformed), false);
-  }
+  assert.equal(hasRequiredNarrativeV2ReportStructure(valid), true);
+  assert.equal(hasRequiredNarrativeV2ReportStructure(missingDoctype), false);
+  assert.equal(hasRequiredNarrativeV2ReportStructure(missingLayer), false);
+  assert.equal(hasRequiredNarrativeV2ReportStructure(malformed), false);
+  assert.equal(hasRequiredReportV2Structure(valid), true);
 
   assert.equal(
     hasRequiredReportV2Structure('<!doctype html><h2>Where are the problems?</h2>'),
@@ -850,7 +846,7 @@ test("NV2-PROD-01: disabled runtime rejects an explicit Narrative v2 request ins
   );
 });
 
-test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders the governed layer", async () => {
+test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judge pass and renders clean canonical HTML", async () => {
   let writerCalls = 0;
   let judgeCalls = 0;
   let writerExecutionInput;
@@ -912,10 +908,18 @@ test("NV2-PROD-02: enabled explicit Narrative v2 runs one controlled Writer/Judg
   assert.deepEqual(orchestration.passes[0].writerOutput.actionPlan, judgeExecutionOutput.actionPlan, "release candidate must persist the validated multi-action Writer output");
   assert.equal(orchestration.status, "RELEASE_CANDIDATE");
   assert.equal(orchestration.passCount, 1);
-  assert.match(html, /id="narrative-layer"/);
   assert.match(html, /Executive Scorecard/);
   assert.match(html, /Evidence detail/);
-  for (const action of judgeExecutionOutput.actionPlan) assert.match(html, new RegExp(action.title));
+  for (const action of judgeExecutionOutput.actionPlan) assert.doesNotMatch(html, new RegExp(action.title));
+  for (const marker of [
+    /id="narrative-layer"/,
+    /id="narrative-action-plan"/,
+    /id="narrative-decision"/,
+    /id="narrative-diagnostic-layer"/,
+    /data-writer-pass/,
+    /data-judge-score/,
+    /data-judge-decision/,
+  ]) assert.doesNotMatch(html, marker);
   assert.equal(await artifactStore.exists(oldNarrativeKey), false, "Narrative v2 must not run/persist the legacy WP9 narrative artifact");
 });
 

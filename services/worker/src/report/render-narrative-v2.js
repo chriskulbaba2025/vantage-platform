@@ -1,401 +1,26 @@
-// PRYSM Narrative v2 — governed browser/PDF narrative rendering bridge.
+// PRYSM Narrative v2 — governed validation bridge for canonical report rendering.
 //
-// This module is additive. It does not alter the active report-v2 production
-// path. It accepts the exact governed orchestration result, re-validates the
-// final WriterOutput, and composes that narrative into the existing report-v2
-// HTML while preserving the deterministic evidence/detail layer underneath.
-//
-// Narrative sections are assigned to the existing 15-page viewer via
-// data-viewer-page attributes, making them searchable and printable within
-// the viewer's page structure.
+// Writer/Judge outputs are validated at this boundary for the existing
+// orchestration contract, but are intentionally not serialized into the client
+// report artifact. Client remediation is owned by the deterministic report-v2
+// renderer and its canonical solution records.
 
 import { NARRATIVE_V2_STATUS } from "../narrative-v2/orchestrator.js";
 import { validateWriterOutput } from "../narrative-v2/writer-output.js";
 import { renderReportV2 } from "./render-report-v2.js";
 
-export const NARRATIVE_RENDER_VERSION = "1.0.0";
-
-function e(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function atomHtml(atom, { tag = "p", className = "narrative-copy" } = {}) {
-  const refs = Array.isArray(atom?.evidenceRefs)
-    ? atom.evidenceRefs.join(" ")
-    : "";
-
-  return `<${tag} class="${e(className)}" data-statement-class="${e(
-    atom?.statementClass || "",
-  )}" data-evidence-refs="${e(refs)}">${e(atom?.text || "")}</${tag}>`;
-}
-
-function titledAtom(label, atom) {
-  return `<div class="narrative-field"><h4>${e(label)}</h4>${atomHtml(
-    atom,
-  )}</div>`;
-}
-
-function sectionCard(id, eyebrow, headline, body, viewerPage) {
-  const viewerAttr = viewerPage
-    ? ` data-viewer-page="${e(viewerPage)}"`
-    : "";
-
-  return `<section id="${e(id)}" class="card narrative-card"${viewerAttr}>
-    <div class="narrative-eyebrow">${e(eyebrow)}</div>
-    <h2>${e(headline)}</h2>
-    ${body}
-  </section>`;
-}
-
-const STANDARD_FIELDS = Object.freeze({
-  conversion: [
-    ["whatWorks", "What works"],
-    ["constraints", "Constraints"],
-    ["businessMeaning", "Business meaning"],
-    ["priority", "Priority"],
-  ],
-  content: [
-    ["currentStrength", "Current strength"],
-    ["coverageAssessment", "Coverage assessment"],
-    ["qualityAssessment", "Quality assessment"],
-    ["topicalArchitecture", "Topical architecture"],
-    ["importantGaps", "Important gaps"],
-    ["businessMeaning", "Business meaning"],
-  ],
-  seoSerp: [
-    ["whatWorks", "What works"],
-    ["constraints", "Constraints"],
-    ["searchImplication", "Search implication"],
-    ["priority", "Priority"],
-  ],
-  aiSearch: [
-    ["answerability", "Answerability"],
-    ["entityStrength", "Entity strength"],
-    ["citationReadiness", "Citation readiness"],
-    ["constraints", "Constraints"],
-    ["opportunity", "Opportunity"],
-  ],
-  eeatTrust: [
-    ["experience", "Experience"],
-    ["expertise", "Expertise"],
-    ["authority", "Authority"],
-    ["trust", "Trust"],
-    ["proofGaps", "Proof gaps"],
-    ["businessMeaning", "Business meaning"],
-  ],
-  technical: [
-    ["assessment", "Assessment"],
-    ["materialIssues", "Material issues"],
-    ["businessMeaning", "Business meaning"],
-  ],
-  performanceUx: [
-    ["assessment", "Assessment"],
-    ["userImpact", "User impact"],
-    ["conversionImpact", "Conversion impact"],
-  ],
-  competitors: [
-    ["advantages", "Advantages"],
-    ["disadvantages", "Disadvantages"],
-    ["marketInterpretation", "Market interpretation"],
-    ["differentiatorToProtect", "Differentiator to protect"],
-  ],
-});
-
-function standardSection(id, eyebrow, value, fieldKey, viewerPage) {
-  const fields = STANDARD_FIELDS[fieldKey]
-    .map(([key, label]) => titledAtom(label, value[key]))
-    .join("");
-
-  return sectionCard(
-    id,
-    eyebrow,
-    value.headline,
-    `<div class="narrative-grid">${fields}</div>`,
-    viewerPage,
-  );
-}
-
-function executiveConclusionSection(output) {
-  return sectionCard(
-    "narrative-executive",
-    "Executive conclusion",
-    output.executiveConclusion.headline,
-    atomHtml(output.executiveConclusion.narrative, {
-      className: "narrative-lead",
-    }),
-    "executive-scorecard",
-  );
-}
-
-function strengthsNarrativeSection(output) {
-  const items = output.strengths
-    .map(
-      (item) =>
-        `<li data-item-id="${e(item.itemId)}"><strong>${e(
-          item.title,
-        )}</strong>${atomHtml(item.narrative)}</li>`,
-    )
-    .join("");
-
-  return sectionCard(
-    "narrative-strengths",
-    "What should be preserved",
-    "Verified strengths",
-    `<ul class="narrative-list">${items}</ul>`,
-    "executive-scorecard",
-  );
-}
-
-function rootCauseNarrativeSection(output) {
-  const consequences = output.rootCause.businessConsequences.length
-    ? `<h3>Business consequences</h3><div class="narrative-grid">${output.rootCause.businessConsequences
-        .map(
-          (item) =>
-            `<div class="narrative-field"><h4>${e(
-              item.area,
-            )}</h4>${atomHtml(item.narrative)}</div>`,
-        )
-        .join("")}</div>`
-    : "";
-
-  return sectionCard(
-    "narrative-root-cause",
-    "Root cause",
-    output.rootCause.headline,
-    `${atomHtml(output.rootCause.narrative, {
-      className: "narrative-lead",
-    })}${consequences}`,
-    "supporting-detail",
-  );
-}
-
-const FUNNEL_STAGE_LABEL = Object.freeze({
-  awareness: "Awareness",
-  consideration: "Consideration",
-  decision: "Decision",
-});
-
-function funnelNarrativeSection(output) {
-  const stages = ["awareness", "consideration", "decision"]
-    .map((stage) => {
-      const items = output.funnelOpportunities[stage] || [];
-
-      const content = items.length
-        ? items
-            .map(
-              (item) => `<article class="narrative-opportunity" data-item-id="${e(
-                item.itemId,
-              )}">
-          ${titledAtom("Concept", item.concept)}
-          ${titledAtom("User need", item.userNeed)}
-          ${titledAtom("Rationale", item.rationale)}
-          ${titledAtom("Business objective", item.businessObjective)}
-          ${titledAtom("Next action", item.nextAction)}
-        </article>`,
-            )
-            .join("")
-        : `<p class="muted small">No governed opportunity was returned for this funnel stage.</p>`;
-
-      return `<div class="narrative-stage"><h3>${e(
-        FUNNEL_STAGE_LABEL[stage],
-      )}</h3>${content}</div>`;
-    })
-    .join("");
-
-  return sectionCard(
-    "narrative-funnel",
-    "Content funnel",
-    "Funnel opportunities",
-    stages,
-    "supporting-detail",
-  );
-}
-
-function limitationsNarrativeSection(output) {
-  if (output.limitations.length === 0) {
-    return sectionCard(
-      "narrative-limitations",
-      "Evidence boundaries",
-      "Limitations",
-      `<p>No narrative limitations were returned beyond the governed evidence states shown in the evidence layer.</p>`,
-      "evidence-appendix",
-    );
-  }
-
-  const items = output.limitations
-    .map(
-      (item) => `<article class="narrative-limitation" data-item-id="${e(
-        item.itemId,
-      )}">
-      <h3>${e(item.area)} <span class="chip cap-neutral">${e(
-        item.status,
-      )}</span></h3>
-      ${titledAtom("Client explanation", item.clientExplanation)}
-      ${titledAtom("What this means", item.whatThisMeans)}
-      ${titledAtom("What this does not mean", item.whatThisDoesNotMean)}
-      ${titledAtom("Impact on this report", item.impactOnReport)}
-    </article>`,
-    )
-    .join("");
-
-  return sectionCard(
-    "narrative-limitations",
-    "Evidence boundaries",
-    "Limitations",
-    items,
-    "evidence-appendix",
-  );
-}
-
-function actionPlanNarrativeSection(output) {
-  const rows = [...output.actionPlan]
-    .sort((a, b) => a.priority - b.priority)
-    .map(
-      (item) => `<tr data-action-id="${e(item.actionId)}">
-      <td>${e(item.priority)}</td>
-      <td><strong>${e(item.title)}</strong></td>
-      <td>${atomHtml(item.action, { tag: "div" })}</td>
-      <td>${atomHtml(item.whyNow, { tag: "div" })}</td>
-      <td>${atomHtml(item.expectedBusinessEffect, { tag: "div" })}</td>
-      <td>${e(item.effort)}</td>
-      <td>${atomHtml(item.verification, { tag: "div" })}</td>
-    </tr>`,
-    )
-    .join("");
-
-  return sectionCard(
-    "narrative-action-plan",
-    "Prioritized action",
-    "Action plan",
-    `<div class="table-wrap"><table class="narrative-actions">
-      <thead><tr><th>#</th><th>Action</th><th>What to do</th><th>Why now</th><th>Expected effect</th><th>Effort</th><th>Verification</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`,
-    "supporting-detail",
-  );
-}
-
-function executiveDecisionSection(output) {
-  return sectionCard(
-    "narrative-decision",
-    "Executive decision",
-    "Preserve, change, do next",
-    `<div class="narrative-decision-grid">
-      ${titledAtom("Preserve", output.executiveDecision.preserve)}
-      ${titledAtom("Change", output.executiveDecision.change)}
-      ${titledAtom("Do next", output.executiveDecision.doNext)}
-    </div>`,
-    "executive-scorecard",
-  );
-}
-
-export function renderWriterNarrativeLayer(writerOutput, judgeResponse) {
-  const deeperNarrative = `
-    ${rootCauseNarrativeSection(writerOutput)}
-    ${standardSection("narrative-conversion", "Conversion", writerOutput.conversion, "conversion", "supporting-detail")}
-    ${standardSection("narrative-content", "Content and topical architecture", writerOutput.content, "content", "supporting-detail")}
-    ${funnelNarrativeSection(writerOutput)}
-    ${standardSection("narrative-seo", "SEO and SERP", writerOutput.seoSerp, "seoSerp", "supporting-detail")}
-    ${standardSection("narrative-ai-search", "AI search readiness", writerOutput.aiSearch, "aiSearch", "supporting-detail")}
-    ${standardSection("narrative-eeat", "E-E-A-T and trust", writerOutput.eeatTrust, "eeatTrust", "supporting-detail")}
-    ${standardSection("narrative-technical", "Technical foundations", writerOutput.technical, "technical", "technical-seo")}
-    ${standardSection("narrative-performance", "Performance and UX", writerOutput.performanceUx, "performanceUx", "performance")}
-    ${standardSection("narrative-competitors", "Competitive position", writerOutput.competitors, "competitors", "supporting-detail")}
-    ${actionPlanNarrativeSection(writerOutput)}`;
-
-  return `<div id="narrative-layer" class="narrative-layer" data-writer-pass="${e(
-    writerOutput.passNumber,
-  )}" data-judge-score="${e(
-    judgeResponse.totalScore,
-  )}" data-judge-decision="${e(
-    judgeResponse.decision,
-  )}" data-render-version="${e(NARRATIVE_RENDER_VERSION)}">
-    ${executiveConclusionSection(writerOutput)}
-    ${strengthsNarrativeSection(writerOutput)}
-    <details class="narrative-supporting-disclosure" data-viewer-page="supporting-detail">
-      <summary>Additional interpretation and evidence context</summary>
-      <section class="narrative-summary-block">
-        <div class="narrative-eyebrow">Why the report reached these conclusions</div>
-        <h2>What matters most in the assessed experience</h2>
-        <p class="narrative-lead">Mobile loading is the leading experience concern, while the assessed route toward action is clear. Buyer-question support is a qualified content opportunity around that route. Completed enquiries and conversions were not measured.</p>
-      </section>
-      <section class="narrative-summary-block">
-        <div class="narrative-eyebrow">What the evidence supports and limits</div>
-        <h2>How to read the conclusions</h2>
-        <ul class="narrative-list">
-          <li>Content coverage was partial, so unassessed pages remain unknown.</li>
-          <li>Comparisons covered named competitors only and do not establish market position.</li>
-          <li>No material trust gap or conversion-path blocker was established in the assessed evidence.</li>
-          <li>Real-user field performance was unavailable, and AI-search visibility or retrieval was not directly measured.</li>
-        </ul>
-      </section>
-      <section class="narrative-summary-block">
-        <div class="narrative-eyebrow">Additional interpretation worth knowing</div>
-        <h2>Where the deeper detail is useful</h2>
-        <ul class="narrative-list">
-          <li>Search-result messaging and page structure are practical areas to refine within the assessed scope.</li>
-          <li>Existing proof is a foundation to preserve; check that it appears near important decision points.</li>
-          <li>Buyer-stage content can answer questions before action without implying a measured conversion result.</li>
-        </ul>
-      </section>
-      <div id="narrative-diagnostic-layer" class="narrative-diagnostic-layer" data-audit-only="true" hidden aria-hidden="true">
-        ${deeperNarrative}
-      </div>
-    </details>
-    ${limitationsNarrativeSection(writerOutput)}
-    ${executiveDecisionSection(writerOutput)}
-  </div>`;
-}
-
-const NARRATIVE_CSS = `
-.narrative-layer { margin: 1rem 0 1.4rem; }
-.narrative-supporting-disclosure { margin:1rem 0; border:1px solid var(--line); border-radius:10px; background:#f8fafc; }
-.narrative-supporting-disclosure > summary { cursor:pointer; padding:.8rem 1rem; color:var(--ink); font-weight:750; }
-.narrative-supporting-disclosure > section { margin:0 1rem 1rem; }
-.narrative-summary-block { margin:0 1rem 1rem; padding:1rem; border:1px solid var(--line); border-radius:10px; background:#fbfcfe; }
-.narrative-summary-block h2 { margin:.2rem 0 .55rem; }
-.narrative-diagnostic-layer { display:none !important; }
-.narrative-card { border-left: 4px solid var(--accent); }
-.narrative-eyebrow { color:var(--accent); font-family:Arial, Helvetica, sans-serif; font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.narrative-lead { font-size:1.08rem; line-height:1.65; }
-.narrative-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:.8rem; }
-.narrative-field { padding:.65rem .75rem; border:1px solid var(--line); border-radius:6px; background:#fbfcfe; }
-.narrative-field h4 { margin:.05rem 0 .3rem; font-family:Arial, Helvetica, sans-serif; font-size:.78rem; color:var(--muted); }
-.narrative-copy { margin:.2rem 0; }
-.narrative-list { padding-left:1.2rem; }
-.narrative-list li { margin:.65rem 0; }
-.narrative-stage { margin:.8rem 0 1.1rem; }
-.narrative-opportunity, .narrative-limitation { border:1px solid var(--line); border-radius:6px; padding:.8rem; margin:.65rem 0; background:#fbfcfe; }
-.narrative-decision-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:.8rem; }
-.narrative-actions td .narrative-copy { margin:0; }
-@media (max-width:720px) { .narrative-decision-grid { grid-template-columns:1fr; } }
-@media print { .narrative-card, .narrative-opportunity, .narrative-limitation { page-break-inside:avoid; } }
-`;
-
-function assertGovernedRenderInput({
-  model,
-  writerInput,
-  orchestrationResult,
-}) {
+function assertGovernedRenderInput({ model, writerInput, orchestrationResult }) {
   const errors = [];
 
   if (!isObject(model)) errors.push("model is required");
   if (!isObject(writerInput)) errors.push("writerInput is required");
-  if (!isObject(orchestrationResult))
-    errors.push("orchestrationResult is required");
+  if (!isObject(orchestrationResult)) errors.push("orchestrationResult is required");
 
-  if (
-    isObject(orchestrationResult) &&
-    orchestrationResult.status !== NARRATIVE_V2_STATUS.RELEASE_CANDIDATE
-  ) {
+  if (isObject(orchestrationResult) && orchestrationResult.status !== NARRATIVE_V2_STATUS.RELEASE_CANDIDATE) {
     errors.push("orchestrationResult must be RELEASE_CANDIDATE");
   }
 
@@ -405,125 +30,64 @@ function assertGovernedRenderInput({
   if (!isObject(output)) errors.push("finalWriterOutput is required");
   if (!isObject(judge)) errors.push("finalJudgeResponse is required");
 
-  if (
-    writerInput?.auditId &&
-    orchestrationResult?.auditId &&
-    writerInput.auditId !== orchestrationResult.auditId
-  ) {
+  if (writerInput?.auditId && orchestrationResult?.auditId && writerInput.auditId !== orchestrationResult.auditId) {
     errors.push("writerInput auditId does not match orchestrationResult");
   }
 
-  if (
-    output?.auditId &&
-    writerInput?.auditId &&
-    output.auditId !== writerInput.auditId
-  ) {
+  if (output?.auditId && writerInput?.auditId && output.auditId !== writerInput.auditId) {
     errors.push("finalWriterOutput auditId does not match writerInput");
   }
 
   if (output?.passNumber !== orchestrationResult?.passCount) {
-    errors.push(
-      "finalWriterOutput passNumber does not match orchestrationResult.passCount",
-    );
+    errors.push("finalWriterOutput passNumber does not match orchestrationResult.passCount");
   }
 
   if (judge?.passNumber !== orchestrationResult?.passCount) {
-    errors.push(
-      "finalJudgeResponse passNumber does not match orchestrationResult.passCount",
-    );
+    errors.push("finalJudgeResponse passNumber does not match orchestrationResult.passCount");
   }
 
-  if (judge?.decision !== "PASS") {
-    errors.push("finalJudgeResponse must be PASS");
-  }
+  if (judge?.decision !== "PASS") errors.push("finalJudgeResponse must be PASS");
 
   if (errors.length) {
-    throw new Error(
-      `Narrative v2 render input rejected: ${errors.join("; ")}`,
-    );
+    throw new Error(`Narrative v2 render input rejected: ${errors.join("; ")}`);
   }
 
-  const previousPass =
-    orchestrationResult.passCount > 1
-      ? orchestrationResult.passes?.[
-          orchestrationResult.passCount - 2
-        ]
-      : null;
+  const previousPass = orchestrationResult.passCount > 1
+    ? orchestrationResult.passes?.[orchestrationResult.passCount - 2]
+    : null;
 
   const validation = validateWriterOutput(output, {
     writerInput,
     expectedPassNumber: orchestrationResult.passCount,
-    ...(previousPass
-      ? {
-          previousOutput:
-            previousPass.writerOutput,
-          revisionDirective:
-            previousPass.judgeResponse?.revisionDirective,
-        }
-      : {}),
+    ...(previousPass ? {
+      previousOutput: previousPass.writerOutput,
+      revisionDirective: previousPass.judgeResponse?.revisionDirective,
+    } : {}),
   });
 
   if (!validation.valid) {
-    throw new Error(
-      `Narrative v2 WriterOutput revalidation failed: ${validation.errors.join(
-        "; ",
-      )}`,
-    );
+    throw new Error(`Narrative v2 WriterOutput revalidation failed: ${validation.errors.join("; ")}`);
   }
 }
 
 /**
- * Render a client-facing browser/PDF report from a governed release candidate.
+ * Render a client-facing report from a governed release candidate.
  *
- * The Writer prose is visible. Evidence IDs and Judge metadata remain present
- * only as non-visible HTML data attributes for audit traceability. The existing
- * deterministic report-v2 evidence/detail sections are preserved unchanged.
- *
- * Narrative sections are inserted into <main id="reportContent"> with
- * data-viewer-page assignments compatible with the 15-page viewer. Narrative
- * CSS is injected into the existing head style block.
+ * Writer/Judge results are validated above for the existing orchestration
+ * boundary, then deliberately excluded from the client artifact. The
+ * deterministic report-v2 renderer is the sole client remediation boundary.
  */
-export function renderGovernedNarrativeReportV2({
-  model,
-  writerInput,
-  orchestrationResult,
-  date,
-}) {
-  assertGovernedRenderInput({
-    model,
-    writerInput,
-    orchestrationResult,
-  });
+export function renderGovernedNarrativeReportV2({ model, writerInput, orchestrationResult, date }) {
+  assertGovernedRenderInput({ model, writerInput, orchestrationResult });
 
-  // Freeze the exact validated objects before the rendering boundary. No clone,
-  // alias, or reconstruction is introduced between validation and rendering.
+  // Preserve the existing validation-boundary immutability guarantees.
   Object.freeze(writerInput);
   Object.freeze(orchestrationResult.finalWriterOutput);
   Object.freeze(orchestrationResult.finalJudgeResponse);
 
-  const baseHtml = renderReportV2(model, { date });
-
-  if (!baseHtml.includes("</style>")) {
-    throw new Error("Narrative v2 render anchor missing: </style>");
-  }
-
-  if (!baseHtml.includes('<main id="reportContent" tabindex="-1">')) {
-    throw new Error(
-      'Narrative v2 render anchor missing: <main id="reportContent" tabindex="-1">',
-    );
-  }
-
-  const narrativeHtml = renderWriterNarrativeLayer(
-    orchestrationResult.finalWriterOutput,
-    orchestrationResult.finalJudgeResponse,
-  );
-
-  return baseHtml
-    .replace("</style>", `${NARRATIVE_CSS}\n</style>`)
-    .replace("</main>", `\n  ${narrativeHtml}\n  </main>`);
+  return renderReportV2(model, { date });
 }
 
 export default {
   renderGovernedNarrativeReportV2,
-  renderWriterNarrativeLayer,
 };

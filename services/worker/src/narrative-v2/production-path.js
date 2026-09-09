@@ -49,7 +49,7 @@ export function hasRequiredNarrativeV2ReportStructure(html) {
   return typeof html === "string"
     && /^<!doctype html>/i.test(html)
     && html.includes("Where are the problems?")
-    && html.includes('id="narrative-layer"');
+    && html.includes('<main id="reportContent" tabindex="-1">');
 }
 
 function defaultClock() {
@@ -962,10 +962,8 @@ export async function renderNarrativeV2UatFromPersistedArtifacts({
 
   if (
     !/^<!doctype html>/i.test(html) ||
-    !html.includes('id="narrative-layer"') ||
-    !html.includes(
-      `data-viewer-version="${REPORT_V2_VIEWER_VERSION}"`,
-    )
+    !html.includes('<main id="reportContent" tabindex="-1">') ||
+    !html.includes(`data-viewer-version="${REPORT_V2_VIEWER_VERSION}"`)
   ) {
     throw new Error(
       `PRYSM-V2-UAT-RERENDER-01 did not produce governed Viewer v${REPORT_V2_VIEWER_VERSION} HTML`,
