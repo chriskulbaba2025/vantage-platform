@@ -39,6 +39,12 @@ import {
   ReadBackFailureError,
 } from "./artifact-errors.js";
 
+const durableStores = new WeakSet();
+
+export function isDurableObjectArtifactStore(store) {
+  return durableStores.has(store);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -336,7 +342,9 @@ export function createObjectArtifactStore(opts = {}) {
     }
   }
 
-  return { put, get, exists, verify, storageBackend: "s3" };
+  const store = { put, get, exists, verify, storageBackend: "s3" };
+  durableStores.add(store);
+  return store;
 }
 
 // ---------------------------------------------------------------------------

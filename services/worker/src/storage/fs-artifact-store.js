@@ -26,6 +26,12 @@ import {
   ProviderFailureError,
 } from "./artifact-errors.js";
 
+const durableStores = new WeakSet();
+
+export function isDurableFsArtifactStore(store) {
+  return durableStores.has(store);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -289,7 +295,7 @@ export function createFsArtifactStore(opts = {}) {
     }
   }
 
-  return {
+  const store = {
     put,
     get,
     exists,
@@ -297,6 +303,8 @@ export function createFsArtifactStore(opts = {}) {
     _destroy,
     storageBackend: "local",
   };
+  durableStores.add(store);
+  return store;
 }
 
 // ---------------------------------------------------------------------------

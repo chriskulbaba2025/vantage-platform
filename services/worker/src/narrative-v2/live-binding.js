@@ -55,6 +55,8 @@ import {
   normalizeWriterModelOutput,
   normalizeJudgeModelOutput,
 } from "./model-output-normalization.js";
+import { isDurableFsArtifactStore } from "../storage/fs-artifact-store.js";
+import { isDurableObjectArtifactStore } from "../storage/object-artifact-store.js";
 
 export const NARRATIVE_V2_LIVE_BINDING_VERSION = "1.0.0";
 export const NARRATIVE_V2_LIVE_MAX_CALLS = 4;
@@ -354,6 +356,14 @@ function responseName(callNumber) {
   ).padStart(2, "0")}-response.json`;
 }
 
+function responseStateName(callNumber) {
+  return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-response-state.json`;
+}
+
+function responseMetaName(callNumber) {
+  return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-response-meta.json`;
+}
+
 function resultName(callNumber) {
   return `${RESERVATION_PREFIX}/call-${String(
     callNumber,
@@ -628,7 +638,7 @@ export function createNarrativeV2LiveBinding({
 
   if (
     requireDurableStore &&
-    !["local", "s3"].includes(artifactStore.storageBackend)
+    !(isDurableFsArtifactStore(artifactStore) || isDurableObjectArtifactStore(artifactStore))
   ) {
     throw new Error(
       "Narrative v2 live release requires a durable artifact store",
@@ -880,6 +890,13 @@ export function createNarrativeV2LiveBinding({
     if (original.promptSha256 !== originalRequestSha256 || original.modelId !== originalModelId) {
       throw new Error("Narrative v2 recovery request/model identity mismatch");
     }
+    if (
+      executionId !== scope.executionId ||
+      original.executionId !== scope.executionId ||
+      original.auditId !== scope.auditId
+    ) {
+      throw new Error("Narrative v2 recovery execution identity mismatch");
+    }
     if (!originalWriterInputSha256) {
       throw new Error("Narrative v2 recovery requires WriterInput identity");
     }
@@ -1000,6 +1017,22 @@ export function createNarrativeV2LiveBinding({
 
       if (recoveryAuthorization) {
         const recovery = recoveryAuthorization;
+        const durableAuthorization = recovery.authorizationId
+          ? await readJsonByName(
+              artifactStore,
+              scope,
+              recoveryName(recovery.authorizationId),
+            )
+          : null;
+        const durableAuthorizationHash = durableAuthorization
+          ? objectSha256(
+              Object.fromEntries(
+                Object.entries(durableAuthorization).filter(
+                  ([key]) => key !== "authorizationSha256",
+                ),
+              ),
+            )
+          : null;
         const original = existing.find((entry) =>
           entry.reservationId === recovery.originalReservationId &&
           entry.callNumber === recovery.originalCallNumber,
@@ -1011,6 +1044,8 @@ export function createNarrativeV2LiveBinding({
           recovery.state === NARRATIVE_V2_CALL_STATE.RECOVERY_AUTHORIZED &&
           recovery.authorizedRecoveryAction === NARRATIVE_V2_RECOVERY_ACTION &&
           recovery.maxAdditionalCallCount === 1 &&
+          recovery.auditId === scope.auditId &&
+          recovery.executionId === scope.executionId &&
           recovery.role === role &&
           recovery.passNumber === passNumber &&
           original &&
@@ -1020,7 +1055,16 @@ export function createNarrativeV2LiveBinding({
           recovery.originalRequestSha256 === sha256(prompt) &&
           recovery.originalWriterInputSha256 === writerInputSha256 &&
           recovery.judgeRevisionSha256 === objectSha256(previousJudgeResponse || null);
-        if (!validRecovery) {
+        const authenticatedRecovery =
+          validRecovery &&
+          durableAuthorization &&
+          durableAuthorization.authorizationSha256 === durableAuthorizationHash &&
+          durableAuthorization.authorizationSha256 === recovery.authorizationSha256 &&
+          durableAuthorization.authorizationId === recovery.authorizationId &&
+          durableAuthorization.auditId === scope.auditId &&
+          durableAuthorization.executionId === scope.executionId &&
+          durableAuthorization.originalReservationId === recovery.originalReservationId;
+        if (!authenticatedRecovery) {
           throw new Error("Narrative v2 recovery authorization identity or lineage mismatch");
         }
       } else if (
@@ -1616,6 +1660,18 @@ export function createNarrativeV2LiveBinding({
           ? "concrete DNS lookup failure before request transmission"
           : "transport exception did not prove whether provider received the request",
       });
+      if (recoveryAuthorization) {
+        await persistReturnedFailure({
+          scope,
+          callNumber: reservation.callNumber,
+          reservation,
+          role,
+          passNumber,
+          modelId,
+          errorCode: "RECOVERY_TRANSPORT_FAILED",
+          state: NARRATIVE_V2_CALL_STATE.RECOVERY_FAILED,
+        });
+      }
       throw transportError;
     } finally {
       clearTimeout(timeout);
@@ -1628,6 +1684,15 @@ export function createNarrativeV2LiveBinding({
       if (typeof response.text === "function") {
         const rawText = await response.text();
         responseDigest = sha256(rawText);
+        await persistJson(artifactStore, scope, responseStateName(callNumber), {
+          state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
+          callNumber,
+          role,
+          passNumber,
+          modelId,
+          responseSha256: responseDigest,
+          responseStatus: response.status || 200,
+        });
         try {
           body = JSON.parse(rawText);
         } catch {
@@ -1644,6 +1709,15 @@ export function createNarrativeV2LiveBinding({
       } else {
         body = await response.json();
         responseDigest = sha256(JSON.stringify(body));
+        await persistJson(artifactStore, scope, responseStateName(callNumber), {
+          state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
+          callNumber,
+          role,
+          passNumber,
+          modelId,
+          responseSha256: responseDigest,
+          responseStatus: response.status || 200,
+        });
       }
     } catch (err) {
       if (/response was not JSON/.test(err.message || "")) throw err;
@@ -1797,6 +1871,13 @@ export function createNarrativeV2LiveBinding({
         modelPrice,
       );
 
+    await persistJson(artifactStore, scope, responseMetaName(callNumber), {
+      state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
+      responseSha256: responseDigest,
+      responseContentSha256: sha256(content),
+      usage,
+    });
+
     processDaily.reservedUsd =
       Math.max(
         0,
@@ -1897,6 +1978,122 @@ export function createNarrativeV2LiveBinding({
       );
     }
 
+    return parsed;
+  }
+
+  async function resumePersistedCall({
+    auditId,
+    callNumber,
+    role,
+    passNumber,
+    modelId,
+    promptSha256,
+    writerInput,
+    writerInputSha256 = null,
+    previousJudgeResponse = null,
+    normalize,
+    validate,
+  }) {
+    const scope = resolveScope(auditId);
+    const reservation = await readJsonByName(
+      artifactStore,
+      scope,
+      reservationName(callNumber),
+    );
+    if (
+      !reservation ||
+      reservation.auditId !== scope.auditId ||
+      reservation.executionId !== scope.executionId ||
+      reservation.role !== role ||
+      reservation.passNumber !== passNumber ||
+      reservation.modelId !== modelId ||
+      reservation.promptSha256 !== promptSha256 ||
+      (writerInputSha256 && reservation.writerInputSha256 !== writerInputSha256) ||
+      (writerInput && reservation.writerInputSha256 !== objectSha256(writerInput)) ||
+      reservation.judgeRevisionSha256 !== objectSha256(previousJudgeResponse || null)
+    ) {
+      throw new Error("Narrative v2 persisted call identity mismatch");
+    }
+
+    const response = await readJsonByName(
+      artifactStore,
+      scope,
+      responseName(callNumber),
+    );
+    const responseMeta = await readJsonByName(
+      artifactStore,
+      scope,
+      responseMetaName(callNumber),
+    );
+    const result = await readJsonByName(
+      artifactStore,
+      scope,
+      resultName(callNumber),
+    );
+    if (!response || !responseMeta) {
+      throw new Error("Narrative v2 persisted response is unavailable for deterministic resume");
+    }
+    if (result?.validationResult === "PASS") {
+      if (
+        result.role !== role ||
+        result.passNumber !== passNumber ||
+        result.responseSha256 !== responseMeta.responseContentSha256
+      ) {
+        throw new Error("Narrative v2 persisted result identity mismatch");
+      }
+    }
+
+    const parsed = normalize(response);
+    const validation = validate(parsed);
+    const metadataErrors = [];
+    if (role === "writer" && parsed?.modelId !== modelId) {
+      metadataErrors.push(`modelId must equal configured Writer model ${modelId}`);
+    }
+    if (role === "judge" && parsed?.judgeModelId !== modelId) {
+      metadataErrors.push(`judgeModelId must equal configured Judge model ${modelId}`);
+    }
+    if (!validation.valid || metadataErrors.length > 0) {
+      throw new Error(`Narrative v2 persisted ${role} resume validation failed: ${[
+        ...(validation.errors || []),
+        ...metadataErrors,
+      ].join("; ")}`);
+    }
+    const usage = responseMeta.usage;
+    if (!usage || !Number.isFinite(Number(usage.inputTokens)) || !Number.isFinite(Number(usage.outputTokens))) {
+      throw new Error("Narrative v2 persisted response usage is unavailable for deterministic resume");
+    }
+    if (result?.validationResult === "PASS") return parsed;
+
+    const modelPrice = config.priceTable[modelId];
+    const actualCost = estimateActualCost(usage, modelPrice);
+    const ledger = createUsageLedgerEntry({
+      auditId: scope.auditId,
+      executionId: scope.executionId,
+      workflowVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      nodeId: `narrative-v2-${role}`,
+      mode: NARRATIVE_V2_LIVE_MODE,
+      modelId,
+      promptVersion: role === "writer" ? parsed.promptVersion || WRITER_PROMPT_VERSION : parsed.judgePromptVersion || JUDGE_PROMPT_VERSION,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedInputTokens: usage.cachedInputTokens,
+      estimatedCost: reservation.estimatedCost,
+      actualCost,
+      retryNumber: 0,
+      cacheHit: false,
+      validationResult: "PASS",
+      timestamp: clock.now(),
+    });
+    await persistJson(artifactStore, scope, resultName(callNumber), {
+      ...ledger,
+      bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      callNumber,
+      role,
+      passNumber,
+      state: NARRATIVE_V2_CALL_STATE.CALL_COMPLETED,
+      responseSha256: responseMeta.responseContentSha256,
+      validationErrors: [],
+    });
     return parsed;
   }
 
@@ -2049,6 +2246,8 @@ export function createNarrativeV2LiveBinding({
     judgeExecutor,
 
     registerAuditScope,
+
+    resumePersistedCall,
 
     authorizeTransportRecovery,
 

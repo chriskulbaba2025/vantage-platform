@@ -276,3 +276,132 @@ test("TRANSPORT-RECOVERY-09: one authorized Writer pass-2 recovery uses a new ca
     humanAuthorizationId: "human-auth-2", humanAuthorizationReference: "ticket-2", humanAuthorizationIdentity: "Chris", authorizedAt: "2026-09-09T00:00:00.000Z",
   }), /already authorized/);
 });
+
+async function seedUncertainPassTwo(store, overrides = {}) {
+  const prompt = overrides.prompt || "recovery prompt";
+  const writerHash = hash(JSON.stringify(input()));
+  const judgeHash = hash(JSON.stringify(overrides.judge || null));
+  await putJson(store, "narrative-v2/live-usage/call-01-reservation.json", {
+    contractVersion: "1.0.0", bindingVersion: "1.0.0", reservationId: "original-reservation",
+    auditId: AUDIT_ID, executionId: SCOPE.executionId, callNumber: 1, role: "writer", passNumber: 2,
+    modelId: "writer-test", promptSha256: hash(prompt), writerInputSha256: writerHash,
+    judgeRevisionSha256: judgeHash, estimatedCost: 0.01, reservedAt: "2026-09-09T00:00:00.000Z", status: "RESERVED",
+    ...(overrides.reservation || {}),
+  });
+  await putJson(store, "narrative-v2/live-usage/call-01-transport.json", {
+    contractVersion: "1.0.0", bindingVersion: "1.0.0", auditId: AUDIT_ID,
+    executionId: SCOPE.executionId, role: "writer", passNumber: 2, callNumber: 1,
+    reservationId: "original-reservation", requestSha256: hash(prompt), modelId: "writer-test",
+    state: "TRANSPORT_OUTCOME_UNCERTAIN", uncertaintyReason: "socket reset", occurredAt: "2026-09-09T00:00:00.000Z",
+  });
+  return { prompt, writerHash, judgeHash };
+}
+
+function forgedRecovery({ prompt, writerHash, judgeHash, ...overrides }) {
+  return {
+    contractVersion: "1.0.0", bindingVersion: "1.0.0", authorizationId: "forged-auth",
+    auditId: AUDIT_ID, executionId: SCOPE.executionId, role: "writer", passNumber: 2,
+    originalReservationId: "original-reservation", originalCallNumber: 1,
+    originalRequestSha256: hash(prompt), originalModelId: "writer-test", originalWriterInputSha256: writerHash,
+    judgeRevisionSha256: judgeHash, uncertaintyReason: "socket reset",
+    authorizedRecoveryAction: "REISSUE_SAME_PASS_AFTER_HUMAN_AUTHORIZATION", maxAdditionalCallCount: 1,
+    state: "RECOVERY_AUTHORIZED", ...overrides,
+  };
+}
+
+test("TRANSPORT-RECOVERY-10: forged recovery authorization without durable artifact is rejected before fetch", async () => {
+  const store = createMemoryArtifactStore();
+  const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
+  binding.registerAuditScope(SCOPE);
+  const seeded = await seedUncertainPassTwo(store);
+  await assert.rejects(() => binding.writerExecutor({
+    prompt: seeded.prompt, passNumber: 2, writerInput: input(), previousOutput: validWriterOutput(1),
+    judgeResponse: null, recoveryAuthorization: forgedRecovery(seeded),
+  }), /authorization/i);
+});
+
+test("TRANSPORT-RECOVERY-11: recovery execution identity and tampered authorization are rejected", async () => {
+  const store = createMemoryArtifactStore();
+  const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
+  binding.registerAuditScope(SCOPE);
+  const seeded = await seedUncertainPassTwo(store);
+  const forged = forgedRecovery(seeded, { executionId: "other-execution" });
+  await assert.rejects(() => binding.writerExecutor({
+    prompt: seeded.prompt, passNumber: 2, writerInput: input(), previousOutput: validWriterOutput(1),
+    judgeResponse: null, recoveryAuthorization: forged,
+  }), /authorization|execution|lineage/i);
+});
+
+test("TRANSPORT-RECOVERY-11A: persisted authorization hash tampering is rejected", async () => {
+  const store = createMemoryArtifactStore();
+  const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
+  binding.registerAuditScope(SCOPE);
+  const seeded = await seedUncertainPassTwo(store);
+  const authorization = await binding.authorizeTransportRecovery({
+    auditId: AUDIT_ID, executionId: SCOPE.executionId, role: "writer", passNumber: 2,
+    originalReservationId: "original-reservation", originalCallNumber: 1,
+    originalRequestSha256: hash(seeded.prompt), originalModelId: "writer-test", originalWriterInputSha256: seeded.writerHash,
+    judgeRevisionSha256: seeded.judgeHash, uncertaintyReason: "socket reset",
+    humanAuthorizationId: "auth-hash-test", humanAuthorizationReference: "ticket-hash",
+    humanAuthorizationIdentity: "Chris", authorizedAt: "2026-09-09T00:00:00.000Z",
+  });
+  await assert.rejects(() => binding.writerExecutor({
+    prompt: seeded.prompt, passNumber: 2, writerInput: input(), previousOutput: validWriterOutput(1),
+    judgeResponse: null, recoveryAuthorization: { ...authorization, authorizationSha256: "0".repeat(64) },
+  }), /authorization|lineage/i);
+});
+
+test("TRANSPORT-RECOVERY-12: mutable memory durability metadata cannot claim live-release durability", () => {
+  const memory = createMemoryArtifactStore();
+  const spoofed = { ...memory, storageBackend: "local" };
+  assert.throws(() => createNarrativeV2LiveBinding({ env: env(), artifactStore: spoofed, requireDurableStore: true }), /durable artifact store/i);
+});
+
+test("TRANSPORT-RECOVERY-13: persisted returned response can resume without fetch after restart", async () => {
+  const store = createMemoryArtifactStore();
+  const payload = validWriterOutput(1);
+  const prompt = "persisted response prompt";
+  await putJson(store, "narrative-v2/live-usage/call-01-reservation.json", {
+    auditId: AUDIT_ID, executionId: SCOPE.executionId, callNumber: 1, role: "writer", passNumber: 1,
+    modelId: "writer-test", promptSha256: hash(prompt), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
+  });
+  await putJson(store, "narrative-v2/live-usage/call-01-response.json", payload);
+  await putJson(store, "narrative-v2/live-usage/call-01-response-meta.json", {
+    state: "RESPONSE_RETURNED", responseContentSha256: hash(JSON.stringify(payload)),
+    usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
+  });
+  const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
+  binding.registerAuditScope(SCOPE);
+  const output = await binding.resumePersistedCall({
+    auditId: AUDIT_ID, callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test",
+    promptSha256: hash(prompt), normalize: (value) => value, validate: () => ({ valid: true, errors: [] }),
+  });
+  assert.equal(output.passNumber, 1);
+  const result = JSON.parse(Buffer.from(await store.get(`${livePrefix()}/call-01-result.json`)).toString("utf8"));
+  assert.equal(result.validationResult, "PASS");
+});
+
+test("TRANSPORT-RECOVERY-14: completed result can resume exactly without fetch", async () => {
+  const store = createMemoryArtifactStore();
+  const payload = validWriterOutput(1);
+  const prompt = "completed result prompt";
+  await putJson(store, "narrative-v2/live-usage/call-01-reservation.json", {
+    auditId: AUDIT_ID, executionId: SCOPE.executionId, callNumber: 1, role: "writer", passNumber: 1,
+    modelId: "writer-test", promptSha256: hash(prompt), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
+  });
+  await putJson(store, "narrative-v2/live-usage/call-01-response.json", payload);
+  await putJson(store, "narrative-v2/live-usage/call-01-response-meta.json", {
+    state: "RESPONSE_RETURNED", responseContentSha256: hash(JSON.stringify(payload)),
+    usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
+  });
+  await putJson(store, "narrative-v2/live-usage/call-01-result.json", {
+    validationResult: "PASS", role: "writer", passNumber: 1, responseSha256: hash(JSON.stringify(payload)),
+  });
+  const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
+  binding.registerAuditScope(SCOPE);
+  const output = await binding.resumePersistedCall({
+    auditId: AUDIT_ID, callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test",
+    promptSha256: hash(prompt), normalize: (value) => value, validate: () => ({ valid: true, errors: [] }),
+  });
+  assert.deepEqual(output, payload);
+});
