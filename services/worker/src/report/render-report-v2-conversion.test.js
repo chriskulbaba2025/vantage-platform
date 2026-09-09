@@ -584,15 +584,16 @@ test("CR-10: heading evidence is scoped to the named evaluated page", () => {
   assert.match(uHeadings, /Not Assessed/i, "uncollected heading evidence renders Not Assessed");
   assert.ok(!/\bMissing\b/.test(uHeadings), "uncollected headings must not render as Missing");
 });
-test("CR-11: observed schema and recommended schema are semantically distinct", () => {
+test("CR-11: observed schema remains evidence-only without an independent recommendation", () => {
   const html = renderReportV2(scoreWith(assessedSite()));
   const idx = html.indexOf("Schema");
   const schema = html.slice(idx, idx + 4000);
 
   assert.match(schema, /Observed/i, "observed block present");
-  assert.match(schema, /Recommended/i, "recommended block present");
+  assert.match(schema, /Structured-data evidence boundary/i, "evidence boundary present");
+  assert.doesNotMatch(schema, /Recommended structured-data candidates|A structured-data change should be prioritized/i);
 
-  const observedBlock = schema.slice(schema.search(/Observed/i), schema.search(/Recommended/i));
+  const observedBlock = schema.slice(schema.search(/Observed/i), schema.search(/Structured-data evidence boundary/i));
 
   assert.match(observedBlock, /Organization/, "detected type appears under Observed");
   assert.ok(!/\bFAQPage\b/.test(observedBlock), "a merely recommended type must not appear as observed");
@@ -2072,6 +2073,65 @@ if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(m
     "competitor-with-limitations": "fafcbb32c0ce2aef00b63b127afc84fc8580405eef204257cdea5fcc97ebb281",
     "device-profile-failed": "ea0425598002d8002f3a4c2f7460794ca02b79a381fc1d04bd3871bd5b839b8f",
   });
+  Object.assign(canonicalRenderGolden, {
+    assessed: "bb5ee8889b4254b59c989a2fe390b51ae79a1a875e4a130e4e6860d62a829c8c",
+    unassessed: "eb42f7feeecb34eedcbbd347fd5059373367bc671a0f5e383d856beb24951fc4",
+    "provider-failed": "f2702852cec57d8523e57f5a09fb241f2042b19d83f465b6ae3cd18d9dafcbdc",
+    "crawl-blocked": "681f53187d222c0435715b56f98312d4fc71923e047680d18ebdc8e9bcafc1b2",
+    "target-outage": "b95f5b92649e6b4cfa7375fe531a80d6699b9c90f14c251303f2e9d45073813b",
+    "outage-with-limitations": "d1f8d9deb36be3afdef32ae90d41d504b0edbc38ee4807096149c005ad8977c4",
+    "http-and-noindex": "0c1d296b83f0a625e49e8986e93846f63b0c73268a1e655834857b2fef3594cd",
+    "robots-retrieved": "aa0d61f959c6a9a31fe7abdb90e712bb004b2986a3b36bf6c40fc8beb65077ad",
+    "canonical-missing": "f4fe4cdc937fbe400e02e0184f54943eaff08e6e6046da4d72c1c8a7b4a451b2",
+    "no-conversion-mechanism": "8b43c4d7c02a5c7bd6cba0ebaea9a313be5aef8fb61c24a7b6c25e3ef06f1c25",
+    "no-contact": "811aefd68b3664eb6f42bd7d022e86890c865f38726e0f3aa71413c9f962f77e",
+    "headers-all-present": "f53858d8cc1e75a6510adca450c9b90001c64a996259126d13353eb6409ea911",
+    "ga4-ready": "083ccee79fc343b97be34435c8ea12ad3d5f7443b6729ce262455ce66fd9d193",
+    "ga4-issues": "8c8bc51db751a2603dfa9119dc4716084b5e6b9d8ca63e4ca499be25ab5ca747",
+    "ga4-not-applicable": "c7e8bbfeb4977bf85349a63ed7f3a597c9671df43a795c6130ee57d7fafc016e",
+    "slow-mobile": "b17ff91d6651bede6926968af0c3475c24603751a60b51c9b5255486db5dee00",
+    "no-performance": "3d0aae01723866ebbff6452df97427552df1f96746935a5c17a843f721beaaa4",
+    "path-validated-blocker": "b954fb035ae8c50c9e74ad2670991d3b4db3ad9ae9ae9a85cfd9f5a6d67d15a0",
+    "competitor-present": "49f5aa7e363e1b2f880dfbfaa8dcbdd8bbb589ad7cb71373fde3ce36d44323de",
+    "proprietary-platform": "5cc6447965d75d5a4ed90791e26f44896286e0804e7b99c5dc7ea97fe781914a",
+    "untraced-broken-links": "2dab199b20073b1626f41b1665fb3768336edb77b4cf4b4f9cc1550e0bc71c45",
+    "schema-confirmed-absent": "d39717b4ef6e0b2d5874715f62dc75abb18e82730f782a9543cee8831eb6cc82",
+    "headings-absent-h1": "b1fd3d83c0ce1e696c92825689bb93d4794766deeccd3cdbf4e991abc30272df",
+    "headings-multiple-h1": "70e09b9427983278c52aa0260993226cf4d15711e0f5352f327ed5fad9b4a829",
+    "perf-field-and-multipage": "8537f65cc7f163d0ffe46347018632cc36d22621f98ffe15e9fcb61e6fe98450",
+    "competitor-with-limitations": "c3c02e4e3d741e24db92f878dd86729efdd54ed3549beb235fa378e55c98bc8f",
+    "device-profile-failed": "0e1a4c14935ea3eff706986968d68551331ec343420457cb6debb3328809277a",
+  });
+  Object.assign(canonicalRenderGolden, {
+    assessed: "1c5d1b457953a8eb106d6363ed15c24bbb15e73e79f1829611335d12e40673a3",
+    unassessed: "8338538d5faf8f4c4a0aea49014963440ddaab1433d58c9024dc7b81c45ae67e",
+    "provider-failed": "fef74e97a36982e4a29620c809cc9656c69d45507d601b2d3822b58e5d510461",
+    "crawl-blocked": "534922a39b9b3a381cff83073dbc920c09283901df105a2846a71d5ae2fc8bcb",
+    "target-outage": "05379704b1b19eaeb5e42f9568a5142093bb3d743bbbbc8b158d74409c6fc5be",
+    "outage-with-limitations": "72420f0dea2c8b17bea2b710e71303b2a01300a0111abda081defdd54b2c6d4c",
+    "http-and-noindex": "c42381241b7e6c274f298a54d72b8cea8d79856850782ed1a7d3beb4c7cfc458",
+    "robots-retrieved": "79b666348fe524f01382c83baabc7899d5cd78142f9975c594cbd3f9d0b021b2",
+    "canonical-missing": "51a1530f7e8590729d2aca65658279fe6fe6f3a806ffbf3ba8e3a48b3ca3914e",
+    "no-conversion-mechanism": "2b32c6cf5ed8474c19f9d98537f4dd996870044c492ccf88edcba47da4967047",
+    "no-contact": "8d4dc3e017dce8631965caf74e06acdc0a9fadb5b07fb3e6859bfc971360a7b9",
+    "headers-all-present": "e6f18f54d1e6b89bd4ff8cce02dc0e8bc96bb9418a749e4d93eedaa4d0332867",
+    "ga4-ready": "65fde5b80390125a1525a05fa00cb358056569140c0bd2bc23ed5a5ab52a63be",
+    "ga4-issues": "23ddaa674a28b04dbbee494aa2d576678a758f480135b0c2e58f91a5023931c1",
+    "ga4-not-applicable": "2fea26d3560e0e0cd45cf0573f7f60ab4324dae378cbf6241432579bfebfcb7d",
+    "slow-mobile": "42dda2fcc30e3e8427657ecc99083568dfb74a5008c0be241fd8d273e3025b1f",
+    "no-performance": "ea5b4ee185e575e65c997ff1370e72ceb72404bcb73d50093465cf5d8a38d663",
+    "path-validated-blocker": "8a88642c414c9b1de941628701a0dc4f5e0b494929be6c7706742a777c66f56a",
+    "competitor-present": "6c481b41bd8f507194f46625a977bb47331e0913fe13cb2028eaa6451b580f9c",
+    "proprietary-platform": "a07dbabb2b7279e6bb6b4f85c2203b9b7d9b4e26e3f83a18c6c15a045900855b",
+    "untraced-broken-links": "27570f55dbe37cdd413667f9d6ad449eccdc309d5911905a4a53067929cc55ce",
+    "schema-confirmed-absent": "064663c58991d92c97d0201ba21a7c3b8fa2874adfaef36432dbbbfe36fddd7f",
+    "headings-absent-h1": "20ddc8e0c4e1bf242767936ed285dc298fd246f9af4e54be823c44d31e5eb8e2",
+    "headings-multiple-h1": "161c623cec6f17bc038fb50950c8821b33e6edb7b88d148b4e4e52b04e6e5671",
+    "perf-field-and-multipage": "afa1911b536759417bbafa0091a95030da20f3ca8376d3c3b52d45b68bac5291",
+    "competitor-with-limitations": "22bb48893992f8d62e14ec402900337b76f184c9763ba3b812588282b29e2a7b",
+    "device-profile-failed": "e32fea1ce94efbe3ff7a22a81cb9fe61cea7cbf7fd3df982abc53c0eb541b437",
+  });
+
   assert.deepEqual(
     actual,
     canonicalRenderGolden,

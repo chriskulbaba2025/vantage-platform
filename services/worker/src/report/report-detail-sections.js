@@ -363,7 +363,7 @@ export function eeatSection(model) {
         }.`
       : typeof score === "number"
         ? score >= 70
-          ? `The site has a useful trust foundation (${score}/100), but important decision points should still be checked for proof, reassurance, and clear next-step expectations.`
+          ? `The site has a useful trust foundation (${score}/100). Observed proof and the assessed trust questions are shown below.`
           : `Trust and risk reduction are not yet strong enough at ${score}/100. Buyers may reach important decision points without enough proof or reassurance to feel confident taking the next step.`
         : "Trust evidence was assessed, but no dimension score was available. The observed proof signals below should be read directly.";
 
@@ -439,7 +439,7 @@ export function eeatSection(model) {
       ? "The assessed trust foundation is useful, but content coverage is partial. Observed proof is retained; unobserved proof remains unknown."
       : typeof score === "number" && score >= 70 && !hasMaterialTrustFinding
         ? `Trust is a relative strength at ${score}/100. No trust issue crossed the Priority Fix threshold.`
-        : "The assessed site has a useful trust foundation. The main opportunity is not adding proof for its own sake, but making sure the right proof appears where buyers need reassurance before acting.";
+        : "The assessed site has a useful trust foundation. The observed proof and remaining evidence limitations are shown below; no separate trust remedy is inferred here.";
   const confidenceNote = trustPartial
     ? "The available trust-proof assessment is partial, so no conclusion is made about unobserved signals or pages."
     : hasMaterialTrustFinding
@@ -515,7 +515,6 @@ export function eeatSection(model) {
     .replace(/<h3>How confidence should build<\/h3>[\s\S]*?<h3>Where confidence breaks down<\/h3>/, "<h3>Where confidence may still need strengthening</h3><p>No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.</p>")
     .replace(/<p>No checked trust-proof signal was absent from the assessed content\.<\/p>/, "")
     .replace(/<h3>Proof already available but underused<\/h3>/, "<h3>Proof already available</h3>")
-    .replace(/<h3>Material trust findings<\/h3>[\s\S]*?<h3>Assessment limitations<\/h3>/, "<h3>What to check or improve first</h3><ol class=\"trust-actions\"><li>Keep the existing proof assets.</li><li>Check that testimonials, case studies, credentials, pricing or investment context, and reassurance appear near the pages and actions where buyers make decisions.</li><li>Add or reposition proof only where that page-level review shows a real gap.</li></ol><h3>Assessment limitations</h3>")
     + `<section id="eeat-detail" class="card" data-supporting-section="trust-evidence"><p class="muted small">Supporting Detail</p><h2>E-E-A-T Trust Readiness Detail</h2><details class="supporting-detail-disclosure"><summary>Show detailed trust dimensions</summary><h3>Governed E-E-A-T dimensions</h3><div class="pillar-grid">${dimensionCards}</div><h3>Detailed trust interpretation</h3><p>${e(verdict)}</p>${findingBlock}</details></section>`;
 }
 
@@ -1531,26 +1530,7 @@ export function schemaSection(model) {
           ? '<p class="small"><span class="chip cap-neutral">PARTIAL</span> No structured-data type was observed in the available partial assessment. Absence is not established.</p>'
           : '<p class="small"><span class="chip cap-missing">FINDING</span> No structured-data type was observed in the fully assessed structured-data evidence.</p>';
 
-  const recommendations =
-    schemaComplete
-      ? RECOMMENDED_SCHEMA.filter(
-          ([type]) =>
-            !observed.some(
-              (item) =>
-                String(
-                  item,
-                )
-                  .toLowerCase()
-                  .includes(
-                    type
-                      .split(
-                        " ",
-                      )[0]
-                      .toLowerCase(),
-                  ),
-            ),
-        )
-      : [];
+  const recommendations = [];
 
   const directAnswer =
     !schemaAssessed
@@ -1577,7 +1557,7 @@ export function schemaSection(model) {
     <h3>Observed structured data</h3>
     ${observedBlock}
 
-    <h3>Recommended structured-data candidates</h3>
+    <h3>Structured-data evidence boundary</h3>
     ${
       schemaComplete &&
       recommendations.length
@@ -1594,7 +1574,7 @@ export function schemaSection(model) {
             )
             .join("")}</tbody>
         </table></div>
-        <p class="muted small">These are candidates for consideration only. A missing schema type is not automatically a finding or recommendation.</p>`
+        <p class="muted small">No canonical structured-data remedy is emitted from this evidence-only section.</p>`
         : schemaPartial
           ? '<p><span class="chip cap-neutral">PARTIAL</span> PRYSM does not derive missing-schema candidates from incomplete structured-data coverage.</p>'
           : "<p>No additional structured-data candidate was established from the available evidence.</p>"
@@ -1674,7 +1654,7 @@ export function schemaSection(model) {
     </div>
 
     <h3>Material findings only</h3>
-    <p class="small">Schema type counts do not become findings by themselves. A structured-data change should be prioritized only when it materially improves understanding of a real business, service, person, location, or supporting content relationship.</p>
+    <p class="small">Schema type counts are evidence context only. They do not become a client remedy without a separately governed canonical solution.</p>
 
     <h3>Unavailable or partial evidence</h3>
     ${
@@ -2094,6 +2074,11 @@ export function performanceDetailSection(model) {
       finding.module ===
       "performance",
   );
+  const canonicalByFindingId = new Map(
+    (model?.canonicalSolutions?.records || []).flatMap((record) =>
+      (record.findingRefs || []).map((findingId) => [findingId, record]),
+    ),
+  );
 
   const collectedDiagnostics =
     Array.isArray(
@@ -2187,13 +2172,10 @@ export function performanceDetailSection(model) {
                   finding.title ||
                     "Performance finding",
                 )}</strong> — ${e(
-                  finding.businessImpact ||
-                    "",
+                  "Evidence-backed performance finding.",
                 )}${
-                  finding.recommendation
-                    ? ` <strong>Action:</strong> ${e(
-                        finding.recommendation,
-                      )}`
+                  canonicalByFindingId.has(finding.findingId)
+                    ? ` <a href="#priority-fixes" data-solution-id="${e(canonicalByFindingId.get(finding.findingId).solutionId)}">Canonical solution ${e(canonicalByFindingId.get(finding.findingId).solutionId)}</a>`
                     : ""
                 }</li>`,
             )
@@ -2891,15 +2873,9 @@ export function actionPlanSection(canonical, checklist) {
 
     <details class="supporting-detail-disclosure"><summary>Show detailed implementation sequence</summary>
 
-    ${
-      foundationsToFix.length
-        ? `<p class="small"><strong>Foundations to resolve alongside these actions:</strong> ${e(
-            foundationsToFix.join(
-              ", ",
-            ),
-          )}.</p>`
-        : ""
-    }
+    ${foundationsToFix.length
+      ? `<p class="small">Foundational evidence requiring attention is shown in the First Things First assessment above; it is not a separate client action sequence.</p>`
+      : ""}
 
     ${groupBlocks}
 

@@ -312,9 +312,9 @@ test("S03: conversion journey tells a bounded CRO story", () => {
     "Where the journey is strong",
     "Where visitors may lose momentum",
     "What this means for conversion",
-    "What to improve around the journey",
+     "Canonical issues affecting this journey",
     "Conversion takeaway",
-    "The assessed route is already clear. The best opportunity is not to redesign the path",
+     "The assessed route is described above using the available evidence",
     "What we could not determine",
     "completed enquiries",
   ]) assert.match(html, new RegExp(text));
@@ -375,4 +375,80 @@ test("WP-G-05: v1 renderer still renders the same model (locked path unchanged)"
   assert.match(v1, /Prysm Phase 1 Audit/);
   // v1 must NOT contain the v2 design markers.
   assert.doesNotMatch(v1, /Where are the problems\?/);
+});
+
+test("AUTH-CLOSURE-01: non-canonical remedy inputs cannot alter client remediation", () => {
+  const baselineModel = model();
+  const baseline = renderReportV2(baselineModel);
+  const mutated = structuredClone(baselineModel);
+  const token = "NON_CANONICAL_REMEDY_SENTINEL";
+
+  mutated.writerOutput = {
+    actionPlan: [token],
+    executiveDecision: { preserve: token, change: token, doNext: token },
+    conversion: { priority: token },
+    seoSerp: { priority: token },
+    aiSearch: { opportunity: token },
+    funnelOpportunities: [{ nextAction: token }],
+    content: { importantGaps: [token] },
+    eeatTrust: { proofGaps: [token] },
+    technical: { materialIssues: [token] },
+    executiveConclusion: token,
+    strengths: [token],
+    rootCause: token,
+    limitations: [token],
+  };
+  mutated.findings = mutated.findings.map((finding) => ({
+    ...finding,
+    recommendation: token,
+    businessImpact: token,
+    verificationMethod: token,
+    affectedUrls: [token],
+  }));
+  mutated.competitors = {
+    ...(mutated.competitors || {}),
+    opportunities: { gaps: [{ recommendation: token }] },
+  };
+  // The fixture has no content-opportunity records; keep that governed absence
+  // while the direct section tests cover mutation of content recommendation fields.
+  mutated.evidence = {
+    ...mutated.evidence,
+    internalLinkOpportunities: {
+      opportunities: [{ sourceUrl: token, targetUrl: token, proposedAnchor: token, reasonForLink: token }],
+    },
+  };
+
+  const rendered = renderReportV2(mutated);
+  const priorityStart = (html) => html.indexOf('<section id="priority-fixes"');
+  const priorityEnd = (html) => html.indexOf('<section id="conversion-journey"', priorityStart(html));
+  assert.equal(
+    rendered.slice(priorityStart(rendered), priorityEnd(rendered)),
+    baseline.slice(priorityStart(baseline), priorityEnd(baseline)),
+    "canonical client remediation is invariant under non-canonical remedy mutation",
+  );
+  assert.doesNotMatch(rendered, new RegExp(token));
+});
+
+test("AUTH-CLOSURE-02: final report has no independent remedy structures", () => {
+  const html = renderReportV2(priorityModel());
+  for (const forbidden of [
+    "narrative-layer",
+    "narrative-action-plan",
+    "narrative-diagnostic-layer",
+    "data-writer-pass",
+    "data-judge-score",
+    "data-judge-decision",
+    "trust-actions",
+    "What to check or improve first",
+    "Recommended structured-data candidates",
+    "Implementation-Ready Recommendations",
+    "What to create or improve first",
+    "What to improve around the journey",
+    "Preserve the existing clear route",
+  ]) {
+    assert.doesNotMatch(html, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), forbidden);
+  }
+  assert.match(html, /data-solution-id=/);
+  assert.match(html, /How to fix it/);
+  assert.match(html, /Canonical solution/);
 });

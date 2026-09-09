@@ -933,16 +933,15 @@ function conversionPathSection(model) {
     <div class="conversion-journey-strength"><p>${e(workingCopy)}</p>${blockerNote}</div>
     ${momentumSection}
     <h3>What this means for conversion</h3>
-    <p>The route itself is not the main issue. The stronger opportunity is improving the experience around that route so visitors can reach the next step faster and with fewer unanswered questions.</p>
-    <h3>What to improve around the journey</h3>
+    <p>The assessed route was evaluated using the available path evidence. Any client remediation that applies to this journey is represented by the linked canonical Priority Fix record.</p>
+    <h3>Canonical issues affecting this journey</h3>
     <ol class="conversion-journey-actions">${["VAN-PERF-001", "VAN-CONTENT-002"]
       .map((ruleId) => solutionForRule(ruleId))
       .filter(Boolean)
       .map((record) => `<li>${e(record.whatToChange)} ${canonicalReference(record)}</li>`)
       .join("")}
-      <li>Preserve the existing clear route while making the surrounding decision experience easier.</li>
     </ol>
-    <div class="conversion-journey-takeaway"><strong>Conversion takeaway</strong><p>The assessed route is already clear. The best opportunity is not to redesign the path, but to remove friction around it—help mobile visitors engage sooner and answer more of their questions before they are asked to act.</p></div>
+    <div class="conversion-journey-takeaway"><strong>Conversion takeaway</strong><p>The assessed route is described above using the available evidence. Unassessed behavior and outcomes remain outside this report.</p></div>
     ${journeyBridge}
     <div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>This assessment does not measure completed enquiries, CTA click-through rate, form completion rate, abandonment, scroll depth, or behavior on unassessed pages.</p></div>
   </section>`;
@@ -1170,7 +1169,7 @@ function competitorSection(model) {
               <td class="small">${e((gap.observedCompetitorCoverage || []).join(", ") || gap.competitorDomain || gap.competitorPage || "Observed competitor coverage")}</td>
               <td class="small">${e(gap.clientCoverage || "Not Assessed")}</td>
               <td class="small">${e(gap.conversionRelevance || "Material relevance was established by the qualification gate.")}</td>
-              <td class="small">${e(gap.recommendation || gap.limitationStatement || "Qualified comparison retained; no standalone recommendation created.")}</td>
+              <td class="small">${e(gap.limitationStatement || "Qualified comparison retained as evidence context; no standalone client remedy was created.")}</td>
             </tr>`).join("")}</tbody>
         </table></div>`
       : "<p>No competitor gap passed the qualification threshold required to appear as a material comparative finding.</p>"}
@@ -1264,7 +1263,7 @@ function competitorSectionClient(model) {
     <h3>Where meaningful differences were observed</h3>
     ${gapList}
     <h3>What this means for the client</h3>
-    <p class="small">${e(gaps.length ? "Review the qualified differences in Supporting Detail before deciding whether any deserves a site change." : "No qualified comparative gap was established. Use the site's own assessed conversion-readiness evidence as the basis for action.")}</p>
+    <p class="small">${e(gaps.length ? "Qualified comparative differences are retained as evidence context. No client remedy is inferred from competitor observations." : "No qualified comparative gap was established, and no client remedy is inferred from competitor context.")}</p>
     <p class="small"><strong>Evidence limitation:</strong> This comparison covers only the named competitors and observable conversion-readiness signals. It does not establish traffic, rankings, backlinks, market share, domain authority, or causal performance.</p>
   </section>
   <section id="competitor-detail" class="card" data-supporting-section="competitive-trust-evidence">
@@ -1275,7 +1274,7 @@ function competitorSectionClient(model) {
     <p class="muted small">Service depth is shown as not directly comparable because the available measures are not equivalent. Other rows use the same signal type across the named set.</p>
     <div class="table-wrap"><table><thead><tr><th>Material area</th><th>This site</th>${header}</tr></thead><tbody>${signalRows}</tbody></table></div>
     <h3>Qualified comparative gaps</h3>
-    ${gaps.length ? `<div class="table-wrap"><table><thead><tr><th>Competitor behavior</th><th>Your current coverage</th><th>Why it matters</th><th>PRYSM judgment</th></tr></thead><tbody>${gaps.slice(0, 10).map((gap) => `<tr><td class="small">${e((gap.observedCompetitorCoverage || []).join(", ") || gap.competitorDomain || gap.competitorPage || "Observed competitor coverage")}</td><td class="small">${e(gap.clientCoverage || "Not Assessed")}</td><td class="small">${e(gap.conversionRelevance || "Material relevance was established by the qualification gate.")}</td><td class="small">${e(gap.recommendation || gap.limitationStatement || "Qualified comparison retained; no standalone recommendation created.")}</td></tr>`).join("")}</tbody></table></div>` : "<p>No competitor gap passed the qualification threshold required to appear as a material comparative finding.</p>"}
+    ${gaps.length ? `<div class="table-wrap"><table><thead><tr><th>Competitor behavior</th><th>Your current coverage</th><th>Why it matters</th><th>PRYSM judgment</th></tr></thead><tbody>${gaps.slice(0, 10).map((gap) => `<tr><td class="small">${e((gap.observedCompetitorCoverage || []).join(", ") || gap.competitorDomain || gap.competitorPage || "Observed competitor coverage")}</td><td class="small">${e(gap.clientCoverage || "Not Assessed")}</td><td class="small">${e(gap.conversionRelevance || "Material relevance was established by the qualification gate.")}</td><td class="small">${e(gap.limitationStatement || "Qualified comparison retained as evidence context; no standalone client remedy was created.")}</td></tr>`).join("")}</tbody></table></div>` : "<p>No competitor gap passed the qualification threshold required to appear as a material comparative finding.</p>"}
     ${qualifiedCandidates.length || excludedCandidates.length ? `<p class="muted small">${e(qualifiedCandidates.length)} qualified candidate(s) · ${e(excludedCandidates.length)} excluded candidate(s).</p>` : ""}
     <h3>Evidence limitations</h3>
     ${limitations.length ? `<ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : `<p class="small">This comparison covers observable conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, domain authority, or causal ranking advantage.</p>`}
@@ -1290,7 +1289,6 @@ function meaningfulClientTopic(value) {
 }
 
 function contentOpportunitiesSection(model) {
-  const canonical = canonicalSolutionContext(model);
   const ideas = model.contentIdeas || {};
   const tofu = ideas.tofu || [];
   const mofu = ideas.mofu || [];
@@ -1399,20 +1397,6 @@ function contentOpportunitiesSection(model) {
     return "Helps a prospective buyer evaluate the service before taking the next step.";
   };
 
-  const clientJourneyConnection = (i) => {
-    const stage = String(i.funnelStage || i.stage || "");
-    if (/awareness|tofu/i.test(stage)) {
-      return "Link this educational content into the relevant service explanation.";
-    }
-    if (/consideration|evaluation|mofu/i.test(stage)) {
-      return "Link this between service understanding and the assessed next step with comparison, process, or proof support.";
-    }
-    if (/decision|bofu/i.test(stage)) {
-      return "Place this near the assessed conversion action to support a buyer's final question or first step.";
-    }
-    return "Connect this to the relevant service page and the next-step action used in the assessed journey.";
-  };
-
   const evidenceLabel = (i) =>
     i.evidenceStatus === "AVAILABLE"
       ? "Supported within assessed content"
@@ -1425,11 +1409,7 @@ function contentOpportunitiesSection(model) {
       .map((i, offset) => {
         const index = startIndex + offset;
         const detail = primary ? "" : ` ${e(i.gap || "")}`;
-        const canonicalContent = canonical.ordered.find((record) => record.findingRefs.some((findingRef) => {
-          const finding = (model.findings || []).find((item) => item.findingId === findingRef);
-          return finding && String(finding.ruleId || finding.id).startsWith("VAN-CONTENT-");
-        }));
-        return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}"${canonicalContent ? ` data-solution-id="${e(canonicalContent.solutionId)}"` : ""}>
+        return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}">
           <div class="content-opportunity-card-header">
             ${primary ? `<span class="content-opportunity-rank">${index + 1}</span>` : ""}
             ${index === 0 ? '<span class="content-opportunity-start">Start here</span>' : ""}
@@ -1439,10 +1419,7 @@ function contentOpportunitiesSection(model) {
             <div><dt>Buyer question / need</dt><dd>${e(i.question || "Buyer decision support")}</dd></div>
             <div><dt>Buyer stage</dt><dd>${e(i.funnelStage || i.stage || "Assessed buyer journey")}</dd></div>
             <div><dt>Why it matters</dt><dd>${e(/supports the stated goal/i.test(String(i.whyItMatters || "")) ? clientWhyItMatters(i) : (i.whyItMatters || clientWhyItMatters(i)))}</dd></div>
-            <div><dt>Recommended asset</dt><dd>${e(i.recommendedAsset || i.type || "Content asset")}</dd></div>
-            <div><dt>Journey connection</dt><dd>${e(clientJourneyConnection(i))}</dd></div>
-            <div><dt>Decision-support role</dt><dd>${e(i.frame || i.placement || "Supports buyer decision-making")}</dd></div>
-            ${canonicalContent ? `<div><dt>Canonical solution</dt><dd>${canonicalReference(canonicalContent)}</dd></div>` : ""}
+            <div><dt>Decision-support context</dt><dd>${e(i.frame || i.placement || "Supports buyer decision-making")}</dd></div>
             ${primary ? `<div><dt>Evidence qualification</dt><dd>${e(evidenceLabel(i))}</dd></div>` : `<div class="content-opportunity-uncertainty"><dt>Evidence qualification</dt><dd>${e(evidenceLabel(i))}${detail}</dd></div>`}
           </dl>
         </article>`;
@@ -1488,7 +1465,7 @@ function contentOpportunitiesSection(model) {
     <h3>Where decision support is thin</h3>
     <p class="content-opportunities-gap">The assessed content signals identify qualified opportunities to answer buyer questions. This does not establish that unassessed pages lack the same support.</p>
 
-    <h3>What to create or improve first</h3>
+    <h3>Qualified content opportunities</h3>
     ${opportunityCards
       ? `<div class="content-opportunity-list">${opportunityCards}</div>`
       : `<p><span class="chip cap-ok">PASS</span> No qualified content opportunity was generated from the assessed evidence.</p>`}
@@ -1569,35 +1546,6 @@ function cmsPlatformSection(model) {
   </section>`;
 }
 
-function safeHref(u) {
-  try {
-    const parsed = new URL(String(u || ""), "https://placeholder.local");
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return e(u);
-    }
-  } catch {
-    /* fall through */
-  }
-  return "#";
-}
-
-const LINK_REASON_LABEL = {
-  source_content_supports_related_service_page:
-    "Content supports related service",
-  informational_content_progresses_to_commercial_page:
-    "Info content → commercial",
-  consideration_content_progresses_to_conversion_page:
-    "Consideration → conversion",
-  pages_belong_to_same_topic_hierarchy:
-    "Same topic hierarchy",
-  source_content_references_target_service:
-    "References target service",
-  source_content_clarifies_referenced_topic:
-    "Clarifies referenced topic",
-  high_value_page_is_weakly_linked:
-    "High-value page weakly linked",
-};
-
 function internalLinksSection(model) {
   const site = model.evidence?.site || {};
   const opp = model.evidence?.internalLinkOpportunities;
@@ -1616,52 +1564,9 @@ function internalLinksSection(model) {
         : ""
     }</p>`;
   } else if (opportunities.length === 0) {
-    body = `<p>No implementation-ready recommendations: no high- or medium-confidence opportunities were identified from crawl evidence.</p>`;
+    body = `<p>No qualified internal-link opportunity was identified from crawl evidence.</p>`;
   } else {
-    const recommendationSummary = opportunities.length <= 8
-      ? `${opportunities.length} additional recommendations are available.`
-      : `${opportunities.length} additional recommendations are available; representative examples are shown first.`;
-    body = `<h3>Implementation-Ready Recommendations</h3>
-<p class="small">${e(recommendationSummary)}</p>
-<p class="muted small">High- and medium-confidence recommendations traceable to crawled source and target page content.</p>
-<p class="small">Additional recommendations remain available in the deeper evidence layer.</p>
-<details class="supporting-detail-disclosure"><summary>Show representative internal-link recommendations</summary><div class="table-wrap"><table>
-<thead><tr><th>Source</th><th>Target</th><th>Anchor</th><th>Source context</th><th>Reason</th><th>Stage</th><th>Confidence</th><th>Warning</th></tr></thead>
-<tbody>${opportunities
-  .slice(0, 8)
-  .map(
-    (o) => `
-  <tr>
-    <td class="small"><a href="${safeHref(o.sourceUrl)}">${e(
-      (o.sourceUrl || "")
-        .replace(/^https?:\/\//, "")
-        .replace(/\/$/, "")
-        .slice(0, 40),
-    )}</a></td>
-    <td class="small"><a href="${safeHref(o.targetUrl)}">${e(
-      (o.targetUrl || "")
-        .replace(/^https?:\/\//, "")
-        .replace(/\/$/, "")
-        .slice(0, 40),
-    )}</a></td>
-    <td>${e(o.proposedAnchor || "")}</td>
-    <td class="small">${e(o.relevantSurroundingText || "—")}</td>
-    <td class="small">${e(
-      LINK_REASON_LABEL[o.reasonForLink] || o.reasonForLink || "",
-    )}</td>
-    <td>${e(o.funnelStage || "")}</td>
-    <td><span class="chip ${
-      o.confidence === "high" ? "cap-ok" : "cap-partial"
-    }">${e(o.confidence || "")}</span></td>
-    <td class="small">${
-      o.duplicateAnchorWarning
-        ? e(o.duplicateAnchorWarning)
-        : "—"
-    }</td>
-  </tr>`,
-  )
-  .join("")}</tbody>
-</table></div></details>`;
+    body = `<p class="small">${e(opportunities.length)} internal-link opportunities were identified from crawl evidence. They remain supporting evidence only; no client link-change instruction is rendered here.</p>`;
   }
 
   const tracedBroken = brokenLinks.filter(
@@ -1727,7 +1632,7 @@ function internalLinksSection(model) {
       opp?.coverage?.pagesEvaluated ?? 0,
     )} pages evaluated. ${e(
       opportunities.length,
-    )} recommendation(s). Representative examples are shown first; additional supporting evidence remains available.</p>
+    )} observed opportunity signal(s). The opportunity data is supporting evidence, not a standalone client remedy.</p>
     ${body}
     ${brokenTable}${untracedNote}
     ${orphanBlock}
@@ -2072,14 +1977,6 @@ body.viewer-ready main > section.viewer-active {
   display:block;
 }
 
-body.viewer-ready .narrative-layer [data-viewer-page]:not(.viewer-active) {
-  display:none;
-}
-
-body.viewer-ready .narrative-layer [data-viewer-page].viewer-active {
-  display:block;
-}
-
 .card {
   background:var(--card);
   border:1px solid var(--line);
@@ -2410,14 +2307,6 @@ footer {
   }
 
   body.viewer-ready main > section.viewer-active { display:block !important; }
-
-  body.viewer-ready .narrative-layer [data-viewer-page]:not(.viewer-active) {
-    display:none !important;
-  }
-
-  body.viewer-ready .narrative-layer [data-viewer-page].viewer-active {
-    display:block !important;
-  }
 
   .card,
   .pillar,
@@ -3219,24 +3108,6 @@ td {
   padding:14px 16px;
 }
 
-.narrative-card {
-  border-color:#C9DCD5;
-}
-
-.narrative-eyebrow {
-  color:var(--prysm-primary);
-  font-family:'DM Sans',sans-serif;
-  font-size:15px;
-  font-weight:800;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-}
-
-.narrative-field {
-  background:var(--prysm-mint-2);
-  border-color:var(--prysm-line);
-}
-
 footer {
   color:var(--prysm-muted);
   font-family:'DM Sans',sans-serif;
@@ -3493,19 +3364,9 @@ footer {
   const navLinks = Array.from(
     document.querySelectorAll("a[data-viewer-page]")
   );
-  const narrativeSections = Array.from(
-    document.querySelectorAll(
-      "#narrative-layer [data-viewer-page]"
-    )
-  );
-
   for (const id of allSectionIds) {
     const section = document.getElementById(id);
     if (section) section.classList.add("viewer-section");
-  }
-
-  for (const section of narrativeSections) {
-    section.classList.add("viewer-section");
   }
 
   function resolveRoute() {
@@ -3534,13 +3395,6 @@ footer {
       if (section) {
         section.classList.toggle("viewer-active", activeIds.has(id));
       }
-    }
-
-    for (const section of narrativeSections) {
-      section.classList.toggle(
-        "viewer-active",
-        section.dataset.viewerPage === page.pageId
-      );
     }
 
     for (const link of links) {

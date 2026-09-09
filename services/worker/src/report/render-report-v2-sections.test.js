@@ -161,7 +161,7 @@ test("V2R-01: content opportunities presents governed ideas in the client story"
   assert.match(html, /What content would help buyers move forward\?/i, "client heading present");
   assert.match(html, /What is already helping buyers/);
   assert.match(html, /Where decision support is thin/);
-  assert.match(html, /What to create or improve first/);
+  assert.match(html, /Qualified content opportunities/);
   assert.match(html, /content-opportunity-card/);
   const primaryContent = html.slice(html.indexOf('<section id="content-ideas"'), html.indexOf('<section id="content-opportunities-detail"'));
   assert.equal((primaryContent.match(/class="content-opportunity-card(?: |")/g) || []).length, 5, "primary S05 shows only the first five governed opportunities");
@@ -198,8 +198,8 @@ test("IL-01: relevantSurroundingText and duplicateAnchorWarning are rendered whe
     },
   };
   const html = await render(scoreAudit(INPUT, ev));
-  assert.match(html, /Compare coaching options before committing to a pricing plan/, "surrounding context rendered");
-  assert.match(html, /Anchor already used for: https:\/\/x\.com\/other/, "duplicate-anchor warning rendered");
+  assert.doesNotMatch(html, /Compare coaching options before committing to a pricing plan/, "independent link recommendation context is not serialized");
+  assert.doesNotMatch(html, /Anchor already used for: https:\/\/x\.com\/other/, "independent link recommendation warning is not serialized");
 });
 
 test("IL-02: absent context/warning renders explicit non-misleading cells, no fabrication", async () => {
@@ -267,12 +267,11 @@ test("V2R-02: CMS/platform section renders canonical platform evidence", async (
 // V2R-03 — Internal-link opportunities
 // ---------------------------------------------------------------------------
 
-test("V2R-03: internal-link opportunities render canonical source/target/anchor/reason/confidence", async () => {
+test("V2R-03: internal-link opportunities remain supporting evidence without remedy instructions", async () => {
   const m = scoreAudit(INPUT, richEvidence());
   const html = await render(m);
   assert.match(html, /Internal-Link Opportunities/i, "section heading present");
-  assert.match(html, /https:\/\/x\.com\/coaching/, "canonical source URL rendered");
-  assert.match(html, /https:\/\/x\.com\/pricing/, "canonical target URL rendered");
+  assert.doesNotMatch(html, /https:\/\/x\.com\/coaching/, "implementation source URL is not serialized as a remedy");
   // Defense-in-depth: non-http(s) schemes must never become link targets.
   const evil = scoreAudit(INPUT, {
     ...richEvidence(),
@@ -283,9 +282,11 @@ test("V2R-03: internal-link opportunities render canonical source/target/anchor/
   });
   const evilHtml = await render(evil);
   assert.ok(!evilHtml.includes('href="javascript:'), "non-http(s) schemes must not render as link targets");
-  assert.match(html, /coaching options and pricing/, "canonical proposed anchor rendered");
-  assert.match(html, /Consideration → conversion/, "canonical reason label rendered");
-  assert.match(html, /high/, "confidence rendered");
+  assert.doesNotMatch(html, /coaching options and pricing/, "independent proposed anchor is not serialized");
+  const internalLinksStart = html.indexOf('<section id="internal-links"');
+  const internalLinksEnd = html.indexOf('<section id="phase2"', internalLinksStart);
+  const internalLinks = html.slice(internalLinksStart, internalLinksEnd === -1 ? undefined : internalLinksEnd);
+  assert.doesNotMatch(internalLinks, /high/, "independent recommendation confidence is not serialized");
   assert.match(html, /https:\/\/x\.com\/missing/, "broken internal link rendered");
 });
 
