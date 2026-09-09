@@ -32,6 +32,12 @@ import { validateWriterOutput } from "./writer-output.js";
 import { validateJudgeResponse } from "./judge-contract.js";
 import { renderGovernedNarrativeReportV2 } from "../report/render-narrative-v2.js";
 import { REPORT_V2_VIEWER_VERSION } from "../report/render-report-v2.js";
+import {
+  buildSolutionAuthorityRecords,
+  SOLUTION_PAGE_REGISTRY,
+} from "../solution/solution-authority-provider.js";
+import { buildSolutionDirectiveInput } from "../solution/solution-directive-authority.js";
+import { generateCanonicalSolutions } from "../solution/solution-generator.js";
 
 const T = LIFECYCLE_STATE;
 const NARRATIVE_V2_VERSION = "2.0.0";
@@ -187,6 +193,27 @@ async function loadScoredInputs({ artifactStore, auditRequest, validateContract 
   assertCurrentScoreSet(scoreSet, { validateContract });
 
   return { decisionEvidence, capabilityEvidence, findings, scoreSet };
+}
+
+function prepareCanonicalSolutions({ inputs, solutionAuthorityProvider }) {
+  const authorityRecords = solutionAuthorityProvider({
+    findings: inputs.findings,
+    scoreSet: inputs.scoreSet,
+    decisionEvidence: inputs.decisionEvidence,
+    pageRegistry: SOLUTION_PAGE_REGISTRY,
+  });
+  const authorityInput = buildSolutionDirectiveInput({
+    findings: inputs.findings,
+    scoreSet: inputs.scoreSet,
+    decisionEvidence: inputs.decisionEvidence,
+    authorityRecords,
+    pageRegistry: SOLUTION_PAGE_REGISTRY,
+  });
+  const canonicalSolutions = generateCanonicalSolutions(authorityInput);
+  if (!canonicalSolutions || !Array.isArray(canonicalSolutions.records)) {
+    throw new Error("Canonical solution generation did not return a valid solution set");
+  }
+  return canonicalSolutions;
 }
 
 async function ensureReportContentPackage({ artifactStore, auditRequest, validateContract, inputs }) {
@@ -955,12 +982,14 @@ async function runNarrativeV2FromScored({
   validateContract,
   writerExecutor,
   judgeExecutor,
+  solutionAuthorityProvider,
   clock,
 }) {
   let inputs;
   try {
     inputs = await loadScoredInputs({ artifactStore, auditRequest, validateContract });
     await ensureReportContentPackage({ artifactStore, auditRequest, validateContract, inputs });
+    prepareCanonicalSolutions({ inputs, solutionAuthorityProvider });
   } catch (err) {
     // Package/input preparation occurs before NARRATIVE_PENDING. Remain at
     // SCORED so deterministic preparation can be retried without model calls.
@@ -1446,6 +1475,7 @@ export function createNarrativeV2ProductionPath({
   writerExecutor,
   judgeExecutor,
   authorizeFinalPass,
+  solutionAuthorityProvider = buildSolutionAuthorityRecords,
   clock,
 }) {
   if (!baseOrchestrator || typeof baseOrchestrator.execute !== "function") {
@@ -1482,6 +1512,7 @@ export function createNarrativeV2ProductionPath({
         validateContract,
         writerExecutor,
         judgeExecutor,
+        solutionAuthorityProvider,
         clock: c,
       });
     }
@@ -1505,6 +1536,7 @@ export function createNarrativeV2ProductionPath({
         validateContract,
         writerExecutor,
         judgeExecutor,
+        solutionAuthorityProvider,
         clock: c,
       });
     }
@@ -1673,6 +1705,10 @@ export function createNarrativeV2ProductionPath({
         auditRequest: args.auditRequest,
         validateContract: args.validateContract,
         inputs,
+      });
+      prepareCanonicalSolutions({
+        inputs,
+        solutionAuthorityProvider: args.solutionAuthorityProvider,
       });
       writerInput = buildWriterInput({
         auditId: args.auditRequest.auditId,

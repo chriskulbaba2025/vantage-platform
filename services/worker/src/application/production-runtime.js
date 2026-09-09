@@ -18,6 +18,7 @@ import { createAuditApplicationService } from "./audit-service.js";
 import { createLifecycleService } from "../lifecycle/lifecycle-service.js";
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
 import { REQUIRED_APPROVED_PAGE_FILENAMES } from "../storage/report-store.js";
+import { buildSolutionAuthorityRecords } from "../solution/solution-authority-provider.js";
 import {
   createProductionAdapters,
   createProductionContractValidator,
@@ -236,6 +237,8 @@ export function createProductionRuntime({
     writerExecutor: narrativeV2Deps.writerExecutor,
     judgeExecutor: narrativeV2Deps.judgeExecutor,
     authorizeFinalPass: narrativeV2Deps.authorizeFinalPass,
+    solutionAuthorityProvider:
+      narrativeV2Deps.solutionAuthorityProvider || buildSolutionAuthorityRecords,
     clock: runtimeClock,
   });
 

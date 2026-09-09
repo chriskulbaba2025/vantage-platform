@@ -89,6 +89,7 @@ function okSourceResult(source, evidence = {}) {
 function workingAdapters() {
   const siteEvidence = {
     sourceStatus: "AVAILABLE",
+    rawArtifactRef: "fixture://governed-onpage-evidence",
     domain: "proof.example.com",
     targetUrl: "https://proof.example.com",
     pageCount: 1,
