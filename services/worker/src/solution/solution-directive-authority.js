@@ -99,18 +99,10 @@ function collectExplicitRefs(value, refs, seen = new Set()) {
   }
 }
 
-function buildEvidenceIndex(findings, decisionEvidence, authorityMap) {
+function buildEvidenceIndex(findings, decisionEvidence) {
   const refs = new Set();
   for (const finding of findings) collectExplicitRefs(finding?.evidence, refs);
   collectExplicitRefs(decisionEvidence, refs);
-  for (const authority of authorityMap.values()) {
-    for (const ref of authority?.evidenceRefs || []) {
-      if (ref && typeof ref === "object" && ref.persisted === true) {
-        const id = refIdOf(ref);
-        if (id) refs.add(id);
-      }
-    }
-  }
   return refs;
 }
 
@@ -289,7 +281,7 @@ export function buildSolutionDirectiveInput({ findings, scoreSet, decisionEviden
     if (!findingIds.has(key) || !hierarchyIds.has(key)) fail("AUTH-HIERARCHY", key, "authorityRecords", "Authority may not introduce a finding outside the governed hierarchy.");
   }
   const pageIds = normalizeRegistry(pageRegistry);
-  const evidenceIndex = buildEvidenceIndex(findings, decisionEvidence, authorityMap);
+  const evidenceIndex = buildEvidenceIndex(findings, decisionEvidence);
   for (const findingId of ordered) {
     if (!findingIds.has(findingId)) fail("AUTH-HIERARCHY", findingId, "findings", "A governed hierarchy entry has no finding.");
     if (!authorityMap.has(findingId)) fail("AUTH-MISSING", findingId, "authorityRecords", "Every governed finding requires exactly one explicit authority record.");

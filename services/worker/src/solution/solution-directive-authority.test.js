@@ -156,6 +156,24 @@ test("missing explicit siteAnchor fails", () => { const r = authority("F-1", "E-
 test("multiple affected URLs do not select an anchor automatically", () => { const r = authority("F-1", "E-1"); delete r.siteAnchor; authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-ANCHOR"); });
 test("multiple evidence records do not select evidence automatically", () => { const r = authority("F-1", "E-1"); delete r.evidenceRefs; authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-EVIDENCE-REF"); });
 test("missing evidence reference fails", () => { const r = authority("F-1", "MISSING"); authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-EVIDENCE-REF"); });
+test("authority persisted flag cannot self-certify an unknown evidence reference", () => {
+  const r = authority("F-1", "UNKNOWN-AUTH-EVIDENCE");
+  r.evidenceRefs[0].persisted = true;
+  r.siteAnchor.evidenceRefIds = ["UNKNOWN-AUTH-EVIDENCE"];
+  authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-EVIDENCE-REF");
+});
+test("authority persisted flag does not affect a genuinely governed evidence reference", () => {
+  const withoutFlag = buildSolutionDirectiveInput(input());
+  const withFlagRecord = authority("F-1", "E-1");
+  withFlagRecord.evidenceRefs[0].persisted = true;
+  const withFlag = buildSolutionDirectiveInput(input({ authorityRecords: { "F-1": withFlagRecord, "F-2": authority("F-2", "E-2") } }));
+  assert.deepEqual(withFlag.validationContext.evidenceRefs, withoutFlag.validationContext.evidenceRefs);
+  const withoutFlagGenerated = generateCanonicalSolutions(withoutFlag);
+  const withFlagGenerated = generateCanonicalSolutions(withFlag);
+  assert.deepEqual(withFlagGenerated.sequence, withoutFlagGenerated.sequence);
+  assert.deepEqual(withFlagGenerated.activeSequence, withoutFlagGenerated.activeSequence);
+  assert.deepEqual(withFlagGenerated.records.map((record) => record.solutionId), withoutFlagGenerated.records.map((record) => record.solutionId));
+});
 test("missing anchor evidence reference fails", () => { const r = authority("F-1", "E-1"); r.siteAnchor.evidenceRefIds = ["MISSING"]; authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-ANCHOR"); });
 test("PARTIAL with PRESCRIPTIVE fails", () => { const r = authority("F-1", "E-1", { evidenceGrade: "PARTIAL" }); authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-PRESCRIPTION"); });
 test("UNKNOWN with FIX_NOW remediation fails", () => { const r = authority("F-1", "E-1", { evidenceGrade: "UNKNOWN", prescriptionMode: "PRESCRIPTIVE" }); authorityFails(input({ authorityRecords: { "F-1": r, "F-2": authority("F-2", "E-2") } }), "AUTH-PRESCRIPTION"); });
