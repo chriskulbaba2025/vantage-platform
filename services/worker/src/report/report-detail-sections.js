@@ -232,6 +232,7 @@ export function eeatSection(model) {
       finding.dimension === "trust_eeat" ||
       finding.module === "trust_signals",
   );
+  const hasMaterialTrustFinding = findings.length > 0;
   const solutionByFindingId = new Map(
     (model?.canonicalSolutions?.records || []).flatMap((record) =>
       (record.findingRefs || []).map((findingId) => [findingId, record]),
@@ -436,10 +437,14 @@ export function eeatSection(model) {
     ? "Trust-proof page content was not available, so the assessment cannot establish whether enough visible proof is present."
     : trustPartial
       ? "The assessed trust foundation is useful, but content coverage is partial. Observed proof is retained; unobserved proof remains unknown."
-      : "The assessed site has a useful trust foundation. The main opportunity is not adding proof for its own sake, but making sure the right proof appears where buyers need reassurance before acting.";
+      : typeof score === "number" && score >= 70 && !hasMaterialTrustFinding
+        ? `Trust is a relative strength at ${score}/100. No trust issue crossed the Priority Fix threshold.`
+        : "The assessed site has a useful trust foundation. The main opportunity is not adding proof for its own sake, but making sure the right proof appears where buyers need reassurance before acting.";
   const confidenceNote = trustPartial
     ? "The available trust-proof assessment is partial, so no conclusion is made about unobserved signals or pages."
-    : "No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.";
+    : hasMaterialTrustFinding
+      ? "Material trust findings are linked to their canonical Priority Fix records. The remaining question is whether observed proof appears close enough to important decision points."
+      : "No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.";
   const limitation = trustComplete
     ? "This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources."
     : trustPartial
@@ -2799,7 +2804,6 @@ function actionRows(records) {
         <th>Why</th>
         <th>Class</th>
         <th>Effort</th>
-        <th>How we verify it</th>
       </tr>
     </thead>
 
@@ -2822,9 +2826,6 @@ function actionRows(records) {
           )}</td>
           <td class="small">${e(
             record.effortBand,
-          )}</td>
-          <td class="small">${e(
-            record.implementationCheck.instruction,
           )}</td>
         </tr>`,
       )

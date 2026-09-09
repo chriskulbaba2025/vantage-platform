@@ -358,6 +358,45 @@ test("SUPPORTING-DETAIL-EVIDENCE-01: detail keeps visuals, deterministic samples
   assert.match(supporting, /PARTIAL|UNAVAILABLE|NOT_ASSESSED|limitations/i);
   assert.match(supporting, /<details[^>]*class="supporting-detail-disclosure"/);
   assert.match(supporting, /data-supporting-section="internal-links"/);
+  assert.match(supporting, /1 identified .* showing 1 examples/);
+});
+
+test("SUPPORTING-DETAIL-VERIFICATION-01: verification remains consolidated in MEASURE", async () => {
+  const html = await render(scoreAudit(INPUT, richEvidence()));
+  const plan = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="competitors"'));
+  assert.doesNotMatch(plan, /How we verify it/);
+  assert.match(plan, /MEASURE/);
+  assert.match(plan, /Evidence to compare in the next audit/);
+});
+
+test("INTERNAL-LINKS-DISCLOSURE-01: orphan count and governed full list are progressive", async () => {
+  const evidence = richEvidence();
+  evidence.internalLinkOpportunities.orphans = Array.from({ length: 6 }, (_, index) => ({
+    url: `https://x.com/orphan-${index + 1}`,
+    title: `Orphan ${index + 1}`,
+  }));
+  const html = await render(scoreAudit(INPUT, evidence));
+  const links = html.slice(html.indexOf('id="internal-links"'), html.indexOf('id="evidence"'));
+  assert.match(links, /6 identified .* showing 5 examples/);
+  assert.match(links, /Show all 6 governed orphan pages/);
+  assert.equal((links.match(/https:\/\/x\.com\/orphan-/g) || []).length, 11);
+});
+
+test("TRUST-WORDING-01: positive trust score explains absence of a Priority Fix", async () => {
+  const evidence = richEvidence();
+  evidence.site.trust = {
+    testimonials: true,
+    credentials: true,
+    caseStudies: true,
+    faq: true,
+    pricing: true,
+    policies: true,
+    contact: true,
+  };
+  const model = scoreAudit(INPUT, evidence);
+  model.scores.trustEeatDimension = 75;
+  const html = await render(model);
+  assert.match(html, /Trust is a relative strength at 75\/100\. No trust issue crossed the Priority Fix threshold\./);
 });
 
 test("SUPPORTING-DETAIL-PERFORMANCE-02: raw performance diagnostics stay behind disclosure", async () => {

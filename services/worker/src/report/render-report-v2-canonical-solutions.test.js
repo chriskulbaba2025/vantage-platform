@@ -111,6 +111,9 @@ test("Priority Fixes renders canonical detail and stable IDs in governed order",
   assert.match(priority, /Canonical reason 2/);
   assert.match(priority, /Canonical change 2/);
   assert.match(priority, /Canonical fix 2/);
+  assert.doesNotMatch(priority, /<dt>What needs attention<\/dt>/);
+  assert.match(priority, /<dt>What to change<\/dt>[\s\S]*Canonical change 2/);
+  assert.match(priority, /<dt>How to fix it<\/dt>[\s\S]*Canonical fix 2/);
   assert.ok(priority.indexOf("SOL-TWO") < priority.indexOf("SOL-ONE"));
 });
 

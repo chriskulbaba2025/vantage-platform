@@ -335,7 +335,7 @@ test("CR-03: a verified foundation blocker outranks a higher-scoring optimizatio
     "rendered Priority Fixes must lead with the authoritative client sequence",
   );
   assert.doesNotMatch(sectionE, /VAN-PATH-001|VAN-TECH-001|Foundation blocker/);
-  assert.match(sectionE, /What needs attention/);
+  assert.doesNotMatch(sectionE, /<dt>What needs attention<\/dt>/);
   assert.match(sectionE, /Where it applies/);
   assert.match(sectionE, /How to confirm it improved/);
 });
@@ -2044,33 +2044,33 @@ if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(m
     "device-profile-failed": "d0a5d82d7f2fc36f79abc75dc10964c345047f076c1f3c585131cb759a3d248f",
   });
   Object.assign(canonicalRenderGolden, {
-    assessed: "68ea6fc3afd99a35dfe515118a235edb55c58dfbacebd99975e0344be6fbb731",
-    unassessed: "2c9d6e67101d375e3d09b6a62ef4d49e59368b775b5268f68028fd99c0690e13",
+    assessed: "85aaf5183786e52aef5c46e2461e2cecc7d5a1c87b6209e2f351f1227ca9b607",
+    unassessed: "417693466efa8f96a4edd0eab5c10894d84e9c729313ed62ddb37b27f8c157ce",
     "provider-failed": "93866ce35a36178d50886edde3269f3ba75e9ef23ffa5730d75bd077b6c95413",
     "crawl-blocked": "a5da9839a8d563e6ebfe6f9a78c3daf02a85c7d1586cf6a2dddd67885005505a",
-    "target-outage": "6c6c39fc0df31e9b234e2e074a3a092628b91e82f613ecb598bdfe49611a6c3c",
-    "outage-with-limitations": "7e7ce376566ed93ff62a91eeb6b56c64110255430f416b69c9012fa928d087c0",
-    "http-and-noindex": "e912b25fc4f34f3d952cd34d321432f6b1f618cf878a57ff109dd03265631444",
-    "robots-retrieved": "8ff0a9c9bf64dbcb772a3a8f87961694d9e367a1c87c6046a103ce1f7b716ad3",
-    "canonical-missing": "0dd11b71e4616e8311f96fb48edbaa5c1c59d873f2ad56d5d6f98f1bcb445f4f",
-    "no-conversion-mechanism": "0c3fe1f2f479b2acffb62e89ee4baba05343738f49215cd4a3ef51a3754415aa",
-    "no-contact": "b8a8ff77431afa31993388a40477aa348b1bffc3eefc7e4b6e0a9ccf58350094",
-    "headers-all-present": "bcb620111557828fd1890bb3712e6e60e9c935233e7121b0b3e9d024a6543b94",
-    "ga4-ready": "8a0d67f76f294aee817876e8626ef9013218d2ef46ddea7f90bedd8e2af1aad7",
-    "ga4-issues": "33c9d2d19aabab42487a1a341b1be6b5c5f96f11d244709ae0ad7ff158a6822d",
-    "ga4-not-applicable": "79017a2ab0094bef53e234aa804c90046a7da354145f679b6546280f8c29354c",
-    "slow-mobile": "913a3020e95dffaf170e03b881d2417e87a25b0237724119d166ce44ead461c7",
-    "no-performance": "59b1d631038984960466e07944480202ec98b6ae86f39b618c4a92a15dc508f3",
-    "path-validated-blocker": "fcf52aaed2cffc283be17ba68f5aef8e3bfedf762b41bdba4cf8cee582b59a78",
-    "competitor-present": "3f95496ee65105c2645cf225c345804f7a7fdd319d3f17f84470fa98300ecbf5",
-    "proprietary-platform": "6abd49ca0778c22a5a4c34df15c85a87b9503ceab185fd247b067a5e3b8ac258",
-    "untraced-broken-links": "2cd41ae977558187a68d520c789f656f16d94a686d11761296f331630a56dcca",
-    "schema-confirmed-absent": "e2078e6d7f0bce8e93cdbe6edbd9d01f6e2713136a7e67da184a8b46ec56c91e",
-    "headings-absent-h1": "0dec7f34fa205f54682662d995c2c17afd28c8147901da065168ac8fee65c343",
-    "headings-multiple-h1": "2477a03dab42019b16c06b5632caccd3218400aa2bbdb7580339c304028ca147",
-    "perf-field-and-multipage": "54bbe71a93fdfae1e8606346725fcaaf9b94d57fb4b1c681a36fd91c6ecafb4e",
-    "competitor-with-limitations": "dab13d627e6dc2df769aebd8b6edc0ddf167632372acd9c5ccfb84ac71f5e996",
-    "device-profile-failed": "1e3a2c543d765d2cd75910dac8da0357073ec7280fde134a5fe5d4915ffd2441",
+    "target-outage": "cd3242ba1af425f6d8c002d8b2fa6fa65a8b0dc33f134c579357d903faa3e18f",
+    "outage-with-limitations": "9066cfdf6d88ef7073a80998cd5f2c7b3d0caf2dbc79cb1cff241333d0121f94",
+    "http-and-noindex": "93c7b8037217dc4d2b628c0e9f2f3e37fa7a584f7d0d8391df09518a165a11d7",
+    "robots-retrieved": "053c5b3b6122eb0ce6381d78d453a16d4dd4503bce82758d1d4c6f8e6854c609",
+    "canonical-missing": "d9ac5770a1ebefc821149fa03f870f13db1fd3a075f5722c98576eb9fca6fcc0",
+    "no-conversion-mechanism": "453ecb0892a7c3659f21ed06fcfe813e99b3ece299ae3468a118476ea3803f76",
+    "no-contact": "fb3b558616d993db2e78346073e761b205cbd2585fec99498a1a972bd882a356",
+    "headers-all-present": "5ba40e01d5c7a1b9ecdf5673d584e10593cb4cfec77ec0298d1462bcb610cf52",
+    "ga4-ready": "72c7a9976d395a645ffd451a0fc292dbfc063c0095607db40903d25880a68b69",
+    "ga4-issues": "2766a4f2fa72a329bf470bdd97f5a9c2741f165011edc014af463798ff3e0c5e",
+    "ga4-not-applicable": "d9f2e0f649f01022d2e302688755edbbefb348e8436ccf7c3d60651356bed6be",
+    "slow-mobile": "b3d96155df755ccfac117457af215713b9467796e89eb6d64ade1f8561813cef",
+    "no-performance": "84cd08db6feec508ea7f891daff1b6d541161c97db35e0acc8d16d55182487fb",
+    "path-validated-blocker": "760cd6d348db05ccd47dc6eb6960ee370a49fc6ba3520b26460d82a6ac06fcbc",
+    "competitor-present": "d365b285be92105da3c4921063c839a13292d2a3eed61566c7cced2667a89ead",
+    "proprietary-platform": "ae5ef877ba516d1012828ce7c0444285caf24dd0e1f85f483d84baf90f0c077c",
+    "untraced-broken-links": "451556b31de99e5c915c6a09fb51d6350c06124e286645db70f01a9ec1325341",
+    "schema-confirmed-absent": "259a02dba6f78721d5209abfea2d30a09c6b85878c5ec40c23dda60beaa1e4b3",
+    "headings-absent-h1": "57074dfa7abf7974b03843f240a506662db6b8ed4f134b63589bff10adf3c81f",
+    "headings-multiple-h1": "bf786d408592839c2ba9a83dbd3d56255c8b09461b85254156f710bef3134c81",
+    "perf-field-and-multipage": "d3f74ea5dd7bb044d53b855adeea1fa98e0b07c4daaad7e082d8a0896d437568",
+    "competitor-with-limitations": "fafcbb32c0ce2aef00b63b127afc84fc8580405eef204257cdea5fcc97ebb281",
+    "device-profile-failed": "ea0425598002d8002f3a4c2f7460794ca02b79a381fc1d04bd3871bd5b839b8f",
   });
   assert.deepEqual(
     actual,
@@ -2080,7 +2080,7 @@ if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(m
 });
 
 const RENDERER_BRANCH_MARKERS = [
-  ["Priority Fixes client action sequence", "What needs attention"],
+  ["Priority Fixes client action sequence", "How to fix it"],
   ["competitor comparison note", "does not claim traffic, rankings"],
   ["proprietary-platform migration risk", "proprietary platform constraints"],
   ["untraced broken-links note", "could not be traced"],

@@ -219,14 +219,15 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
   for (const label of [
-    "What needs attention",
     "Why it matters",
     "What to change",
+    "How to fix it",
     "Where it applies",
     "How to confirm it improved",
   ]) {
     assert.match(blockers, new RegExp(label), `required client field: ${label}`);
   }
+  assert.doesNotMatch(blockers, /<dt>What needs attention<\/dt>/);
   const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)" data-solution-id="([^"]+)">([\s\S]*?)<\/article>/g)];
   assert.equal(cards.length, 3, "exactly the governed canonical priority cards are rendered");
   const ranks = cards.map((match) => Number(match[1]));

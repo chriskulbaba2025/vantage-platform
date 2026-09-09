@@ -417,7 +417,7 @@ function executiveScorecard(model, pillars, canonical) {
   const uncertainty = readiness === null
     ? "There was not enough information to produce an overall score. The report distinguishes what was reviewed from what remains unknown."
     : model.readinessStatus === "Provisional"
-      ? "Some information was unavailable, so this overall result should be read as provisional."
+      ? "Evidence was unavailable within the governed assessed scope, so this overall result should be read as provisional."
       : "No material limitation changes the overall conclusion.";
   return `
   <section id="executive" class="card">
@@ -678,7 +678,6 @@ function blockersSection(model, canonical) {
         </div>
       </div>
       <dl class="priority-action-fields">
-        <div class="priority-field priority-field-attention"><dt>What needs attention</dt><dd>${e(record.problem)}</dd></div>
         <div class="priority-field"><dt>Why it matters</dt><dd>${e(record.whyItMatters)}</dd></div>
         <div class="priority-field"><dt>What to change</dt><dd>${e(record.whatToChange)}</dd></div>
         <div class="priority-field"><dt>How to fix it</dt><dd>${e(record.howToFix)}</dd></div>
@@ -1305,7 +1304,7 @@ function contentOpportunitiesSection(model) {
 
   const coverageState = (count, positive = false) => {
     if (positive || count >= 3) return "Good foundation";
-    if (count >= 1) return "Some support";
+    if (count >= 1) return "Support observed within the governed assessed scope";
     return "Limited information";
   };
 
@@ -1705,25 +1704,19 @@ function internalLinksSection(model) {
       )} broken link destination(s) could not be traced to a source page from the collected evidence — count only, no source implied.</p>`
     : "";
 
-  const orphanBlock =
-    orphans.length && opp?.coverage?.crawlComplete !== false
-      ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>
-<p class="small">Five representative examples are shown; additional supporting evidence remains available.</p>
-<details class="supporting-detail-disclosure"><summary>Show representative orphan-page examples</summary><div class="table-wrap"><table>
-<thead><tr><th>URL</th><th>Title</th></tr></thead>
-<tbody>${orphans
-  .slice(0, 5)
-  .map(
-    (o) =>
-      `<tr><td class="small">${e(
-        (o.url || "").slice(0, 60),
-      )}</td><td class="small">${e(o.title || "—")}</td></tr>`,
-  )
-  .join("")}</tbody>
-</table></div></details>`
-      : opp?.coverage?.crawlComplete === false
-        ? `<p class="small">Orphan analysis: crawl coverage is incomplete — definitive orphan claims cannot be made.</p>`
-        : "";
+  const orphanShown = Math.min(5, orphans.length);
+  const renderOrphanRows = (rows) => rows
+    .map((o) => `<tr><td class="small">${e((o.url || "").slice(0, 60))}</td><td class="small">${e(o.title || "—")}</td></tr>`)
+    .join("");
+  const orphanBlock = orphans.length && opp?.coverage?.crawlComplete !== false
+    ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>
+<p class="small">${e(orphans.length)} identified · showing ${e(orphanShown)} examples.</p>
+<details class="supporting-detail-disclosure"><summary>Show ${e(orphanShown)} representative orphan-page examples</summary><div class="table-wrap"><table><thead><tr><th>URL</th><th>Title</th></tr></thead><tbody>${renderOrphanRows(orphans.slice(0, 5))}</tbody></table></div>${orphans.length > orphanShown
+  ? `<details class="supporting-detail-disclosure"><summary>Show all ${e(orphans.length)} governed orphan pages</summary><div class="table-wrap"><table><thead><tr><th>URL</th><th>Title</th></tr></thead><tbody>${renderOrphanRows(orphans)}</tbody></table></div></details>`
+  : ""}</details>`
+    : opp?.coverage?.crawlComplete === false
+      ? `<p class="small">Orphan analysis: crawl coverage is incomplete — definitive orphan claims cannot be made.</p>`
+      : "";
 
   return `
   <section id="internal-links" class="card" data-supporting-section="internal-links">
