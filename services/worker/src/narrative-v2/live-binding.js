@@ -1473,11 +1473,61 @@ export function createNarrativeV2LiveBinding({
     previousJudgeResponse = null,
     recoveryAuthorization = null,
     writerInputSha256 = null,
+    writerInput = null,
   }) {
     // A final-pass restart may occur after Writer3 returned and validated
     // successfully but before Judge3 could be reserved. Reuse that exact
     // governed Writer3 result only when the model and prompt hash match.
     // No other pass or role is replayed through this recovery path.
+    if (!recoveryAuthorization) {
+      const existing = await existingReservations(scope);
+      const prior = existing.find(
+        (entry) => entry.role === role && entry.passNumber === passNumber,
+      );
+      if (prior) {
+        const response = await readJsonByName(
+          artifactStore,
+          scope,
+          responseName(prior.callNumber),
+        );
+        const responseMeta = await readJsonByName(
+          artifactStore,
+          scope,
+          responseMetaName(prior.callNumber),
+        );
+        const responseState = await readJsonByName(
+          artifactStore,
+          scope,
+          responseStateName(prior.callNumber),
+        );
+        const result = await readJsonByName(
+          artifactStore,
+          scope,
+          resultName(prior.callNumber),
+        );
+        if (result?.validationResult === "FAIL") {
+          throw new Error(
+            `Narrative v2 paid ${role} pass ${passNumber} already reserved with a persisted failed result; refusing duplicate call`,
+          );
+        }
+        if (responseMeta || responseState || result) {
+          return resumePersistedCall({
+            auditId: scope.auditId,
+            callNumber: prior.callNumber,
+            role,
+            passNumber,
+            modelId,
+            promptSha256: sha256(prompt),
+            writerInput,
+            writerInputSha256,
+            previousJudgeResponse,
+            normalize,
+            validate,
+          });
+        }
+      }
+    }
+
     if (
       role === "writer" &&
       passNumber === 3
@@ -2128,6 +2178,8 @@ export function createNarrativeV2LiveBinding({
       writerInputSha256:
         objectSha256(request.writerInput),
 
+      writerInput: request.writerInput,
+
       responseFormat:
         buildWriterStructuredResponseFormat(
           {
@@ -2194,6 +2246,8 @@ export function createNarrativeV2LiveBinding({
 
       writerInputSha256:
         objectSha256(request.writerInput),
+
+      writerInput: request.writerInput,
 
       responseFormat:
         buildJudgeStructuredResponseFormat(

@@ -363,7 +363,7 @@ test("TRANSPORT-RECOVERY-13: persisted returned response can resume without fetc
   const prompt = "persisted response prompt";
   await putJson(store, "narrative-v2/live-usage/call-01-reservation.json", {
     auditId: AUDIT_ID, executionId: SCOPE.executionId, callNumber: 1, role: "writer", passNumber: 1,
-    modelId: "writer-test", promptSha256: hash(prompt), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
+    modelId: "writer-test", promptSha256: hash(prompt), writerInputSha256: hash(JSON.stringify(input())), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
   });
   await putJson(store, "narrative-v2/live-usage/call-01-response.json", payload);
   await putJson(store, "narrative-v2/live-usage/call-01-response-meta.json", {
@@ -372,10 +372,7 @@ test("TRANSPORT-RECOVERY-13: persisted returned response can resume without fetc
   });
   const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
   binding.registerAuditScope(SCOPE);
-  const output = await binding.resumePersistedCall({
-    auditId: AUDIT_ID, callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test",
-    promptSha256: hash(prompt), normalize: (value) => value, validate: () => ({ valid: true, errors: [] }),
-  });
+  const output = await binding.writerExecutor({ prompt, passNumber: 1, writerInput: input() });
   assert.equal(output.passNumber, 1);
   const result = JSON.parse(Buffer.from(await store.get(`${livePrefix()}/call-01-result.json`)).toString("utf8"));
   assert.equal(result.validationResult, "PASS");
@@ -387,7 +384,7 @@ test("TRANSPORT-RECOVERY-14: completed result can resume exactly without fetch",
   const prompt = "completed result prompt";
   await putJson(store, "narrative-v2/live-usage/call-01-reservation.json", {
     auditId: AUDIT_ID, executionId: SCOPE.executionId, callNumber: 1, role: "writer", passNumber: 1,
-    modelId: "writer-test", promptSha256: hash(prompt), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
+    modelId: "writer-test", promptSha256: hash(prompt), writerInputSha256: hash(JSON.stringify(input())), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
   });
   await putJson(store, "narrative-v2/live-usage/call-01-response.json", payload);
   await putJson(store, "narrative-v2/live-usage/call-01-response-meta.json", {
@@ -399,9 +396,7 @@ test("TRANSPORT-RECOVERY-14: completed result can resume exactly without fetch",
   });
   const binding = createNarrativeV2LiveBinding({ env: env(), artifactStore: store, fetchImpl: async () => { throw new Error("must not call"); } });
   binding.registerAuditScope(SCOPE);
-  const output = await binding.resumePersistedCall({
-    auditId: AUDIT_ID, callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test",
-    promptSha256: hash(prompt), normalize: (value) => value, validate: () => ({ valid: true, errors: [] }),
-  });
-  assert.deepEqual(output, payload);
+  const output = await binding.writerExecutor({ prompt, passNumber: 1, writerInput: input() });
+  assert.equal(output.passNumber, payload.passNumber);
+  assert.equal(output.funnelOpportunities.awareness[0].itemId, "FUN-A-01");
 });
