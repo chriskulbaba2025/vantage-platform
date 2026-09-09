@@ -65,8 +65,60 @@ export const NARRATIVE_V2_LIVE_MODE = "live";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const RESERVATION_PREFIX = "narrative-v2/live-usage";
 
+export const NARRATIVE_V2_CALL_STATE = Object.freeze({
+  RESERVED: "RESERVED",
+  RESPONSE_RETURNED: "RESPONSE_RETURNED",
+  CALL_COMPLETED: "CALL_COMPLETED",
+  TRANSPORT_FAILED_PRE_TRANSMISSION: "TRANSPORT_FAILED_PRE_TRANSMISSION",
+  TRANSPORT_OUTCOME_UNCERTAIN: "TRANSPORT_OUTCOME_UNCERTAIN",
+  RETURNED_PROVIDER_FAILURE: "RETURNED_PROVIDER_FAILURE",
+  POST_RESPONSE_LOCAL_FAILURE: "POST_RESPONSE_LOCAL_FAILURE",
+  RECOVERY_AUTHORIZED: "RECOVERY_AUTHORIZED",
+  RECOVERY_COMPLETED: "RECOVERY_COMPLETED",
+  RECOVERY_FAILED: "RECOVERY_FAILED",
+});
+
+export const NARRATIVE_V2_RECOVERY_ACTION =
+  "REISSUE_SAME_PASS_AFTER_HUMAN_AUTHORIZATION";
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function objectSha256(value) {
+  return sha256(JSON.stringify(value));
+}
+
+function transportName(callNumber) {
+  return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-transport.json`;
+}
+
+function recoveryName(authorizationId) {
+  const safeId = String(authorizationId || "").replace(/[^a-zA-Z0-9_-]/g, "-");
+  return `${RESERVATION_PREFIX}/recovery-${safeId}.json`;
+}
+
+function isConcretePreTransmissionError(error) {
+  const cause = error?.cause || error;
+  return cause?.code === "ENOTFOUND" && cause?.syscall === "getaddrinfo";
+}
+
+function sanitizedTransportFields(error) {
+  const cause = error?.cause || error;
+  const safe = {};
+  const fields = ["name", "message", "code", "errno", "syscall", "hostname", "port", "address"];
+  for (const field of fields) {
+    const value = field === "name" ? error?.name || cause?.name : cause?.[field];
+    if (value !== undefined && value !== null) {
+      const key = field === "name" ? "errorName" : field === "message" ? "errorMessage" : field === "code" ? "causeCode" : field;
+      if (key === "errorMessage") continue;
+      safe[key] = typeof value === "string" ? value.slice(0, 240) : value;
+    }
+  }
+  if (error?.name === "AbortError" || cause?.name === "AbortError") {
+    safe.timeoutClassification = "ABORT_TIMEOUT";
+  }
+  return safe;
 }
 
 function parsePositiveNumber(
@@ -547,6 +599,7 @@ export function createNarrativeV2LiveBinding({
   env = process.env,
   fetchImpl = globalThis.fetch,
   artifactStore,
+  requireDurableStore = false,
   clock = {
     now: () => new Date().toISOString(),
   },
@@ -570,6 +623,15 @@ export function createNarrativeV2LiveBinding({
   if (!artifactStore) {
     throw new Error(
       "Narrative v2 live binding requires artifactStore",
+    );
+  }
+
+  if (
+    requireDurableStore &&
+    !["local", "s3"].includes(artifactStore.storageBackend)
+  ) {
+    throw new Error(
+      "Narrative v2 live release requires a durable artifact store",
     );
   }
 
@@ -611,6 +673,37 @@ export function createNarrativeV2LiveBinding({
           `${auditId}:narrative-v2`,
       }),
     );
+  }
+
+  async function persistTransportOutcome({
+    scope,
+    reservation,
+    error,
+    state,
+    uncertaintyReason,
+    responseStatus = null,
+    responseSha256 = null,
+  }) {
+    const record = Object.freeze({
+      contractVersion: "1.0.0",
+      bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      auditId: scope.auditId,
+      executionId: scope.executionId,
+      role: reservation.role,
+      passNumber: reservation.passNumber,
+      callNumber: reservation.callNumber,
+      reservationId: reservation.reservationId,
+      requestSha256: reservation.promptSha256,
+      modelId: reservation.modelId,
+      state,
+      uncertaintyReason,
+      ...sanitizedTransportFields(error),
+      ...(responseStatus !== null ? { responseStatus } : {}),
+      ...(responseSha256 ? { responseSha256 } : {}),
+      occurredAt: clock.now(),
+    });
+    await persistJson(artifactStore, scope, transportName(reservation.callNumber), record);
+    return record;
   }
 
   function resolveScope(auditId) {
@@ -753,6 +846,90 @@ export function createNarrativeV2LiveBinding({
     }
   }
 
+  async function authorizeTransportRecovery({
+    auditId,
+    executionId,
+    role,
+    passNumber,
+    originalReservationId,
+    originalCallNumber,
+    originalRequestSha256,
+    originalModelId,
+    originalWriterInputSha256,
+    judgeRevisionSha256 = null,
+    uncertaintyReason,
+    transportFailureSha256,
+    humanAuthorizationId,
+    humanAuthorizationReference,
+    humanAuthorizationIdentity,
+    authorizedAt,
+  }) {
+    const scope = resolveScope(auditId);
+    if (role !== "writer" || passNumber !== 2) {
+      throw new Error("Narrative v2 recovery permits only Writer pass 2");
+    }
+    const existing = await existingReservations(scope);
+    const original = existing.find((entry) =>
+      entry.reservationId === originalReservationId &&
+      entry.callNumber === originalCallNumber,
+    );
+    if (!original) throw new Error("Narrative v2 recovery original reservation not found");
+    if (original.role !== role || original.passNumber !== passNumber) {
+      throw new Error("Narrative v2 recovery role/pass mismatch");
+    }
+    if (original.promptSha256 !== originalRequestSha256 || original.modelId !== originalModelId) {
+      throw new Error("Narrative v2 recovery request/model identity mismatch");
+    }
+    if (!originalWriterInputSha256) {
+      throw new Error("Narrative v2 recovery requires WriterInput identity");
+    }
+    const transport = await readJsonByName(artifactStore, scope, transportName(original.callNumber));
+    if (!transport || transport.state !== NARRATIVE_V2_CALL_STATE.TRANSPORT_OUTCOME_UNCERTAIN) {
+      throw new Error("Narrative v2 recovery requires an uncertain transport outcome");
+    }
+    if (transportFailureSha256 && objectSha256(transport) !== transportFailureSha256) {
+      throw new Error("Narrative v2 recovery transport record hash mismatch");
+    }
+    if (existing.some((entry) => entry.recoveryOfReservationId === originalReservationId)) {
+      throw new Error("Narrative v2 recovery already authorized for original reservation");
+    }
+    const normalizedId = String(humanAuthorizationId || "").trim();
+    if (!normalizedId || !humanAuthorizationReference || !humanAuthorizationIdentity || !authorizedAt) {
+      throw new Error("Narrative v2 recovery requires explicit human authorization fields");
+    }
+    const authorization = Object.freeze({
+      contractVersion: "1.0.0",
+      bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      authorizationId: normalizedId,
+      auditId,
+      executionId,
+      role,
+      passNumber,
+      originalReservationId,
+      originalCallNumber,
+      originalRequestSha256,
+      originalModelId,
+      originalWriterInputSha256,
+      judgeRevisionSha256,
+      uncertaintyReason,
+      transportFailureSha256: transportFailureSha256 || objectSha256(transport),
+      humanAuthorizationReference,
+      humanAuthorizationIdentity,
+      authorizedAt,
+      authorizedRecoveryAction: NARRATIVE_V2_RECOVERY_ACTION,
+      maxAdditionalCallCount: 1,
+      relationship: "recovery-of-original-reservation",
+      conservativeCostTreatment: "original-reservation-estimate-retained",
+      state: NARRATIVE_V2_CALL_STATE.RECOVERY_AUTHORIZED,
+    });
+    const authorizationRecord = {
+      ...authorization,
+      authorizationSha256: objectSha256(authorization),
+    };
+    await persistJson(artifactStore, scope, recoveryName(normalizedId), authorizationRecord);
+    return Object.freeze(authorizationRecord);
+  }
+
   async function reserveCall({
     scope,
     role,
@@ -761,6 +938,8 @@ export function createNarrativeV2LiveBinding({
     maxOutputTokens,
     passNumber,
     previousJudgeResponse = null,
+    recoveryAuthorization = null,
+    writerInputSha256 = null,
   }) {
     const inFlightKey =
       `${scope.auditId}:${role}:${passNumber}`;
@@ -804,6 +983,7 @@ export function createNarrativeV2LiveBinding({
       }
 
       if (
+        !recoveryAuthorization &&
         existing.some(
           (entry) =>
             entry.role === role &&
@@ -818,7 +998,32 @@ export function createNarrativeV2LiveBinding({
 
       let finalPassAuthorization = null;
 
-      if (
+      if (recoveryAuthorization) {
+        const recovery = recoveryAuthorization;
+        const original = existing.find((entry) =>
+          entry.reservationId === recovery.originalReservationId &&
+          entry.callNumber === recovery.originalCallNumber,
+        );
+        const transport = original
+          ? await readJsonByName(artifactStore, scope, transportName(original.callNumber))
+          : null;
+        const validRecovery =
+          recovery.state === NARRATIVE_V2_CALL_STATE.RECOVERY_AUTHORIZED &&
+          recovery.authorizedRecoveryAction === NARRATIVE_V2_RECOVERY_ACTION &&
+          recovery.maxAdditionalCallCount === 1 &&
+          recovery.role === role &&
+          recovery.passNumber === passNumber &&
+          original &&
+          transport?.state === NARRATIVE_V2_CALL_STATE.TRANSPORT_OUTCOME_UNCERTAIN &&
+          existing.filter((entry) => entry.recoveryOfReservationId === recovery.originalReservationId).length === 0 &&
+          recovery.originalModelId === modelId &&
+          recovery.originalRequestSha256 === sha256(prompt) &&
+          recovery.originalWriterInputSha256 === writerInputSha256 &&
+          recovery.judgeRevisionSha256 === objectSha256(previousJudgeResponse || null);
+        if (!validRecovery) {
+          throw new Error("Narrative v2 recovery authorization identity or lineage mismatch");
+        }
+      } else if (
         role === "writer" &&
         passNumber === 1
       ) {
@@ -1099,6 +1304,17 @@ export function createNarrativeV2LiveBinding({
 
           modelId,
 
+          ...(recoveryAuthorization
+            ? {
+                recoveryOfReservationId: recoveryAuthorization.originalReservationId,
+                recoveryAuthorizationId: recoveryAuthorization.authorizationId,
+              }
+            : {}),
+
+          ...(writerInputSha256 ? { writerInputSha256 } : {}),
+
+          judgeRevisionSha256: objectSha256(previousJudgeResponse || null),
+
           promptSha256:
             sha256(prompt),
 
@@ -1115,7 +1331,7 @@ export function createNarrativeV2LiveBinding({
           reservedAt: now,
 
           status:
-            "RESERVED_BEFORE_CALL",
+            NARRATIVE_V2_CALL_STATE.RESERVED,
         });
 
       await persistJson(
@@ -1150,6 +1366,7 @@ export function createNarrativeV2LiveBinding({
     errorCode,
     responseStatus = null,
     responseSha256 = null,
+    state = NARRATIVE_V2_CALL_STATE.POST_RESPONSE_LOCAL_FAILURE,
   }) {
     const record = Object.freeze({
       contractVersion: "1.0.0",
@@ -1176,6 +1393,8 @@ export function createNarrativeV2LiveBinding({
       actualCost: null,
 
       validationResult: "FAIL",
+
+      state,
 
       status:
         "RETURNED_RESPONSE_FAILED_CLOSED",
@@ -1208,6 +1427,8 @@ export function createNarrativeV2LiveBinding({
     responseFormat,
     normalize = (value) => value,
     previousJudgeResponse = null,
+    recoveryAuthorization = null,
+    writerInputSha256 = null,
   }) {
     // A final-pass restart may occur after Writer3 returned and validated
     // successfully but before Judge3 could be reserved. Reuse that exact
@@ -1310,6 +1531,8 @@ export function createNarrativeV2LiveBinding({
       maxOutputTokens,
       passNumber,
       previousJudgeResponse,
+      recoveryAuthorization,
+      writerInputSha256,
     });
 
     const controller =
@@ -1375,41 +1598,55 @@ export function createNarrativeV2LiveBinding({
         },
       );
     } catch (err) {
-      throw new Error(
+      const transportError = Object.assign(new Error(
         `Narrative v2 ${role} request failed after paid-call reservation: ${
           err.name === "AbortError"
             ? "timeout"
-            : err.message
+            : "fetch failed"
         }`,
-      );
+      ), { cause: err });
+      await persistTransportOutcome({
+        scope,
+        reservation,
+        error: err,
+        state: isConcretePreTransmissionError(err)
+          ? NARRATIVE_V2_CALL_STATE.TRANSPORT_FAILED_PRE_TRANSMISSION
+          : NARRATIVE_V2_CALL_STATE.TRANSPORT_OUTCOME_UNCERTAIN,
+        uncertaintyReason: isConcretePreTransmissionError(err)
+          ? "concrete DNS lookup failure before request transmission"
+          : "transport exception did not prove whether provider received the request",
+      });
+      throw transportError;
     } finally {
       clearTimeout(timeout);
     }
 
-    if (!response?.ok) {
-      await persistReturnedFailure({
-        scope,
-        callNumber,
-        reservation,
-        role,
-        passNumber,
-        modelId,
-        errorCode:
-          "PROVIDER_HTTP_ERROR",
-        responseStatus:
-          response?.status || 0,
-      });
-
-      throw safeProviderError(
-        response?.status || 0,
-      );
-    }
-
     let body;
+    let responseDigest = null;
 
     try {
-      body = await response.json();
-    } catch {
+      if (typeof response.text === "function") {
+        const rawText = await response.text();
+        responseDigest = sha256(rawText);
+        try {
+          body = JSON.parse(rawText);
+        } catch {
+          await persistJson(artifactStore, scope, responseName(callNumber), { rawBody: rawText, status: response.status || 200 });
+          await persistReturnedFailure({
+            scope, callNumber, reservation, role, passNumber, modelId,
+            errorCode: "PROVIDER_RESPONSE_NOT_JSON",
+            responseStatus: response.status || 200,
+            responseSha256: responseDigest,
+            state: NARRATIVE_V2_CALL_STATE.POST_RESPONSE_LOCAL_FAILURE,
+          });
+          throw new Error(`Narrative v2 ${role} response was not JSON`);
+        }
+      } else {
+        body = await response.json();
+        responseDigest = sha256(JSON.stringify(body));
+      }
+    } catch (err) {
+      if (/response was not JSON/.test(err.message || "")) throw err;
       await persistReturnedFailure({
         scope,
         callNumber,
@@ -1421,6 +1658,8 @@ export function createNarrativeV2LiveBinding({
           "PROVIDER_RESPONSE_NOT_JSON",
         responseStatus:
           response.status || 200,
+        responseSha256: responseDigest,
+        state: NARRATIVE_V2_CALL_STATE.POST_RESPONSE_LOCAL_FAILURE,
       });
 
       throw new Error(
@@ -1428,11 +1667,24 @@ export function createNarrativeV2LiveBinding({
       );
     }
 
+    if (!response?.ok) {
+      await persistJson(artifactStore, scope, responseName(callNumber), body);
+      await persistReturnedFailure({
+        scope, callNumber, reservation, role, passNumber, modelId,
+        errorCode: "PROVIDER_HTTP_ERROR",
+        responseStatus: response?.status || 0,
+        responseSha256: responseDigest,
+        state: NARRATIVE_V2_CALL_STATE.RETURNED_PROVIDER_FAILURE,
+      });
+      throw safeProviderError(response?.status || 0);
+    }
+
     let content;
 
     try {
       content = extractContent(body);
     } catch (err) {
+      await persistJson(artifactStore, scope, responseName(callNumber), body);
       await persistReturnedFailure({
         scope,
         callNumber,
@@ -1454,6 +1706,7 @@ export function createNarrativeV2LiveBinding({
     try {
       rawParsed = JSON.parse(content);
     } catch {
+      await persistJson(artifactStore, scope, responseName(callNumber), body);
       await persistReturnedFailure({
         scope,
         callNumber,
@@ -1474,14 +1727,10 @@ export function createNarrativeV2LiveBinding({
       );
     }
 
-    // Preserve the exact parsed provider response before any deterministic
-    // structural normalization. This closes the prior forensic blind spot.
-    await persistJson(
-      artifactStore,
-      scope,
-      responseName(callNumber),
-      rawParsed,
-    );
+    // Preserve the exact parsed governed model response for existing
+    // restart/recovery consumers. The outer provider envelope is retained
+    // for returned-failure paths above.
+    await persistJson(artifactStore, scope, responseName(callNumber), rawParsed);
 
     const parsed = normalize(rawParsed);
 
@@ -1620,6 +1869,10 @@ export function createNarrativeV2LiveBinding({
 
         passNumber,
 
+        state: recoveryAuthorization
+          ? NARRATIVE_V2_CALL_STATE.RECOVERY_COMPLETED
+          : NARRATIVE_V2_CALL_STATE.CALL_COMPLETED,
+
         responseSha256:
           sha256(content),
 
@@ -1671,6 +1924,12 @@ export function createNarrativeV2LiveBinding({
 
       previousJudgeResponse:
         request.judgeResponse || null,
+
+      recoveryAuthorization:
+        request.recoveryAuthorization || null,
+
+      writerInputSha256:
+        objectSha256(request.writerInput),
 
       responseFormat:
         buildWriterStructuredResponseFormat(
@@ -1736,6 +1995,9 @@ export function createNarrativeV2LiveBinding({
       passNumber:
         request.passNumber,
 
+      writerInputSha256:
+        objectSha256(request.writerInput),
+
       responseFormat:
         buildJudgeStructuredResponseFormat(
           {
@@ -1787,6 +2049,8 @@ export function createNarrativeV2LiveBinding({
     judgeExecutor,
 
     registerAuditScope,
+
+    authorizeTransportRecovery,
 
     authorizeFinalPass,
 

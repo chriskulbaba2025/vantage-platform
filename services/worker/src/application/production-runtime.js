@@ -130,7 +130,7 @@ export function createProductionRuntime({
   // executors are injected, compose the explicit env-driven live binding.
   // It is disabled by default and performs no network action at startup.
   const automaticNarrativeV2 = narrativeV2 === undefined
-    ? createNarrativeV2LiveBinding({ artifactStore })
+    ? createNarrativeV2LiveBinding({ artifactStore, requireDurableStore: true })
     : null;
   const narrativeV2Deps = narrativeV2 ?? automaticNarrativeV2 ?? {};
   const narrativeV2Enabled = narrativeV2Deps.enabled === true;

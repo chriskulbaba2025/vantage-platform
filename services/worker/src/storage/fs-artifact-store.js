@@ -295,6 +295,7 @@ export function createFsArtifactStore(opts = {}) {
     exists,
     verify,
     _destroy,
+    storageBackend: "local",
   };
 }
 

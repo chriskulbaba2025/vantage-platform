@@ -224,7 +224,7 @@ export function createMemoryArtifactStore(inject = {}) {
     store.clear();
   }
 
-  return { put, get, exists, verify, _clear };
+  return { put, get, exists, verify, _clear, storageBackend: "memory" };
 }
 
 export default { createMemoryArtifactStore };

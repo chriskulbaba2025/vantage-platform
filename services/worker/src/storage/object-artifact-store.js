@@ -336,7 +336,7 @@ export function createObjectArtifactStore(opts = {}) {
     }
   }
 
-  return { put, get, exists, verify };
+  return { put, get, exists, verify, storageBackend: "s3" };
 }
 
 // ---------------------------------------------------------------------------

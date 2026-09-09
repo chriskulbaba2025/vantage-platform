@@ -379,6 +379,7 @@ export async function runNarrativeV2Orchestration({
   judgeExecutor,
   maxAutomaticPasses,
   continuation,
+  recoveryAuthorization,
 }) {
   const effectiveMaxAutomaticPasses =
     maxAutomaticPasses
@@ -448,6 +449,9 @@ export async function runNarrativeV2Orchestration({
               previousOutput,
               judgeResponse: previousJudgeResponse,
             }
+          : {}),
+        ...(recoveryAuthorization && passNumber === recoveryAuthorization.passNumber
+          ? { recoveryAuthorization }
           : {}),
       });
 
