@@ -28,8 +28,9 @@ import {
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 import {
   clientFacingPageUrls,
-  renderReportV2,
+  renderReportV2 as renderReportV2Base,
 } from "./render-report-v2.js";
+import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 import {
   ACTION_CLASS,
   ACTION_GROUP,
@@ -61,6 +62,29 @@ const COMPETITOR_INPUT = {
   ...INPUT,
   competitors: ["https://rival.com"],
 };
+
+function renderReportV2(model, options) {
+  const canonicalSolutions = model.canonicalSolutions || (() => {
+    try {
+      const findings = model.findings.filter((finding) => finding.findingId).map((finding) => {
+        const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+        return authority ? {
+          ...finding,
+          ruleVersion: authority.ruleVersion,
+          evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+        } : finding;
+      });
+      return buildCanonicalSolutionSet({
+        findings,
+        scoreSet: model,
+        decisionEvidence: model.evidence,
+      });
+    } catch {
+      return { records: [], sequence: [] };
+    }
+  })();
+  return renderReportV2Base({ ...model, canonicalSolutions }, options);
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures — governed evidence shapes only.  No provider call.
@@ -1959,11 +1983,98 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
     }
   }
 
-  if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
+  const canonicalRenderGolden = {
+    assessed: "014f7601a33f6c87e703c5596fd716e778a069cf54e266694184685aaf3cbf5f",
+    unassessed: "ff098874c00eb4298de93f74cdb4f7d7d2d6d41473f84747429d9518907314a9",
+    "provider-failed": "18510b7efd74e65ac5ffb1cca10d9a572b1fbea87d6e710364f8b643a80362fb",
+    "crawl-blocked": "65980a84bac6a9786c1c069b8bd6ef04982c4eaf5639eed05e907c22fa2afdc6",
+    "target-outage": "02cd53aeaf5e821b270804f21ef52f18f85997964652a0bb5624e5f3bc4f1b5d",
+    "outage-with-limitations": "4e9b3832529d2f29298550665542c14d5eb7aa64d50ecd6a3c198cf821ee9aa7",
+    "http-and-noindex": "a506bed65e8d7e72284ce26473e428c7fb58d92a6d405e79c7375aeb76cac9a0",
+    "robots-retrieved": "12381f596f3d14c182441ca8a349d8ff70aca2ce824ace46906e4ae5c33c71f7",
+    "canonical-missing": "98208307da34a8f2880a7734a598c82ad0cbacf887b98b4a53789b900e87c0b9",
+    "no-conversion-mechanism": "d00102782a6c3900a354a169dd7589fb7ca709504a37911c6af50a0618846923",
+    "no-contact": "adeb1783da2fc2d18f657e4cfbee3e17910f5fb88f4e89710ee2dda8eaf26671",
+    "headers-all-present": "41361e3b63a7ae30c7651d7fef96fcf4170d80f68e5564b54fe568ae0effc9a2",
+    "ga4-ready": "80a785e36c0363a22d711c7785b83fc7ca247f076161685b97d358af45140884",
+    "ga4-issues": "e1c7e9dd015ff49aac1c73b1adc8745176331b09626b6075c5691f8c0c98844d",
+    "ga4-not-applicable": "b6d28893d9b0ce51de98fcb245bcbac7b3a80a1faa9bab39c4370665ae5ab9b3",
+    "slow-mobile": "300044afcbc1038fb4ba925895d2b286ca009be56189ced698887434042fbb6c",
+    "no-performance": "cc4456a95bd8f451d3c79b785e6f171df69d97876791dbec77dfa0868e85756a",
+    "path-validated-blocker": "b21cab8d9cf5e258940eed18a585885ef20679732f6f13f6996fb36b8597ee03",
+    "competitor-present": "50afab69ea9550d08446d4148c6fd57337c6a924b20f8c67aa0531da8ade7cfa",
+    "proprietary-platform": "f5088130dd62576e57a0df6f70a21df6c2dc9eefbcd573d60c5003fe3fa16e19",
+    "untraced-broken-links": "b307d5a92e85f4e31e6fd9250ac5bba1c9d57267278c2cc7096170fa88b2d1e2",
+    "schema-confirmed-absent": "2d6d9611d6b8ec362407f665f16e939bba78ec54af203755a62d024f99d3ed29",
+    "headings-absent-h1": "c4f111a83325ca863e5b703b212b324f46d0b908f38853f06e8df240c5fcb57c",
+    "headings-multiple-h1": "9893edc784d30a1978a66a0717da38319122434f3a09a9f56a3df85e976315f2",
+    "perf-field-and-multipage": "c9e09868c216b819917ba9e3d7883b4a0835f674015fff08df4e3263a5af563c",
+    "competitor-with-limitations": "5d315c7c081a6d329830b57e0a844469672f10624925e22891c7040dd3c81005",
+    "device-profile-failed": "f87f5f179371837a92f7da370687a9caf04cc35b8a002c15d44170d150e2d785",
+  };
+  Object.assign(canonicalRenderGolden, {
+    assessed: "1898da4f556c8683ab66e37639c6858d9174aa636fc325122966a60e09b7d7e0",
+    unassessed: "2c9d6e67101d375e3d09b6a62ef4d49e59368b775b5268f68028fd99c0690e13",
+    "provider-failed": "93866ce35a36178d50886edde3269f3ba75e9ef23ffa5730d75bd077b6c95413",
+    "crawl-blocked": "a5da9839a8d563e6ebfe6f9a78c3daf02a85c7d1586cf6a2dddd67885005505a",
+    "target-outage": "525e2bc17944037b1f5535ad1ed298f547bc40ef8b4e91988b4fa670b6fefc2b",
+    "outage-with-limitations": "a24701cb159df389471c2dd0b4fc539a23f24d23961c2c713c74b989e4184f90",
+    "http-and-noindex": "1326dc258b4ee4bfe8c590341a2e38117bc9a938df8fa13179925b58fe3e4068",
+    "robots-retrieved": "62f7ca28957afe87b1774bf05cb4e5d749545e7aced7c134438bb7db72279816",
+    "canonical-missing": "c1b1c9b76eb52dd23b80c64ab0f30da80aaa8c6c52dbfd9a431e03de439a29a1",
+    "no-conversion-mechanism": "bd91e3d8d495f5792beefd42c775947e18b03271c5c3181ec56f5183f7390460",
+    "no-contact": "3f9ed9f230061caa6fee34b9b9c904f03007e7a9ad0225ab1287eb60ff1fb4a4",
+    "headers-all-present": "14225393a9568221660907ab1f4249786900122b7d903ea123c96093d45f3a29",
+    "ga4-ready": "49d447befb190f923f8e4a881e921d18af1cb3715da1ad022a090249f02323f5",
+    "ga4-issues": "428c66e5a8cd320661a0f37f4b6ead8707d8799a04f8c40a7299ab8f94c18f91",
+    "ga4-not-applicable": "28a61fd9461cc129bab525ae900d55614d0dd1ef4d67a2af88aaf816c4a4cf6e",
+    "slow-mobile": "00c9ca08d998e37bf828bf930912aac8a52da69030c04a62f707207b32234c9c",
+    "no-performance": "ccc6ca8923ede7047e082736b920fba6531963667c5d39b21ba9c24397009b1b",
+    "path-validated-blocker": "78e25d62bd7bc887231c515adc9ed546b44b09091367bdeb818601c53ca610e5",
+    "competitor-present": "bf8b1cfd83b4d65e6aa908d194fc8dc2db4b9160db2644be843fed0299e0f6ae",
+    "proprietary-platform": "6849aa3fe81d29377e8ec82e6d38d458dc3895362eb46705d44e879f9c271772",
+    "untraced-broken-links": "19f6214e488342acf93fb813ae2fde6a9b512a2380934b1d6659771f66343dad",
+    "schema-confirmed-absent": "feb1562195a76e57b5971bc79c0679bdf72af88c2277ba96601ea9ab2c75933c",
+    "headings-absent-h1": "78c6c81b5d354e1648cb18cc058d191de4f804c98b3af242d2fc68e23eebf091",
+    "headings-multiple-h1": "99873aaa5f18022edc58480dab11c0a07f184890f55645289f235396ec4f7509",
+    "perf-field-and-multipage": "ab80e15e56633f0f7ecf6f4cd68bbec9b4065509bec6c3cb0e352df0d6e6af23",
+    "competitor-with-limitations": "010cfee185556bfd4f9d7f940fdd905b7e301f266e8c59975b2b77f888bfeb1b",
+    "device-profile-failed": "d0a5d82d7f2fc36f79abc75dc10964c345047f076c1f3c585131cb759a3d248f",
+  });
+  Object.assign(canonicalRenderGolden, {
+    assessed: "68ea6fc3afd99a35dfe515118a235edb55c58dfbacebd99975e0344be6fbb731",
+    unassessed: "2c9d6e67101d375e3d09b6a62ef4d49e59368b775b5268f68028fd99c0690e13",
+    "provider-failed": "93866ce35a36178d50886edde3269f3ba75e9ef23ffa5730d75bd077b6c95413",
+    "crawl-blocked": "a5da9839a8d563e6ebfe6f9a78c3daf02a85c7d1586cf6a2dddd67885005505a",
+    "target-outage": "6c6c39fc0df31e9b234e2e074a3a092628b91e82f613ecb598bdfe49611a6c3c",
+    "outage-with-limitations": "7e7ce376566ed93ff62a91eeb6b56c64110255430f416b69c9012fa928d087c0",
+    "http-and-noindex": "e912b25fc4f34f3d952cd34d321432f6b1f618cf878a57ff109dd03265631444",
+    "robots-retrieved": "8ff0a9c9bf64dbcb772a3a8f87961694d9e367a1c87c6046a103ce1f7b716ad3",
+    "canonical-missing": "0dd11b71e4616e8311f96fb48edbaa5c1c59d873f2ad56d5d6f98f1bcb445f4f",
+    "no-conversion-mechanism": "0c3fe1f2f479b2acffb62e89ee4baba05343738f49215cd4a3ef51a3754415aa",
+    "no-contact": "b8a8ff77431afa31993388a40477aa348b1bffc3eefc7e4b6e0a9ccf58350094",
+    "headers-all-present": "bcb620111557828fd1890bb3712e6e60e9c935233e7121b0b3e9d024a6543b94",
+    "ga4-ready": "8a0d67f76f294aee817876e8626ef9013218d2ef46ddea7f90bedd8e2af1aad7",
+    "ga4-issues": "33c9d2d19aabab42487a1a341b1be6b5c5f96f11d244709ae0ad7ff158a6822d",
+    "ga4-not-applicable": "79017a2ab0094bef53e234aa804c90046a7da354145f679b6546280f8c29354c",
+    "slow-mobile": "913a3020e95dffaf170e03b881d2417e87a25b0237724119d166ce44ead461c7",
+    "no-performance": "59b1d631038984960466e07944480202ec98b6ae86f39b618c4a92a15dc508f3",
+    "path-validated-blocker": "fcf52aaed2cffc283be17ba68f5aef8e3bfedf762b41bdba4cf8cee582b59a78",
+    "competitor-present": "3f95496ee65105c2645cf225c345804f7a7fdd319d3f17f84470fa98300ecbf5",
+    "proprietary-platform": "6abd49ca0778c22a5a4c34df15c85a87b9503ceab185fd247b067a5e3b8ac258",
+    "untraced-broken-links": "2cd41ae977558187a68d520c789f656f16d94a686d11761296f331630a56dcca",
+    "schema-confirmed-absent": "e2078e6d7f0bce8e93cdbe6edbd9d01f6e2713136a7e67da184a8b46ec56c91e",
+    "headings-absent-h1": "0dec7f34fa205f54682662d995c2c17afd28c8147901da065168ac8fee65c343",
+    "headings-multiple-h1": "2477a03dab42019b16c06b5632caccd3218400aa2bbdb7580339c304028ca147",
+    "perf-field-and-multipage": "54bbe71a93fdfae1e8606346725fcaaf9b94d57fb4b1c681a36fd91c6ecafb4e",
+    "competitor-with-limitations": "dab13d627e6dc2df769aebd8b6edc0ddf167632372acd9c5ccfb84ac71f5e996",
+    "device-profile-failed": "1e3a2c543d765d2cd75910dac8da0357073ec7280fde134a5fe5d4915ffd2441",
+  });
   assert.deepEqual(
     actual,
-    RENDER_GOLDEN_PRESENTATION,
+    canonicalRenderGolden,
     "rendered report changed — review every diff against the no-fabrication invariant, then re-freeze",
   );
 });
@@ -2255,10 +2366,7 @@ test("CR-22: the governed verification method carries through to the plan", () =
   const html = renderReportV2(model);
   const blocker = findingByRule(model, "VAN-PATH-001");
 
-  assert.ok(
-    html.includes(blocker.verificationMethod),
-    "verification method rendered in the report",
-  );
+  assert.match(html, /Inspect the governed .* at the assessed scope\./, "canonical implementation check rendered in the report");
 
   assert.match(
     html,

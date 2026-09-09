@@ -16,6 +16,7 @@ import {
   WRITER_PROMPT_VERSION,
 } from "../narrative-v2/writer-output.js";
 import { renderGovernedNarrativeReportV2 } from "./render-narrative-v2.js";
+import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 
 const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 const REF = "finding:F-001";
@@ -401,7 +402,23 @@ function deterministicModel() {
     gsc: null,
   };
 
-  return scoreAudit(input, evidence);
+  const scored = scoreAudit(input, evidence);
+  const findings = scored.findings.map((finding) => {
+    const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+    return authority ? {
+      ...finding,
+      ruleVersion: authority.ruleVersion,
+      evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+    } : finding;
+  });
+  return {
+    ...scored,
+    canonicalSolutions: buildCanonicalSolutionSet({
+      findings,
+      scoreSet: scored,
+      decisionEvidence: scored.evidence,
+    }),
+  };
 }
 
 async function releaseCandidate() {

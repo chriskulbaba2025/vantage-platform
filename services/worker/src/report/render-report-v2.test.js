@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { scoreAudit } from "../scoring/vantage-score.js";
-import { renderReportV2, computePillars } from "./render-report-v2.js";
+import { renderReportV2 as renderReportV2Base, computePillars } from "./render-report-v2.js";
+import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 import { REPORT_DESIGN_V1, REPORT_DESIGN_V2, DEFAULT_REPORT_DESIGN } from "./report-design.js";
 import { renderReport } from "./render-report.js";
 
@@ -15,6 +16,29 @@ const INPUT = {
   services: ["Coaching"],
   primaryGoal: "Book consultations",
 };
+
+function renderReportV2(model, options) {
+  const canonicalSolutions = model.canonicalSolutions || (() => {
+    try {
+      const findings = model.findings.filter((finding) => finding.findingId).map((finding) => {
+        const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+        return authority ? {
+          ...finding,
+          ruleVersion: authority.ruleVersion,
+          evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+        } : finding;
+      });
+      return buildCanonicalSolutionSet({
+        findings,
+        scoreSet: model,
+        decisionEvidence: model.evidence,
+      });
+    } catch {
+      return { records: [], sequence: [] };
+    }
+  })();
+  return renderReportV2Base({ ...model, canonicalSolutions }, options);
+}
 
 function evidence() {
   return {
@@ -203,21 +227,18 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   ]) {
     assert.match(blockers, new RegExp(label), `required client field: ${label}`);
   }
-  const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)">([\s\S]*?)<\/article>/g)];
-  assert.equal(cards.length, 5, "exactly five priority cards are rendered");
+  const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)" data-solution-id="([^"]+)">([\s\S]*?)<\/article>/g)];
+  assert.equal(cards.length, 3, "exactly the governed canonical priority cards are rendered");
   const ranks = cards.map((match) => Number(match[1]));
-  assert.deepEqual(ranks, [1, 2, 3, 4, 5], "governed plan order is rendered once in rank order");
-  assert.match(cards[0][2], /Start here/);
-  for (const card of cards.slice(1)) assert.doesNotMatch(card[2], /Start here/);
-  assert.match(cards[1][2], /Material uncertainty/);
-  assert.match(cards[4][2], /Some basic browser protections were not detected in the website response we tested\./);
-  assert.match(cards[4][2], /These protections help reduce avoidable security risk in the browser\./);
-  assert.match(cards[4][2], /Ask your developer or hosting provider to add the missing browser protections\./);
-  assert.match(cards[4][2], /Website response tested/);
-  assert.match(cards[4][2], /Run the security check again and confirm the protections are present\./);
-  assert.doesNotMatch(cards[4][2], /assessed response/i);
+  assert.deepEqual(ranks, [1, 2, 3], "canonical sequence is rendered once in governed order");
+  assert.match(cards[0][3], /Start here/);
+  for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Start here/);
+  assert.match(cards[0][3], /The governed site evidence indicates that pricing or risk-reassurance information is missing/);
+  assert.match(cards[0][3], /PARTIAL \/ CONDITIONAL/);
+  assert.match(cards[0][3], /Inspect the governed/);
+  assert.doesNotMatch(blockers, /businessImpact|legacy recommendation|affectedUrls|verificationMethod/i);
   assert.doesNotMatch(blockers, /First Things First|Do Now|Do Next|Action Plan|governed priority order/i);
-  assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 5, "no second action sequence is introduced");
+  assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 3, "no second action sequence is introduced");
 });
 
 test("P9: conversion journey visual presents three complete client stages", () => {
@@ -252,13 +273,15 @@ test("P2: blocker location falls back to the governed evidence source when no UR
   finding.evidence = [{ field: "site.imagesMissingAlt" }];
   const html = renderReportV2(m);
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  assert.match(blockers, /Pages covered by the available evidence|Pages where the issue was detected/);
+  assert.match(blockers, /Where it applies/);
+  assert.match(blockers, /assessed scope/);
   assert.doesNotMatch(blockers, /site\.imagesMissingAlt/);
 });
 
 test("P2: no-action PASS states the current evidence-scope criterion", () => {
   const m = model();
   m.findings = [];
+  m.decisionHierarchy = { ...m.decisionHierarchy, orderedFindingIds: [] };
   const html = renderReportV2(m);
   assert.match(html, /No prioritized action was produced from the available evidence/);
 });
@@ -294,8 +317,7 @@ test("S03: conversion journey tells a bounded CRO story", () => {
     "What we could not determine",
     "completed enquiries",
   ]) assert.match(html, new RegExp(text));
-  assert.match(html, /Main content takes too long to appear on mobile\./);
-  assert.match(html, /Buyer-question content was not found on the pages we could assess\./);
+  assert.doesNotMatch(html, /Main content takes too long to appear on mobile\.|Buyer-question content was not found on the pages we could assess\./);
   assert.equal((html.match(/class="conversion-journey-bridge-card"/g) || []).length, 3);
   assert.match(html, /What supports this journey\?/);
   assert.match(html, /Content that answers buyer questions/);

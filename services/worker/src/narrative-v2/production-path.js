@@ -824,8 +824,8 @@ function resolveCompetitorSourceStatus(decisionEvidence) {
     : SOURCE_STATUS.NOT_APPLICABLE;
 }
 
-function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, decisionEvidence }) {
-  const current = hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence });
+function buildV2Model({ auditRequest, scoreSet, findings, capabilityEvidence, decisionEvidence, canonicalSolutions }) {
+  const current = hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence, canonicalSolutions });
   return {
     ...current,
     sourceStatus: {
@@ -851,6 +851,7 @@ export async function renderNarrativeV2UatFromPersistedArtifacts({
   auditRequest,
   artifactStore,
   validateContract,
+  solutionAuthorityProvider = buildSolutionAuthorityRecords,
 }) {
   if (
     !auditRequest ||
@@ -921,12 +922,18 @@ export async function renderNarrativeV2UatFromPersistedArtifacts({
     );
   }
 
+  const canonicalSolutions = prepareCanonicalSolutions({
+    inputs,
+    solutionAuthorityProvider,
+  });
+
   const model = buildV2Model({
     auditRequest,
     scoreSet: inputs.scoreSet,
     findings: inputs.findings,
     capabilityEvidence: inputs.capabilityEvidence,
     decisionEvidence: inputs.decisionEvidence,
+    canonicalSolutions,
   });
 
   const gate = runFinalizationGate(
@@ -1210,6 +1217,7 @@ async function renderNarrativeV2Draft({
   lifecycleService,
   artifactStore,
   validateContract,
+  solutionAuthorityProvider,
   clock,
 }) {
   if (!isReportDesignV2(auditRequest.report?.designVersion)) {
@@ -1233,6 +1241,7 @@ async function renderNarrativeV2Draft({
   let writerInput;
   let orchestrationResult;
   let inputs;
+  let canonicalSolutions;
   try {
     [writerInput, orchestrationResult, inputs] = await Promise.all([
       loadJsonArtifact({ artifactStore, auditRequest, artifactName: "narrative-v2/writer-input.json" }),
@@ -1242,6 +1251,10 @@ async function renderNarrativeV2Draft({
       }),
       loadScoredInputs({ artifactStore, auditRequest, validateContract }),
     ]);
+    canonicalSolutions = prepareCanonicalSolutions({
+      inputs,
+      solutionAuthorityProvider,
+    });
     const validation = validatePersistedReleaseCandidate(writerInput, orchestrationResult);
     if (!validation.valid) {
       throw new Error(`Narrative v2 persisted release candidate invalid: ${validation.errors.join("; ")}`);
@@ -1270,6 +1283,7 @@ async function renderNarrativeV2Draft({
     findings: inputs.findings,
     capabilityEvidence: inputs.capabilityEvidence,
     decisionEvidence: inputs.decisionEvidence,
+    canonicalSolutions,
   });
 
   const gate = runFinalizationGate({ ...model, findings: inputs.findings }, inputs.decisionEvidence);
@@ -1575,6 +1589,7 @@ export function createNarrativeV2ProductionPath({
         lifecycleService,
         artifactStore,
         validateContract,
+        solutionAuthorityProvider,
         clock: c,
       });
     }

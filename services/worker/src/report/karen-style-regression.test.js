@@ -8,7 +8,8 @@ import {
   WRITER_OUTPUT_VERSION,
   WRITER_PROMPT_VERSION,
 } from "../narrative-v2/writer-output.js";
-import { renderReportV2 } from "./render-report-v2.js";
+import { renderReportV2 as renderReportV2Base } from "./render-report-v2.js";
+import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 import { renderWriterNarrativeLayer } from "./render-narrative-v2.js";
 
 const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
@@ -128,6 +129,24 @@ function model() {
     gsc: null,
   };
   return scoreAudit(input, evidence);
+}
+
+function renderReportV2(modelInput, options) {
+  const findings = (modelInput.findings || []).filter((finding) => finding.findingId).map((finding) => {
+    const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+    return authority ? {
+      ...finding,
+      ruleVersion: authority.ruleVersion,
+      evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+    } : finding;
+  });
+  let canonicalSolutions = { records: [], sequence: [] };
+  if (findings.length) {
+    try {
+      canonicalSolutions = buildCanonicalSolutionSet({ findings, scoreSet: modelInput, decisionEvidence: modelInput.evidence });
+    } catch {}
+  }
+  return renderReportV2Base({ ...modelInput, canonicalSolutions }, options);
 }
 
 function writerInput() {

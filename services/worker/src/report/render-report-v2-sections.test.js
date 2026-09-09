@@ -14,7 +14,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { scoreAudit } from "../scoring/vantage-score.js";
-import { renderReportV2 } from "./render-report-v2.js";
+import { renderReportV2 as renderReportV2Base } from "./render-report-v2.js";
+import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 import { renderReport } from "./render-report.js";
 
 const FIXED_TS = "2026-01-15T12:00:00.000Z";
@@ -133,7 +134,21 @@ function richEvidence() {
 }
 
 async function render(model) {
-  return renderReportV2(model);
+  const findings = (model.findings || []).filter((finding) => finding.findingId).map((finding) => {
+    const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+    return authority ? {
+      ...finding,
+      ruleVersion: authority.ruleVersion,
+      evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+    } : finding;
+  });
+  let canonicalSolutions = { records: [], sequence: [] };
+  if (findings.length) {
+    try {
+      canonicalSolutions = buildCanonicalSolutionSet({ findings, scoreSet: model, decisionEvidence: model.evidence });
+    } catch {}
+  }
+  return renderReportV2Base({ ...model, canonicalSolutions });
 }
 
 // ---------------------------------------------------------------------------

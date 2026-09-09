@@ -11,7 +11,6 @@
 import { REPORT_DESIGN_V2 } from "./report-design.js";
 import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 import { computePillars } from "./v2-pillars.js";
-import { buildActionPlan } from "./action-priority.js";
 import { buildFoundationChecklist } from "./foundation-readiness.js";
 import {
   foundationSection,
@@ -160,6 +159,84 @@ function clientFacingReportModel(model) {
       ),
     })),
   };
+}
+
+function canonicalSolutionContext(model) {
+  const canonical = model?.canonicalSolutions;
+  if (!canonical || !Array.isArray(canonical.records) || !Array.isArray(canonical.sequence)) {
+    return { byId: new Map(), byFindingId: new Map(), ordered: [] };
+  }
+  const requiredFields = [
+    "problem", "whyItMatters", "whatToChange", "howToFix", "siteAnchor",
+    "evidenceGrade", "prescriptionMode", "capabilityRequired", "effortBand",
+    "dependencies", "implementationCheck", "disposition", "clientProminence",
+    "crossPageReferences",
+  ];
+  const byId = new Map();
+  for (const record of canonical.records) {
+    if (!record?.solutionId || byId.has(record.solutionId)) {
+      throw new Error("Canonical solution ID is invalid or duplicated");
+    }
+    if (requiredFields.some((field) => !Object.hasOwn(record, field))) {
+      throw new Error(`Canonical solution record is missing a required field for rendering: ${record.solutionId}`);
+    }
+    if (!record.siteAnchor || typeof record.siteAnchor !== "object" ||
+      typeof record.siteAnchor.type !== "string" || typeof record.siteAnchor.locator !== "string" ||
+      typeof record.siteAnchor.scope !== "string") {
+      throw new Error(`Canonical solution site anchor is malformed: ${record.solutionId}`);
+    }
+    if (!record.implementationCheck || typeof record.implementationCheck.instruction !== "string" ||
+      typeof record.implementationCheck.passCondition !== "string") {
+      throw new Error(`Canonical solution implementation check is malformed: ${record.solutionId}`);
+    }
+    if (!Array.isArray(record.capabilityRequired) || !Array.isArray(record.dependencies) ||
+      !Array.isArray(record.crossPageReferences)) {
+      throw new Error(`Canonical solution arrays are malformed: ${record.solutionId}`);
+    }
+    for (const reference of record.crossPageReferences) {
+      if (!reference?.pageId || !REPORT_V2_VIEWER_PAGES.some((page) => page.pageId === reference.pageId)) {
+        throw new Error(`Canonical solution page reference is invalid: ${record.solutionId}`);
+      }
+    }
+    byId.set(record.solutionId, record);
+  }
+  const byFindingId = new Map();
+  for (const record of canonical.records) {
+    if (!record?.solutionId || !Array.isArray(record.findingRefs) || !record.findingRefs.length) {
+      throw new Error("Canonical solution record is incomplete for solution rendering");
+    }
+    for (const findingRef of record.findingRefs) {
+      if (typeof findingRef !== "string" || byFindingId.has(findingRef)) {
+        throw new Error("Canonical solution finding reference is invalid or duplicated");
+      }
+      byFindingId.set(findingRef, record);
+    }
+  }
+  if (new Set(canonical.sequence).size !== canonical.sequence.length) {
+    throw new Error("Canonical solution sequence contains duplicate IDs");
+  }
+  const ordered = canonical.sequence.map((solutionId) => {
+    const record = byId.get(solutionId);
+    if (!record) throw new Error(`Canonical solution sequence reference does not resolve: ${solutionId}`);
+    return record;
+  });
+  const findingsById = new Map((model?.findings || []).map((finding) => [finding.findingId, finding]));
+  const hierarchyIds = (model?.decisionHierarchy?.orderedFindingIds || [])
+    .filter((findingId) => findingsById.get(findingId)?.actionable !== false);
+  for (const findingId of hierarchyIds) {
+    if (!byFindingId.has(findingId)) {
+      throw new Error(`Canonical solution missing for governed hierarchy finding: ${findingId}`);
+    }
+  }
+  return { byId, byFindingId, ordered };
+}
+
+function canonicalReference(record, label = "View canonical detail") {
+  return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)} (${e(record.solutionId)})</a>`;
+}
+
+function canonicalSummary(record) {
+  return `<strong>${e(record.problem)}</strong><br><span class="small">${e(record.whyItMatters)}</span><br>${e(record.whatToChange)} ${canonicalReference(record)}`;
 }
 
 function legacyExecutiveScorecard(model, pillars) {
@@ -316,33 +393,16 @@ function executiveText(value) {
     .replace(/Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/gi, "assessment detail");
 }
 
-function executivePriority(action) {
-  const finding = action.finding || {};
-  if (finding.ruleId === "VAN-PERF-001" || finding.id === "VAN-PERF-001") {
-    return {
-      problem: "Main content takes too long to appear on mobile.",
-      why: "This can create friction for people using the site on mobile devices.",
-      action: "Reduce the time it takes for the main mobile content to appear, then retest the page.",
-    };
-  }
-  return {
-    problem: executiveText(finding.title || "A supported improvement needs attention."),
-    why: executiveText(finding.businessImpact || "This may create friction for visitors in the assessed scope."),
-    action: executiveText(finding.recommendation || "Address the supported finding, then verify the change."),
-  };
-}
-
-function executiveScorecard(model, pillars) {
+function executiveScorecard(model, pillars, canonical) {
   const readiness = model.scores.conversionReadiness;
   const assessedWeight = Number(model.assessedWeight ?? 0);
-  const actions = (buildActionPlan(model, buildFoundationChecklist(model)).actions || []).slice(0, 3);
+  const actions = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed).slice(0, 3);
   const readinessLine = readiness === null
     ? `<div class="readiness-none">${e(model.readinessStatus || "Overall score unavailable")}</div>`
     : `<div class="readiness">${e(readiness)}<span class="readiness-max">/100</span></div><div class="readiness-band">${bandChip(model.bands.conversionReadiness)}</div>`;
   const priorities = actions.length
-    ? `<ol class="executive-priorities">${actions.map((action) => {
-      const item = executivePriority(action);
-      return `<li><p><strong>Problem:</strong> ${e(executiveText(item.problem))}</p><p><strong>Why it matters:</strong> ${e(executiveText(item.why))}</p><p><strong>Action:</strong> ${e(executiveText(item.action))}</p></li>`;
+    ? `<ol class="executive-priorities">${actions.map((record) => {
+      return `<li data-solution-id="${e(record.solutionId)}"><p><strong>Problem:</strong> ${e(record.problem)}</p><p><strong>Why it matters:</strong> ${e(record.whyItMatters)}</p><p><strong>Action:</strong> ${e(record.whatToChange)} ${canonicalReference(record, "Priority Fixes")}</p></li>`;
     }).join("")}</ol>`
     : `<p>No priority action was generated from the information reviewed.</p>`;
   const strengths = (pillars || [])
@@ -596,8 +656,9 @@ function priorityClientCopy(action) {
   };
 }
 
-function blockersSection(model, plan) {
-  if (plan.actions.length === 0) {
+function blockersSection(model, canonical) {
+  const primary = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed);
+  if (primary.length === 0) {
     return `<section id="blockers" class="card">
       <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">What should you fix first?</p>
       <p class="muted small">Priority Fixes</p>
@@ -606,27 +667,27 @@ function blockersSection(model, plan) {
     </section>`;
   }
 
-  const primary = plan.actions.slice(0, 5);
-  const cards = primary.map((action) => {
-    const copy = priorityClientCopy(action);
-    const uncertainty = copy.uncertainty
-      ? `<div class="priority-field priority-field-uncertainty"><dt>Material uncertainty</dt><dd>${e(copy.uncertainty)}</dd></div>`
-      : "";
-    return `<article class="priority-action" data-priority-rank="${e(action.rank)}">
+  const cards = primary.slice(0, 5).map((record, index) => {
+    const governedRank = record.sequenceInputs?.governedRank ?? index + 1;
+    return `<article class="priority-action" data-priority-rank="${e(governedRank)}" data-solution-id="${e(record.solutionId)}">
       <div class="priority-action-heading">
-        <span class="priority-rank" aria-label="Priority ${e(action.rank)}">${e(action.rank)}</span>
+        <span class="priority-rank" aria-label="Priority ${e(governedRank)}">${e(governedRank)}</span>
         <div>
-          ${action.rank === 1 ? '<span class="priority-start">Start here</span>' : ''}
-          <h3>${e(copy.title)}</h3>
+          ${index === 0 ? '<span class="priority-start">Start here</span>' : ''}
+          <h3>${e(record.problem)}</h3>
         </div>
       </div>
       <dl class="priority-action-fields">
-        <div class="priority-field priority-field-attention"><dt>What needs attention</dt><dd>${e(copy.title)}</dd></div>
-        <div class="priority-field"><dt>Why it matters</dt><dd>${e(copy.why)}</dd></div>
-        <div class="priority-field"><dt>What to change</dt><dd>${e(copy.change)}</dd></div>
-        <div class="priority-field"><dt>Where it applies</dt><dd>${e(copy.scope)}</dd></div>
-        <div class="priority-field"><dt>How to confirm it improved</dt><dd>${e(copy.confirm)}</dd></div>
-        ${uncertainty}
+        <div class="priority-field priority-field-attention"><dt>What needs attention</dt><dd>${e(record.problem)}</dd></div>
+        <div class="priority-field"><dt>Why it matters</dt><dd>${e(record.whyItMatters)}</dd></div>
+        <div class="priority-field"><dt>What to change</dt><dd>${e(record.whatToChange)}</dd></div>
+        <div class="priority-field"><dt>How to fix it</dt><dd>${e(record.howToFix)}</dd></div>
+        <div class="priority-field"><dt>Where it applies</dt><dd>${e(`${record.siteAnchor.type}: ${record.siteAnchor.locator} (${record.siteAnchor.scope})`)}</dd></div>
+        <div class="priority-field"><dt>Evidence qualification</dt><dd>${e(`${record.evidenceGrade} / ${record.prescriptionMode}`)}</dd></div>
+        <div class="priority-field"><dt>Capability required</dt><dd>${e(record.capabilityRequired.join(", "))}</dd></div>
+        <div class="priority-field"><dt>Effort</dt><dd>${e(record.effortBand)}</dd></div>
+        <div class="priority-field"><dt>How to confirm it improved</dt><dd>${e(record.implementationCheck.instruction)} ${e(record.implementationCheck.passCondition)}</dd></div>
+        <div class="priority-field"><dt>Disposition</dt><dd>${e(record.disposition)}</dd></div>
       </dl>
     </article>`;
   }).join("");
@@ -752,6 +813,7 @@ function legacyConversionPathSection(model) {
 }
 
 function conversionPathSection(model) {
+  const canonical = canonicalSolutionContext(model);
   const paths = Array.isArray(model.conversionPaths) ? model.conversionPaths : [];
   const trustBand = model.bands?.trust;
   if (paths.length === 0) {
@@ -767,6 +829,10 @@ function conversionPathSection(model) {
   const clearCount = paths.filter((path) => path.status === "Clear").length;
   const weakCount = paths.filter((path) => path.status === "Weak").length;
   const findingIds = new Set((model.findings || []).map((finding) => finding.ruleId || finding.id));
+  const solutionForRule = (ruleId) => {
+    const finding = (model.findings || []).find((item) => (item.ruleId || item.id) === ruleId);
+    return finding ? canonical.byFindingId.get(finding.findingId) : null;
+  };
   const verdict = clearCount === paths.length
     ? "The assessed path to action is clear, but there are opportunities to make that journey faster and more reassuring."
     : weakCount > 0
@@ -796,35 +862,41 @@ function conversionPathSection(model) {
     : "";
   const momentumCards = [];
   if (findingIds.has("VAN-PERF-001")) {
+    const solution = solutionForRule("VAN-PERF-001");
     momentumCards.push({
       title: "Mobile loading friction",
-      finding: "Main content takes too long to appear on mobile.",
-      meaning: "Visitors may experience delay before they can fully engage with the page or reach the next step.",
+      finding: solution?.problem || "A governed performance issue was identified.",
+      meaning: solution?.whyItMatters || "The assessed performance evidence needs review.",
+      solution,
     });
   }
   if (findingIds.has("VAN-CONTENT-002")) {
+    const solution = solutionForRule("VAN-CONTENT-002");
     momentumCards.push({
       title: "Decision-support gap",
-      finding: "Buyer-question content was not found on the pages we could assess.",
-      meaning: "Some visitors may reach the action point while still having unanswered questions.",
+      finding: solution?.problem || "A governed content issue was identified.",
+      meaning: solution?.whyItMatters || "The assessed content evidence needs review.",
       limitation: "This applies only to the pages we could assess; other pages remain unknown.",
+      solution,
     });
   }
   const momentumSection = momentumCards.length
     ? `<h3>Where visitors may lose momentum</h3><div class="conversion-journey-card-grid">${momentumCards.map((card) => `<article class="conversion-journey-detail-card">
       <h4>${e(card.title)}</h4>
-      <p><strong>Finding:</strong> ${e(card.finding)}</p>
+      <p><strong>Finding:</strong> ${e(card.finding)}${card.solution ? ` ${canonicalReference(card.solution)}` : ""}</p>
       <p><strong>Client meaning:</strong> ${e(card.meaning)}</p>
       ${card.limitation ? `<p class="muted small">${e(card.limitation)}</p>` : ""}
     </article>`).join("")}</div>`
     : "";
   const bridgeCards = [];
   if (findingIds.has("VAN-CONTENT-002")) {
+    const solution = solutionForRule("VAN-CONTENT-002");
     bridgeCards.push({
       title: "Content that answers buyer questions",
-      interpretation: "Some visitors may reach the next step while still having unanswered questions. Buyer-question content was not found on the pages we could assess.",
+      interpretation: solution?.whyItMatters || "The assessed content evidence needs review before a conclusion is drawn.",
       cta: "See Content Opportunities →",
       target: "#content-ideas",
+      solution,
     });
   }
   if (trustBand) {
@@ -841,12 +913,13 @@ function conversionPathSection(model) {
       interpretation: "The route is clear, but slow mobile loading may create friction before visitors fully engage with the next step.",
       cta: "See Priority Fixes →",
       target: "#priority-fixes",
+      solution: solutionForRule("VAN-PERF-001"),
     });
   }
   const journeyBridge = bridgeCards.length
     ? `<h3>What supports this journey?</h3><div class="conversion-journey-bridge-grid">${bridgeCards.map((card) => `<article class="conversion-journey-bridge-card">
       <h4>${e(card.title)}</h4>
-      <p>${e(card.interpretation)}</p>
+       <p>${e(card.interpretation)}${card.solution ? ` ${canonicalReference(card.solution)}` : ""}</p>
       <a class="conversion-journey-bridge-link" href="${e(card.target)}">${e(card.cta)}</a>
     </article>`).join("")}</div>`
     : "";
@@ -863,9 +936,11 @@ function conversionPathSection(model) {
     <h3>What this means for conversion</h3>
     <p>The route itself is not the main issue. The stronger opportunity is improving the experience around that route so visitors can reach the next step faster and with fewer unanswered questions.</p>
     <h3>What to improve around the journey</h3>
-    <ol class="conversion-journey-actions">
-      <li>Reduce the wait before the main mobile content appears.</li>
-      <li>Answer common buyer questions before or near the point of action.</li>
+    <ol class="conversion-journey-actions">${["VAN-PERF-001", "VAN-CONTENT-002"]
+      .map((ruleId) => solutionForRule(ruleId))
+      .filter(Boolean)
+      .map((record) => `<li>${e(record.whatToChange)} ${canonicalReference(record)}</li>`)
+      .join("")}
       <li>Preserve the existing clear route while making the surrounding decision experience easier.</li>
     </ol>
     <div class="conversion-journey-takeaway"><strong>Conversion takeaway</strong><p>The assessed route is already clear. The best opportunity is not to redesign the path, but to remove friction around it—help mobile visitors engage sooner and answer more of their questions before they are asked to act.</p></div>
@@ -1216,6 +1291,7 @@ function meaningfulClientTopic(value) {
 }
 
 function contentOpportunitiesSection(model) {
+  const canonical = canonicalSolutionContext(model);
   const ideas = model.contentIdeas || {};
   const tofu = ideas.tofu || [];
   const mofu = ideas.mofu || [];
@@ -1350,7 +1426,11 @@ function contentOpportunitiesSection(model) {
       .map((i, offset) => {
         const index = startIndex + offset;
         const detail = primary ? "" : ` ${e(i.gap || "")}`;
-        return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}">
+        const canonicalContent = canonical.ordered.find((record) => record.findingRefs.some((findingRef) => {
+          const finding = (model.findings || []).find((item) => item.findingId === findingRef);
+          return finding && String(finding.ruleId || finding.id).startsWith("VAN-CONTENT-");
+        }));
+        return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}"${canonicalContent ? ` data-solution-id="${e(canonicalContent.solutionId)}"` : ""}>
           <div class="content-opportunity-card-header">
             ${primary ? `<span class="content-opportunity-rank">${index + 1}</span>` : ""}
             ${index === 0 ? '<span class="content-opportunity-start">Start here</span>' : ""}
@@ -1363,6 +1443,7 @@ function contentOpportunitiesSection(model) {
             <div><dt>Recommended asset</dt><dd>${e(i.recommendedAsset || i.type || "Content asset")}</dd></div>
             <div><dt>Journey connection</dt><dd>${e(clientJourneyConnection(i))}</dd></div>
             <div><dt>Decision-support role</dt><dd>${e(i.frame || i.placement || "Supports buyer decision-making")}</dd></div>
+            ${canonicalContent ? `<div><dt>Canonical solution</dt><dd>${canonicalReference(canonicalContent)}</dd></div>` : ""}
             ${primary ? `<div><dt>Evidence qualification</dt><dd>${e(evidenceLabel(i))}</dd></div>` : `<div class="content-opportunity-uncertainty"><dt>Evidence qualification</dt><dd>${e(evidenceLabel(i))}${detail}</dd></div>`}
           </dl>
         </article>`;
@@ -1774,7 +1855,7 @@ function renderViewerNav() {
     <div class="viewer-supporting-nav" aria-label="Supporting evidence navigation"><div class="viewer-supporting-divider" aria-hidden="true"></div><div class="viewer-supporting-label">Evidence &amp; Detail</div>${links(REPORT_V2_VIEWER_PAGES.filter((page) => page.tier === "SUPPORTING"), "supporting")}</div>`;
 }
 
-function pageShell(model, date, pillars, checklist, plan) {
+function pageShell(model, date, pillars, checklist, canonical) {
   const business = model.input?.businessName || "Business";
   const domain =
     model.evidence?.site?.domain ||
@@ -3360,13 +3441,13 @@ footer {
     </div>
 
     <main id="reportContent" tabindex="-1">
-      ${executiveScorecard(model, pillars)}
+      ${executiveScorecard(model, pillars, canonical)}
       ${pillarSection(pillars)}
-      ${blockersSection(model, plan)}
+      ${blockersSection(model, canonical)}
       ${foundationSection(checklist)}
       ${conversionPathSection(model)}
       ${contentOpportunitiesSection(model)}
-      ${actionPlanSection(plan, checklist)}
+      ${actionPlanSection(canonical, checklist)}
       ${competitorSectionClient(model)}
       ${eeatSection(model)}
       ${technicalDetailSection(model)}
@@ -3554,6 +3635,7 @@ footer {
 
 export function renderReportV2(model, options = {}) {
   const renderModel = clientFacingReportModel(model);
+  const canonical = canonicalSolutionContext(renderModel);
 
   const generated = renderModel?.generatedAt
     ? new Date(renderModel.generatedAt)
@@ -3567,14 +3649,12 @@ export function renderReportV2(model, options = {}) {
 
   const pillars = computePillars(renderModel);
   const checklist = buildFoundationChecklist(renderModel);
-  const plan = buildActionPlan(renderModel, checklist);
-
   return pageShell(
     renderModel,
     date,
     pillars,
     checklist,
-    plan,
+    canonical,
   );
 }
 

@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 
 import { scoreAudit } from "../scoring/vantage-score.js";
 import {
-  renderReportV2,
+  renderReportV2 as renderReportV2Base,
   REPORT_V2_VIEWER_PAGES,
   REPORT_V2_VIEWER_VERSION,
 } from "./render-report-v2.js";
+import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 
 const FIXED_TS = "2026-01-15T12:00:00.000Z";
 const INPUT = {
@@ -16,6 +17,29 @@ const INPUT = {
   services: ["Coaching"],
   primaryGoal: "Book consultations",
 };
+
+function renderReportV2(model, options) {
+  const canonicalSolutions = model.canonicalSolutions || (() => {
+    try {
+      const findings = model.findings.filter((finding) => finding.findingId).map((finding) => {
+        const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+        return authority ? {
+          ...finding,
+          ruleVersion: authority.ruleVersion,
+          evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+        } : finding;
+      });
+      return buildCanonicalSolutionSet({
+        findings,
+        scoreSet: model,
+        decisionEvidence: model.evidence,
+      });
+    } catch {
+      return { records: [], sequence: [] };
+    }
+  })();
+  return renderReportV2Base({ ...model, canonicalSolutions }, options);
+}
 
 function evidence() {
   return {

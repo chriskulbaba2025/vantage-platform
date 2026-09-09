@@ -4,7 +4,7 @@
  * Every current renderer/replay projection must consume this semantic object
  * after the persisted current ScoreSet has been validated.
  */
-export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence }) {
+export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence, canonicalSolutions }) {
   if (!scoreSet || typeof scoreSet !== "object" || Array.isArray(scoreSet)) {
     throw new Error("Current report model requires a validated ScoreSet");
   }
@@ -38,6 +38,7 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
     suppressedModules: scoreSet.suppressedModules,
     capabilityEvidence,
     evidence: decisionEvidence,
+    canonicalSolutions,
     conversionPaths: scoreSet.conversionPaths,
     readinessMap: scoreSet.readinessMap,
     contentIdeas: scoreSet.contentIdeas,

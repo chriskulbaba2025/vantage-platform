@@ -232,6 +232,11 @@ export function eeatSection(model) {
       finding.dimension === "trust_eeat" ||
       finding.module === "trust_signals",
   );
+  const solutionByFindingId = new Map(
+    (model?.canonicalSolutions?.records || []).flatMap((record) =>
+      (record.findingRefs || []).map((findingId) => [findingId, record]),
+    ),
+  );
 
   const trustQuestions = [
     [
@@ -411,15 +416,12 @@ export function eeatSection(model) {
           (finding) =>
             `<li><strong>${e(
               finding.title || "Trust finding",
-            )}</strong> — ${e(
-              finding.businessImpact || "",
-            )}${
-              finding.recommendation
-                ? ` <strong>Action:</strong> ${e(
-                    finding.recommendation,
-                  )}`
-                : ""
-            }</li>`,
+            )}</strong>${(() => {
+              const solution = solutionByFindingId.get(finding.findingId);
+              return solution
+                ? ` — <a href="#priority-fixes" data-solution-id="${e(solution.solutionId)}">Canonical solution ${e(solution.solutionId)}</a>`
+                : " — no canonical client solution is displayed for this evidence.";
+            })()}</li>`,
         )
         .join("")}</ul>`
     : '<p class="small">No material trust finding was produced from the assessed evidence.</p>';
@@ -2784,8 +2786,8 @@ const GROUP_INTRO = {
     "Refinement and optimization after the core issues are resolved.",
 };
 
-function actionRows(actions) {
-  if (!actions.length) {
+function actionRows(records) {
+  if (!records.length) {
     return '<p class="small">Nothing in this group from the assessed evidence.</p>';
   }
 
@@ -2801,32 +2803,28 @@ function actionRows(actions) {
       </tr>
     </thead>
 
-    <tbody>${actions
+    <tbody>${records
       .map(
-        (a) => `<tr>
+        (record, index) => `<tr data-solution-id="${e(record.solutionId)}">
           <td>${e(
-            a.rank,
+            record.sequenceInputs?.governedRank ?? index + 1,
           )}</td>
           <td><strong>${e(
-            a.finding.title,
+            record.problem,
           )}</strong><br><span class="small">${e(
-            a.finding
-              .recommendation ||
-              "",
+            record.whatToChange,
           )}</span></td>
           <td class="small">${e(
-            a.finding
-              .businessImpact ||
-              "",
+            record.whyItMatters,
           )}</td>
           <td class="small">${e(
-            a.actionClass,
+            record.solutionId,
           )}</td>
           <td class="small">${e(
-            a.effort,
+            record.effortBand,
           )}</td>
           <td class="small">${e(
-            a.verificationMethod,
+            record.implementationCheck.instruction,
           )}</td>
         </tr>`,
       )
@@ -2834,7 +2832,8 @@ function actionRows(actions) {
   </table></div>`;
 }
 
-export function actionPlanSection(plan, checklist) {
+export function actionPlanSection(canonical, checklist) {
+  const records = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed);
   const groupBlocks = [
     ACTION_GROUP.DO_NOW,
     ACTION_GROUP.DO_NEXT,
@@ -2847,20 +2846,20 @@ export function actionPlanSection(plan, checklist) {
         <p class="muted small">${e(
           GROUP_INTRO[group],
         )}</p>
-        ${actionRows(
-          plan.groups[
-            group
-          ] || [],
-        )}`,
+        ${actionRows(records.filter((record) => group === ACTION_GROUP.DO_NOW
+          ? record.disposition === "FIX_NOW"
+          : group === ACTION_GROUP.DO_NEXT
+            ? record.disposition === "FIX_LATER"
+            : false))}`,
     )
     .join("");
 
   const measures = [
     ...new Set(
-      plan.actions
+      records
         .map(
           (a) =>
-            a.verificationMethod,
+            a.implementationCheck?.instruction,
         )
         .filter(Boolean),
     ),
