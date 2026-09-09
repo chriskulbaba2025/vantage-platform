@@ -370,6 +370,10 @@ function resultName(callNumber) {
   ).padStart(2, "0")}-result.json`;
 }
 
+function recoveredResultName(callNumber) {
+  return `${RESERVATION_PREFIX}/call-${String(callNumber).padStart(2, "0")}-recovered-result.json`;
+}
+
 function scopeWithName(scope, artifactName) {
   return {
     tenantId: scope.tenantId,
@@ -1475,6 +1479,7 @@ export function createNarrativeV2LiveBinding({
     writerInputSha256 = null,
     writerInput = null,
   }) {
+    const promptSha256 = sha256(prompt);
     // A final-pass restart may occur after Writer3 returned and validated
     // successfully but before Judge3 could be reserved. Reuse that exact
     // governed Writer3 result only when the model and prompt hash match.
@@ -1505,7 +1510,21 @@ export function createNarrativeV2LiveBinding({
           scope,
           resultName(prior.callNumber),
         );
-        if (result?.validationResult === "FAIL") {
+        const recoveredResult = await readJsonByName(
+          artifactStore,
+          scope,
+          recoveredResultName(prior.callNumber),
+        );
+        const effectiveResult = recoveredResult || result;
+        const persistedState =
+          effectiveResult?.state ||
+          responseMeta?.state ||
+          responseState?.state ||
+          null;
+        const resumableState =
+          persistedState === NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED ||
+          persistedState === NARRATIVE_V2_CALL_STATE.POST_RESPONSE_LOCAL_FAILURE;
+        if (effectiveResult?.validationResult === "FAIL" && !resumableState) {
           throw new Error(
             `Narrative v2 paid ${role} pass ${passNumber} already reserved with a persisted failed result; refusing duplicate call`,
           );
@@ -1730,23 +1749,31 @@ export function createNarrativeV2LiveBinding({
     let body;
     let responseDigest = null;
 
+    const persistResponseState = async () =>
+      persistJson(artifactStore, scope, responseStateName(callNumber), {
+        state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
+        auditId: scope.auditId,
+        executionId: scope.executionId,
+        reservationId: reservation.reservationId,
+        callNumber,
+        role,
+        passNumber,
+        modelId,
+        requestSha256: promptSha256,
+        responseSha256: responseDigest,
+        responseStatus: response.status || 200,
+      });
+
     try {
       if (typeof response.text === "function") {
         const rawText = await response.text();
-        responseDigest = sha256(rawText);
-        await persistJson(artifactStore, scope, responseStateName(callNumber), {
-          state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
-          callNumber,
-          role,
-          passNumber,
-          modelId,
-          responseSha256: responseDigest,
-          responseStatus: response.status || 200,
-        });
         try {
           body = JSON.parse(rawText);
         } catch {
-          await persistJson(artifactStore, scope, responseName(callNumber), { rawBody: rawText, status: response.status || 200 });
+          const persistedBody = { rawBody: rawText, status: response.status || 200 };
+          await persistJson(artifactStore, scope, responseName(callNumber), persistedBody);
+          responseDigest = sha256(JSON.stringify(persistedBody, null, 2));
+          await persistResponseState();
           await persistReturnedFailure({
             scope, callNumber, reservation, role, passNumber, modelId,
             errorCode: "PROVIDER_RESPONSE_NOT_JSON",
@@ -1758,16 +1785,6 @@ export function createNarrativeV2LiveBinding({
         }
       } else {
         body = await response.json();
-        responseDigest = sha256(JSON.stringify(body));
-        await persistJson(artifactStore, scope, responseStateName(callNumber), {
-          state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
-          callNumber,
-          role,
-          passNumber,
-          modelId,
-          responseSha256: responseDigest,
-          responseStatus: response.status || 200,
-        });
       }
     } catch (err) {
       if (/response was not JSON/.test(err.message || "")) throw err;
@@ -1793,6 +1810,8 @@ export function createNarrativeV2LiveBinding({
 
     if (!response?.ok) {
       await persistJson(artifactStore, scope, responseName(callNumber), body);
+      responseDigest = sha256(JSON.stringify(body, null, 2));
+      await persistResponseState();
       await persistReturnedFailure({
         scope, callNumber, reservation, role, passNumber, modelId,
         errorCode: "PROVIDER_HTTP_ERROR",
@@ -1809,6 +1828,8 @@ export function createNarrativeV2LiveBinding({
       content = extractContent(body);
     } catch (err) {
       await persistJson(artifactStore, scope, responseName(callNumber), body);
+      responseDigest = sha256(JSON.stringify(body, null, 2));
+      await persistResponseState();
       await persistReturnedFailure({
         scope,
         callNumber,
@@ -1843,7 +1864,7 @@ export function createNarrativeV2LiveBinding({
         responseStatus:
           response.status || 200,
         responseSha256:
-          sha256(content),
+          responseDigest,
       });
 
       throw new Error(
@@ -1855,6 +1876,8 @@ export function createNarrativeV2LiveBinding({
     // restart/recovery consumers. The outer provider envelope is retained
     // for returned-failure paths above.
     await persistJson(artifactStore, scope, responseName(callNumber), rawParsed);
+    responseDigest = sha256(JSON.stringify(rawParsed, null, 2));
+    await persistResponseState();
 
     const parsed = normalize(rawParsed);
 
@@ -1875,7 +1898,7 @@ export function createNarrativeV2LiveBinding({
         responseStatus:
           response.status || 200,
         responseSha256:
-          sha256(content),
+          responseDigest,
       });
 
       throw err;
@@ -1923,8 +1946,16 @@ export function createNarrativeV2LiveBinding({
 
     await persistJson(artifactStore, scope, responseMetaName(callNumber), {
       state: NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED,
+      auditId: scope.auditId,
+      executionId: scope.executionId,
+      reservationId: reservation.reservationId,
+      callNumber,
+      role,
+      passNumber,
+      modelId,
+      requestSha256: promptSha256,
       responseSha256: responseDigest,
-      responseContentSha256: sha256(content),
+      responseContentSha256: responseDigest,
       usage,
     });
 
@@ -2005,7 +2036,7 @@ export function createNarrativeV2LiveBinding({
           : NARRATIVE_V2_CALL_STATE.CALL_COMPLETED,
 
         responseSha256:
-          sha256(content),
+          responseDigest,
 
         validationErrors:
           combinedValidation.valid
@@ -2075,19 +2106,67 @@ export function createNarrativeV2LiveBinding({
       scope,
       responseMetaName(callNumber),
     );
+    const responseState = await readJsonByName(
+      artifactStore,
+      scope,
+      responseStateName(callNumber),
+    );
     const result = await readJsonByName(
       artifactStore,
       scope,
       resultName(callNumber),
     );
+    const recoveredResult = await readJsonByName(
+      artifactStore,
+      scope,
+      recoveredResultName(callNumber),
+    );
+    const effectiveResult = recoveredResult || result;
     if (!response || !responseMeta) {
       throw new Error("Narrative v2 persisted response is unavailable for deterministic resume");
     }
-    if (result?.validationResult === "PASS") {
+    const identityRecords = [responseState, responseMeta];
+    for (const record of identityRecords) {
       if (
-        result.role !== role ||
-        result.passNumber !== passNumber ||
-        result.responseSha256 !== responseMeta.responseContentSha256
+        !record ||
+        record.auditId !== scope.auditId ||
+        record.executionId !== scope.executionId ||
+        record.reservationId !== reservation.reservationId ||
+        record.callNumber !== callNumber ||
+        record.role !== role ||
+        record.passNumber !== passNumber ||
+        record.modelId !== modelId ||
+        record.requestSha256 !== promptSha256
+      ) {
+        throw new Error("Narrative v2 persisted response identity mismatch");
+      }
+    }
+    if (
+      responseState.state !== NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED ||
+      ![NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED, NARRATIVE_V2_CALL_STATE.POST_RESPONSE_LOCAL_FAILURE]
+        .includes(responseMeta.state)
+    ) {
+      throw new Error("Narrative v2 persisted response state is not resumable");
+    }
+    const persistedResponseDigest = sha256(
+      JSON.stringify(response, null, 2),
+    );
+    if (
+      responseState.responseSha256 !== persistedResponseDigest ||
+      responseMeta.responseSha256 !== persistedResponseDigest ||
+      responseMeta.responseContentSha256 !== persistedResponseDigest
+    ) {
+      throw new Error("Narrative v2 persisted response digest mismatch");
+    }
+    if (effectiveResult?.validationResult === "PASS") {
+      if (
+        effectiveResult.auditId !== scope.auditId ||
+        effectiveResult.executionId !== scope.executionId ||
+        effectiveResult.callNumber !== callNumber ||
+        effectiveResult.role !== role ||
+        effectiveResult.passNumber !== passNumber ||
+        effectiveResult.modelId !== modelId ||
+        effectiveResult.responseSha256 !== responseMeta.responseContentSha256
       ) {
         throw new Error("Narrative v2 persisted result identity mismatch");
       }
@@ -2112,7 +2191,7 @@ export function createNarrativeV2LiveBinding({
     if (!usage || !Number.isFinite(Number(usage.inputTokens)) || !Number.isFinite(Number(usage.outputTokens))) {
       throw new Error("Narrative v2 persisted response usage is unavailable for deterministic resume");
     }
-    if (result?.validationResult === "PASS") return parsed;
+    if (effectiveResult?.validationResult === "PASS") return parsed;
 
     const modelPrice = config.priceTable[modelId];
     const actualCost = estimateActualCost(usage, modelPrice);
@@ -2134,9 +2213,11 @@ export function createNarrativeV2LiveBinding({
       validationResult: "PASS",
       timestamp: clock.now(),
     });
-    await persistJson(artifactStore, scope, resultName(callNumber), {
+    await persistJson(artifactStore, scope, recoveredResultName(callNumber), {
       ...ledger,
       bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      reservationId: reservation.reservationId,
+      requestSha256: promptSha256,
       callNumber,
       role,
       passNumber,
