@@ -22,6 +22,9 @@ import {
 
 const TBK = "9714c206-8ed3-4686-8fe2-ceeca0ca0f82";
 const REBOOT = "97d6b2c7-03b9-4530-8ea7-16557502c638";
+const CURRENT_GOVERNED_CANDIDATE_SHA = "a16430aa6c000afadcaade3e692e41f0f08ed903";
+const STALE_CANDIDATE_SHA = "a2c1587aa4dfa799dab3b6b2cfbd42b384e1a893";
+const UNRELATED_CANDIDATE_SHA = "0000000000000000000000000000000000000000";
 
 const config = {
   writerModel: "mock-writer",
@@ -51,6 +54,34 @@ function mockBindingFactory({ calls, judgeCalls, output = null } = {}) {
     };
   };
 }
+
+test("PLANE3-ID: current governed candidate is accepted while stale and unrelated candidates are rejected", async () => {
+  const current = await runWriterOnlySample({
+    auditId: TBK,
+    candidateSha: CURRENT_GOVERNED_CANDIDATE_SHA,
+    ledgerRoot: await tempRoot(),
+    bindingFactory: mockBindingFactory(),
+  });
+  assert.equal(current.manifest.candidateSha, CURRENT_GOVERNED_CANDIDATE_SHA);
+  await assert.rejects(
+    runWriterOnlySample({
+      auditId: TBK,
+      candidateSha: STALE_CANDIDATE_SHA,
+      ledgerRoot: await tempRoot(),
+      bindingFactory: mockBindingFactory(),
+    }),
+    /requires candidate/,
+  );
+  await assert.rejects(
+    runWriterOnlySample({
+      auditId: TBK,
+      candidateSha: UNRELATED_CANDIDATE_SHA,
+      ledgerRoot: await tempRoot(),
+      bindingFactory: mockBindingFactory(),
+    }),
+    /requires candidate/,
+  );
+});
 
 test("PLANE3-01: only the two explicitly approved frozen inputs resolve", async () => {
   assert.deepEqual(Object.keys(APPROVED_INPUTS).sort(), [TBK, REBOOT].sort());

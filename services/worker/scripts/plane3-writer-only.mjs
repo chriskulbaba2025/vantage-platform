@@ -32,7 +32,7 @@ import { buildWriterPrompt } from "../src/narrative-v2/writer-prompt.js";
 const execFileAsync = promisify(execFile);
 
 export const PLANE3_HARNESS_VERSION = "1.0.0";
-export const EXPECTED_CANDIDATE_SHA = "a2c1587aa4dfa799dab3b6b2cfbd42b384e1a893";
+export const EXPECTED_CANDIDATE_SHA = "a16430aa6c000afadcaade3e692e41f0f08ed903";
 
 const workerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(workerRoot, "..", "..");
