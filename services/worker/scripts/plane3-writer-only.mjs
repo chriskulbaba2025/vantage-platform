@@ -32,7 +32,11 @@ import { buildWriterPrompt } from "../src/narrative-v2/writer-prompt.js";
 const execFileAsync = promisify(execFile);
 
 export const PLANE3_HARNESS_VERSION = "1.0.0";
-export const EXPECTED_CANDIDATE_SHA = "a16430aa6c000afadcaade3e692e41f0f08ed903";
+export const SEMANTIC_APPLICATION_BASE_SHA = "a16430aa6c000afadcaade3e692e41f0f08ed903";
+export const AUTHORIZED_TOOLING_OVERLAY_PATHS = Object.freeze([
+  "services/worker/scripts/plane3-writer-only.mjs",
+  "services/worker/scripts/plane3-writer-only.test.js",
+]);
 
 const workerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(workerRoot, "..", "..");
@@ -72,9 +76,68 @@ function assertOutside(candidate, parent, label) {
   }
 }
 
-async function currentCandidateSha() {
-  const { stdout } = await execFileAsync("git", ["-C", repositoryRoot, "rev-parse", "HEAD"]);
-  return stdout.trim();
+async function runGit(args, root = repositoryRoot) {
+  return execFileAsync("git", ["-C", root, ...args]);
+}
+
+export async function verifyRuntimeIdentity({
+  repositoryRootOverride = repositoryRoot,
+  runGitCommand = (args) => runGit(args, repositoryRootOverride),
+} = {}) {
+  const expectedRoot = resolve(repositoryRootOverride);
+  const { stdout: actualRootOutput } = await runGitCommand(["rev-parse", "--show-toplevel"]);
+  const actualRoot = resolve(actualRootOutput.trim());
+  if (actualRoot !== expectedRoot) {
+    throw new Error("Plane 3 harness repository root identity mismatch");
+  }
+
+  const { stdout: semanticBaseOutput } = await runGitCommand([
+    "rev-parse",
+    "--verify",
+    `${SEMANTIC_APPLICATION_BASE_SHA}^{commit}`,
+  ]);
+  const semanticApplicationBaseSha = semanticBaseOutput.trim();
+  if (semanticApplicationBaseSha !== SEMANTIC_APPLICATION_BASE_SHA) {
+    throw new Error("Plane 3 harness semantic application base is invalid");
+  }
+
+  const { stdout: toolingHeadOutput } = await runGitCommand(["rev-parse", "HEAD"]);
+  const toolingHeadSha = toolingHeadOutput.trim();
+  const { stdout: statusOutput } = await runGitCommand([
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+  ]);
+  const worktreeClean = statusOutput.trim() === "";
+  if (!worktreeClean) {
+    throw new Error("Plane 3 harness requires a clean worktree");
+  }
+
+  try {
+    await runGitCommand(["merge-base", "--is-ancestor", semanticApplicationBaseSha, toolingHeadSha]);
+  } catch {
+    throw new Error("Plane 3 harness tooling HEAD is not a descendant of the semantic application base");
+  }
+
+  const { stdout: changedPathsOutput } = await runGitCommand([
+    "diff",
+    "--name-only",
+    semanticApplicationBaseSha,
+    toolingHeadSha,
+  ]);
+  const changedPaths = changedPathsOutput.split(/\r?\n/).map((path) => path.trim()).filter(Boolean);
+  const unboundedPaths = changedPaths.filter((path) => !AUTHORIZED_TOOLING_OVERLAY_PATHS.includes(path));
+  if (unboundedPaths.length > 0) {
+    throw new Error(`Plane 3 harness tooling overlay contains unauthorized paths: ${unboundedPaths.join(", ")}`);
+  }
+
+  return Object.freeze({
+    semanticApplicationBaseSha,
+    toolingHeadSha,
+    worktreeClean,
+    boundedOverlayVerified: true,
+    changedPaths,
+  });
 }
 
 async function loadJson(path) {
@@ -147,14 +210,12 @@ export async function runWriterOnlySample({
   env = process.env,
   appRoot = repositoryRoot,
   ledgerRoot,
-  candidateSha = EXPECTED_CANDIDATE_SHA,
   executionIdFactory = (id) => `plane3-writer-only-${id}-${cryptoRandomId()}`,
   storeFactory = createFsArtifactStore,
   bindingFactory = createNarrativeV2LiveBinding,
+  identityVerifier = verifyRuntimeIdentity,
 }) {
-  if (candidateSha !== EXPECTED_CANDIDATE_SHA) {
-    throw new Error(`Plane 3 harness requires candidate ${EXPECTED_CANDIDATE_SHA}`);
-  }
+  const runtimeIdentity = await identityVerifier({ repositoryRootOverride: appRoot });
   const selected = await resolveApprovedInput({ auditId, appRoot });
   const executionId = executionIdFactory(auditId);
   if (typeof executionId !== "string" || executionId.length < 16) {
@@ -213,7 +274,12 @@ export async function runWriterOnlySample({
   const manifest = {
     contractVersion: "1.0.0",
     harnessVersion: PLANE3_HARNESS_VERSION,
-    candidateSha,
+    candidateSha: runtimeIdentity.semanticApplicationBaseSha,
+    semanticApplicationBaseSha: runtimeIdentity.semanticApplicationBaseSha,
+    toolingHeadSha: runtimeIdentity.toolingHeadSha,
+    worktreeClean: runtimeIdentity.worktreeClean,
+    boundedOverlayVerified: runtimeIdentity.boundedOverlayVerified,
+    changedPaths: runtimeIdentity.changedPaths,
     auditId,
     sampleType: selected.sampleType,
     executionId,
@@ -254,8 +320,7 @@ function cryptoRandomId() {
 
 export async function main(argv = process.argv.slice(2)) {
   const auditId = parseAuditId(argv);
-  const candidateSha = await currentCandidateSha();
-  const result = await runWriterOnlySample({ auditId, candidateSha });
+  const result = await runWriterOnlySample({ auditId });
   console.log(JSON.stringify({
     RESULT: result.manifest.finalStatus,
     AUDIT_ID: result.manifest.auditId,

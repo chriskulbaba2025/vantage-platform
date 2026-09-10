@@ -6,9 +6,11 @@ import { tmpdir } from "node:os";
 
 import {
   APPROVED_INPUTS,
-  EXPECTED_CANDIDATE_SHA,
+  AUTHORIZED_TOOLING_OVERLAY_PATHS,
+  SEMANTIC_APPLICATION_BASE_SHA,
   runWriterOnlySample,
   resolveApprovedInput,
+  verifyRuntimeIdentity,
 } from "./plane3-writer-only.mjs";
 import {
   buildControlledWriterOutput,
@@ -22,9 +24,6 @@ import {
 
 const TBK = "9714c206-8ed3-4686-8fe2-ceeca0ca0f82";
 const REBOOT = "97d6b2c7-03b9-4530-8ea7-16557502c638";
-const CURRENT_GOVERNED_CANDIDATE_SHA = "a16430aa6c000afadcaade3e692e41f0f08ed903";
-const STALE_CANDIDATE_SHA = "a2c1587aa4dfa799dab3b6b2cfbd42b384e1a893";
-const UNRELATED_CANDIDATE_SHA = "0000000000000000000000000000000000000000";
 
 const config = {
   writerModel: "mock-writer",
@@ -34,6 +33,18 @@ const config = {
 
 async function tempRoot() {
   return mkdtemp(join(tmpdir(), "plane3-writer-only-test-"));
+}
+
+const testRuntimeIdentity = async () => ({
+  semanticApplicationBaseSha: SEMANTIC_APPLICATION_BASE_SHA,
+  toolingHeadSha: "test-tooling-head",
+  worktreeClean: true,
+  boundedOverlayVerified: true,
+  changedPaths: [...AUTHORIZED_TOOLING_OVERLAY_PATHS],
+});
+
+async function runSampleForTest(options) {
+  return runWriterOnlySample({ ...options, identityVerifier: testRuntimeIdentity });
 }
 
 function mockBindingFactory({ calls, judgeCalls, output = null } = {}) {
@@ -55,32 +66,60 @@ function mockBindingFactory({ calls, judgeCalls, output = null } = {}) {
   };
 }
 
-test("PLANE3-ID: current governed candidate is accepted while stale and unrelated candidates are rejected", async () => {
-  const current = await runWriterOnlySample({
-    auditId: TBK,
-    candidateSha: CURRENT_GOVERNED_CANDIDATE_SHA,
-    ledgerRoot: await tempRoot(),
-    bindingFactory: mockBindingFactory(),
+function fakeGit({ head = "tooling-head", changedPaths = AUTHORIZED_TOOLING_OVERLAY_PATHS, dirty = "", ancestor = true, root = process.cwd() } = {}) {
+  return async (args) => {
+    if (args[0] === "rev-parse" && args[1] === "--show-toplevel") return { stdout: root };
+    if (args[0] === "rev-parse" && args[1] === "--verify") return { stdout: `${SEMANTIC_APPLICATION_BASE_SHA}\n` };
+    if (args[0] === "rev-parse" && args[1] === "HEAD") return { stdout: `${head}\n` };
+    if (args[0] === "status") return { stdout: dirty };
+    if (args[0] === "merge-base") {
+      if (!ancestor) throw new Error("not an ancestor");
+      return { stdout: "" };
+    }
+    if (args[0] === "diff") return { stdout: `${changedPaths.join("\n")}\n` };
+    throw new Error(`Unexpected fake git command: ${args.join(" ")}`);
+  };
+}
+
+test("PLANE3-ID: semantic base and tooling HEAD are separate, and bounded overlay is accepted", async () => {
+  const identity = await verifyRuntimeIdentity({
+    repositoryRootOverride: process.cwd(),
+    runGitCommand: fakeGit({ head: "61303af4d7d567c2d77eb61379b98dff6f1974aa" }),
   });
-  assert.equal(current.manifest.candidateSha, CURRENT_GOVERNED_CANDIDATE_SHA);
+  assert.equal(identity.semanticApplicationBaseSha, SEMANTIC_APPLICATION_BASE_SHA);
+  assert.equal(identity.toolingHeadSha, "61303af4d7d567c2d77eb61379b98dff6f1974aa");
+  assert.notEqual(identity.semanticApplicationBaseSha, identity.toolingHeadSha);
+  assert.equal(identity.boundedOverlayVerified, true);
+  assert.deepEqual(identity.changedPaths, AUTHORIZED_TOOLING_OVERLAY_PATHS);
+});
+
+test("PLANE3-ID: unbounded, dirty, non-ancestor, and wrong-root overlays fail closed", async () => {
   await assert.rejects(
-    runWriterOnlySample({
-      auditId: TBK,
-      candidateSha: STALE_CANDIDATE_SHA,
-      ledgerRoot: await tempRoot(),
-      bindingFactory: mockBindingFactory(),
+    verifyRuntimeIdentity({
+      repositoryRootOverride: process.cwd(),
+      runGitCommand: fakeGit({ changedPaths: [...AUTHORIZED_TOOLING_OVERLAY_PATHS, "services/worker/src/index.js"] }),
     }),
-    /requires candidate/,
+    /unauthorized paths/,
   );
   await assert.rejects(
-    runWriterOnlySample({
-      auditId: TBK,
-      candidateSha: UNRELATED_CANDIDATE_SHA,
-      ledgerRoot: await tempRoot(),
-      bindingFactory: mockBindingFactory(),
-    }),
-    /requires candidate/,
+    verifyRuntimeIdentity({ repositoryRootOverride: process.cwd(), runGitCommand: fakeGit({ dirty: " M file.js" }) }),
+    /clean worktree/,
   );
+  await assert.rejects(
+    verifyRuntimeIdentity({ repositoryRootOverride: process.cwd(), runGitCommand: fakeGit({ ancestor: false }) }),
+    /not a descendant/,
+  );
+  await assert.rejects(
+    verifyRuntimeIdentity({ repositoryRootOverride: process.cwd(), runGitCommand: fakeGit({ root: "C:\\other-repository" }) }),
+    /repository root identity/,
+  );
+});
+
+test("PLANE3-ID: executable path uses shared verifier and has no direct HEAD-equals-base comparison", async () => {
+  const source = await readFile(new URL("./plane3-writer-only.mjs", import.meta.url), "utf8");
+  assert.match(source, /verifyRuntimeIdentity/);
+  assert.doesNotMatch(source, /currentCandidateSha/);
+  assert.doesNotMatch(source, /candidateSha !==/);
 });
 
 test("PLANE3-01: only the two explicitly approved frozen inputs resolve", async () => {
@@ -99,10 +138,9 @@ test("PLANE3-02: each sample uses the existing Writer seam, never Judge, and rec
   const root = await tempRoot();
   const calls = [];
   const judgeCalls = [];
-  const result = await runWriterOnlySample({
+  const result = await runSampleForTest({
     auditId: TBK,
     ledgerRoot: root,
-    candidateSha: EXPECTED_CANDIDATE_SHA,
     bindingFactory: mockBindingFactory({ calls, judgeCalls }),
   });
   assert.equal(calls.length, 1);
@@ -123,12 +161,12 @@ test("PLANE3-02: each sample uses the existing Writer seam, never Judge, and rec
 
 test("PLANE3-03: executions receive distinct identities and isolated ledgers", async () => {
   const root = await tempRoot();
-  const first = await runWriterOnlySample({
+  const first = await runSampleForTest({
     auditId: TBK,
     ledgerRoot: root,
     bindingFactory: mockBindingFactory(),
   });
-  const second = await runWriterOnlySample({
+  const second = await runSampleForTest({
     auditId: TBK,
     ledgerRoot: root,
     bindingFactory: mockBindingFactory(),
@@ -139,7 +177,7 @@ test("PLANE3-03: executions receive distinct identities and isolated ledgers", a
 
 test("PLANE3-04: historical fixture paths cannot be used as a ledger", async () => {
   await assert.rejects(
-    runWriterOnlySample({
+    runSampleForTest({
       auditId: TBK,
       ledgerRoot: join(process.cwd(), "test-fixtures"),
       bindingFactory: mockBindingFactory(),
@@ -151,7 +189,7 @@ test("PLANE3-04: historical fixture paths cannot be used as a ledger", async () 
 test("PLANE3-05: Writer validation failure is a governed failure and does not invoke Judge", async () => {
   const root = await tempRoot();
   const calls = [];
-  const result = await runWriterOnlySample({
+  const result = await runSampleForTest({
     auditId: REBOOT,
     ledgerRoot: root,
     calls,
@@ -185,7 +223,7 @@ test("PLANE3-06: the real binding owns cost preflight and rejects before fetch u
       "judge-test": { inputPricePer1K: 1, outputPricePer1K: 1 },
     }),
   };
-  const result = await runWriterOnlySample({
+  const result = await runSampleForTest({
     auditId: TBK,
     env,
     ledgerRoot: root,
