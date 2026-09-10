@@ -5,7 +5,7 @@ import { buildWriterPrompt } from "./writer-prompt.js";
 
 const writerInput = Object.freeze({
   contractVersion: "1.0.0",
-  writerInputVersion: "1.0.0",
+  writerInputVersion: "1.1.0",
   auditId: "11111111-1111-4111-8111-111111111111",
   scoreGovernance: {
     sourceDependencies: { backlinks: "FAILED" },

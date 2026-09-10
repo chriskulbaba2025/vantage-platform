@@ -26,6 +26,74 @@ export const WRITER_FINDING_REQUIRED_FIELDS = Object.freeze([
   "finalPriority",
 ]);
 
+const IMPACT_BASES = new Set(["OBSERVED", "INFERRED"]);
+const OUTCOME_STATUSES = new Set([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNKNOWN",
+  "UNAVAILABLE",
+  "NOT ASSESSED",
+  "NOT_ASSESSED",
+]);
+
+const COMMERCIAL_OUTCOME_PATTERN =
+  /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
+
+const CERTAIN_OUTCOME_PATTERN =
+  /\b(?:will|cause|causes|caused|causing|drive|drives|drove|driven|driving|result(?:s|ed|ing)?\s+in|lead(?:s|ing)?\s+to|led\s+to|increase|increases|increased|increasing|decrease|decreases|decreased|decreasing|reduce|reduces|reduced|reducing|improve|improves|improved|improving|hurt|hurts|hurting|damage|damages|damaged|damaging|lose|loses|lost|losing|cost|costs|costing|confirm|confirms|confirmed|establish|establishes|established|prove|proves|proved|proven|demonstrate|demonstrates|demonstrated|show|shows|showed|shown)\b/i;
+
+const WRITER_IMPACT_DERIVATION = "bounded-business-impact-v1";
+
+function assertImpactAuthority(finding) {
+  const basis = finding.businessImpactBasis ?? "INFERRED";
+  if (!IMPACT_BASES.has(basis)) {
+    throw new Error("businessImpactBasis must be OBSERVED or INFERRED");
+  }
+
+  const outcomeStatus =
+    finding.businessImpactOutcomeStatus ??
+    (basis === "OBSERVED" ? "AVAILABLE" : "UNAVAILABLE");
+  if (!OUTCOME_STATUSES.has(outcomeStatus)) {
+    throw new Error(`businessImpactOutcomeStatus must be governed: ${outcomeStatus}`);
+  }
+
+  const outcomeEvidenceRefs = finding.businessImpactOutcomeEvidenceRefs;
+  if (basis === "OBSERVED") {
+    if (outcomeStatus !== "AVAILABLE") {
+      throw new Error("OBSERVED business impact requires AVAILABLE outcome status");
+    }
+    if (!Array.isArray(outcomeEvidenceRefs) || outcomeEvidenceRefs.length === 0) {
+      throw new Error("OBSERVED business impact requires exact available outcome evidenceRefs");
+    }
+  }
+
+  return { basis, outcomeStatus, outcomeEvidenceRefs };
+}
+
+function projectBusinessImpact(finding) {
+  const { basis, outcomeStatus, outcomeEvidenceRefs } = assertImpactAuthority(finding);
+  const sourceText = finding.businessImpact;
+  const isUnboundedCommercialContext =
+    basis === "INFERRED" &&
+    COMMERCIAL_OUTCOME_PATTERN.test(sourceText) &&
+    CERTAIN_OUTCOME_PATTERN.test(sourceText);
+  const writerText = isUnboundedCommercialContext
+    ? `${finding.title} may affect visitor experience or evaluation in the assessed scope; the downstream commercial outcome was not measured.`
+    : sourceText;
+
+  return {
+    writerText,
+    basis,
+    outcomeStatus,
+    evidenceRefs:
+      basis === "OBSERVED"
+        ? [...outcomeEvidenceRefs]
+        : [`finding:${finding.findingId}`],
+    sourceFindingId: finding.findingId,
+    derivation: WRITER_IMPACT_DERIVATION,
+  };
+}
+
 const OPTIONAL_FINDING_FIELDS = Object.freeze([
   "rawPriority",
   "findingKey",
@@ -89,10 +157,14 @@ function projectFinding(finding, index) {
     } else if (field === "evidence") {
       out.evidence = finding.evidence.map((record, evidenceIndex) =>
         projectEvidence(record, finding.findingId, evidenceIndex));
+    } else if (field === "businessImpact") {
+      out[field] = projectBusinessImpact(finding).writerText;
     } else {
       out[field] = finding[field];
     }
   }
+
+  out.businessImpactContext = Object.freeze(projectBusinessImpact(finding));
 
   for (const field of OPTIONAL_FINDING_FIELDS) {
     if (Object.hasOwn(finding, field) && finding[field] !== undefined) out[field] = finding[field];

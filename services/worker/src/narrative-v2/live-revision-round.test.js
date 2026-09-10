@@ -59,7 +59,7 @@ function baseEnv() {
 function writerInput() {
   return {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.0.0",
+    writerInputVersion: "1.1.0",
     auditId: AUDIT_ID,
     scoreGovernance: {
       sourceDependencies: { offsite: "UNAVAILABLE" },

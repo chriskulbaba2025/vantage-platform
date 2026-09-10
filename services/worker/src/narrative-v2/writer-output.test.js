@@ -14,7 +14,7 @@ const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 function writerInput() {
   return {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.0.0",
+    writerInputVersion: "1.1.0",
     auditId: AUDIT_ID,
     business: {
       businessName: "Example Business",
@@ -999,6 +999,16 @@ test("WRITER-PROMPT-01: Pass 1 prompt freezes exact terminology and evidence aut
   assert.match(prompt, /source:backlinks/);
   assert.match(prompt, /will, should, cause/);
   assert.doesNotMatch(prompt, /eeatScore/);
+});
+
+test("WRITER-PROMPT-04: business impact basis and outcome status govern Writer authority", () => {
+  const prompt = buildWriterPrompt({ writerInput: writerInput(), passNumber: 1 });
+  assert.match(prompt, /businessImpactContext/);
+  assert.match(prompt, /basis/);
+  assert.match(prompt, /outcomeStatus/);
+  assert.match(prompt, /INFERRED/);
+  assert.match(prompt, /OBSERVED/);
+  assert.match(prompt, /raw source businessImpact/i);
 });
 
 test("WRITER-PROMPT-02: revision prompt is surgical and contains exact Judge defects", () => {

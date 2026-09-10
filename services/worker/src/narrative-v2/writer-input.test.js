@@ -167,12 +167,81 @@ test("WRITER-V2-01: packet preserves exact canonical business, scores, findings 
   assert.equal(packet.business.businessName, "Example Business");
   assert.equal(packet.business.language, "en-CA");
   assert.equal(packet.score.scores.trustEeatDimension, 74);
+  assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
+  assert.equal(packet.findings[0].businessImpactContext.outcomeStatus, "UNAVAILABLE");
+  assert.match(packet.findings[0].businessImpact, /may|opportunity|not measured/i);
   assert.equal(packet.findings[0].businessImpact, "Search engines may receive a weaker canonical URL signal.");
   assert.equal(packet.findings[0].evidence[0].field, "site.pages[].canonicalUrl");
   assert.equal(packet.capabilityContext.capabilities["trust.proof"].status, "PARTIAL");
   assert.deepEqual(packet.capabilityContext.capabilities["trust.proof"].coverage, { requested: 10, completed: 7, failed: 3 });
   assert.equal(packet.scoreGovernance.sourceDependencies.backlinks, "FAILED");
   assert.deepEqual(packet.deterministicAnalysis.contentIdeas.decision, ["Proof topic"]);
+});
+
+test("WRITER-V2-10: legacy assertive impact is bounded without mutating the source finding", () => {
+  const source = finding({
+    businessImpact: "Slow first impressions increase mobile abandonment.",
+  });
+  const packet = buildWriterInput({
+    auditId: AUDIT_ID,
+    auditRequest: request(),
+    scoreSet: scoreSet(),
+    findings: [source],
+    capabilityEvidence: capabilityEvidence({
+      capabilities: {
+        ...capabilityEvidence().capabilities,
+        "performance.field": {
+          capability: "performance.field",
+          status: "UNAVAILABLE",
+          coverage: { requested: 2, completed: 2, failed: 0 },
+          provenance: { source: "pagespeed-insights", adapterVersion: null, artifactRef: null },
+          limitations: ["CrUX field data was not returned"],
+          requiredFieldsPresent: false,
+        },
+      },
+    }),
+  });
+
+  assert.equal(source.businessImpact, "Slow first impressions increase mobile abandonment.");
+  assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
+  assert.equal(packet.findings[0].businessImpactContext.outcomeStatus, "UNAVAILABLE");
+  assert.doesNotMatch(packet.findings[0].businessImpact, /increase mobile abandonment/i);
+  assert.equal(packet.capabilityContext.capabilities["performance.field"].status, "UNAVAILABLE");
+});
+
+test("WRITER-V2-11: partial and unknown outcomes remain bounded and explicit", () => {
+  for (const status of ["PARTIAL", "UNKNOWN", "UNAVAILABLE", "NOT_ASSESSED"]) {
+    const source = finding({
+      businessImpact: "Weak trust signals reduce enquiries.",
+      businessImpactOutcomeStatus: status,
+    });
+    const packet = buildWriterInput({
+      auditId: AUDIT_ID,
+      auditRequest: request(),
+      scoreSet: scoreSet(),
+      findings: [source],
+      capabilityEvidence: capabilityEvidence(),
+    });
+    assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
+    assert.equal(packet.findings[0].businessImpactContext.outcomeStatus, status);
+    assert.match(packet.findings[0].businessImpact, /may|opportunity|not measured/i);
+    assert.doesNotMatch(packet.findings[0].businessImpact, /reduce enquiries/i);
+  }
+});
+
+test("WRITER-V2-12: legacy WriterInput without impact metadata cannot pass through raw impact", () => {
+  const source = finding({ businessImpact: "Clear pricing improves conversions." });
+  const packet = buildWriterInput({
+    auditId: AUDIT_ID,
+    auditRequest: request(),
+    scoreSet: scoreSet(),
+    findings: [source],
+    capabilityEvidence: capabilityEvidence(),
+  });
+
+  assert.equal(packet.writerInputVersion, WRITER_INPUT_VERSION);
+  assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
+  assert.doesNotMatch(packet.findings[0].businessImpact, /improves conversions/i);
 });
 
 test("T1-WRITER-01: current WriterInput projects every persisted hierarchy action without recomputing it", () => {

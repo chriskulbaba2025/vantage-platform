@@ -507,7 +507,7 @@ async function buildContinuationFixture({
 
   const writerInput = {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.0.0",
+    writerInputVersion: "1.1.0",
     auditId,
     scoreGovernance: {
       sourceDependencies: {
@@ -1294,7 +1294,7 @@ test("NV2-PROD-06: invalid persisted terminal orchestration fails closed without
     artifactName: "narrative-v2/writer-input.json",
   }, {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.0.0",
+    writerInputVersion: "1.1.0",
     auditId: auditRequest.auditId,
     referenceIndex: {},
   });
