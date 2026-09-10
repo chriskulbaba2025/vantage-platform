@@ -399,13 +399,13 @@ export function validateWriterSemanticFidelity(
     /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
 
   const causalCertaintyPattern =
-    /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|increased|decreases?|reduces?|improves?|hurts?|damages?|lose|loses|losing|costs?)\b/i;
+    /\b(?:will|(?<!root-)(?<!root )(?:cause|causes|caused|causing)|(?:drive|drives|drove|driven|driving)|(?:result|results|resulted|resulting) in|(?:lead|leads|led|leading) to|(?:increase|increases|increased|increasing)|(?:decrease|decreases|decreased|decreasing)|(?:reduce|reduces|reduced|reducing)|(?:improve|improves|improved|improving)|(?:hurt|hurts|hurting)|(?:damage|damages|damaged|damaging)|(?:lose|loses|lost|losing)|(?:cost|costs|costing))\b/i;
 
   const boundedOutcomePattern =
     /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?|not measured|did not measure)\b/i;
 
   const establishedOutcomePattern =
-    /\b(?:confirmed|confirms|established|proven|proves?|demonstrates?|shows?)\b/i;
+    /\b(?:confirm|confirms|confirmed|confirming|establish|establishes|established|establishing|prove|proves|proved|proven|proving|demonstrate|demonstrates|demonstrated|demonstrating|show|shows|showed|shown|showing)\b/i;
 
   const nonEstablishmentOutcomePattern =
     /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed)?|measur(?:ed|e)|collect(?:ed|ion)|confirm(?:ed)?|prov(?:e|en))\b|(?:does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed)?|measur(?:ed|e)|collect(?:ed|ion)|confirm(?:ed)?|prov(?:e|en))|\bnot\s+(?:measured|collected|established|confirmed|proven)\b)/i;
@@ -427,6 +427,76 @@ export function validateWriterSemanticFidelity(
 
   const negatedAiEstablishmentPattern =
     /\bno\b[^.!?]{0,120}\b(?:limitation|constraint|weakness|gap)\b[^.!?]{0,80}\b(?:established|identified|observed|detected)\b/i;
+
+  const governedPredicateHeadPattern =
+    /^(?:will|cause|causes|caused|causing|drive|drives|drove|driven|driving|result|results|resulted|resulting|lead|leads|led|leading|increase|increases|increased|increasing|decrease|decreases|decreased|decreasing|reduce|reduces|reduced|reducing|improve|improves|improved|improving|hurt|hurts|damage|damages|damaged|lose|loses|lost|losing|cost|costs|costing|confirm|confirms|confirmed|confirming|establish|establishes|established|establishing|prove|proves|proved|proven|proving|demonstrate|demonstrates|demonstrated|demonstrating|show|shows|showed|shown|showing)\b/i;
+
+  const predicateContinuationPrefixPattern =
+    /^(?:(?:may|might|could|can|should|would|possibly|potentially|likely|perhaps|also|still|then|not|is|are|was|were|be|been|being|has|have|had|to)\s+)+/i;
+
+  const firstGovernedPredicateIndex = (value) => {
+    const causalIndex = value.search(causalCertaintyPattern);
+    const establishedIndex = value.search(establishedOutcomePattern);
+    if (causalIndex < 0) return establishedIndex;
+    if (establishedIndex < 0) return causalIndex;
+    return Math.min(causalIndex, establishedIndex);
+  };
+
+  const hasQualifierBeforePredicate = (value) => {
+    const predicateIndex = firstGovernedPredicateIndex(value);
+    return predicateIndex >= 0 && boundedOutcomePattern.test(value.slice(0, predicateIndex));
+  };
+
+  const isPredicateContinuation = (value) => {
+    let remainder = value.trim();
+    for (let index = 0; index < 3; index += 1) {
+      const prefix = remainder.match(predicateContinuationPrefixPattern);
+      if (!prefix) break;
+      remainder = remainder.slice(prefix[0].length).trim();
+    }
+    return governedPredicateHeadPattern.test(remainder);
+  };
+
+  const scanClaimGroups = (value) => {
+    const groups = [];
+    const hardSegments = value
+      .split(/[\n;:—–]+|(?<=[.!?])\s+/i)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+
+    for (const segment of hardSegments) {
+      const boundaries = /\(\s*|,\s*(?:(and|but|however|therefore|so|yet|while|although)\s+)?|\s+(and|but|however|therefore|so|yet|while|although)\s+/gi;
+      let cursor = 0;
+      let inheritedBounded = false;
+      for (const match of segment.matchAll(boundaries)) {
+        const left = segment.slice(cursor, match.index).trim();
+        if (left) groups.push({ text: left, inheritedBounded });
+
+        const isParentheticalStart = match[0].trim().startsWith("(");
+        const conjunction = (match[1] || match[2] || "").toLowerCase();
+        const right = segment.slice(match.index + match[0].length).trim();
+        const continuationText = isParentheticalStart
+          ? right.replace(/^and\s+/i, "")
+          : right;
+        const continuesPredicateGroup =
+          (isParentheticalStart
+            ? /^and\s+/i.test(right)
+            : conjunction === "" || conjunction === "and") &&
+          isPredicateContinuation(continuationText);
+
+        inheritedBounded = continuesPredicateGroup && (
+          inheritedBounded || hasQualifierBeforePredicate(left)
+        );
+        if (!continuesPredicateGroup) inheritedBounded = false;
+        cursor = match.index + match[0].length;
+      }
+
+      const remainder = segment.slice(cursor).trim();
+      if (remainder) groups.push({ text: remainder, inheritedBounded });
+    }
+
+    return groups;
+  };
 
   for (
     const { path, atom }
@@ -463,33 +533,35 @@ export function validateWriterSemanticFidelity(
     }
 
     // Every atom can reach an executive reader, including opportunities and
-    // action text. A bounded marker in a different sentence must not launder
-    // an unsupported causal claim in the same output.
-    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-    const containsUnsupportedCommercialOutcome = (sentence) =>
-      sentence
-        .split(/\s+(?:but|however|therefore|so)\s+/i)
-        .some((clause) => {
-          const hasCommercialOutcome = commercialOutcomePattern.test(clause);
-          if (!hasCommercialOutcome) return false;
+    // action text. Evaluate each ordinary clause independently so bounded or
+    // non-establishing language cannot launder a separate certain claim.
+    const observedActionOnlyText = text.replace(observedConversionActionCompoundPattern, "");
+    const isObservedActionOnly =
+      observedConversionActionPattern.test(text) &&
+      !commercialOutcomePattern.test(observedActionOnlyText);
+    const claimGroups = scanClaimGroups(text);
 
-          const hasCausalCertainty = causalCertaintyPattern.test(clause);
-          const hasEstablishedOutcome = establishedOutcomePattern.test(clause);
-          const isExplicitlyNonEstablishing = nonEstablishmentOutcomePattern.test(clause);
-          const isBounded = boundedOutcomePattern.test(clause);
-          const isObservedConversionAction =
-            observedConversionActionPattern.test(clause) &&
-            !commercialOutcomePattern.test(
-              clause.replace(observedConversionActionCompoundPattern, ""),
-            );
+    const containsUnsupportedCommercialOutcome = ({ text: clause, inheritedBounded }) => {
+      const hasCommercialOutcome = commercialOutcomePattern.test(clause);
+      if (!hasCommercialOutcome) return false;
 
-          return (
-            (hasCausalCertainty && !isBounded) ||
-            (hasEstablishedOutcome && !isExplicitlyNonEstablishing && !isBounded && !isObservedConversionAction)
-          );
-        });
+      const hasCausalCertainty = causalCertaintyPattern.test(clause);
+      const hasEstablishedOutcome = establishedOutcomePattern.test(clause);
+      const isExplicitlyNonEstablishing = nonEstablishmentOutcomePattern.test(clause);
+      const isBounded = inheritedBounded || boundedOutcomePattern.test(clause);
+      const isObservedConversionAction =
+        (isObservedActionOnly || observedConversionActionPattern.test(clause)) &&
+        !commercialOutcomePattern.test(
+          clause.replace(observedConversionActionCompoundPattern, ""),
+        );
 
-    if (sentences.some(containsUnsupportedCommercialOutcome)) {
+      return (
+        (hasCausalCertainty && !isBounded) ||
+        (hasEstablishedOutcome && !isExplicitlyNonEstablishing && !isBounded && !isObservedConversionAction)
+      );
+    };
+
+    if (claimGroups.some(containsUnsupportedCommercialOutcome)) {
       errors.push(
         `${path}.text states an unmeasured business outcome with causal certainty`,
       );

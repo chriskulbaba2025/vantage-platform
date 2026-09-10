@@ -411,6 +411,438 @@ test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted withou
   }
 });
 
+test("PRYSM-CAUSAL-01: ordinary causal morphology and outcome-certainty forms reject", () => {
+  const unsupportedClaims = [
+    "Changes cause conversions.",
+    "The change causes conversions.",
+    "The change caused conversions.",
+    "The change has caused conversions.",
+    "The change is causing conversions.",
+    "Changes drive conversions.",
+    "The change drives conversions.",
+    "The change drove conversions.",
+    "The change has driven conversions.",
+    "The change is driving conversions.",
+    "Changes result in conversions.",
+    "The change results in conversions.",
+    "The change resulted in conversions.",
+    "The change has resulted in conversions.",
+    "The change is resulting in conversions.",
+    "Changes lead to conversions.",
+    "The change leads to conversions.",
+    "The change led to conversions.",
+    "The change has led to conversions.",
+    "The change is leading to conversions.",
+    "Changes increase conversions.",
+    "The change increases conversions.",
+    "The change increased conversions.",
+    "The change has increased conversions.",
+    "The change is increasing conversions.",
+    "Changes decrease conversions.",
+    "The change decreases conversions.",
+    "The change decreased conversions.",
+    "The change has decreased conversions.",
+    "The change is decreasing conversions.",
+    "Changes reduce sales.",
+    "The change reduces sales.",
+    "The change reduced sales.",
+    "The change has reduced sales.",
+    "The change is reducing sales.",
+    "Changes improve conversions.",
+    "The change improves conversions.",
+    "The change improved conversions.",
+    "The change has improved conversions.",
+    "The change is improving conversions.",
+    "Changes hurt enquiries.",
+    "The change hurts enquiries.",
+    "The change hurt enquiries.",
+    "The change has hurt enquiries.",
+    "The change is hurting enquiries.",
+    "Changes damage sales.",
+    "The change damages sales.",
+    "The change damaged sales.",
+    "The change has damaged sales.",
+    "The change is damaging sales.",
+    "Changes lose customers.",
+    "The change loses customers.",
+    "The change lost customers.",
+    "The change has lost customers.",
+    "The change is losing customers.",
+    "Changes cost customers.",
+    "The change costs customers.",
+    "The change cost customers.",
+    "The change has cost customers.",
+    "The change is costing customers.",
+    "The findings establish a sales outcome.",
+    "The finding establishes a sales outcome.",
+    "The finding established a sales outcome.",
+    "The finding has established a sales outcome.",
+    "The finding is establishing a sales outcome.",
+    "The findings prove conversion performance is poor.",
+    "The finding proves conversion performance is poor.",
+    "The finding proved conversion performance is poor.",
+    "The finding has proven conversion performance is poor.",
+    "The finding is proving conversion performance is poor.",
+    "The findings show conversions are poor.",
+    "The finding shows conversions are poor.",
+    "The finding showed conversions are poor.",
+    "The finding has shown conversions are poor.",
+    "The finding is showing conversions are poor.",
+    "The findings demonstrate poor sales performance.",
+    "The finding demonstrates poor sales performance.",
+    "The finding demonstrated poor sales performance.",
+    "The finding has demonstrated poor sales performance.",
+    "The finding is demonstrating poor sales performance.",
+  ];
+
+  for (const text of unsupportedClaims) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
+test("PRYSM-CAUSAL-02: clauses, punctuation, bounded language, and denial language cannot launder certainty", () => {
+  const accepted = [
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, so no overall conversion conclusion is established.",
+    "No conversion outcome was established.",
+    "The evidence does not establish a conversion outcome.",
+    "Completed enquiry outcomes were not measured.",
+    "No sales conclusion can be established from the available evidence.",
+  ];
+  const unsupportedMixedClaims = [
+    "Conversion evidence was not collected, but the change improved conversions.",
+    "Conversion evidence was not collected; the change drove more leads.",
+    "No overall conversion conclusion is established. The change is causing conversions.",
+    "Conversion evidence was not collected: the change resulted in more sales.",
+    "No conversion conclusion is established — the change reduced enquiries.",
+    "Conversion evidence was not collected (the change is losing customers).",
+    "Conversion evidence was not collected\nthe change damaged sales.",
+    "No conversion conclusion is established, yet the change is increasing conversions.",
+    "Conversion evidence was not collected while the change is reducing sales.",
+    "Conversion evidence was not collected although the change is improving conversions.",
+    "The change will increase conversions, and the evidence may be incomplete.",
+    "The change will increase conversions; the evidence may be incomplete.",
+    "The change will increase conversions although the evidence may be incomplete.",
+    "The change will increase conversions (the evidence may be incomplete).",
+    "The change will increase conversions, while the evidence may be incomplete.",
+    "Conversion evidence was not collected, and the change will increase conversions.",
+    "Conversion evidence was not collected, the change established a sales outcome.",
+    "The change will increase conversions, the evidence may be incomplete.",
+    "Conversion evidence was not collected, and the change confirms conversions.",
+    "No conversion outcome was established, and the change established a sales outcome.",
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, and the change established a sales outcome.",
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, and the change is causing conversions.",
+  ];
+
+  for (const text of accepted) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.deepEqual(result, { valid: true, errors: [] }, text);
+  }
+
+  for (const text of unsupportedMixedClaims) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
+test("PRYSM-CAUSAL-03: bounded comma clauses cannot launder ordinary causal morphology", () => {
+  const causalFamilies = [
+    ["cause", ["conversions cause sales", "redesign causes sales", "redesign caused sales", "redesign has caused sales", "redesign is causing sales"]],
+    ["drive", ["conversions drive sales", "redesign drives sales", "redesign drove sales", "redesign has driven sales", "redesign is driving sales"]],
+    ["result in", ["conversions result in sales", "redesign results in sales", "redesign resulted in sales", "redesign has resulted in sales", "redesign is resulting in sales"]],
+    ["lead to", ["conversions lead to sales", "redesign leads to sales", "redesign led to sales", "redesign has led to sales", "redesign is leading to sales"]],
+    ["increase", ["conversions increase sales", "redesign increases sales", "redesign increased sales", "redesign has increased sales", "redesign is increasing sales"]],
+    ["decrease", ["conversions decrease sales", "redesign decreases sales", "redesign decreased sales", "redesign has decreased sales", "redesign is decreasing sales"]],
+    ["reduce", ["conversions reduce sales", "redesign reduces sales", "redesign reduced sales", "redesign has reduced sales", "redesign is reducing sales"]],
+    ["improve", ["conversions improve sales", "redesign improves sales", "redesign improved sales", "redesign has improved sales", "redesign is improving sales"]],
+    ["hurt", ["conversions hurt customers", "redesign hurts customers", "redesign hurt customers", "redesign has hurt customers", "redesign is hurting customers"]],
+    ["damage", ["conversions damage revenue", "redesign damages revenue", "redesign damaged revenue", "redesign has damaged revenue", "redesign is damaging revenue"]],
+    ["lose", ["conversions lose customers", "redesign loses customers", "redesign lost customers", "redesign has lost customers", "redesign is losing customers"]],
+    ["cost", ["conversions cost customers", "redesign costs customers", "redesign cost customers", "redesign has cost customers", "redesign is costing customers"]],
+  ];
+  const establishedFamilies = [
+    ["establish", ["findings establish a sales outcome", "finding establishes a sales outcome", "finding established a sales outcome", "finding has established a sales outcome", "finding is establishing a sales outcome"]],
+    ["prove", ["findings prove conversion performance is poor", "finding proves conversion performance is poor", "finding proved conversion performance is poor", "finding has proven conversion performance is poor", "finding is proving conversion performance is poor"]],
+    ["show", ["findings show conversions are poor", "finding shows conversions are poor", "finding showed conversions are poor", "finding has shown conversions are poor", "finding is showing conversions are poor"]],
+    ["demonstrate", ["findings demonstrate poor sales performance", "finding demonstrates poor sales performance", "finding demonstrated poor sales performance", "finding has demonstrated poor sales performance", "finding is demonstrating poor sales performance"]],
+  ];
+  const claims = [];
+  for (const [, forms] of [...causalFamilies, ...establishedFamilies]) {
+    for (const form of forms) {
+      claims.push(`The evidence may be incomplete, ${form}.`);
+      claims.push(`The evidence may be incomplete, and ${form}.`);
+    }
+  }
+
+  assert.equal(claims.length, 160);
+  for (const text of claims) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
+test("PRYSM-CAUSAL-04: varied clause subjects and bounded prefixes cannot launder certainty", () => {
+  const subjects = [
+    "conversions", "sales", "leads", "enquiries", "revenue", "customers", "traffic", "engagement",
+    "page", "website", "redesign", "CTA", "form", "navigation", "content", "template",
+    "change", "finding", "findings", "evidence", "pattern", "issue", "result", "structure",
+  ];
+  const prefixes = [
+    "The evidence may be incomplete",
+    "The evidence might be incomplete",
+    "The evidence could be incomplete",
+    "A possible limitation remains",
+    "The outcome is likely unmeasured",
+    "The issue carries a risk",
+    "The evidence suggests a limitation",
+    "The evidence indicates a limitation",
+    "The outcome was not measured",
+    "The available evidence did not measure the outcome",
+  ];
+  const separators = [", ", ", and ", ", but ", ", yet ", ", while ", "; ", ". ", ": ", " — ", " (", "\n"];
+  const claims = [];
+  for (let index = 0; index < subjects.length; index += 1) {
+    const subject = subjects[index];
+    const prefix = prefixes[index % prefixes.length];
+    const separator = separators[index % separators.length];
+    const suffix = separator === " (" ? ")" : "";
+    claims.push(`${prefix}${separator}${subject} increased sales${suffix}.`);
+  }
+
+  assert.equal(claims.length, 24);
+  for (const text of claims) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
+test("PRYSM-CAUSAL-05: predicate groups preserve shared qualifier scope without laundering independent claims", () => {
+  const accepted = [
+    "The change may increase conversions and reduce sales.",
+    "The change might improve conversions and drive leads.",
+    "The change could increase sales and decrease enquiries.",
+    "The redesign may cause hesitation and reduce conversions.",
+    "The evidence may suggest improved engagement and increased traffic.",
+    "A possible risk may damage revenue and hurt customers.",
+    "The change may improve conversions, reduce abandonment, and increase engagement.",
+    "The redesign might reduce sales and has the potential to improve leads.",
+    "The page could increase traffic and might improve engagement.",
+    "The website is likely to improve conversions and may reduce abandonment.",
+    "The form may lead to enquiries and result in more qualified leads.",
+    "The navigation could reduce bounce rate and improve engagement.",
+    "The content may show stronger relevance and demonstrate clearer structure.",
+    "The template might establish a clearer path and prove useful to visitors.",
+    "The change may increase conversions and can reduce abandonment.",
+    "The redesign could drive leads, reduce friction, and improve enquiries.",
+    "A potential opportunity may increase sales and improve pipeline quality.",
+    "The issue likely indicates a risk and suggests a need for further assessment.",
+    "The page may hurt abandonment and damage conversion confidence.",
+    "The change could lose fewer customers and cost less revenue.",
+  ];
+  const rejected = [
+    "The evidence may be incomplete, and the redesign increased sales.",
+    "The redesign might improve conversions, but navigation reduced enquiries.",
+    "No conversion conclusion is established, and the redesign increased sales.",
+    "The redesign increased conversions (although evidence may be incomplete).",
+    "The evidence may be incomplete. The redesign increased sales.",
+    "The change increases conversions and may reduce abandonment.",
+    "The change may increase conversions, and the redesign reduced sales.",
+    "The change increases conversions and may reduce abandonment.",
+    "The change may increase conversions; navigation reduced enquiries.",
+    "The change may increase conversions: the page reduced abandonment.",
+    "The change may increase conversions — the form caused abandonment.",
+    "The change may increase conversions\nthe website reduced sales.",
+    "The change may increase conversions and the evidence confirms sales.",
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, so no overall conversion conclusion is established, and the redesign increased sales.",
+  ];
+
+  for (const text of accepted) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.deepEqual(result, { valid: true, errors: [] }, text);
+  }
+
+  for (const text of rejected) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
+test("PRYSM-CAUSAL-06: parenthetical predicate continuations preserve qualifier scope locally", () => {
+  const accepted = [
+    "The redesign may increase conversions (and reduce abandonment).",
+    "The redesign might improve conversions (and drive leads).",
+    "The change could increase sales (and decrease enquiries).",
+    "The redesign may cause hesitation (and reduce conversions).",
+    "The evidence may suggest improved engagement (and increased traffic).",
+    "A possible risk may damage revenue (and hurt customers).",
+    "The redesign may increase conversions (and navigation may reduce enquiries).",
+    "The redesign could reduce sales (and the navigation might improve engagement).",
+    "The page can increase traffic (and may improve conversions).",
+    "The website is likely to improve conversions (and can reduce abandonment).",
+    "The findings may establish a sales outcome (and demonstrate conversions).",
+    "The evidence could show stronger engagement (and prove clearer relevance).",
+    "The CTA may drive leads (and result in more enquiries).",
+    "The form might reduce hesitation (and improve conversions).",
+    "The content may increase engagement (and decrease bounce rate).",
+    "The redesign may increase conversions (although evidence may be incomplete).",
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, so no overall conversion conclusion is established.",
+  ];
+  const rejected = [
+    "The redesign may increase conversions (and navigation reduced enquiries).",
+    "The redesign increased conversions (although evidence may be incomplete).",
+    "The evidence may be incomplete (the redesign increased sales).",
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected (and the redesign increased sales).",
+    "No conversion conclusion is established (but the redesign improved conversions).",
+    "The evidence does not establish impact (the page reduced enquiries).",
+    "The redesign may increase conversions (and the findings established a sales outcome).",
+    "The change may improve engagement (and navigation demonstrated poor sales performance).",
+    "The evidence may be incomplete (the CTA is causing conversions).",
+    "The redesign may increase conversions (and the form lost customers).",
+    "The change may increase conversions (and the evidence confirms sales).",
+    "The redesign may increase conversions (and the page has reduced enquiries).",
+    "The redesign may increase conversions (and the website is showing conversions are poor).",
+  ];
+
+  for (const text of accepted) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.deepEqual(result, { valid: true, errors: [] }, text);
+  }
+
+  for (const text of rejected) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
+test("PRYSM-CAUSAL-07: parenthetical scope remains bidirectional across fresh claim groups", () => {
+  const accepted = [
+    "The change may increase conversions (and reduce sales).",
+    "The redesign might drive leads (and improve enquiries).",
+    "The page could increase traffic (and reduce abandonment).",
+    "The CTA can improve conversions (and decrease bounce rate).",
+    "The form may cause hesitation (and hurt conversions).",
+    "The navigation is likely to improve engagement (and may reduce abandonment).",
+    "The content may lead to enquiries (and result in qualified leads).",
+    "The findings may establish a sales outcome (and show conversions).",
+    "The evidence could demonstrate engagement (and confirm traffic).",
+    "A possible risk may damage revenue (and reduce sales).",
+    "The redesign may increase conversions (and the navigation may reduce enquiries).",
+    "The page might improve engagement (and the form could increase leads).",
+    "The change can reduce abandonment (and the CTA may improve conversions).",
+    "The website may show stronger relevance (and the content might demonstrate clearer structure).",
+    "The findings could prove a clearer path (and establish a sales outcome).",
+  ];
+  const explicitSubjects = [
+    "The evidence may be incomplete (the redesign increased sales).",
+    "The change might improve conversions (navigation reduced enquiries).",
+    "The page could increase traffic (the form caused sales).",
+    "The CTA may drive leads (the website lost customers).",
+    "The content can improve engagement (the template damaged revenue).",
+    "The findings may establish a sales outcome (the redesign demonstrated conversions).",
+    "The evidence might show relevance (the page proved sales performance).",
+    "The redesign may reduce abandonment (the checkout increased conversions).",
+    "The form could improve enquiries (the navigation led to lost sales).",
+    "The change is likely to increase conversions (the offer decreased leads).",
+    "The evidence may be incomplete, and the redesign increased sales (the page reduced enquiries).",
+    "The content could improve engagement (the CTA is causing conversions).",
+    "The findings may demonstrate a sales outcome (the form has lost customers).",
+    "The page might increase traffic (the website is reducing conversions).",
+    "The redesign may improve conversions (the navigation has established a sales outcome).",
+  ];
+  const locallyBounded = [
+    "The evidence may be incomplete (the redesign may increase sales).",
+    "The change might improve conversions (navigation could reduce enquiries).",
+    "The page could increase traffic (the form may cause hesitation).",
+    "The CTA may drive leads (the website might improve conversions).",
+    "The content can improve engagement (the template is likely to reduce abandonment).",
+    "The findings may establish a sales outcome (the redesign could demonstrate conversions).",
+    "The evidence might show relevance (the page may prove clearer structure).",
+    "The redesign may reduce abandonment (the checkout can increase conversions).",
+    "The form could improve enquiries (the navigation may lead to qualified leads).",
+    "The change is likely to increase conversions (the offer might decrease leads).",
+  ];
+  const laterQualifier = [
+    "The redesign increased conversions (although evidence may be incomplete).",
+    "The page reduced enquiries (although the evidence might be partial).",
+    "The CTA caused conversions (although the outcome could be unmeasured).",
+    "The form drove leads (although the evidence may be incomplete).",
+    "The navigation improved conversions (although results might be uncertain).",
+    "The content established a sales outcome (although evidence may be incomplete).",
+    "The findings demonstrated poor sales performance (although the evidence could be partial).",
+    "The website lost customers (although the outcome may be unmeasured).",
+    "The redesign decreased engagement (although the evidence might be incomplete).",
+    "The change resulted in lost sales (although evidence may be incomplete).",
+  ];
+  const localScope = [
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, so no overall conversion conclusion is established.",
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected (and the redesign increased sales).",
+    "No conversion conclusion is established (but the redesign improved conversions).",
+    "The evidence does not establish impact (the page reduced enquiries).",
+    "Completed enquiry outcomes were not measured (the CTA increased conversions).",
+    "No sales conclusion can be established from the available evidence (the form drove leads).",
+    "The evidence may be incomplete (the redesign may increase conversions).",
+    "No conversion outcome was established (although the page might improve enquiries).",
+    "The evidence was not collected (and navigation reduced sales).",
+    "The evidence does not establish a conversion outcome (the redesign demonstrated conversions).",
+  ];
+
+  for (const text of accepted.concat(locallyBounded, localScope.slice(6, 8))) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.deepEqual(result, { valid: true, errors: [] }, text);
+  }
+
+  for (const text of explicitSubjects.concat(laterQualifier, localScope.slice(1, 6), localScope.slice(8))) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+
+  const reboot = validateWriterOutput(
+    { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(localScope[0]) } },
+    { writerInput: writerInput(), expectedPassNumber: 1 },
+  );
+  assert.deepEqual(reboot, { valid: true, errors: [] });
+});
+
 test("PDV5-WRITER-OUT-03: bounded language in another sentence cannot launder causal certainty", () => {
   const unsupported = validOutput();
   unsupported.executiveConclusion.narrative = atom(
