@@ -385,6 +385,11 @@ test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted withou
     "This issue causes lost sales.",
     "The weak CTA decreases enquiries.",
     "This proves conversion performance is poor.",
+    "The change increases conversions.",
+    "The change increased conversions.",
+    "The change will increase conversions.",
+    "This increased sales.",
+    "The update increased enquiries.",
     "Conversions were not measured, but the missing proof will reduce sales.",
     "No conversion outcome was measured, therefore the site is losing customers.",
   ];

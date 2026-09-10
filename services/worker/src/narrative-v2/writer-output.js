@@ -399,7 +399,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
 
   const causalCertaintyPattern =
-    /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|decreases?|reduces?|improves?|hurts?|damages?|lose|loses|losing|costs?)\b/i;
+    /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|increased|decreases?|reduces?|improves?|hurts?|damages?|lose|loses|losing|costs?)\b/i;
 
   const boundedOutcomePattern =
     /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?|not measured|did not measure)\b/i;
