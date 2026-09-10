@@ -93,6 +93,35 @@ test("PLANE3-ID: semantic base and tooling HEAD are separate, and bounded overla
   assert.deepEqual(identity.changedPaths, AUTHORIZED_TOOLING_OVERLAY_PATHS);
 });
 
+test("PLANE3-ID: the exact published semantic base is accepted with no overlay", async () => {
+  const identity = await verifyRuntimeIdentity({
+    repositoryRootOverride: process.cwd(),
+    runGitCommand: fakeGit({ head: SEMANTIC_APPLICATION_BASE_SHA, changedPaths: [] }),
+  });
+  assert.equal(SEMANTIC_APPLICATION_BASE_SHA, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.equal(identity.semanticApplicationBaseSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.equal(identity.toolingHeadSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.deepEqual(identity.changedPaths, []);
+  assert.equal(identity.boundedOverlayVerified, true);
+});
+
+test("PLANE3-ID: semantic application source changes above the base fail closed", async () => {
+  await assert.rejects(
+    verifyRuntimeIdentity({
+      repositoryRootOverride: process.cwd(),
+      runGitCommand: fakeGit({ changedPaths: ["services/worker/src/narrative-v2/writer-output.js"] }),
+    }),
+    /unauthorized paths/,
+  );
+  await assert.rejects(
+    verifyRuntimeIdentity({
+      repositoryRootOverride: process.cwd(),
+      runGitCommand: fakeGit({ changedPaths: ["services/worker/src/narrative-v2/writer-output.test.js"] }),
+    }),
+    /unauthorized paths/,
+  );
+});
+
 test("PLANE3-ID: unbounded, dirty, non-ancestor, and wrong-root overlays fail closed", async () => {
   await assert.rejects(
     verifyRuntimeIdentity({
@@ -285,4 +314,25 @@ test("PLANE3-08: live production binding requires a durable store while tests ma
     requireDurableStore: true,
     fetchImpl: async () => {},
   }).enabled);
+});
+
+test("PLANE3-ID: mock manifest records the exact published semantic candidate", async () => {
+  const root = await tempRoot();
+  const exactBaseIdentity = async () => ({
+    semanticApplicationBaseSha: "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab",
+    toolingHeadSha: "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab",
+    worktreeClean: true,
+    boundedOverlayVerified: true,
+    changedPaths: [],
+  });
+  const result = await runWriterOnlySample({
+    auditId: TBK,
+    ledgerRoot: root,
+    identityVerifier: exactBaseIdentity,
+    bindingFactory: mockBindingFactory(),
+  });
+  assert.equal(result.manifest.candidateSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.equal(result.manifest.semanticApplicationBaseSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.equal(result.manifest.toolingHeadSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.deepEqual(result.manifest.changedPaths, []);
 });
