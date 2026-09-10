@@ -507,7 +507,7 @@ async function buildContinuationFixture({
 
   const writerInput = {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.1.0",
+    writerInputVersion: "1.2.0",
     auditId,
     scoreGovernance: {
       sourceDependencies: {

@@ -169,8 +169,7 @@ test("WRITER-V2-01: packet preserves exact canonical business, scores, findings 
   assert.equal(packet.score.scores.trustEeatDimension, 74);
   assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
   assert.equal(packet.findings[0].businessImpactContext.outcomeStatus, "UNAVAILABLE");
-  assert.match(packet.findings[0].businessImpact, /may|opportunity|not measured/i);
-  assert.equal(packet.findings[0].businessImpact, "Search engines may receive a weaker canonical URL signal.");
+  assert.match(packet.findings[0].businessImpact, /may affect|not measured/i);
   assert.equal(packet.findings[0].evidence[0].field, "site.pages[].canonicalUrl");
   assert.equal(packet.capabilityContext.capabilities["trust.proof"].status, "PARTIAL");
   assert.deepEqual(packet.capabilityContext.capabilities["trust.proof"].coverage, { requested: 10, completed: 7, failed: 3 });
@@ -224,7 +223,7 @@ test("WRITER-V2-11: partial and unknown outcomes remain bounded and explicit", (
     });
     assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
     assert.equal(packet.findings[0].businessImpactContext.outcomeStatus, status);
-    assert.match(packet.findings[0].businessImpact, /may|opportunity|not measured/i);
+    assert.match(packet.findings[0].businessImpact, /may affect|not measured/i);
     assert.doesNotMatch(packet.findings[0].businessImpact, /reduce enquiries/i);
   }
 });
@@ -242,6 +241,22 @@ test("WRITER-V2-12: legacy WriterInput without impact metadata cannot pass throu
   assert.equal(packet.writerInputVersion, WRITER_INPUT_VERSION);
   assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
   assert.doesNotMatch(packet.findings[0].businessImpact, /improves conversions/i);
+});
+
+test("WRITER-INPUT: all commercial source wording is bounded independently of vocabulary", () => {
+  const source = finding({ businessImpact: "Confusing forms annihilate lead generation." });
+  const packet = buildWriterInput({
+    auditId: AUDIT_ID,
+    auditRequest: request(),
+    scoreSet: scoreSet(),
+    findings: [source],
+    capabilityEvidence: capabilityEvidence(),
+  });
+
+  assert.equal(packet.findings[0].businessImpactContext.basis, "INFERRED");
+  assert.equal(packet.findings[0].businessImpactContext.outcomeStatus, "UNAVAILABLE");
+  assert.doesNotMatch(packet.findings[0].businessImpact, /annihilate lead generation/i);
+  assert.match(packet.findings[0].businessImpact, /may affect|not measured/i);
 });
 
 test("T1-WRITER-01: current WriterInput projects every persisted hierarchy action without recomputing it", () => {

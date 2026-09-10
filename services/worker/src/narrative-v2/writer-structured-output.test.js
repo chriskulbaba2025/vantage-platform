@@ -14,7 +14,7 @@ const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 function writerInput() {
   return {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.1.0",
+    writerInputVersion: "1.2.0",
     auditId: AUDIT_ID,
     findings: [{ findingId: "F-001", title: "Verified finding" }],
     scoreGovernance: {

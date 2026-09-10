@@ -13,7 +13,7 @@ import { buildWriterBusinessContext } from "./writer-business-context.js";
 import { buildWriterScoreContext } from "./writer-scores.js";
 import { buildWriterFindings } from "./writer-findings.js";
 
-export const WRITER_INPUT_VERSION = "1.1.0";
+export const WRITER_INPUT_VERSION = "1.2.0";
 
 const CAPABILITY_REQUIRED_FIELDS = Object.freeze([
   "capability",

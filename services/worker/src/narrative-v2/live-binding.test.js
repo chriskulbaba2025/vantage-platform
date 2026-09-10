@@ -55,7 +55,7 @@ function baseEnv(overrides = {}) {
 function writerInput() {
   return {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.1.0",
+    writerInputVersion: "1.2.0",
     auditId: AUDIT_ID,
     scoreGovernance: {
       sourceDependencies: { offsite: "UNAVAILABLE" },

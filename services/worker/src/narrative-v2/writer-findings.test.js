@@ -39,9 +39,10 @@ test("WRITER-FINDING-01: canonical finding names and evidence survive unchanged"
 
   assert.equal(finding.findingId, input.findingId);
   assert.equal(finding.title, input.title);
-  assert.equal(finding.businessImpact, input.businessImpact);
+  assert.notEqual(finding.businessImpact, input.businessImpact);
   assert.equal(finding.businessImpactContext.basis, "INFERRED");
   assert.equal(finding.businessImpactContext.outcomeStatus, "UNAVAILABLE");
+  assert.equal(finding.businessImpactContext.claimType, "INFERRED_SIGNIFICANCE");
   assert.equal(finding.businessImpactContext.sourceFindingId, input.findingId);
   assert.deepEqual(finding.businessImpactContext.evidenceRefs, [`finding:${input.findingId}`]);
   assert.equal(finding.recommendation, input.recommendation);
@@ -63,12 +64,13 @@ test("WRITER-FINDING-06: assertive inferred impact is bounded before the Writer 
   assert.equal(input.businessImpact, "Slow first impressions increase mobile abandonment.");
   assert.equal(projected.businessImpactContext.basis, "INFERRED");
   assert.equal(projected.businessImpactContext.outcomeStatus, "UNAVAILABLE");
-  assert.match(projected.businessImpact, /may|opportunity|not measured/i);
+  assert.equal(projected.businessImpactContext.claimType, "INFERRED_SIGNIFICANCE");
+  assert.match(projected.businessImpact, /may affect|not measured/i);
   assert.doesNotMatch(projected.businessImpact, /increase mobile abandonment/i);
   assert.equal(Object.hasOwn(projected.businessImpactContext, "sourceText"), false);
 });
 
-test("WRITER-FINDING-07: observed basis requires explicit available outcome authority", () => {
+test("WRITER-FINDING-07: observed condition remains observed without becoming commercial outcome authority", () => {
   const input = canonicalFinding({
     businessImpact: "The measured enquiries increased during the observed period.",
     businessImpactBasis: "OBSERVED",
@@ -77,31 +79,59 @@ test("WRITER-FINDING-07: observed basis requires explicit available outcome auth
   });
   const [projected] = buildWriterFindings([input]);
 
-  assert.equal(projected.businessImpactContext.basis, "OBSERVED");
-  assert.equal(projected.businessImpactContext.outcomeStatus, "AVAILABLE");
+  assert.equal(projected.businessImpactContext.basis, "INFERRED");
+  assert.equal(projected.businessImpactContext.conditionBasis, "OBSERVED");
+  assert.equal(projected.businessImpactContext.claimType, "OBSERVED_CONDITION");
+  assert.equal(projected.businessImpactContext.outcomeStatus, "UNAVAILABLE");
   assert.deepEqual(projected.businessImpactContext.evidenceRefs, ["finding:F-001"]);
-  assert.equal(projected.businessImpact, input.businessImpact);
+  assert.notEqual(projected.businessImpact, input.businessImpact);
+  assert.doesNotMatch(projected.businessImpact, /enquiries increased/i);
 });
 
-test("WRITER-FINDING-08: observed commercial impact without exact outcome authority fails closed", () => {
-  assert.throws(
-    () => buildWriterFindings([canonicalFinding({
-      businessImpact: "Conversions increased.",
-      businessImpactBasis: "OBSERVED",
-    })]),
-    /exact available outcome evidenceRefs/,
-  );
+test("WRITER-FINDING-08: observed outcome metadata is ignored while GA4 authority is paused", () => {
+  const [projected] = buildWriterFindings([canonicalFinding({
+    businessImpact: "Conversions increased.",
+    businessImpactBasis: "OBSERVED",
+    businessImpactOutcomeStatus: "AVAILABLE",
+    businessImpactOutcomeEvidenceRefs: ["evidence:conversion"],
+  })]);
+  assert.equal(projected.businessImpactContext.basis, "INFERRED");
+  assert.equal(projected.businessImpactContext.outcomeStatus, "UNAVAILABLE");
+  assert.doesNotMatch(projected.businessImpact, /Conversions increased/i);
 });
 
 test("WRITER-FINDING-09: malformed or unknown impact basis fails closed", () => {
-  assert.throws(
-    () => buildWriterFindings([canonicalFinding({ businessImpactBasis: "MEASURED" })]),
-    /businessImpactBasis must be OBSERVED or INFERRED/,
-  );
-  assert.throws(
-    () => buildWriterFindings([canonicalFinding({ businessImpactBasis: "OBSERVED", businessImpactOutcomeStatus: "UNKNOWN", businessImpactOutcomeEvidenceRefs: ["finding:F-001"] })]),
-    /OBSERVED business impact requires AVAILABLE outcome status/,
-  );
+  const [unknownBasis] = buildWriterFindings([canonicalFinding({ businessImpactBasis: "MEASURED" })]);
+  assert.equal(unknownBasis.businessImpactContext.basis, "INFERRED");
+  assert.equal(unknownBasis.businessImpactContext.conditionBasis, "INFERRED");
+  const [downgraded] = buildWriterFindings([canonicalFinding({
+    businessImpactBasis: "OBSERVED",
+    businessImpactOutcomeStatus: "UNKNOWN",
+    businessImpactOutcomeEvidenceRefs: ["finding:F-001"],
+  })]);
+  assert.equal(downgraded.businessImpactContext.basis, "INFERRED");
+  assert.equal(downgraded.businessImpactContext.outcomeStatus, "UNKNOWN");
+});
+
+test("WRITER-FINDING-10: arbitrary commercial wording is bounded without vocabulary detection", () => {
+  const sourceTexts = [
+    "Weak trust signals undermine enquiries.",
+    "Clear pricing boosts conversion rates.",
+    "A confusing page worsens revenue performance.",
+    "Missing proof drives buyer decisions.",
+    "Fast pages turbocharge sales.",
+    "Confusing forms annihilate lead generation.",
+    "Novel wording detonates pipeline confidence.",
+  ];
+
+  for (const businessImpact of sourceTexts) {
+    const [projected] = buildWriterFindings([canonicalFinding({ businessImpact })]);
+    assert.equal(projected.businessImpactContext.basis, "INFERRED");
+    assert.equal(projected.businessImpactContext.claimType, "INFERRED_SIGNIFICANCE");
+    assert.equal(projected.businessImpactContext.outcomeStatus, "UNAVAILABLE");
+    assert.notEqual(projected.businessImpact, businessImpact);
+    assert.match(projected.businessImpact, /may affect|not measured/i);
+  }
 });
 
 test("WRITER-FINDING-02: display aliases cannot substitute for canonical fields", () => {

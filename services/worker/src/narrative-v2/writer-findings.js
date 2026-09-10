@@ -36,61 +36,60 @@ const OUTCOME_STATUSES = new Set([
   "NOT_ASSESSED",
 ]);
 
-const COMMERCIAL_OUTCOME_PATTERN =
-  /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
+const WRITER_IMPACT_DERIVATION = "bounded-business-impact-v2";
 
-const CERTAIN_OUTCOME_PATTERN =
-  /\b(?:will|cause|causes|caused|causing|drive|drives|drove|driven|driving|result(?:s|ed|ing)?\s+in|lead(?:s|ing)?\s+to|led\s+to|increase|increases|increased|increasing|decrease|decreases|decreased|decreasing|reduce|reduces|reduced|reducing|improve|improves|improved|improving|hurt|hurts|hurting|damage|damages|damaged|damaging|lose|loses|lost|losing|cost|costs|costing|confirm|confirms|confirmed|establish|establishes|established|prove|proves|proved|proven|demonstrate|demonstrates|demonstrated|show|shows|showed|shown)\b/i;
-
-const WRITER_IMPACT_DERIVATION = "bounded-business-impact-v1";
+const BOUNDED_IMPACT_TEXT =
+  "The assessed condition may affect visitor experience or buyer evaluation in the assessed scope; the downstream commercial outcome was not measured.";
 
 function assertImpactAuthority(finding) {
-  const basis = finding.businessImpactBasis ?? "INFERRED";
-  if (!IMPACT_BASES.has(basis)) {
-    throw new Error("businessImpactBasis must be OBSERVED or INFERRED");
-  }
+  const conditionBasis = IMPACT_BASES.has(finding.businessImpactBasis)
+    ? finding.businessImpactBasis
+    : "INFERRED";
+  const declaredStatus = finding.businessImpactOutcomeStatus;
+  const conditionStatus = OUTCOME_STATUSES.has(declaredStatus)
+    ? declaredStatus
+    : conditionBasis === "OBSERVED"
+      ? "AVAILABLE"
+      : "UNAVAILABLE";
 
-  const outcomeStatus =
-    finding.businessImpactOutcomeStatus ??
-    (basis === "OBSERVED" ? "AVAILABLE" : "UNAVAILABLE");
-  if (!OUTCOME_STATUSES.has(outcomeStatus)) {
-    throw new Error(`businessImpactOutcomeStatus must be governed: ${outcomeStatus}`);
-  }
-
-  const outcomeEvidenceRefs = finding.businessImpactOutcomeEvidenceRefs;
-  if (basis === "OBSERVED") {
-    if (outcomeStatus !== "AVAILABLE") {
-      throw new Error("OBSERVED business impact requires AVAILABLE outcome status");
-    }
-    if (!Array.isArray(outcomeEvidenceRefs) || outcomeEvidenceRefs.length === 0) {
-      throw new Error("OBSERVED business impact requires exact available outcome evidenceRefs");
-    }
-  }
-
-  return { basis, outcomeStatus, outcomeEvidenceRefs };
+  // GA4 downstream commercial-outcome authority is paused for this release.
+  // Legacy outcome fields are therefore provenance only and can never promote
+  // the Writer-facing commercial significance to OBSERVED.
+  return {
+    basis: "INFERRED",
+    conditionBasis,
+    conditionStatus,
+    outcomeStatus:
+      conditionBasis === "OBSERVED" && declaredStatus === "AVAILABLE"
+        ? "UNAVAILABLE"
+        : conditionStatus,
+    claimType:
+      conditionBasis === "OBSERVED"
+        ? "OBSERVED_CONDITION"
+        : "INFERRED_SIGNIFICANCE",
+  };
 }
 
 function projectBusinessImpact(finding) {
-  const { basis, outcomeStatus, outcomeEvidenceRefs } = assertImpactAuthority(finding);
-  const sourceText = finding.businessImpact;
-  const isUnboundedCommercialContext =
-    basis === "INFERRED" &&
-    COMMERCIAL_OUTCOME_PATTERN.test(sourceText) &&
-    CERTAIN_OUTCOME_PATTERN.test(sourceText);
-  const writerText = isUnboundedCommercialContext
-    ? `${finding.title} may affect visitor experience or evaluation in the assessed scope; the downstream commercial outcome was not measured.`
-    : sourceText;
+  const {
+    basis,
+    conditionBasis,
+    conditionStatus,
+    outcomeStatus,
+    claimType,
+  } = assertImpactAuthority(finding);
 
   return {
-    writerText,
+    writerText: BOUNDED_IMPACT_TEXT,
     basis,
+    conditionBasis,
+    claimType,
+    conditionStatus,
     outcomeStatus,
-    evidenceRefs:
-      basis === "OBSERVED"
-        ? [...outcomeEvidenceRefs]
-        : [`finding:${finding.findingId}`],
+    evidenceRefs: [`finding:${finding.findingId}`],
     sourceFindingId: finding.findingId,
     derivation: WRITER_IMPACT_DERIVATION,
+    commercialOutcomeAuthority: "PAUSED",
   };
 }
 

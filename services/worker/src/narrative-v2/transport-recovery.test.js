@@ -45,7 +45,7 @@ function env() {
 function input() {
   return {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.1.0",
+    writerInputVersion: "1.2.0",
     auditId: AUDIT_ID,
     scoreGovernance: { sourceDependencies: { offsite: "UNAVAILABLE" } },
     referenceIndex: { "finding:F-001": { kind: "finding", path: "findings.F-001" } },

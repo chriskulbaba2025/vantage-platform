@@ -26,7 +26,7 @@ const FIXED_TS = "2026-08-20T04:00:00.000Z";
 function writerInput() {
   return {
     contractVersion: "1.0.0",
-    writerInputVersion: "1.1.0",
+    writerInputVersion: "1.2.0",
     auditId: AUDIT_ID,
     scoreGovernance: {
       sourceDependencies: {
