@@ -399,13 +399,16 @@ export function validateWriterSemanticFidelity(
     /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
 
   const causalCertaintyPattern =
-    /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|decreases?|reduces?|improves?|hurts?|damages?|loses?|costs?)\b/i;
+    /\b(?:will|(?<!root-)(?<!root )causes?|caused|drives?|driven|results? in|led to|increases?|decreases?|reduces?|improves?|hurts?|damages?|lose|loses|losing|costs?)\b/i;
 
   const boundedOutcomePattern =
     /\b(?:may|might|could|can|should|risk|potential|possible|likely|opportunity|suggests?|indicates?|not measured|did not measure)\b/i;
 
   const establishedOutcomePattern =
-    /\b(?:confirmed|confirms|established|proven|demonstrates?|shows?)\b/i;
+    /\b(?:confirmed|confirms|established|proven|proves?|demonstrates?|shows?)\b/i;
+
+  const nonEstablishmentOutcomePattern =
+    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed)?|measur(?:ed|e)|collect(?:ed|ion)|confirm(?:ed)?|prov(?:e|en))\b|(?:does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed)?|measur(?:ed|e)|collect(?:ed|ion)|confirm(?:ed)?|prov(?:e|en))|\bnot\s+(?:measured|collected|established|confirmed|proven)\b)/i;
 
   const observedConversionActionPattern =
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
@@ -463,17 +466,30 @@ export function validateWriterSemanticFidelity(
     // action text. A bounded marker in a different sentence must not launder
     // an unsupported causal claim in the same output.
     const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-    if (sentences.some((sentence) =>
-      commercialOutcomePattern.test(sentence) &&
-      (causalCertaintyPattern.test(sentence) || establishedOutcomePattern.test(sentence)) &&
-      !boundedOutcomePattern.test(sentence) &&
-        !(
-          observedConversionActionPattern.test(sentence) &&
-          !commercialOutcomePattern.test(
-            sentence.replace(observedConversionActionCompoundPattern, ""),
-          )
-        )
-    )) {
+    const containsUnsupportedCommercialOutcome = (sentence) =>
+      sentence
+        .split(/\s+(?:but|however|therefore|so)\s+/i)
+        .some((clause) => {
+          const hasCommercialOutcome = commercialOutcomePattern.test(clause);
+          if (!hasCommercialOutcome) return false;
+
+          const hasCausalCertainty = causalCertaintyPattern.test(clause);
+          const hasEstablishedOutcome = establishedOutcomePattern.test(clause);
+          const isExplicitlyNonEstablishing = nonEstablishmentOutcomePattern.test(clause);
+          const isBounded = boundedOutcomePattern.test(clause);
+          const isObservedConversionAction =
+            observedConversionActionPattern.test(clause) &&
+            !commercialOutcomePattern.test(
+              clause.replace(observedConversionActionCompoundPattern, ""),
+            );
+
+          return (
+            (hasCausalCertainty && !isBounded) ||
+            (hasEstablishedOutcome && !isExplicitlyNonEstablishing && !isBounded && !isObservedConversionAction)
+          );
+        });
+
+    if (sentences.some(containsUnsupportedCommercialOutcome)) {
       errors.push(
         `${path}.text states an unmeasured business outcome with causal certainty`,
       );

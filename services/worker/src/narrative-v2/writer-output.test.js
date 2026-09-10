@@ -372,6 +372,40 @@ test("PDV5-WRITER-OUT-02: unmeasured commercial causality is rejected while boun
   assert.deepEqual(boundedResult, { valid: true, errors: [] });
 });
 
+test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted without weakening causal rejection", () => {
+  const accepted = [
+    "Conversion, offer, trust, and completed enquiry-path evidence were not collected, so no overall conversion conclusion is established.",
+    "No conversion outcome was established.",
+    "The evidence does not establish a conversion outcome.",
+    "Completed enquiry outcomes were not measured.",
+    "No sales conclusion can be established from the available evidence.",
+  ];
+  const rejected = [
+    "The missing proof will reduce conversions.",
+    "This issue causes lost sales.",
+    "The weak CTA decreases enquiries.",
+    "This proves conversion performance is poor.",
+    "Conversions were not measured, but the missing proof will reduce sales.",
+    "No conversion outcome was measured, therefore the site is losing customers.",
+  ];
+
+  for (const text of accepted) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.deepEqual(result, { valid: true, errors: [] }, text);
+  }
+
+  for (const text of rejected) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.ok(result.errors.some((error) => /unmeasured business outcome with causal certainty/.test(error)), text);
+  }
+});
+
 test("PDV5-WRITER-OUT-03: bounded language in another sentence cannot launder causal certainty", () => {
   const unsupported = validOutput();
   unsupported.executiveConclusion.narrative = atom(
