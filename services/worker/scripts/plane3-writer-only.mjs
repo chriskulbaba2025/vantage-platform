@@ -18,6 +18,12 @@ import {
   buildArtifactKey,
 } from "../src/storage/artifact-key.js";
 import {
+  WRITER_INPUT_VERSION,
+} from "../src/narrative-v2/writer-input.js";
+import {
+  assertCurrentScoreSet,
+} from "../src/scoring/current-score-set.js";
+import {
   createNarrativeV2LiveBinding,
 } from "../src/narrative-v2/live-binding.js";
 import {
@@ -36,6 +42,10 @@ export const SEMANTIC_APPLICATION_BASE_SHA = "d7ce3cfe69d5ada8f6d4541c8a9603f17e
 export const AUTHORIZED_TOOLING_OVERLAY_PATHS = Object.freeze([
   "services/worker/scripts/plane3-writer-only.mjs",
   "services/worker/scripts/plane3-writer-only.test.js",
+  "services/worker/test-fixtures/plane3-current-uat/tbk-9714c206/derivation-manifest.json",
+  "services/worker/test-fixtures/plane3-current-uat/tbk-9714c206/findings.json",
+  "services/worker/test-fixtures/plane3-current-uat/tbk-9714c206/scores.json",
+  "services/worker/test-fixtures/plane3-current-uat/tbk-9714c206/writer-input.json",
 ]);
 
 const workerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,18 +57,17 @@ const historicalArtifactRoots = [
 export const APPROVED_INPUTS = Object.freeze({
   "9714c206-8ed3-4686-8fe2-ceeca0ca0f82": Object.freeze({
     sampleType: "PRIMARY_TBK",
-    writerInputPath: "test-fixtures/report-replay-offline/audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current/governed/report-v2/narrative-v2/writer-input.json",
+    currentUatFixtureRoot: "test-fixtures/plane3-current-uat/tbk-9714c206",
     auditRequestPath: "test-fixtures/report-replay-offline/audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current/governed/canonical/audit-request.json",
-  }),
-  "97d6b2c7-03b9-4530-8ea7-16557502c638": Object.freeze({
-    sampleType: "ADDITIONAL_REBOOT",
-    writerInputPath: "test-fixtures/report-replay/audit-97d6b2c7/governed/report-v2/narrative-v2/writer-input.json",
-    auditRequestPath: "test-fixtures/report-replay/audit-97d6b2c7/governed/canonical/audit-request.json",
   }),
 });
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function canonicalJsonSha256(value) {
+  return sha256(JSON.stringify(value, null, 2));
 }
 
 function inside(child, parent) {
@@ -169,26 +178,62 @@ export async function resolveApprovedInput({ auditId, appRoot = repositoryRoot }
   if (!approved) {
     throw new Error(`Plane 3 Writer-only harness rejects unapproved audit ID: ${auditId}`);
   }
-  const inputPath = resolve(appRoot, "services", "worker", approved.writerInputPath);
+  const fixtureRoot = resolve(appRoot, "services", "worker", approved.currentUatFixtureRoot);
+  const inputPath = resolve(fixtureRoot, "writer-input.json");
+  const scoresPath = resolve(fixtureRoot, "scores.json");
+  const findingsPath = resolve(fixtureRoot, "findings.json");
+  const manifestPath = resolve(fixtureRoot, "derivation-manifest.json");
   const requestPath = resolve(appRoot, "services", "worker", approved.auditRequestPath);
-  if (!inside(inputPath, appRoot) || !inside(requestPath, appRoot)) {
+  if (![fixtureRoot, inputPath, scoresPath, findingsPath, manifestPath, requestPath].every((candidate) => inside(candidate, appRoot))) {
     throw new Error("Approved input path escaped the application repository");
   }
-  await access(inputPath);
-  await access(requestPath);
-  const [writerInput, auditRequest] = await Promise.all([
+  await Promise.all([inputPath, scoresPath, findingsPath, manifestPath, requestPath].map((candidate) => access(candidate)));
+  const [writerInput, scoreSet, findings, manifest, auditRequest] = await Promise.all([
     loadJson(inputPath),
+    loadJson(scoresPath),
+    loadJson(findingsPath),
+    loadJson(manifestPath),
     loadJson(requestPath),
   ]);
-  if (writerInput.auditId !== auditId || auditRequest.auditId !== auditId) {
+  if (manifest.auditId !== auditId || writerInput.auditId !== auditId || auditRequest.auditId !== auditId) {
     throw new Error("Approved WriterInput and AuditRequest identity mismatch");
+  }
+  if (manifest.semanticCandidateSha !== SEMANTIC_APPLICATION_BASE_SHA) {
+    throw new Error("Current UAT fixture semantic candidate identity mismatch");
+  }
+  if (manifest.scoreSetVersion !== "2.0.0" || scoreSet.contractVersion !== "2.0.0") {
+    throw new Error("Current UAT fixture requires ScoreSet 2.0.0");
+  }
+  assertCurrentScoreSet(scoreSet);
+  if (manifest.writerInputVersion !== WRITER_INPUT_VERSION || writerInput.writerInputVersion !== WRITER_INPUT_VERSION) {
+    throw new Error(`Current UAT fixture requires WriterInput ${WRITER_INPUT_VERSION}`);
+  }
+  const expectedHashes = manifest.derivativeHashes || {};
+  if (canonicalJsonSha256(scoreSet) !== expectedHashes["scores.json"]) {
+    throw new Error("Current UAT fixture scores hash mismatch");
+  }
+  if (canonicalJsonSha256(findings) !== expectedHashes["findings.json"]) {
+    throw new Error("Current UAT fixture findings hash mismatch");
+  }
+  if (canonicalJsonSha256(writerInput) !== expectedHashes["writer-input.json"]) {
+    throw new Error("Current UAT fixture WriterInput hash mismatch");
+  }
+  if (manifest.ga4CommercialOutcomeAuthority !== "PAUSED") {
+    throw new Error("Current UAT fixture GA4 commercial-outcome authority must remain paused");
   }
   return Object.freeze({
     ...approved,
     auditId,
+    fixtureRoot,
     inputPath,
+    scoresPath,
+    findingsPath,
+    manifestPath,
     requestPath,
     writerInput,
+    scoreSet,
+    findings,
+    manifest,
     auditRequest,
   });
 }

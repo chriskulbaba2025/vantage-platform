@@ -1,0 +1,34 @@
+{
+  "manifestVersion": "1.0.0",
+  "fixtureType": "CURRENT_VALIDATION_DERIVATIVE",
+  "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
+  "semanticCandidateSha": "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97",
+  "derivedFromApplicationHeadSha": "5f2c1a27cbb6eaf022fb9d61dc9a2d6c37a9c3eb",
+  "scoringVersion": "4.1.1",
+  "scoreSetVersion": "2.0.0",
+  "writerInputVersion": "1.2.0",
+  "rootCauseRuleId": "VAN-CONTENT-002",
+  "sourceCanonicalEvidenceHashes": {
+    "canonical/audit-request.json": "282c9326f23447101bc64f77fc79e69289b08afaa966e0c816f8ca36e9bc2ea3",
+    "canonical/decision-evidence.json": "d2dca1a1365eb31f6f86ac21ea18d0524250504bf2a984978b5691940baee41b",
+    "canonical/capability-evidence.json": "17c825052085ed994f3dec7d1889f7817ab3a503e4db4b183241d1b364b57b79",
+    "canonical/findings.json": "f20a0ab2ad680618e1ec606b56d8ad9a2fbc77a200994c8c55d6b3349498de77",
+    "canonical/scores.json": "7c26d0479eb9f3da95289b7dca085bae0eb8a71df2b3262dbee239c34050d18d",
+    "manifests/canonical-evidence-record.json": "ee82141281ceff92259c04b6438476f985d277580795cfc46fab75af78cfa5de"
+  },
+  "derivativeHashes": {
+    "scores.json": "e92711f22e076a757caf7ac724b84b8b14d0ea39b66f696f5daa5dbf97e4195b",
+    "findings.json": "ad84a761e6c7eda385ead7cd2b9b2f37c42f704ff5664407747b1942ccaf3827",
+    "writer-input.json": "d95dc2922f8cef3813812a7f3704aef10fc78e5dc2e43e4dd04ddf8fdfa3d6da"
+  },
+  "materialEquivalence": "NOT_REQUIRED_CURRENT_SCORING_AUTHORITATIVE",
+  "decisionHierarchy": {
+    "validated": true,
+    "provenance": "scoreAudit/action-priority"
+  },
+  "providerRecollection": 0,
+  "modelCalls": 0,
+  "historicalMutation": 0,
+  "ga4CommercialOutcomeAuthority": "PAUSED",
+  "derivedAt": "2026-09-10T00:00:00.000Z"
+}

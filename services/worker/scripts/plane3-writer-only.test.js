@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -23,7 +23,6 @@ import {
 } from "../src/storage/fs-artifact-store.js";
 
 const TBK = "9714c206-8ed3-4686-8fe2-ceeca0ca0f82";
-const REBOOT = "97d6b2c7-03b9-4530-8ea7-16557502c638";
 
 const config = {
   writerModel: "mock-writer",
@@ -152,13 +151,11 @@ test("PLANE3-ID: executable path uses shared verifier and has no direct HEAD-equ
 });
 
 test("PLANE3-01: only the two explicitly approved frozen inputs resolve", async () => {
-  assert.deepEqual(Object.keys(APPROVED_INPUTS).sort(), [TBK, REBOOT].sort());
+  assert.deepEqual(Object.keys(APPROVED_INPUTS), [TBK]);
   const tbk = await resolveApprovedInput({ auditId: TBK });
-  const reboot = await resolveApprovedInput({ auditId: REBOOT });
   assert.equal(tbk.writerInput.auditId, TBK);
-  assert.equal(reboot.writerInput.auditId, REBOOT);
   await assert.rejects(
-    resolveApprovedInput({ auditId: "00000000-0000-4000-8000-000000000000" }),
+    resolveApprovedInput({ auditId: "97d6b2c7-03b9-4530-8ea7-16557502c638" }),
     /unapproved audit ID/,
   );
 });
@@ -219,7 +216,7 @@ test("PLANE3-05: Writer validation failure is a governed failure and does not in
   const root = await tempRoot();
   const calls = [];
   const result = await runSampleForTest({
-    auditId: REBOOT,
+    auditId: TBK,
     ledgerRoot: root,
     calls,
     bindingFactory: mockBindingFactory({ calls, output: {} }),
@@ -229,6 +226,53 @@ test("PLANE3-05: Writer validation failure is a governed failure and does not in
   assert.equal(result.manifest.finalStatus, "WRITER_VALIDATION_FAILED");
   assert.ok(result.manifest.validationErrors.length > 0);
   assert.equal(result.manifest.judgeCalls, 0);
+});
+
+async function copyCurrentTbkFixture(root) {
+  const workerFixture = join(root, "services", "worker", "test-fixtures", "plane3-current-uat", "tbk-9714c206");
+  const workerRequest = join(root, "services", "worker", "test-fixtures", "report-replay-offline", "audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current", "governed", "canonical");
+  await mkdir(workerFixture, { recursive: true });
+  await mkdir(workerRequest, { recursive: true });
+  const sourceFixture = join(process.cwd(), "test-fixtures", "plane3-current-uat", "tbk-9714c206");
+  const sourceRequest = join(process.cwd(), "test-fixtures", "report-replay-offline", "audit-9714c206-8ed3-4686-8fe2-ceeca0ca0f82-current", "governed", "canonical", "audit-request.json");
+  for (const name of ["scores.json", "findings.json", "writer-input.json", "derivation-manifest.json"]) {
+    await cp(join(sourceFixture, name), join(workerFixture, name));
+  }
+  await cp(sourceRequest, join(workerRequest, "audit-request.json"));
+  return workerFixture;
+}
+
+test("PLANE3-UAT: current TBK fixture is accepted with bounded authority and current versions", async () => {
+  const selected = await resolveApprovedInput({ auditId: TBK });
+  assert.equal(selected.writerInput.writerInputVersion, "1.2.0");
+  assert.equal(selected.scoreSet.contractVersion, "2.0.0");
+  assert.equal(selected.manifest.ga4CommercialOutcomeAuthority, "PAUSED");
+  assert.equal(selected.manifest.rootCauseRuleId, "VAN-CONTENT-002");
+  assert.ok(selected.writerInput.findings.every((finding) => finding.businessImpactContext?.basis === "INFERRED"));
+});
+
+test("PLANE3-UAT: stale, malformed, missing, mismatched, and altered current fixtures fail closed", async () => {
+  const cases = [
+    ["stale WriterInput version", (fixture) => fixture("writer-input.json", (value) => ({ ...value, writerInputVersion: "1.0.0" }))],
+    ["legacy WriterInput 1.1 version", (fixture) => fixture("writer-input.json", (value) => ({ ...value, writerInputVersion: "1.1.0" }))],
+    ["wrong WriterInput hash", (fixture) => fixture("derivation-manifest.json", (value) => ({ ...value, derivativeHashes: { ...value.derivativeHashes, "writer-input.json": "0".repeat(64) } }))],
+    ["wrong audit ID", (fixture) => fixture("derivation-manifest.json", (value) => ({ ...value, auditId: "00000000-0000-4000-8000-000000000000" }))],
+    ["altered scores", (fixture) => fixture("scores.json", (value) => ({ ...value, overallScore: 0 }))],
+    ["altered findings", (fixture) => fixture("findings.json", (value) => value.slice(0, -1))],
+    ["missing manifest", (fixture) => fixture.removeManifest()],
+  ];
+  for (const [label, mutate] of cases) {
+    const root = await tempRoot();
+    const fixtureRoot = await copyCurrentTbkFixture(root);
+    const fixture = async (name, transform) => {
+      const file = join(fixtureRoot, name);
+      const value = JSON.parse(await readFile(file, "utf8"));
+      await writeFile(file, `${JSON.stringify(transform(value), null, 2)}\n`, "utf8");
+    };
+    fixture.removeManifest = async () => { await (await import("node:fs/promises")).unlink(join(fixtureRoot, "derivation-manifest.json")); };
+    await mutate(fixture, fixtureRoot);
+    await assert.rejects(resolveApprovedInput({ auditId: TBK, appRoot: root }), undefined, label);
+  }
 });
 
 test("PLANE3-06: the real binding owns cost preflight and rejects before fetch under budget failure", async () => {
