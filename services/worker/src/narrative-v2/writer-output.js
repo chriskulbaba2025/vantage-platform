@@ -808,7 +808,13 @@ export function validateTargetedWriterRevision({ previousOutput, revisedOutput, 
   return { valid: errors.length === 0, errors };
 }
 
-export function validateWriterOutput(output, { writerInput, expectedPassNumber, previousOutput, revisionDirective } = {}) {
+export function validateWriterOutput(output, {
+  writerInput,
+  expectedPassNumber,
+  previousOutput,
+  revisionDirective,
+  expectedPromptVersion = WRITER_PROMPT_VERSION,
+} = {}) {
   const errors = [];
   if (!isObject(output)) return { valid: false, errors: ["Writer output must be an object"] };
   if (!isObject(writerInput)) return { valid: false, errors: ["writerInput is required"] };
@@ -826,35 +832,61 @@ export function validateWriterOutput(output, { writerInput, expectedPassNumber, 
   if (!Number.isInteger(output.passNumber) || output.passNumber < 1 || output.passNumber > 3) errors.push("passNumber must be an integer from 1 to 3");
   if (expectedPassNumber !== undefined && output.passNumber !== expectedPassNumber) errors.push(`passNumber mismatch: ${String(output.passNumber)} vs expected ${String(expectedPassNumber)}`);
   if (!nonEmptyString(output.modelId)) errors.push("modelId is required");
-  if (output.promptVersion !== WRITER_PROMPT_VERSION) errors.push(`promptVersion must equal ${WRITER_PROMPT_VERSION}`);
+  if (output.promptVersion !== expectedPromptVersion) errors.push(`promptVersion must equal ${expectedPromptVersion}`);
   if (!nonEmptyString(output.generatedAt)) errors.push("generatedAt is required");
 
-  if (!isObject(output.executiveConclusion)) errors.push("executiveConclusion must be an object");
-  else {
-    validateHeadline(output.executiveConclusion.headline, "executiveConclusion.headline", errors);
-    validateNarrativeAtom(output.executiveConclusion.narrative, writerInput, "executiveConclusion.narrative", errors, {
-      className: WRITER_STATEMENT_CLASS.INTERPRETATION,
-      maxWords: 180,
-    });
-  }
+  const targetedContinuation = output.passNumber > 1 &&
+    isObject(previousOutput) &&
+    isObject(revisionDirective) &&
+    revisionDirective.required === true &&
+    revisionDirective.mode === "TARGETED" &&
+    Array.isArray(revisionDirective.fieldsToRewrite);
+  const fieldsToRewrite = targetedContinuation
+    ? new Set(revisionDirective.fieldsToRewrite)
+    : new Set();
+  const isCurrentSection = (path) => !targetedContinuation || fieldsToRewrite.has(path);
 
-  validateStrengths(output.strengths, writerInput, errors);
-  validateRootCause(output.rootCause, writerInput, errors);
-  for (const sectionName of Object.keys(STANDARD_SECTIONS)) {
-    validateStandardSection(sectionName, output[sectionName], writerInput, errors);
-  }
-
-  if (!isObject(output.funnelOpportunities)) errors.push("funnelOpportunities must be an object");
-  else {
-    for (const stage of ["awareness", "consideration", "decision"]) {
-      validateFunnelStage(stage, output.funnelOpportunities[stage], writerInput, errors);
+  if (isCurrentSection("executiveConclusion")) {
+    if (!isObject(output.executiveConclusion)) errors.push("executiveConclusion must be an object");
+    else {
+      validateHeadline(output.executiveConclusion.headline, "executiveConclusion.headline", errors);
+      validateNarrativeAtom(output.executiveConclusion.narrative, writerInput, "executiveConclusion.narrative", errors, {
+        className: WRITER_STATEMENT_CLASS.INTERPRETATION,
+        maxWords: 180,
+      });
     }
   }
 
-  validateLimitations(output.limitations, writerInput, errors);
-  validateActionPlan(output.actionPlan, writerInput, errors);
-  validateExecutiveDecision(output.executiveDecision, writerInput, errors);
-  validateWriterSemanticFidelity(output, writerInput, errors);
+  if (isCurrentSection("strengths")) validateStrengths(output.strengths, writerInput, errors);
+  if (isCurrentSection("rootCause")) validateRootCause(output.rootCause, writerInput, errors);
+  for (const sectionName of Object.keys(STANDARD_SECTIONS)) {
+    if (isCurrentSection(sectionName)) validateStandardSection(sectionName, output[sectionName], writerInput, errors);
+  }
+
+  if (isCurrentSection("funnelOpportunities.awareness") || isCurrentSection("funnelOpportunities.consideration") || isCurrentSection("funnelOpportunities.decision")) {
+    if (!isObject(output.funnelOpportunities)) errors.push("funnelOpportunities must be an object");
+    else {
+      for (const stage of ["awareness", "consideration", "decision"]) {
+        if (isCurrentSection(`funnelOpportunities.${stage}`)) {
+          validateFunnelStage(stage, output.funnelOpportunities[stage], writerInput, errors);
+        }
+      }
+    }
+  }
+
+  if (isCurrentSection("limitations")) validateLimitations(output.limitations, writerInput, errors);
+  if (isCurrentSection("actionPlan")) validateActionPlan(output.actionPlan, writerInput, errors);
+  if (isCurrentSection("executiveDecision")) validateExecutiveDecision(output.executiveDecision, writerInput, errors);
+
+  if (targetedContinuation) {
+    const semanticOutput = structuredClone(output);
+    for (const path of WRITER_OUTPUT_SECTION_PATHS) {
+      if (!fieldsToRewrite.has(path)) setPathValue(semanticOutput, path, undefined);
+    }
+    validateWriterSemanticFidelity(semanticOutput, writerInput, errors);
+  } else {
+    validateWriterSemanticFidelity(output, writerInput, errors);
+  }
 
   if (output.passNumber > 1) {
     const targeted = validateTargetedWriterRevision({ previousOutput, revisedOutput: output, revisionDirective });

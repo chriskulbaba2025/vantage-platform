@@ -1616,7 +1616,9 @@ export function createNarrativeV2LiveBinding({
         }
 
         const validation =
-          validate(parsed);
+          validate(parsed, {
+            expectedPromptVersion: parsed?.promptVersion,
+          });
 
         const metadataValid =
           parsed?.modelId === modelId;
@@ -2217,7 +2219,9 @@ export function createNarrativeV2LiveBinding({
         errors: enforcement.errors,
       };
     }
-    const validation = validate(parsed);
+    const validation = validate(parsed, {
+      expectedPromptVersion: response?.promptVersion,
+    });
     const metadataErrors = [];
     if (role === "writer" && parsed?.modelId !== modelId) {
       metadataErrors.push(`modelId must equal configured Writer model ${modelId}`);
@@ -2327,13 +2331,15 @@ export function createNarrativeV2LiveBinding({
       normalize:
         normalizeWriterModelOutput,
 
-      validate: (output) =>
+      validate: (output, { expectedPromptVersion = WRITER_PROMPT_VERSION } = {}) =>
         validateWriterOutput(output, {
           writerInput:
             request.writerInput,
 
           expectedPassNumber:
             request.passNumber,
+
+          expectedPromptVersion,
 
           ...(request.passNumber > 1
             ? {

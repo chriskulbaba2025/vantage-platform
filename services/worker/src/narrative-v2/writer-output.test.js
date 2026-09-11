@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   WRITER_OUTPUT_VERSION,
+  WRITER_OUTPUT_SECTION_PATHS,
   WRITER_PROMPT_VERSION,
   enforceTargetedWriterRevision,
   validateTargetedWriterRevision,
@@ -1078,6 +1079,114 @@ test("WRITER-OUT-09: unknown rewrite paths fail closed", () => {
   assert.match(enforcement.errors.join("\n"), /Unknown rewrite field: notASection/);
   assert.deepEqual(enforcement.candidate.limitations, previous.limitations);
   assert.deepEqual(enforcement.unauthorizedRawChangedPaths, ["limitations"]);
+});
+
+function targetedDirective(fieldsToRewrite) {
+  return {
+    required: true,
+    mode: "TARGETED",
+    fieldsToRewrite,
+    fieldsLocked: WRITER_OUTPUT_SECTION_PATHS.filter((path) => !fieldsToRewrite.includes(path)),
+    defectIds: ["DEF-01"],
+  };
+}
+
+test("WRITER-OUT-10: exact incident semantics accept historical locked content under its persisted prompt version", () => {
+  const previous = validOutput(1);
+  previous.promptVersion = "2.3.0";
+  previous.limitations.push({ ...structuredClone(previous.limitations[0]), itemId: "LIM-02" });
+  previous.limitations[1].whatThisMeans.evidenceRefs = ["source:backlinks", "source:backlinks"];
+  previous.actionPlan.push(...["ACT-02", "ACT-03", "ACT-04", "ACT-05"].map((actionId) => ({ ...structuredClone(previous.actionPlan[0]), actionId })));
+  const rawPass2 = structuredClone(previous);
+  rawPass2.passNumber = 2;
+  rawPass2.executiveConclusion.headline = "Historical authorized conclusion";
+  rawPass2.rootCause.headline = "Historical authorized root cause";
+  rawPass2.conversion.whatWorks.text = "Historical authorized conversion";
+  rawPass2.limitations = [rawPass2.limitations[0]];
+  rawPass2.actionPlan = [rawPass2.actionPlan[0]];
+  const directive = targetedDirective(["executiveConclusion", "rootCause", "conversion"]);
+  const enforcement = enforceTargetedWriterRevision({ previousOutput: previous, revisedOutput: rawPass2, revisionDirective: directive });
+  const result = validateWriterOutput(enforcement.candidate, {
+    writerInput: writerInput(),
+    expectedPassNumber: 2,
+    previousOutput: previous,
+    revisionDirective: directive,
+    expectedPromptVersion: "2.3.0",
+  });
+  assert.deepEqual(result, { valid: true, errors: [] });
+  assert.equal(enforcement.candidate.promptVersion, "2.3.0");
+  assert.deepEqual(enforcement.candidate.limitations, previous.limitations);
+  assert.deepEqual(enforcement.candidate.actionPlan, previous.actionPlan);
+  assert.deepEqual(enforcement.candidate.limitations[1].whatThisMeans.evidenceRefs, ["source:backlinks", "source:backlinks"]);
+  assert.equal(enforcement.candidate.limitations.some((item) => item.itemId === "LIM-02"), true);
+  assert.deepEqual(enforcement.candidate.actionPlan.map((item) => item.actionId), ["ACT-01", "ACT-02", "ACT-03", "ACT-04", "ACT-05"]);
+});
+
+test("WRITER-OUT-11: current 2.4 targeted continuation validates rewritten fields strictly", () => {
+  const previous = validOutput(1);
+  const rawPass2 = structuredClone(previous);
+  rawPass2.passNumber = 2;
+  rawPass2.conversion.whatWorks.text = "Current authorized conversion revision";
+  const directive = targetedDirective(["conversion"]);
+  const enforcement = enforceTargetedWriterRevision({ previousOutput: previous, revisedOutput: rawPass2, revisionDirective: directive });
+  const result = validateWriterOutput(enforcement.candidate, {
+    writerInput: writerInput(),
+    expectedPassNumber: 2,
+    previousOutput: previous,
+    revisionDirective: directive,
+  });
+  assert.deepEqual(result, { valid: true, errors: [] });
+  assert.equal(enforcement.candidate.promptVersion, WRITER_PROMPT_VERSION);
+  assert.deepEqual(enforcement.candidate.limitations, previous.limitations);
+});
+
+test("WRITER-OUT-12: new duplicate references in a rewritten field fail current validation", () => {
+  const previous = validOutput(1);
+  const rawPass2 = structuredClone(previous);
+  rawPass2.passNumber = 2;
+  rawPass2.conversion.whatWorks.evidenceRefs = ["source:website", "source:website"];
+  const directive = targetedDirective(["conversion"]);
+  const enforcement = enforceTargetedWriterRevision({ previousOutput: previous, revisedOutput: rawPass2, revisionDirective: directive });
+  const result = validateWriterOutput(enforcement.candidate, {
+    writerInput: writerInput(),
+    expectedPassNumber: 2,
+    previousOutput: previous,
+    revisionDirective: directive,
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /conversion\.whatWorks\.evidenceRefs contains duplicate reference/);
+});
+
+test("WRITER-OUT-13: locked inherited tampering remains targeted-validation failure", () => {
+  const previous = validOutput(1);
+  const rawPass2 = structuredClone(previous);
+  rawPass2.passNumber = 2;
+  const directive = targetedDirective(["conversion"]);
+  const enforcement = enforceTargetedWriterRevision({ previousOutput: previous, revisedOutput: rawPass2, revisionDirective: directive });
+  enforcement.candidate.limitations[0].itemId = "TAMPERED";
+  const result = validateTargetedWriterRevision({ previousOutput: previous, revisedOutput: enforcement.candidate, revisionDirective: directive });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /Unauthorized Writer change outside revision directive: limitations/);
+});
+
+test("WRITER-OUT-14: Pass 1 remains strict against duplicate references", () => {
+  const output = validOutput(1);
+  output.limitations[0].whatThisMeans.evidenceRefs = ["source:backlinks", "source:backlinks"];
+  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /limitations\[0\]\.whatThisMeans\.evidenceRefs contains duplicate reference/);
+});
+
+test("WRITER-OUT-15: targeted continuation compatibility fails without previous-output authority", () => {
+  const output = validOutput(2);
+  const directive = targetedDirective(["conversion"]);
+  const result = validateWriterOutput(output, {
+    writerInput: writerInput(),
+    expectedPassNumber: 2,
+    revisionDirective: directive,
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /previousOutput and revisedOutput are required/);
 });
 
 test("WRITER-PROMPT-04: business impact basis and outcome status govern Writer authority", () => {
