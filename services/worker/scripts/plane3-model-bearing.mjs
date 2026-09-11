@@ -8,6 +8,12 @@ import { tmpdir } from "node:os";
 
 import { createNarrativeV2LiveBinding } from "../src/narrative-v2/live-binding.js";
 import { createFsArtifactStore } from "../src/storage/fs-artifact-store.js";
+import { createProductionContractValidator } from "../src/application/production-bootstrap.js";
+import { loadAndValidateDecisionEvidence } from "../src/evidence/decision-evidence.js";
+import { loadAndValidateCapabilityEvidence } from "../src/evidence/capability-evidence.js";
+import { assertCurrentScoreSet } from "../src/scoring/current-score-set.js";
+import { buildArtifactKey } from "../src/storage/artifact-key.js";
+import { buildWriterInput, WRITER_INPUT_VERSION } from "../src/narrative-v2/writer-input.js";
 import {
   NARRATIVE_V2_STATUS,
   runNarrativeV2Orchestration,
@@ -44,6 +50,7 @@ export const DEFAULT_OUTPUT_ROOT = join(tmpdir(), "PRYSM-model-bearing", "plane3
 export const DEFAULT_CANDIDATE_SHA = "c7087990250d2280b80921c88c26926a5c9b184a";
 export const MAX_LIVE_CALLS_PER_SAMPLE = 6;
 export const MAX_AUTOMATIC_PASSES = 2;
+export const EXPECTED_PRIMARY_WRITER_INPUT_SHA256 = "5313c1929a5bfca31d8ed7e92ade706d378c426b3dddab22d37778ea69eef7e2";
 
 const MODEL_ENV_NAMES = Object.freeze([
   "PRYSM_NARRATIVE_V2_WRITER_MODEL",
@@ -169,7 +176,7 @@ async function readJsonArtifact(path) {
 
 export async function loadFrozenArtifacts(sample, { appRoot = repositoryRoot } = {}) {
   const paths = sample.artifacts || {};
-  const required = ["writerInput", "scoreSet", "findings", "decisionEvidence", "capabilityEvidence", "auditRequest"];
+  const required = ["scoreSet", "findings", "decisionEvidence", "capabilityEvidence", "auditRequest"];
   for (const name of required) {
     if (!paths[name]) throw new Error(`${sample.sampleId || "sample"} missing artifact path: ${name}`);
     if (!isAbsolute(paths[name])) paths[name] = resolve(appRoot, paths[name]);
@@ -177,14 +184,75 @@ export async function loadFrozenArtifacts(sample, { appRoot = repositoryRoot } =
   }
   const artifacts = {};
   for (const name of required) artifacts[name] = await readJsonArtifact(paths[name]);
-  if (artifacts.writerInput.value.auditId !== sample.auditId || artifacts.auditRequest.value.auditId !== sample.auditId) {
+  const historicalPath = paths.historicalWriterInput || paths.writerInput;
+  if (historicalPath) {
+    const resolvedHistoricalPath = isAbsolute(historicalPath) ? historicalPath : resolve(appRoot, historicalPath);
+    await access(resolvedHistoricalPath);
+    artifacts.historicalWriterInput = await readJsonArtifact(resolvedHistoricalPath);
+  }
+  if (artifacts.auditRequest.value.auditId !== sample.auditId) {
     throw new Error(`${sample.sampleId} audit identity mismatch`);
   }
   const expected = sample.artifactHashes || {};
   for (const name of required) {
     if (expected[name] && expected[name] !== artifacts[name].sha256) throw new Error(`${sample.sampleId} ${name} SHA-256 mismatch`);
   }
-  return Object.freeze({ ...artifacts, hashes: Object.fromEntries(required.map((name) => [name, artifacts[name].sha256])) });
+
+  if (sample.historicalWriterInputSha256 && artifacts.historicalWriterInput?.sha256 !== sample.historicalWriterInputSha256) {
+    throw new Error(`${sample.sampleId} historical WriterInput SHA-256 mismatch`);
+  }
+
+  const scope = {
+    tenantId: artifacts.auditRequest.value.tenantId,
+    clientId: artifacts.auditRequest.value.clientId,
+    auditId: artifacts.auditRequest.value.auditId,
+  };
+  const canonicalFiles = new Map([
+    [buildArtifactKey({ ...scope, category: "canonical", artifactName: "decision-evidence.json" }), artifacts.decisionEvidence.path],
+    [buildArtifactKey({ ...scope, category: "canonical", artifactName: "capability-evidence.json" }), artifacts.capabilityEvidence.path],
+    [buildArtifactKey({ ...scope, category: "canonical", artifactName: "scores.json" }), artifacts.scoreSet.path],
+    [buildArtifactKey({ ...scope, category: "canonical", artifactName: "findings.json" }), artifacts.findings.path],
+  ]);
+  const canonicalStore = { get: async (key) => canonicalFiles.has(key) ? readFile(canonicalFiles.get(key)) : null };
+  const validateContract = createProductionContractValidator();
+  const decisionEvidence = await loadAndValidateDecisionEvidence({ store: canonicalStore, scope, validateContract });
+  const capabilityEvidence = await loadAndValidateCapabilityEvidence({ store: canonicalStore, scope, validateContract });
+  assertCurrentScoreSet(artifacts.scoreSet.value, { validateContract });
+  const findings = Array.isArray(artifacts.findings.value) ? artifacts.findings.value : (artifacts.findings.value?.findings || []);
+  const currentWriterInput = buildWriterInput({
+    auditId: scope.auditId,
+    auditRequest: artifacts.auditRequest.value,
+    scoreSet: artifacts.scoreSet.value,
+    findings,
+    capabilityEvidence,
+    decisionEvidence,
+  });
+  if (currentWriterInput.writerInputVersion !== WRITER_INPUT_VERSION) {
+    throw new Error(`${sample.sampleId} current WriterInput version mismatch: expected ${WRITER_INPUT_VERSION}`);
+  }
+  const currentWriterInputBytes = Buffer.from(`${JSON.stringify(currentWriterInput, null, 2)}\n`, "utf8");
+  const currentWriterInputArtifact = {
+    path: null,
+    bytes: currentWriterInputBytes.length,
+    value: currentWriterInput,
+    sha256: sha256(currentWriterInputBytes),
+  };
+  const expectedCurrentSha = sample.expectedCurrentWriterInputSha256;
+  if (expectedCurrentSha && currentWriterInputArtifact.sha256 !== expectedCurrentSha) {
+    throw new Error(`${sample.sampleId} current WriterInput SHA-256 mismatch: expected ${expectedCurrentSha}, got ${currentWriterInputArtifact.sha256}`);
+  }
+  const hashes = Object.fromEntries(required.map((name) => [name, artifacts[name].sha256]));
+  hashes.writerInput = currentWriterInputArtifact.sha256;
+  if (artifacts.historicalWriterInput) hashes.historicalWriterInput = artifacts.historicalWriterInput.sha256;
+  return Object.freeze({
+    ...artifacts,
+    writerInput: currentWriterInputArtifact,
+    currentWriterInput: currentWriterInputArtifact,
+    decisionEvidence: { ...artifacts.decisionEvidence, value: decisionEvidence },
+    capabilityEvidence: { ...artifacts.capabilityEvidence, value: capabilityEvidence },
+    findings: { ...artifacts.findings, value: findings },
+    hashes,
+  });
 }
 
 function canonicalSolutions(inputs) {
@@ -273,6 +341,9 @@ export async function runControlledSample({ sample, artifacts, outputRoot, write
       sampleId: sample.sampleId,
       auditId: sample.auditId,
       inputArtifactHashes: artifacts.hashes,
+      writerInputVersion: artifacts.writerInput.value.writerInputVersion,
+      writerInputSha256: artifacts.writerInput.sha256,
+      historicalWriterInputSha256: artifacts.historicalWriterInput?.sha256 || null,
       responseArtifacts,
       writerPromptVersion: WRITER_PROMPT_VERSION,
       writerOutputVersion: WRITER_OUTPUT_VERSION,
@@ -318,6 +389,9 @@ export async function runControlledSample({ sample, artifacts, outputRoot, write
     sampleId: sample.sampleId,
     auditId: sample.auditId,
     inputArtifactHashes: artifacts.hashes,
+    writerInputVersion: artifacts.writerInput.value.writerInputVersion,
+    writerInputSha256: artifacts.writerInput.sha256,
+    historicalWriterInputSha256: artifacts.historicalWriterInput?.sha256 || null,
     responseArtifacts,
     writerPromptVersion: WRITER_PROMPT_VERSION,
     writerOutputVersion: WRITER_OUTPUT_VERSION,

@@ -97,6 +97,21 @@ test("PLANE34-PREFLIGHT: default preflight makes zero calls and validates frozen
   assert.ok(result.error || result.modelCalls === 0);
 });
 
+test("PLANE34-WRITERINPUT: canonical artifacts rebuild current WriterInput and historical input is reference-only", async () => {
+  const frozen = await artifacts();
+  assert.equal(frozen.writerInput.value.writerInputVersion, "1.2.0");
+  assert.equal(frozen.writerInput.sha256, frozen.currentWriterInput.sha256);
+  assert.ok(frozen.historicalWriterInput);
+  assert.notEqual(frozen.writerInput.path, frozen.historicalWriterInput.path);
+});
+
+test("PLANE34-WRITERINPUT: canonical artifact hash mismatch fails before orchestration", async () => {
+  await assert.rejects(
+    loadFrozenArtifacts({ ...sample, artifactHashes: { scoreSet: "not-the-recovered-score-hash" } }),
+    /scoreSet SHA-256 mismatch/,
+  );
+});
+
 test("PLANE34-AUTH: missing authorization makes zero calls", async () => {
   const result = await executeManifest({ manifest: { samples: [], maximumPermittedCalls: 0 }, env: {}, appRoot: process.cwd() });
   assert.deepEqual(result, { result: "NOT_AUTHORIZED", modelCalls: 0, providerCalls: 0 });
@@ -113,13 +128,23 @@ test("PLANE34-AUTH: execute flag alone and authorization alone make zero calls",
 test("PLANE34-PATH: controlled Writer/Judge run uses production orchestration, validation, finalization, and render", async () => {
   const frozen = await renderableArtifacts();
   const root = await outputRoot();
+  let observedWriterInputVersion;
+  let observedJudgeInputVersion;
   const result = await runControlledSample({
     sample,
     artifacts: frozen,
     outputRoot: root,
-    writerExecutor: buildControlledWriterOutput,
-    judgeExecutor: buildControlledJudgeResponse,
+    writerExecutor: (request) => {
+      observedWriterInputVersion = request.writerInput.writerInputVersion;
+      return buildControlledWriterOutput(request);
+    },
+    judgeExecutor: (request) => {
+      observedJudgeInputVersion = request.writerInput.writerInputVersion;
+      return buildControlledJudgeResponse(request);
+    },
   });
+  assert.equal(observedWriterInputVersion, "1.2.0");
+  assert.equal(observedJudgeInputVersion, "1.2.0");
   assert.equal(result.record.status, "RELEASE_CANDIDATE");
   assert.equal(result.record.writerCalls, 1);
   assert.equal(result.record.judgeCalls, 1);
