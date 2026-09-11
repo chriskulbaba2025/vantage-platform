@@ -42,6 +42,7 @@ import { runCostPreflight } from "../narrative/cost-preflight.js";
 import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
 import {
   WRITER_PROMPT_VERSION,
+  enforceTargetedWriterRevision,
   validateWriterOutput,
 } from "./writer-output.js";
 import {
@@ -1478,6 +1479,7 @@ export function createNarrativeV2LiveBinding({
     recoveryAuthorization = null,
     writerInputSha256 = null,
     writerInput = null,
+    previousOutput = null,
   }) {
     const promptSha256 = sha256(prompt);
     // A final-pass restart may occur after Writer3 returned and validated
@@ -1540,6 +1542,7 @@ export function createNarrativeV2LiveBinding({
             writerInput,
             writerInputSha256,
             previousJudgeResponse,
+            previousOutput,
             normalize,
             validate,
           });
@@ -1603,8 +1606,14 @@ export function createNarrativeV2LiveBinding({
           );
         }
 
-        const parsed =
-          normalize(priorResponse);
+        let parsed = normalize(priorResponse);
+        if (role === "writer" && passNumber > 1) {
+          parsed = enforceTargetedWriterRevision({
+            previousOutput,
+            revisedOutput: parsed,
+            revisionDirective: previousJudgeResponse?.revisionDirective,
+          }).candidate;
+        }
 
         const validation =
           validate(parsed);
@@ -1879,7 +1888,22 @@ export function createNarrativeV2LiveBinding({
     responseDigest = sha256(JSON.stringify(rawParsed, null, 2));
     await persistResponseState();
 
-    const parsed = normalize(rawParsed);
+    let parsed = normalize(rawParsed);
+    let targetedRevisionEnforcement = null;
+    if (role === "writer" && passNumber > 1) {
+      const enforcement = enforceTargetedWriterRevision({
+        previousOutput,
+        revisedOutput: parsed,
+        revisionDirective: previousJudgeResponse?.revisionDirective,
+      });
+      parsed = enforcement.candidate;
+      targetedRevisionEnforcement = {
+        rawChangedPaths: enforcement.rawChangedPaths,
+        unauthorizedRawChangedPaths: enforcement.unauthorizedRawChangedPaths,
+        fieldsToRewrite: previousJudgeResponse?.revisionDirective?.fieldsToRewrite || [],
+        errors: enforcement.errors,
+      };
+    }
 
     let usage;
 
@@ -2042,6 +2066,10 @@ export function createNarrativeV2LiveBinding({
           combinedValidation.valid
             ? []
             : combinedValidation.errors,
+
+        ...(targetedRevisionEnforcement
+          ? { targetedRevisionEnforcement }
+          : {}),
       });
 
     await persistJson(
@@ -2072,6 +2100,7 @@ export function createNarrativeV2LiveBinding({
     writerInput,
     writerInputSha256 = null,
     previousJudgeResponse = null,
+    previousOutput = null,
     normalize,
     validate,
   }) {
@@ -2172,7 +2201,22 @@ export function createNarrativeV2LiveBinding({
       }
     }
 
-    const parsed = normalize(response);
+    let parsed = normalize(response);
+    let targetedRevisionEnforcement = null;
+    if (role === "writer" && passNumber > 1) {
+      const enforcement = enforceTargetedWriterRevision({
+        previousOutput,
+        revisedOutput: parsed,
+        revisionDirective: previousJudgeResponse?.revisionDirective,
+      });
+      parsed = enforcement.candidate;
+      targetedRevisionEnforcement = {
+        rawChangedPaths: enforcement.rawChangedPaths,
+        unauthorizedRawChangedPaths: enforcement.unauthorizedRawChangedPaths,
+        fieldsToRewrite: previousJudgeResponse?.revisionDirective?.fieldsToRewrite || [],
+        errors: enforcement.errors,
+      };
+    }
     const validation = validate(parsed);
     const metadataErrors = [];
     if (role === "writer" && parsed?.modelId !== modelId) {
@@ -2224,6 +2268,9 @@ export function createNarrativeV2LiveBinding({
       state: NARRATIVE_V2_CALL_STATE.CALL_COMPLETED,
       responseSha256: responseMeta.responseContentSha256,
       validationErrors: [],
+      ...(targetedRevisionEnforcement
+        ? { targetedRevisionEnforcement }
+        : {}),
     });
     return parsed;
   }
@@ -2260,6 +2307,8 @@ export function createNarrativeV2LiveBinding({
         objectSha256(request.writerInput),
 
       writerInput: request.writerInput,
+
+      previousOutput: request.previousOutput || null,
 
       responseFormat:
         buildWriterStructuredResponseFormat(

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   WRITER_OUTPUT_VERSION,
   WRITER_PROMPT_VERSION,
+  enforceTargetedWriterRevision,
   validateTargetedWriterRevision,
   validateWriterOutput,
 } from "./writer-output.js";
@@ -1031,6 +1032,52 @@ test("WRITER-PROMPT-01: Pass 1 prompt freezes exact terminology and evidence aut
   assert.match(prompt, /source:backlinks/);
   assert.match(prompt, /will, should, cause/);
   assert.doesNotMatch(prompt, /eeatScore/);
+});
+
+test("WRITER-OUT-08: targeted enforcement restores locked sections and preserves raw collateral evidence", () => {
+  const previous = validOutput(1);
+  previous.limitations.push({ ...structuredClone(previous.limitations[0]), itemId: "LIM-02" });
+  previous.actionPlan.push(...["ACT-02", "ACT-03", "ACT-04", "ACT-05"].map((actionId) => ({ ...structuredClone(previous.actionPlan[0]), actionId })));
+  const rawPass2 = structuredClone(previous);
+  rawPass2.passNumber = 2;
+  rawPass2.generatedAt = "2026-08-20T03:46:00.000Z";
+  rawPass2.executiveConclusion.headline = "Revised conclusion";
+  rawPass2.rootCause.headline = "Revised root cause";
+  rawPass2.conversion.whatWorks.text = "Revised conversion";
+  rawPass2.limitations = [rawPass2.limitations[0]];
+  rawPass2.actionPlan = [rawPass2.actionPlan[0]];
+  const revisionDirective = {
+    required: true,
+    mode: "TARGETED",
+    fieldsToRewrite: ["executiveConclusion", "rootCause", "conversion"],
+    fieldsLocked: ["limitations", "actionPlan"],
+    defectIds: ["DEF-01", "DEF-02", "DEF-03"],
+  };
+  const enforcement = enforceTargetedWriterRevision({ previousOutput: previous, revisedOutput: rawPass2, revisionDirective });
+  assert.deepEqual(enforcement.rawChangedPaths, ["executiveConclusion", "rootCause", "conversion", "limitations", "actionPlan"]);
+  assert.deepEqual(enforcement.unauthorizedRawChangedPaths, ["limitations", "actionPlan"]);
+  assert.deepEqual(enforcement.candidate.limitations, previous.limitations);
+  assert.deepEqual(enforcement.candidate.actionPlan, previous.actionPlan);
+  assert.equal(enforcement.candidate.executiveConclusion.headline, "Revised conclusion");
+  assert.equal(enforcement.candidate.rootCause.headline, "Revised root cause");
+  assert.equal(enforcement.candidate.conversion.whatWorks.text, "Revised conversion");
+  assert.deepEqual(rawPass2.limitations, [previous.limitations[0]]);
+  assert.deepEqual(validateTargetedWriterRevision({ previousOutput: previous, revisedOutput: enforcement.candidate, revisionDirective }), { valid: true, errors: [] });
+});
+
+test("WRITER-OUT-09: unknown rewrite paths fail closed", () => {
+  const previous = validOutput(1);
+  const rawPass2 = structuredClone(previous);
+  rawPass2.passNumber = 2;
+  rawPass2.limitations = [];
+  const enforcement = enforceTargetedWriterRevision({
+    previousOutput: previous,
+    revisedOutput: rawPass2,
+    revisionDirective: { required: true, mode: "TARGETED", fieldsToRewrite: ["notASection"], fieldsLocked: ["limitations"], defectIds: ["D-001"] },
+  });
+  assert.match(enforcement.errors.join("\n"), /Unknown rewrite field: notASection/);
+  assert.deepEqual(enforcement.candidate.limitations, previous.limitations);
+  assert.deepEqual(enforcement.unauthorizedRawChangedPaths, ["limitations"]);
 });
 
 test("WRITER-PROMPT-04: business impact basis and outcome status govern Writer authority", () => {

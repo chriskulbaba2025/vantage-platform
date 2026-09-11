@@ -757,6 +757,38 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
 }
 
+function setPathValue(object, path, value) {
+  const keys = path.split(".");
+  const leaf = keys.pop();
+  const parent = keys.reduce((current, key) => current[key], object);
+  parent[leaf] = value;
+}
+
+export function enforceTargetedWriterRevision({ previousOutput, revisedOutput, revisionDirective }) {
+  const errors = [];
+  if (!isObject(previousOutput) || !isObject(revisedOutput)) {
+    return { candidate: revisedOutput, rawChangedPaths: [], unauthorizedRawChangedPaths: [], errors: ["previousOutput and revisedOutput are required"] };
+  }
+  if (!isObject(revisionDirective) || revisionDirective.mode !== "TARGETED" || revisionDirective.required !== true) {
+    return { candidate: revisedOutput, rawChangedPaths: [], unauthorizedRawChangedPaths: [], errors: ["A TARGETED revisionDirective is required for Pass 2 or Pass 3"] };
+  }
+  const fieldsToRewrite = Array.isArray(revisionDirective.fieldsToRewrite) ? revisionDirective.fieldsToRewrite : [];
+  if (!Array.isArray(revisionDirective.fieldsToRewrite)) errors.push("fieldsToRewrite must be an array");
+  const rewrite = new Set(fieldsToRewrite);
+  for (const field of rewrite) if (!SECTION_PATH_SET.has(field)) errors.push(`Unknown rewrite field: ${field}`);
+  const candidate = structuredClone(revisedOutput);
+  const rawChangedPaths = [];
+  const unauthorizedRawChangedPaths = [];
+  for (const path of WRITER_OUTPUT_SECTION_PATHS) {
+    const changed = stableJson(getPathValue(previousOutput, path)) !== stableJson(getPathValue(revisedOutput, path));
+    if (changed) rawChangedPaths.push(path);
+    if (rewrite.has(path)) continue;
+    if (changed) unauthorizedRawChangedPaths.push(path);
+    setPathValue(candidate, path, structuredClone(getPathValue(previousOutput, path)));
+  }
+  return { candidate, rawChangedPaths, unauthorizedRawChangedPaths, errors };
+}
+
 export function validateTargetedWriterRevision({ previousOutput, revisedOutput, revisionDirective }) {
   const errors = [];
   if (!isObject(previousOutput) || !isObject(revisedOutput)) return { valid: false, errors: ["previousOutput and revisedOutput are required"] };
