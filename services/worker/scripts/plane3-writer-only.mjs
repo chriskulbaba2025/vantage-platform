@@ -38,7 +38,8 @@ import { buildWriterPrompt } from "../src/narrative-v2/writer-prompt.js";
 const execFileAsync = promisify(execFile);
 
 export const PLANE3_HARNESS_VERSION = "1.0.0";
-export const SEMANTIC_APPLICATION_BASE_SHA = "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97";
+export const SEMANTIC_APPLICATION_BASE_SHA = "354d01eaaa1eb7eac096ab1997ada9b2c9d4359f";
+export const FIXTURE_DERIVATION_CANDIDATE_SHA = "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97";
 export const AUTHORIZED_TOOLING_OVERLAY_PATHS = Object.freeze([
   "services/worker/scripts/plane3-writer-only.mjs",
   "services/worker/scripts/plane3-writer-only.test.js",
@@ -198,8 +199,8 @@ export async function resolveApprovedInput({ auditId, appRoot = repositoryRoot }
   if (manifest.auditId !== auditId || writerInput.auditId !== auditId || auditRequest.auditId !== auditId) {
     throw new Error("Approved WriterInput and AuditRequest identity mismatch");
   }
-  if (manifest.semanticCandidateSha !== SEMANTIC_APPLICATION_BASE_SHA) {
-    throw new Error("Current UAT fixture semantic candidate identity mismatch");
+  if (manifest.semanticCandidateSha !== FIXTURE_DERIVATION_CANDIDATE_SHA) {
+    throw new Error("Current UAT fixture derivation identity mismatch");
   }
   if (manifest.scoreSetVersion !== "2.0.0" || scoreSet.contractVersion !== "2.0.0") {
     throw new Error("Current UAT fixture requires ScoreSet 2.0.0");
