@@ -32,7 +32,7 @@ import { buildWriterPrompt } from "../src/narrative-v2/writer-prompt.js";
 const execFileAsync = promisify(execFile);
 
 export const PLANE3_HARNESS_VERSION = "1.0.0";
-export const SEMANTIC_APPLICATION_BASE_SHA = "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab";
+export const SEMANTIC_APPLICATION_BASE_SHA = "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97";
 export const AUTHORIZED_TOOLING_OVERLAY_PATHS = Object.freeze([
   "services/worker/scripts/plane3-writer-only.mjs",
   "services/worker/scripts/plane3-writer-only.test.js",

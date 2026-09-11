@@ -98,9 +98,9 @@ test("PLANE3-ID: the exact published semantic base is accepted with no overlay",
     repositoryRootOverride: process.cwd(),
     runGitCommand: fakeGit({ head: SEMANTIC_APPLICATION_BASE_SHA, changedPaths: [] }),
   });
-  assert.equal(SEMANTIC_APPLICATION_BASE_SHA, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
-  assert.equal(identity.semanticApplicationBaseSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
-  assert.equal(identity.toolingHeadSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.equal(SEMANTIC_APPLICATION_BASE_SHA, "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97");
+  assert.equal(identity.semanticApplicationBaseSha, "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97");
+  assert.equal(identity.toolingHeadSha, "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97");
   assert.deepEqual(identity.changedPaths, []);
   assert.equal(identity.boundedOverlayVerified, true);
 });
@@ -319,8 +319,8 @@ test("PLANE3-08: live production binding requires a durable store while tests ma
 test("PLANE3-ID: mock manifest records the exact published semantic candidate", async () => {
   const root = await tempRoot();
   const exactBaseIdentity = async () => ({
-    semanticApplicationBaseSha: "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab",
-    toolingHeadSha: "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab",
+    semanticApplicationBaseSha: "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97",
+    toolingHeadSha: "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97",
     worktreeClean: true,
     boundedOverlayVerified: true,
     changedPaths: [],
@@ -331,8 +331,8 @@ test("PLANE3-ID: mock manifest records the exact published semantic candidate", 
     identityVerifier: exactBaseIdentity,
     bindingFactory: mockBindingFactory(),
   });
-  assert.equal(result.manifest.candidateSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
-  assert.equal(result.manifest.semanticApplicationBaseSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
-  assert.equal(result.manifest.toolingHeadSha, "52eadcc5a8f6bd3a99da7155d0af86ae261a14ab");
+  assert.equal(result.manifest.candidateSha, "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97");
+  assert.equal(result.manifest.semanticApplicationBaseSha, "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97");
+  assert.equal(result.manifest.toolingHeadSha, "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97");
   assert.deepEqual(result.manifest.changedPaths, []);
 });
