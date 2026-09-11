@@ -411,6 +411,38 @@ test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted withou
   }
 });
 
+test("PRYSM-NEGATION-01: explicit do-not establishment denials are accepted without laundering claims", () => {
+  const accepted = [
+    "A visible invitation and a clear assessed path do not establish visitor completion or conversion performance.",
+    "The assessed path does not establish conversion performance.",
+    "Conversion performance is not established by the assessed path.",
+    "The available evidence does not confirm visitor completion.",
+  ];
+  const rejected = [
+    "The clear assessed path establishes conversion performance.",
+    "This change will increase conversions.",
+    "The assessed path proves visitor completion.",
+    "The assessed path does not establish conversion performance, but it will increase conversions.",
+  ];
+
+  for (const text of accepted) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.deepEqual(result, { valid: true, errors: [] }, text);
+  }
+
+  for (const text of rejected) {
+    const result = validateWriterOutput(
+      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
+      { writerInput: writerInput(), expectedPassNumber: 1 },
+    );
+    assert.equal(result.valid, false, text);
+    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
+  }
+});
+
 test("PRYSM-CAUSAL-01: ordinary causal morphology and outcome-certainty forms reject", () => {
   const unsupportedClaims = [
     "Changes cause conversions.",

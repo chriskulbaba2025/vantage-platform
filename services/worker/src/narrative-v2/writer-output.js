@@ -396,7 +396,7 @@ export function validateWriterSemanticFidelity(
     /not detected.{0,50}(?:available|partial|assessed)|(?:available|partial|assessed|observed).{0,50}(?:assessment|coverage|evidence|pages?|sample)|does not establish|cannot establish|\bno\b[^.!?]{0,80}\b(?:was|were|has been|have been)?\s*established\b|\bdoes not mean\b[^.!?]{0,100}\b(?:absent|missing|lack(?:s)?|without)\b/i;
 
   const commercialOutcomePattern =
-    /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline)\b/i;
+    /\b(?:revenue|sales|leads?|enquiries|inquiries|conversions?|traffic|rankings?|engagement|abandonment|bounce rate|customers?|pipeline|completion)\b/i;
 
   const causalCertaintyPattern =
     /\b(?:will|(?<!root-)(?<!root )(?:cause|causes|caused|causing)|(?:drive|drives|drove|driven|driving)|(?:result|results|resulted|resulting) in|(?:lead|leads|led|leading) to|(?:increase|increases|increased|increasing)|(?:decrease|decreases|decreased|decreasing)|(?:reduce|reduces|reduced|reducing)|(?:improve|improves|improved|improving)|(?:hurt|hurts|hurting)|(?:damage|damages|damaged|damaging)|(?:lose|loses|lost|losing)|(?:cost|costs|costing))\b/i;
@@ -408,7 +408,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:confirm|confirms|confirmed|confirming|establish|establishes|established|establishing|prove|proves|proved|proven|proving|demonstrate|demonstrates|demonstrated|demonstrating|show|shows|showed|shown|showing)\b/i;
 
   const nonEstablishmentOutcomePattern =
-    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed)?|measur(?:ed|e)|collect(?:ed|ion)|confirm(?:ed)?|prov(?:e|en))\b|(?:does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed)?|measur(?:ed|e)|collect(?:ed|ion)|confirm(?:ed)?|prov(?:e|en))|\bnot\s+(?:measured|collected|established|confirmed|proven)\b)/i;
+    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\bnot\s+(?:measured|collected|established|confirmed|proven)\b)/i;
 
   const observedConversionActionPattern =
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
