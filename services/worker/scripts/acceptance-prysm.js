@@ -474,6 +474,7 @@ let htmlContainsService = false;
 let htmlContainsPlatform = false;
 let htmlContainsBacklink = false;
 let htmlContainsCompetitor = false;
+let htmlContainsNoComparableCompetitorState = false;
 for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
   const pageKey = buildArtifactKey({ tenantId, clientId, auditId, category: "report-v2", artifactName: `pages/${filename}` });
   if (await artifactStore.exists(pageKey)) {
@@ -484,13 +485,28 @@ for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
     if (html.includes(SENTINELS.platform)) htmlContainsPlatform = true;
     if (html.includes(SENTINELS.backlinkDomain)) htmlContainsBacklink = true;
     if (html.includes(SENTINELS.competitorDomain)) htmlContainsCompetitor = true;
+    if (html.includes("No directly comparable named competitor evidence was available for this audit.")) {
+      htmlContainsNoComparableCompetitorState = true;
+    }
   }
 }
 check("Current Narrative v2 page rendered", pageCount === 1, `${pageCount}/1`);
 check("Sentinel domain in HTML", htmlContainsDomain);
 check("Sentinel service in HTML", htmlContainsService);
 check("Sentinel platform in HTML", htmlContainsPlatform);
-check("Competitor sentinel in HTML (final governed consumer)", htmlContainsCompetitor);
+const persistedScoresForCompetitorContract = JSON.parse(
+  Buffer.from(await artifactStore.get(scoresKey)).toString("utf8"),
+);
+const persistedCompetitorComparison =
+  persistedScoresForCompetitorContract.competitors?.comparisons?.find(
+    (comparison) => String(comparison?.url || "").includes(SENTINELS.competitorDomain),
+  );
+check("Persisted competitor candidate retained", Boolean(persistedCompetitorComparison));
+check("Persisted competitor candidate is INSUFFICIENT_EVIDENCE",
+  persistedCompetitorComparison?.status === "INSUFFICIENT_EVIDENCE",
+  `got ${persistedCompetitorComparison?.status || "missing"}`);
+check("Insufficient competitor sentinel suppressed from final governed HTML", !htmlContainsCompetitor);
+check("Governed no-comparison competitor state rendered", htmlContainsNoComparableCompetitorState);
 
 // Backlink sentinel: the final governed consumer of the backlink domain
 // evidence is the persisted decision evidence (proven above).  The report

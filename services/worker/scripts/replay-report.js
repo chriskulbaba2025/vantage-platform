@@ -89,6 +89,7 @@ const [
   { REPORT_V2_VIEWER_VERSION },
   { validateJudgeResponse },
   { hydrateCurrentReportModel },
+  { hasRequiredNarrativeV2ReportStructure },
 ] = await Promise.all([
   import("../src/scoring/report-finalization-gate.js"),
   import("../src/report/render-narrative-v2.js"),
@@ -96,6 +97,7 @@ const [
   import("../src/report/render-report-v2.js"),
   import("../src/narrative-v2/judge-contract.js"),
   import("../src/report-model/current-model.js"),
+  import("../src/narrative-v2/production-path.js"),
 ]);
 
 function sha256(value) {
@@ -1070,10 +1072,7 @@ async function replayFixture({
     });
 
   if (
-    !/^<!doctype html>/i.test(html) ||
-    !html.includes(
-      'id="narrative-layer"',
-    ) ||
+    !hasRequiredNarrativeV2ReportStructure(html) ||
     !html.includes(
       `data-viewer-version="${REPORT_V2_VIEWER_VERSION}"`,
     )
