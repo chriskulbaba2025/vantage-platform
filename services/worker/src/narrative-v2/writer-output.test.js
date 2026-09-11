@@ -381,6 +381,9 @@ test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted withou
     "The evidence does not establish a conversion outcome.",
     "Completed enquiry outcomes were not measured.",
     "No sales conclusion can be established from the available evidence.",
+    "Both were positively assessed in scope, without establishing completed actions or conversion performance.",
+    "The route was assessed without demonstrating completed conversions.",
+    "The assessed path was reviewed without proving conversion performance.",
   ];
   const rejected = [
     "The missing proof will reduce conversions.",
