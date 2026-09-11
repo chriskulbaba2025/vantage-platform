@@ -49,3 +49,35 @@ test("WRITER-PROMPT-04: limitation status grounding contract is explicit on init
   });
   assertLimitationGroundingRule(revisionPrompt);
 });
+
+function assertConversionPathAuthorityRule(prompt) {
+  assert.doesNotMatch(prompt, /path clarity measures completion of that invitation/);
+  assert.match(prompt, /CTA clarity assesses the observed invitation/);
+  assert.match(prompt, /conversion-path clarity assesses the observed route from that invitation toward the next step/);
+  assert.match(prompt, /Path clarity does not establish that visitors completed the action or converted/);
+  assert.match(prompt, /A visible form, CTA, enquiry route, or conversion-path condition is not a confirmed conversion/);
+  assert.ok(prompt.indexOf("8d.") < prompt.indexOf("11a."));
+}
+
+test("WRITER-PROMPT-05: conversion-path clarity cannot be read as measured completion", () => {
+  const initialPrompt = buildWriterPrompt({ writerInput, passNumber: 1 });
+  assertConversionPathAuthorityRule(initialPrompt);
+
+  const revisionPrompt = buildWriterPrompt({
+    writerInput,
+    passNumber: 2,
+    previousOutput: {},
+    judgeResponse: {
+      decision: "REVISE",
+      defects: [],
+      revisionDirective: {
+        required: true,
+        mode: "TARGETED",
+        fieldsToRewrite: ["conversion"],
+        fieldsLocked: [],
+        defectIds: [],
+      },
+    },
+  });
+  assertConversionPathAuthorityRule(revisionPrompt);
+});

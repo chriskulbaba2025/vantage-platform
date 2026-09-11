@@ -174,7 +174,7 @@ test("PLANE3-02: each sample uses the existing Writer seam, never Judge, and rec
   assert.equal(judgeCalls.length, 0);
   assert.equal(result.manifest.validationResult, "PASS");
   assert.equal(result.manifest.finalStatus, "WRITER_VALIDATED");
-  assert.equal(result.manifest.writerPromptVersion, "2.3.0");
+  assert.equal(result.manifest.writerPromptVersion, "2.4.0");
   assert.equal(result.manifest.writerOutputVersion, "1.0.0");
   assert.equal(result.manifest.modelCalls, 1);
   assert.equal(result.manifest.judgeCalls, 0);

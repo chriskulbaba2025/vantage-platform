@@ -66,7 +66,7 @@ function validWriterOutput(passNumber = 1) {
   const standard = (headline, fields) => ({ headline, ...fields });
   return {
     contractVersion: "1.0.0", writerOutputVersion: "1.0.0", auditId: AUDIT_ID,
-    passNumber, modelId: "writer-test", promptVersion: "2.3.0", generatedAt: "2026-09-09T00:00:00.000Z",
+    passNumber, modelId: "writer-test", promptVersion: "2.4.0", generatedAt: "2026-09-09T00:00:00.000Z",
     executiveConclusion: { headline: "A governed conclusion", narrative: interpret("Conclusion") },
     strengths: [{ itemId: "STR-01", title: "Strength", narrative: interpret("Strength") }],
     rootCause: { headline: "A governed root cause", narrative: interpret("Root cause"), businessConsequences: [{ area: "Conversion", narrative: interpret("Consequence") }] },
