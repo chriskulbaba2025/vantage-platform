@@ -85,5 +85,14 @@ test("WRITER-PROMPT-05: conversion-path clarity cannot be read as measured compl
 test("WRITER-PROMPT-06: performance implications remain bounded in decision labels", () => {
   const prompt = buildWriterPrompt({ writerInput, passNumber: 1 });
   assert.match(prompt, /name the measured technical condition/);
-  assert.match(prompt, /Never present mobile friction as an established observed condition/);
+  assert.match(prompt, /MUST NOT upgrade that metric into an established user condition anywhere/);
+});
+
+test("WRITER-PROMPT-07: semantic class prevents metric-to-effect and route-to-usability upgrades", () => {
+  const prompt = buildWriterPrompt({ writerInput, passNumber: 1 });
+  assert.match(prompt, /every similar headline, title, label, summary, or body field/);
+  assert.match(prompt, /performance friction condition/);
+  assert.match(prompt, /A clear, visible, or interactable route is an observed route only/);
+  assert.match(prompt, /usable foundation/);
+  assert.match(prompt, /direct evidence measures usability or outcomes/);
 });
