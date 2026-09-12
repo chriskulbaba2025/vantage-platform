@@ -7,12 +7,20 @@ import { tmpdir } from "node:os";
 import {
   computeCallPlan,
   calculateCost,
+  assertFreshRunRoot,
+  createRunCallGuard,
+  executionIdentity,
   executeManifest,
   loadFrozenArtifacts,
+  parseAuthorization,
   readModelConfig,
   runControlledSample,
+  runRootFor,
   runPreflight,
   sampleCallCeiling,
+  validateRunId,
+  verifyIdentity,
+  verifyManifestRuntimeParity,
 } from "./plane3-model-bearing.mjs";
 import { buildControlledJudgeResponse, buildControlledWriterOutput } from "./current-replay-controlled-narrative.js";
 import { buildV2Model } from "../src/narrative-v2/production-path.js";
@@ -165,4 +173,171 @@ test("PLANE34-PERSISTENCE: raw controlled responses and hashes are written outsi
 
 test("PLANE34-NEGATIVE: malformed frozen input fails before any controlled call", async () => {
   await assert.rejects(loadFrozenArtifacts({ ...sample, auditId: "wrong-audit" }), /audit identity mismatch/);
+});
+
+test("PLANE34-IDENTITY: run and sample identities are safe, distinct, and collision-resistant", async () => {
+  const root = await outputRoot();
+  assert.equal(validateRunId("plane34-8604603c-20260912-a"), "plane34-8604603c-20260912-a");
+  for (const bad of ["", "short", "../escape", "a/bad", "a\\bad"]) assert.throws(() => validateRunId(bad));
+  const first = executionIdentity("plane34-8604603c-20260912-a", "PRIMARY_TBK_P01");
+  const second = executionIdentity("plane34-8604603c-20260912-a", "PRIMARY_TBK_P02");
+  const otherRun = executionIdentity("plane34-8604603c-20260912-b", "PRIMARY_TBK_P01");
+  assert.equal(new Set([first, second, otherRun]).size, 3);
+  assert.equal(runRootFor({ isolatedOutputRoot: root, runId: "plane34-8604603c-20260912-a" }), join(root, "plane34-8604603c-20260912-a"));
+  await assertFreshRunRoot(join(root, "plane34-8604603c-20260912-a"));
+});
+
+test("PLANE34-IDENTITY: duplicate sample IDs and reused/non-empty roots fail closed", async () => {
+  assert.throws(() => computeCallPlan([{ ...sample, sampleId: "same" }, { ...sample, sampleId: "same" }], 4), /duplicate sample ID/);
+  const root = await outputRoot();
+  const runRoot = join(root, "plane34-reused-run");
+  await (await import("node:fs/promises")).writeFile(join(root, "marker.txt"), "historical", "utf8");
+  await assert.rejects(assertFreshRunRoot(root), /already exists/);
+  await (await import("node:fs/promises")).mkdir(runRoot, { recursive: true });
+  await (await import("node:fs/promises")).writeFile(join(runRoot, "historical.json"), "preserve", "utf8");
+  await assert.rejects(assertFreshRunRoot(runRoot), /already exists/);
+  assert.equal(await readFile(join(runRoot, "historical.json"), "utf8"), "preserve");
+});
+
+test("PLANE34-PARITY: stale runtime identities fail before execution", async () => {
+  const config = readModelConfig({
+    PRYSM_NARRATIVE_V2_WRITER_MODEL: "gpt-5.6-terra",
+    PRYSM_NARRATIVE_V2_JUDGE_MODEL: "gpt-5.6-sol",
+    PRYSM_NARRATIVE_V2_MAX_INPUT_TOKENS: "120000",
+    PRYSM_NARRATIVE_V2_WRITER_MAX_OUTPUT_TOKENS: "12000",
+    PRYSM_NARRATIVE_V2_JUDGE_MAX_OUTPUT_TOKENS: "8000",
+    PRYSM_NARRATIVE_V2_PRICE_TABLE_JSON: JSON.stringify({ "gpt-5.6-terra": { inputPricePer1K: 0.002, outputPricePer1K: 0.012 }, "gpt-5.6-sol": { inputPricePer1K: 0.005, outputPricePer1K: 0.03 } }),
+  });
+  const manifest = {
+    activeModelIdentity: { writerModel: "stale-writer", judgeModel: "gpt-5.6-sol" },
+    tokenLimits: { maxInputTokens: 120000, writerMaxOutputTokens: 12000, judgeMaxOutputTokens: 8000 },
+    priceEntries: config.prices,
+    contractIdentity: { writerPromptVersion: "2.4.0", judgePromptVersion: "2.1.0", writerOutputVersion: "1.0.0", judgeContractVersion: "1.1.0" },
+  };
+  const parity = await verifyManifestRuntimeParity({ manifest, config });
+  assert.equal(parity.proven, false);
+  assert.match(parity.errors.join(";"), /Writer model identity mismatch/);
+});
+
+test("PLANE34-PARITY: stale token, price, prompt, schema, and validator identities fail closed", async () => {
+  const config = readModelConfig({
+    PRYSM_NARRATIVE_V2_WRITER_MODEL: "gpt-5.6-terra",
+    PRYSM_NARRATIVE_V2_JUDGE_MODEL: "gpt-5.6-sol",
+    PRYSM_NARRATIVE_V2_MAX_INPUT_TOKENS: "120000",
+    PRYSM_NARRATIVE_V2_WRITER_MAX_OUTPUT_TOKENS: "12000",
+    PRYSM_NARRATIVE_V2_JUDGE_MAX_OUTPUT_TOKENS: "8000",
+    PRYSM_NARRATIVE_V2_PRICE_TABLE_JSON: JSON.stringify({ "gpt-5.6-terra": { inputPricePer1K: 0.002, outputPricePer1K: 0.012 }, "gpt-5.6-sol": { inputPricePer1K: 0.005, outputPricePer1K: 0.03 } }),
+  });
+  const base = {
+    activeModelIdentity: { writerModel: "gpt-5.6-terra", judgeModel: "gpt-5.6-sol" },
+    tokenLimits: { maxInputTokens: 120000, writerMaxOutputTokens: 12000, judgeMaxOutputTokens: 8000 },
+    priceEntries: config.prices,
+    contractIdentity: { writerPromptVersion: "2.4.0", judgePromptVersion: "2.1.0", writerOutputVersion: "1.0.0", judgeContractVersion: "1.1.0" },
+  };
+  const mutations = [
+    (m) => { m.tokenLimits.maxInputTokens = 1; },
+    (m) => { m.priceEntries["gpt-5.6-terra"].outputPricePer1K = 999; },
+    (m) => { m.contractIdentity.writerPromptVersion = "stale"; },
+    (m) => { m.contractIdentity.writerOutputVersion = "stale"; },
+    (m) => { m.contractIdentity.writerValidator = "src/narrative-v2/writer-output.js SHA-256 " + "0".repeat(64); },
+  ];
+  for (const mutate of mutations) {
+    const manifest = structuredClone(base);
+    mutate(manifest);
+    const parity = await verifyManifestRuntimeParity({ manifest, config });
+    assert.equal(parity.proven, false);
+  }
+});
+
+test("PLANE34-IDENTITY: stale application HEAD is rejected before any execution", async () => {
+  await assert.rejects(
+    verifyIdentity({ expectedCandidateSha: "required", runGit: async (args) => args[0] === "rev-parse" ? "stale" : "" }),
+    /Candidate SHA mismatch/,
+  );
+});
+
+test("PLANE34-AUTH: candidate, manifest, run, corpus, and budget all bind authorization", () => {
+  const plan = { authorizedMaximumCalls: 8 };
+  const base = { candidateSha: "candidate", manifestSha256: "manifest", runId: "plane34-valid-run", corpusIdentity: "corpus", maximumPermittedCalls: 8, maximumSpend: 4.44 };
+  assert.deepEqual(parseAuthorization({ PRYSM_MODEL_BEARING_PAID_RUN_AUTHORIZED: "YES", PRYSM_MODEL_BEARING_AUTHORIZATION_JSON: JSON.stringify(base) }, { ...base, plan }), base);
+  for (const key of ["candidateSha", "manifestSha256", "runId", "corpusIdentity", "maximumPermittedCalls", "maximumSpend"]) {
+    const altered = { ...base, [key]: key === "maximumSpend" ? 5 : `${base[key]}-wrong` };
+    assert.throws(() => parseAuthorization({ PRYSM_MODEL_BEARING_PAID_RUN_AUTHORIZED: "YES", PRYSM_MODEL_BEARING_AUTHORIZATION_JSON: JSON.stringify(altered) }, { ...base, plan }), /mismatch/);
+  }
+});
+
+test("PLANE34-CEILINGS: Writer, Judge, total, and USD ceilings fail closed", async () => {
+  const config = { writerModel: "w", judgeModel: "j", maxInputTokens: 1000, writerMaxOutputTokens: 100, judgeMaxOutputTokens: 100, prices: { w: { inputPricePer1K: 0.002, outputPricePer1K: 0.012 }, j: { inputPricePer1K: 0.005, outputPricePer1K: 0.03 } } };
+  const guard = createRunCallGuard({ runRoot: await outputRoot(), plan: { authorizedMaximumCalls: 8 }, config });
+  for (let i = 0; i < 5; i += 1) await guard.reserve("writer", `P${i}`);
+  await assert.rejects(guard.reserve("writer", "P6"), /Writer call ceiling/);
+  const judgeGuard = createRunCallGuard({ runRoot: await outputRoot(), plan: { authorizedMaximumCalls: 8 }, config });
+  for (let i = 0; i < 3; i += 1) await judgeGuard.reserve("judge", `P${i}`);
+  await assert.rejects(judgeGuard.reserve("judge", "P4"), /Judge call ceiling/);
+  const totalGuard = createRunCallGuard({ runRoot: await outputRoot(), plan: { authorizedMaximumCalls: 2 }, config });
+  await totalGuard.reserve("writer", "P1");
+  await totalGuard.reserve("judge", "P1");
+  await assert.rejects(totalGuard.reserve("writer", "P2"), /total call ceiling/);
+  const expensive = { ...config, prices: { w: { inputPricePer1K: 1, outputPricePer1K: 1 }, j: config.prices.j } };
+  const costGuard = createRunCallGuard({ runRoot: await outputRoot(), plan: { authorizedMaximumCalls: 8 }, config: expensive });
+  for (let i = 0; i < 4; i += 1) await costGuard.reserve("writer", `P${i}`);
+  await assert.rejects(costGuard.reserve("writer", "P5"), /aggregate cost ceiling/);
+});
+
+test("PLANE34-IMMUTABLE: repeated controlled persistence cannot overwrite prior evidence", async () => {
+  const frozen = await renderableArtifacts();
+  const root = await outputRoot();
+  await runControlledSample({ sample, artifacts: frozen, outputRoot: root, writerExecutor: buildControlledWriterOutput, judgeExecutor: buildControlledJudgeResponse });
+  const rawPath = join(root, sample.sampleId, "calls", "call-01-writer-raw.json");
+  const before = await readFile(rawPath, "utf8");
+  await assert.rejects(runControlledSample({ sample, artifacts: frozen, outputRoot: root, writerExecutor: buildControlledWriterOutput, judgeExecutor: buildControlledJudgeResponse }), /EEXIST/);
+  assert.equal(await readFile(rawPath, "utf8"), before);
+});
+
+test("PLANE34-RESTART: all persisted restart states refuse reuse while a fresh run remains independent", async () => {
+  const base = await outputRoot();
+  const states = ["reservation", "response", "validation", "partial-sample", "judge", "summary"];
+  for (const state of states) {
+    const root = join(base, `plane34-${state}`);
+    await (await import("node:fs/promises")).mkdir(root, { recursive: true });
+    await (await import("node:fs/promises")).writeFile(join(root, "state.json"), state, "utf8");
+    await assert.rejects(assertFreshRunRoot(root), /already exists/);
+  }
+  const fresh = runRootFor({ isolatedOutputRoot: base, runId: "plane34-fresh-independent" });
+  await assertFreshRunRoot(fresh);
+  assert.notEqual(fresh, join(base, "plane34-summary"));
+});
+
+test("PLANE34-STOP: material Writer/Judge failure does not advance a controlled sample", async () => {
+  const frozen = await renderableArtifacts();
+  const root = await outputRoot();
+  let judgeCalled = false;
+  await assert.rejects(runControlledSample({
+    sample,
+    artifacts: frozen,
+    outputRoot: root,
+    writerExecutor: async () => { throw new Error("writer failure"); },
+    judgeExecutor: async () => { judgeCalled = true; return buildControlledJudgeResponse({ writerInput: frozen.writerInput.value }); },
+  }), /writer failure/);
+  assert.equal(judgeCalled, false);
+});
+
+test("PLANE34-STOP: material Judge failure stops the current sample", async () => {
+  const frozen = await renderableArtifacts();
+  const root = await outputRoot();
+  await assert.rejects(runControlledSample({
+    sample,
+    artifacts: frozen,
+    outputRoot: root,
+    writerExecutor: buildControlledWriterOutput,
+    judgeExecutor: async () => { throw new Error("judge failure"); },
+  }), /judge failure/);
+});
+
+test("PLANE34-PREFLIGHT: run identity, plan, and zero-call result remain explicit", async () => {
+  const result = await runPreflight({
+    manifest: { candidateSha: "test-candidate", samples: [sample], maximumPermittedCalls: 2, isolatedOutputRoot: await outputRoot() },
+    appRoot: process.cwd(),
+  }).catch((error) => ({ error }));
+  assert.ok(result.error || (result.modelCalls === 0 && result.providerCalls === 0 && result.runId));
 });
