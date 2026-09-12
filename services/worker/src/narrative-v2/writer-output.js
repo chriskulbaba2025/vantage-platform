@@ -408,7 +408,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:confirm|confirms|confirmed|confirming|establish|establishes|established|establishing|prove|proves|proved|proven|proving|demonstrate|demonstrates|demonstrated|demonstrating|show|shows|showed|shown|showing)\b/i;
 
   const nonEstablishmentOutcomePattern =
-    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\bnot\s+(?:measured|collected|established|confirmed|proven)\b|\bwithout\s+(?:establish(?:ed|ing)?|demonstrat(?:e|ed|es|ing)?|prov(?:e|ed|en|ing))\b)/i;
+    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\bneither\b[^.!?]{0,120}\b(?:establish(?:es|ed|ing)?|measur(?:es|ed|ing)?|collect(?:s|ed|ing)?|confirm(?:s|ed|ing)?|prov(?:es|ed|en|ing))\b|\bnot\s+(?:measured|collected|established|confirmed|proven)\b|\bwithout\s+(?:establish(?:ed|ing)?|demonstrat(?:e|ed|es|ing)?|prov(?:e|ed|en|ing))\b)/i;
 
   const observedConversionActionPattern =
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;

@@ -1017,6 +1017,16 @@ test("PDV5-WRITER-OUT-01C: PARTIAL evidence still rejects unqualified absence", 
   assert.match(result.errors.join("\n"), /converts PARTIAL evidence into an unqualified absence claim/);
 });
 
+test("PDV5-WRITER-OUT-01D: neither-establishes language remains bounded", () => {
+  const output = validOutput();
+  output.executiveDecision.preserve = atom(
+    "Preserve the observed trust proof and clear assessed conversion path, while recognizing that neither establishes conversion effectiveness.",
+    ["finding:F-001"],
+  );
+  const result = validateWriterOutput(output, { writerInput: writerInput(), expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
 test("WRITER-OUT-05: funnel is bounded to at most three ideas per stage", () => {
   const output = validOutput();
   output.funnelOpportunities.awareness = [1, 2, 3, 4].map((n) => ({
