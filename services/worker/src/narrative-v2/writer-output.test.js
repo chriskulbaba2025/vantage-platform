@@ -972,6 +972,51 @@ test("PDV5-WRITER-OUT-01: truthful PARTIAL negations preserve their scope", () =
   assert.deepEqual(result, { valid: true, errors: [] });
 });
 
+test("PDV5-WRITER-OUT-01B: explicit non-establishment of PARTIAL absence is bounded", () => {
+  const input = writerInput();
+  input.capabilityContext.capabilities["content.body"] = {
+    status: "PARTIAL",
+    coverage: { requested: 35, completed: 25, failed: 10 },
+    limitations: ["Usable body content returned for 25 of 35 requested pages"],
+  };
+  input.referenceIndex["capability:content.body"] = {
+    kind: "capability",
+    path: "capabilityContext.capabilities.content.body",
+  };
+
+  const output = validOutput();
+  output.funnelOpportunities.consideration[0].rationale = atom(
+    "This governed consideration-stage opportunity is supported as an opportunity, not as evidence that an equivalent current asset is absent.",
+    ["capability:content.body"],
+    "OPPORTUNITY",
+  );
+  const result = validateWriterOutput(output, { writerInput: input, expectedPassNumber: 1 });
+  assert.deepEqual(result, { valid: true, errors: [] });
+});
+
+test("PDV5-WRITER-OUT-01C: PARTIAL evidence still rejects unqualified absence", () => {
+  const input = writerInput();
+  input.capabilityContext.capabilities["content.body"] = {
+    status: "PARTIAL",
+    coverage: { requested: 35, completed: 25, failed: 10 },
+    limitations: ["Usable body content returned for 25 of 35 requested pages"],
+  };
+  input.referenceIndex["capability:content.body"] = {
+    kind: "capability",
+    path: "capabilityContext.capabilities.content.body",
+  };
+
+  const unsupported = validOutput();
+  unsupported.funnelOpportunities.consideration[0].rationale = atom(
+    "The equivalent current asset is absent from the site.",
+    ["capability:content.body"],
+    "OPPORTUNITY",
+  );
+  const result = validateWriterOutput(unsupported, { writerInput: input, expectedPassNumber: 1 });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /converts PARTIAL evidence into an unqualified absence claim/);
+});
+
 test("WRITER-OUT-05: funnel is bounded to at most three ideas per stage", () => {
   const output = validOutput();
   output.funnelOpportunities.awareness = [1, 2, 3, 4].map((n) => ({
