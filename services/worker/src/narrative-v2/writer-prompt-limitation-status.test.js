@@ -81,3 +81,9 @@ test("WRITER-PROMPT-05: conversion-path clarity cannot be read as measured compl
   });
   assertConversionPathAuthorityRule(revisionPrompt);
 });
+
+test("WRITER-PROMPT-06: performance implications remain bounded in decision labels", () => {
+  const prompt = buildWriterPrompt({ writerInput, passNumber: 1 });
+  assert.match(prompt, /name the measured technical condition/);
+  assert.match(prompt, /Never present mobile friction as an established observed condition/);
+});
