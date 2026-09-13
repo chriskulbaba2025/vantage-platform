@@ -235,6 +235,92 @@ function canonicalReference(record, label = "View canonical detail") {
   return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)} (${e(record.solutionId)})</a>`;
 }
 
+function clientJourneyReference(record, label) {
+  return `<a class="canonical-solution-reference" href="#priority-fixes"${record ? ` data-solution-id="${e(record.solutionId)}"` : ""}>${e(label)}</a>`;
+}
+
+function clientJourneyStep(pathState, index) {
+  const steps = pathState === "clear"
+    ? [
+        ["Reach the right page", "Visitors can get to the pages that explain the offer."],
+        ["See what to do next", "The pages provide a clear next step."],
+        ["Move toward action", "We did not find a major problem blocking that path."],
+      ]
+    : pathState === "weak"
+      ? [
+          ["Reach the right page", "Visitors can reach the pages reviewed in this audit."],
+          ["See what to do next", "A next step is visible, but the route still needs attention."],
+          ["Move toward action", "The audit found issues that may slow movement toward action."],
+        ]
+      : [
+          ["Reach the right page", "The pages reviewed in this audit show part of the route."],
+          ["See what to do next", "Some next-step evidence is available, but the full route is not known."],
+          ["Move toward action", "The audit cannot confirm the full path from the evidence available."],
+        ];
+  return steps[index];
+}
+
+function clientJourneyIssue(issue, solution) {
+  if (issue === "performance") {
+    return {
+      title: "The page can feel slow when someone first arrives.",
+      meaning: "The route itself is clear, but slow loading can interrupt the experience before a visitor has seen the main content. That may make the site feel harder to use than it really is.",
+      next: "Fix the speed issue listed in Priority Fixes, then test the same page again.",
+      reference: clientJourneyReference(solution, "See Priority Fixes"),
+    };
+  }
+  if (issue === "buyer-questions") {
+    return {
+      title: "Some buyers may still have questions.",
+      meaning: "People may understand what the business offers but still need answers before they are ready to contact someone. Questions about cost, process, timing, or what happens next can make people hesitate.",
+      next: "Add the most useful answers where visitors are making the decision.",
+      reference: `${clientJourneyReference(solution, "See Priority Fixes")} ${clientJourneyReference(solution, "See Content Opportunities")}`,
+    };
+  }
+  return null;
+}
+
+function clientJourneyTakeaway(pathState) {
+  if (pathState === "clear") {
+    return "The basic journey does not need to be rebuilt. The better opportunity is to remove small points of friction so people can move through the site with less hesitation.";
+  }
+  if (pathState === "weak") {
+    return "The journey needs focused improvements before it can move visitors toward action with less friction. Start with the issues called out above and retest the affected pages.";
+  }
+  return "The available evidence does not show enough of the journey to decide whether it needs a rebuild. Review the missing path evidence before making that decision.";
+}
+
+function clientJourneySupport({ findingIds, trustBand, solutions }) {
+  const cards = [];
+  if (findingIds.has("VAN-CONTENT-002")) {
+    cards.push({
+      title: "Clear answers",
+      meaning: "Clear answers help people feel ready to take the next step.",
+      cta: "See Content Opportunities",
+      target: "#content-ideas",
+      solution: solutions.get("VAN-CONTENT-002"),
+    });
+  }
+  if (trustBand) {
+    cards.push({
+      title: "Trust signals",
+      meaning: "Trust signals help reduce doubt before someone contacts the business.",
+      cta: "See Trust & Credibility",
+      target: "#trust-eeat",
+    });
+  }
+  if (findingIds.has("VAN-PERF-001")) {
+    cards.push({
+      title: "Fast pages",
+      meaning: "Fast pages help keep people moving without interruption.",
+      cta: "See Priority Fixes",
+      target: "#priority-fixes",
+      solution: solutions.get("VAN-PERF-001"),
+    });
+  }
+  return cards;
+}
+
 function executivePriorityKind(record) {
   const key = `${String(record?.ruleId || "")} ${String(record?.failureMode || "")} ${String(record?.problem || "")}`.toUpperCase();
   if (key.includes("VAN-PERF-001") || key.includes("SLOW-LARGEST-CONTENTFUL-PAINT")) return "performance";
@@ -969,7 +1055,7 @@ function legacyConversionPathSection(model) {
   </section>`;
 }
 
-function conversionPathSection(model) {
+function conversionPathSectionLegacy(model) {
   const canonical = canonicalSolutionContext(model);
   const paths = Array.isArray(model.conversionPaths) ? model.conversionPaths : [];
   const trustBand = model.bands?.trust;
@@ -1103,6 +1189,93 @@ function conversionPathSection(model) {
     <div class="conversion-journey-takeaway"><strong>Conversion takeaway</strong><p>The assessed route is described above using the available evidence. Unassessed behavior and outcomes remain outside this report.</p></div>
     ${journeyBridge}
     <div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>This assessment does not measure completed enquiries, CTA click-through rate, form completion rate, abandonment, scroll depth, or behavior on unassessed pages.</p></div>
+  </section>`;
+}
+
+function conversionPathSection(model) {
+  const canonical = canonicalSolutionContext(model);
+  const paths = Array.isArray(model.conversionPaths) ? model.conversionPaths : [];
+  const trustBand = model.bands?.trust;
+  const limitation = "We can see whether the website gives people a clear path toward action. We cannot tell from this audit how many people clicked a button, completed a form, left a page, or stopped partway through the journey. Those questions need website analytics or other behavior data.";
+  if (paths.length === 0) {
+    return `<section id="paths" class="card">
+      <p class="muted small">Conversion Journey</p>
+      <h2>Can visitors move from interest to action?</h2>
+      <p class="conversion-journey-verdict">We do not have enough evidence to confirm the full path from interest to action.</p>
+      <div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
+    </section>`;
+  }
+
+  const clearCount = paths.filter((path) => path.status === "Clear").length;
+  const weakCount = paths.filter((path) => path.status === "Weak").length;
+  const pathState = clearCount === paths.length ? "clear" : weakCount > 0 ? "weak" : "limited";
+  const findingIds = new Set((model.findings || []).map((finding) => finding.ruleId || finding.id));
+  const solutionForRule = (ruleId) => {
+    const finding = (model.findings || []).find((item) => (item.ruleId || item.id) === ruleId);
+    return finding ? canonical.byFindingId.get(finding.findingId) : null;
+  };
+  const verdict = pathState === "clear"
+    ? "The main path is clear. Visitors can reach the important pages, see a next step, and move toward contacting the business. The biggest opportunities are making the experience faster and answering more questions before people are ready to act."
+    : pathState === "weak"
+      ? "The path is visible, but some issues may slow visitors before they are ready to act."
+      : "The available evidence does not show enough of the journey to confirm a clear route.";
+  const journeySteps = [0, 1, 2].map((index) => clientJourneyStep(pathState, index));
+  const journeyVisual = `<div class="conversion-journey-visual" role="img" aria-label="Three-step conversion journey">
+    <div class="conversion-journey-steps">${journeySteps.map(([title, description], index) => `<div class="conversion-journey-step">
+      <span class="conversion-journey-step-number">${index + 1}</span>
+      <h3>${e(title)}</h3>
+      <p>${e(description)}</p>
+    </div>`).join("")}</div>
+  </div>`;
+
+  const workingCopy = pathState === "clear"
+    ? "Visitors can reach the important pages and find a visible next step. We did not find a major problem blocking that path."
+    : pathState === "weak"
+      ? "The path is visible, but the issues below may make it harder for visitors to keep moving toward action."
+      : "Only part of the journey is shown by the evidence reviewed, so this conclusion is limited.";
+  const momentumCards = [];
+  if (findingIds.has("VAN-PERF-001")) {
+    const issue = clientJourneyIssue("performance", solutionForRule("VAN-PERF-001"));
+    if (issue) momentumCards.push(issue);
+  }
+  if (findingIds.has("VAN-CONTENT-002")) {
+    const issue = clientJourneyIssue("buyer-questions", solutionForRule("VAN-CONTENT-002"));
+    if (issue) momentumCards.push(issue);
+  }
+  const momentumSection = momentumCards.length
+    ? `<h3>Where visitors may lose momentum</h3><div class="conversion-journey-card-grid">${momentumCards.map((card) => `<article class="conversion-journey-detail-card">
+      <h4>${e(card.title)}</h4>
+      <p>${e(card.meaning)}</p>
+      <p><strong>What to do next:</strong> ${e(card.next)}</p>
+      <p>${card.reference}</p>
+    </article>`).join("")}</div>`
+    : "";
+  const solutions = new Map([
+    ["VAN-PERF-001", solutionForRule("VAN-PERF-001")],
+    ["VAN-CONTENT-002", solutionForRule("VAN-CONTENT-002")],
+  ]);
+  const bridgeCards = clientJourneySupport({ findingIds, trustBand, solutions });
+  const journeyBridge = bridgeCards.length
+    ? `<h3>What helps this journey?</h3><div class="conversion-journey-bridge-grid">${bridgeCards.map((card) => `<article class="conversion-journey-bridge-card">
+      <h4>${e(card.title)}</h4>
+      <p>${e(card.meaning)}</p>
+      <a class="conversion-journey-bridge-link" href="${e(card.target)}"${card.solution ? ` data-solution-id="${e(card.solution.solutionId)}"` : ""}>${e(card.cta)}</a>
+    </article>`).join("")}</div>`
+    : "";
+
+  return `<section id="paths" class="card">
+    <p class="muted small">Conversion Journey</p>
+    <h2>Can visitors move from interest to action?</h2>
+    <p class="conversion-journey-verdict">${e(verdict)}</p>
+    <h3>How the journey works</h3>
+    ${journeyVisual}
+    <h3>Where the journey is strong</h3>
+    <div class="conversion-journey-strength"><p>${e(workingCopy)}</p></div>
+    ${momentumSection}
+    <h3>What this means for conversion</h3>
+    <div class="conversion-journey-takeaway"><p>${e(clientJourneyTakeaway(pathState))}</p></div>
+    ${journeyBridge}
+    <div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
   </section>`;
 }
 

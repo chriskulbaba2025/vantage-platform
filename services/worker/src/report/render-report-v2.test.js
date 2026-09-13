@@ -206,8 +206,8 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   assert.match(html, /Evidence capabilities/);
   // CRIT 8a — conversion-path architecture + competitive context are part
   // of the governed section set (rendered from the model, never invented).
-  assert.match(html, /Can visitors move easily from interest to action\?/);
-  assert.match(html, /The assessed path to action is clear, but there are opportunities to make that journey faster and more reassuring\.|The assessed path needs attention before it can be described as clear\.|The available path evidence is incomplete, so a clear route cannot be confirmed\./);
+  assert.match(html, /Can visitors move from interest to action\?/);
+  assert.match(html, /The main path is clear\.|The path is visible, but some issues may slow visitors before they are ready to act\.|The available evidence does not show enough of the journey to confirm a clear route\./);
   assert.match(html, /Competitive context/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
@@ -269,7 +269,7 @@ test("P9: conversion journey visual presents three complete client stages", () =
   const html = renderReportV2(fixture);
   assert.match(html, /class="conversion-journey-visual"/);
   assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 3);
-  for (const label of ["Reach the key pages", "See a clear next step", "Move toward action"]) assert.match(html, new RegExp(label));
+  for (const label of ["Reach the right page", "See what to do next", "Move toward action"]) assert.match(html, new RegExp(label));
   assert.doesNotMatch(html, /Internal stage one|Internal stage two|Internal stage three/);
 });
 
@@ -322,28 +322,30 @@ test("S03: conversion journey tells a bounded CRO story", () => {
   ];
   const html = renderReportV2(fixture);
   for (const text of [
-    "Reach the key pages",
-    "See a clear next step",
+    "Reach the right page",
+    "See what to do next",
     "Move toward action",
     "Where the journey is strong",
     "Where visitors may lose momentum",
     "What this means for conversion",
-     "Canonical issues affecting this journey",
-    "Conversion takeaway",
-     "The assessed route is described above using the available evidence",
+    "The basic journey does not need to be rebuilt",
     "What we could not determine",
-    "completed enquiries",
+    "completed a form",
   ]) assert.match(html, new RegExp(text));
-  assert.doesNotMatch(html, /Main content takes too long to appear on mobile\.|Buyer-question content was not found on the pages we could assess\./);
+  assert.match(html, /The page can feel slow when someone first arrives\.|Some buyers may still have questions\./);
   assert.equal((html.match(/class="conversion-journey-bridge-card"/g) || []).length, 3);
-  assert.match(html, /What supports this journey\?/);
-  assert.match(html, /Content that answers buyer questions/);
+  assert.match(html, /What helps this journey\?/);
+  assert.match(html, /Clear answers/);
   assert.match(html, /href="#content-ideas"/);
-  assert.match(html, /Trust that reduces hesitation/);
+  assert.match(html, /Trust signals/);
   assert.match(html, /href="#trust-eeat"/);
-  assert.match(html, /Performance that keeps momentum/);
+  assert.match(html, /Fast pages/);
   assert.match(html, /href="#priority-fixes"/);
-  assert.doesNotMatch(html, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
+  const page3 = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
+  const page3Text = page3.replace(/<[^>]+>/g, " ");
+  assert.doesNotMatch(page3Text, /SOL-[A-Z0-9-]+|View canonical detail|governed|canonical|client remediation|material route blocker|assessed scope/i);
+  assert.match(page3, /data-solution-id="[^"]+"/);
+  assert.doesNotMatch(page3, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
 });
 
 test("WP-G-03: no invented evidence — every displayed ruleId exists in the model", () => {
