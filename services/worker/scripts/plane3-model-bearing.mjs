@@ -29,6 +29,7 @@ import {
   validateWriterOutput,
 } from "../src/narrative-v2/writer-output.js";
 import { buildV2Model } from "../src/narrative-v2/production-path.js";
+import { buildWriterPrompt } from "../src/narrative-v2/writer-prompt.js";
 import { renderGovernedNarrativeReportV2 } from "../src/report/render-narrative-v2.js";
 import { REPORT_V2_VIEWER_VERSION } from "../src/report/render-report-v2.js";
 import { runFinalizationGate } from "../src/scoring/report-finalization-gate.js";
@@ -554,7 +555,14 @@ export async function runControlledSample({ sample, artifacts, outputRoot, write
     }
   };
   if (sample.judgeEnabled === false) {
-    const output = await wrappedWriter({ writerInput: artifacts.writerInput.value, passNumber: 1 });
+    const output = await wrappedWriter({
+      writerInput: artifacts.writerInput.value,
+      passNumber: 1,
+      prompt: buildWriterPrompt({
+        writerInput: artifacts.writerInput.value,
+        passNumber: 1,
+      }),
+    });
     const validation = validateWriterOutput(output, { writerInput: artifacts.writerInput.value, expectedPassNumber: 1 });
     const record = {
       harnessVersion: HARNESS_VERSION,

@@ -351,6 +351,26 @@ test("LIVE-BIND-04: a reserved failed provider call is never silently retried", 
   assert.equal(result.actualCost, null);
 });
 
+test("LIVE-BIND-04A: missing governed prompt fails explicitly before hashing or network", async () => {
+  const artifactStore = createMemoryArtifactStore();
+  let calls = 0;
+  const binding = createNarrativeV2LiveBinding({
+    env: baseEnv(),
+    artifactStore,
+    clock,
+    fetchImpl: async () => {
+      calls += 1;
+      return responseFor(validWriterOutput(1));
+    },
+  });
+  binding.registerAuditScope(SCOPE);
+  await assert.rejects(
+    () => binding.writerExecutor({ writerInput: writerInput(), passNumber: 1 }),
+    /request missing governed prompt before provider execution/,
+  );
+  assert.equal(calls, 0);
+});
+
 test("LIVE-BIND-05: token ceiling rejects before reservation and before network", async () => {
   const artifactStore = createMemoryArtifactStore();
   let calls = 0;

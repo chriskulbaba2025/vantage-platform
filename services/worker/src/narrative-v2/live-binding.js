@@ -1481,6 +1481,11 @@ export function createNarrativeV2LiveBinding({
     writerInput = null,
     previousOutput = null,
   }) {
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      throw new Error(
+        `Narrative v2 ${role} request missing governed prompt before provider execution`,
+      );
+    }
     const promptSha256 = sha256(prompt);
     // A final-pass restart may occur after Writer3 returned and validated
     // successfully but before Judge3 could be reserved. Reuse that exact

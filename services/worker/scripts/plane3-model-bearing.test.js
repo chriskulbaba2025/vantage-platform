@@ -162,6 +162,30 @@ test("PLANE34-PATH: controlled Writer/Judge run uses production orchestration, v
   assert.ok((await readFile(result.manifest.path, "utf8")).includes("inputArtifactHashes"));
 });
 
+test("PLANE34-P04: writer-only samples receive the governed Writer prompt", async () => {
+  const frozen = await renderableArtifacts();
+  const root = await outputRoot();
+  const writerOnlySample = { ...sample, sampleId: "controlled-tbk-writer-only", judgeEnabled: false };
+  let observedPrompt;
+  const result = await runControlledSample({
+    sample: writerOnlySample,
+    artifacts: frozen,
+    outputRoot: root,
+    writerExecutor: (request) => {
+      observedPrompt = request.prompt;
+      assert.match(request.prompt, /AUTHORITATIVE RULES/);
+      return buildControlledWriterOutput(request);
+    },
+    judgeExecutor: () => {
+      throw new Error("writer-only sample must not execute Judge");
+    },
+  });
+  assert.equal(typeof observedPrompt, "string");
+  assert.ok(observedPrompt.length > 0);
+  assert.equal(result.record.status, "WRITER_VALIDATED");
+  assert.equal(result.record.judgeCalls, 0);
+});
+
 test("PLANE34-PERSISTENCE: raw controlled responses and hashes are written outside the repository", async () => {
   const frozen = await renderableArtifacts();
   const root = await outputRoot();
