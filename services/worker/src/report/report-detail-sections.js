@@ -450,6 +450,9 @@ export function eeatSection(model) {
     : trustPartial
       ? "Trust-proof content coverage was incomplete. Observed proof is retained, but unobserved proof is not treated as established absence."
       : "Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.";
+  const proofAction = trustAssessed && foundSignals.length
+    ? `<h3>How to use the proof you already have</h3><p>The site already has useful types of trust proof. The next action is not automatically to create more proof. Check whether the right proof appears close enough to the decision it supports.</p><ul class="small"><li>Check relevant case studies or outcomes near service decisions.</li><li>Check testimonials or client validation near commitment points.</li><li>Check credentials where expertise matters.</li><li>Check pricing or investment context before a buyer has to ask.</li><li>Check policies, terms, or other reassurance near higher-risk actions.</li></ul><p class="small">PRYSM observed these trust assets, but did not establish their placement across every important conversion page. After any change, review the important decision pages again and confirm that the related proof is easy to find and understand.</p>`
+    : `<h3>How to use the proof you already have</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. Check which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Review the relevant pages again before deciding what to add or change.</p>`;
 
   const rendered = `
   <section id="eeat" class="card" data-supporting-section="trust-evidence">
@@ -514,7 +517,7 @@ export function eeatSection(model) {
     .replace(/<p class="muted small">Trust, E-E-A-T[\s\S]*?<\/p>/, "")
     .replace(/<h3>How confidence should build<\/h3>[\s\S]*?<h3>Where confidence breaks down<\/h3>/, "<h3>Where confidence may still need strengthening</h3><p>No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.</p>")
     .replace(/<p>No checked trust-proof signal was absent from the assessed content\.<\/p>/, "")
-    .replace(/<h3>Proof already available but underused<\/h3>/, "<h3>Proof already available</h3>")
+    .replace(/<h3>Proof already available but underused<\/h3>[\s\S]*?<h3>Material trust findings<\/h3>/, `${proofAction}<h3>Material trust findings</h3>`)
     + `<section id="eeat-detail" class="card" data-supporting-section="trust-evidence"><p class="muted small">Supporting Detail</p><h2>E-E-A-T Trust Readiness Detail</h2><details class="supporting-detail-disclosure"><summary>Show detailed trust dimensions</summary><h3>Governed E-E-A-T dimensions</h3><div class="pillar-grid">${dimensionCards}</div><h3>Detailed trust interpretation</h3><p>${e(verdict)}</p>${findingBlock}</details></section>`;
 }
 

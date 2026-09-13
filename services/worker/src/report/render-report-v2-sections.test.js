@@ -403,6 +403,11 @@ test("TRUST-WORDING-01: positive trust score explains absence of a Priority Fix"
   model.scores.trustEeatDimension = 75;
   const html = await render(model);
   assert.match(html, /Trust is a relative strength at 75\/100\. No trust issue crossed the Priority Fix threshold\./);
+  const trustPage = html.slice(html.indexOf('<section id="eeat"'), html.indexOf('<section id="eeat-detail"'));
+  assert.match(trustPage, /How to use the proof you already have/);
+  assert.match(trustPage, /Check whether the right proof appears close enough to the decision it supports/);
+  assert.match(trustPage, /PRYSM observed these trust assets, but did not establish their placement across every important conversion page/);
+  assert.doesNotMatch(trustPage, /Proof already available but underused|Detected proof is listed here as an available asset/);
 });
 
 test("SUPPORTING-DETAIL-PERFORMANCE-02: raw performance diagnostics stay behind disclosure", async () => {
