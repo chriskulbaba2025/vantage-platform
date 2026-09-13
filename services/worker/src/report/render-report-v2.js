@@ -1517,7 +1517,7 @@ function competitorSection(model) {
   </section>`;
 }
 
-function competitorSectionClient(model) {
+function competitorSectionClientLegacy(model) {
   const comparisons = model.competitors?.comparisons || [];
   const assessed = comparisons.filter(
     (comparison) => comparison?.status === SOURCE_STATUS.AVAILABLE,
@@ -1610,6 +1610,269 @@ function competitorSectionClient(model) {
     ${qualifiedCandidates.length || excludedCandidates.length ? `<p class="muted small">${e(qualifiedCandidates.length)} qualified candidate(s) · ${e(excludedCandidates.length)} excluded candidate(s).</p>` : ""}
     <h3>Evidence limitations</h3>
     ${limitations.length ? `<ul class="small">${limitations.map((l) => `<li>${e(l)}</li>`).join("")}</ul>` : `<p class="small">This comparison covers observable conversion-readiness signals only. It does not claim traffic, rankings, backlinks, market share, domain authority, or causal ranking advantage.</p>`}
+  </section>`;
+}
+
+function competitorSectionClientBasic(model) {
+  const comparisons = model.competitors?.comparisons || [];
+  const assessed = comparisons.filter((comparison) => comparison?.status === SOURCE_STATUS.AVAILABLE);
+  const opportunityData = model.competitors?.opportunities || {};
+  const gaps = opportunityData.gaps || [];
+  const limitations = opportunityData.limitations || [];
+  const sourceStatus = model.sourceStatus?.competitors || SOURCE_STATUS.NOT_APPLICABLE;
+  const unavailableExplanation = {
+    [SOURCE_STATUS.FAILED]: "Competitor evidence collection was attempted but failed, so no directly comparable difference can be concluded.",
+    [SOURCE_STATUS.NOT_CONNECTED]: "The competitor evidence source was not connected, so no directly comparable difference can be concluded.",
+    [SOURCE_STATUS.BLOCKED]: "Competitor evidence collection was blocked, so no directly comparable difference can be concluded.",
+    [SOURCE_STATUS.PARTIAL]: "Competitor evidence collection was partial, so no directly comparable difference can be concluded.",
+    [SOURCE_STATUS.NOT_APPLICABLE]: "Competitor analysis was not applicable for this audit, so no directly comparable difference can be concluded.",
+  }[sourceStatus] || "No directly comparable named competitor evidence was available, so no competitive difference can be concluded.";
+
+  if (!assessed.length) {
+    return `<section id="competitors" class="card">
+      <p class="muted small">Competitor Comparison</p>
+      <h2>How does your website compare with the competitors buyers are likely to consider?</h2>
+      <h3>What the comparison shows</h3>
+      <p>${e(unavailableExplanation)}</p>
+      <h3>Who was compared</h3>
+      <p class="small">No directly comparable named competitor evidence was available for this audit.</p>
+      <h3>What this means for the client</h3>
+      <p class="small">Use the site's own evidence for decisions; this comparison does not establish a competitive disadvantage.</p>
+      ${limitations.length ? `<p class="small"><strong>What this comparison cannot tell us:</strong> ${e(limitations.join(" "))}</p>` : ""}
+    </section>
+    <section id="competitor-detail" class="card">
+      <p class="muted small">Supporting Detail</p>
+      <h2>Competitive context</h2>
+      <p class="small">${e(unavailableExplanation)}</p>
+    </section>`;
+  }
+
+  const sourceRows = assessed.map((comparison) => `<tr><td class="small">${e(comparison.name || comparison.url || "")}</td><td class="small">${e(comparison.url || "")}</td><td class="small">We were able to review visible website signals such as offer clarity, trust, and next-step presentation.</td></tr>`).join("");
+  const businessName = model.input?.businessName || model.businessName || "your website";
+  const businessSubject = businessName === "your website" ? "Your website" : businessName;
+  const competitorNames = assessed.map((comparison) => comparison.name || comparison.url || "the named competitor");
+  const competitorLabel = competitorNames.length === 1 ? competitorNames[0] : competitorNames.length === 2 ? `${competitorNames[0]} and ${competitorNames[1]}` : `${competitorNames.slice(0, -1).join(", ")}, and ${competitorNames[competitorNames.length - 1]}`;
+  const comparisonAreas = [
+    ["offerClarity", "Offer clarity", "How clearly the website explains what the business does and who it is for."],
+    ["trustProof", "Trust", "How the website helps a visitor feel confident in the business."],
+    ["ctaClarity", "Next step", "How easy it is to understand what to do next."],
+    ["pathClarity", "Decision support", "How well the site helps buyers answer questions before taking action."],
+  ].filter(([key]) => assessed.some((comparison) => Object.prototype.hasOwnProperty.call(comparison, key))).map(([, label, meaning]) => [label, meaning]);
+  const areaList = comparisonAreas.map(([label, meaning]) => `<li><strong>${e(label)}:</strong> ${e(meaning)}</li>`).join("");
+  const directAnswer = gaps.length
+    ? `We found a meaningful difference in ${gaps.length} area${gaps.length === 1 ? "" : "s"} within the named comparison set. This does not show that one business is better in every way.`
+    : `We did not find a strong enough difference to say ${businessName} is clearly behind ${competitorNames.length === 2 ? "either competitor" : "the named competitors"} in the areas reviewed.`;
+  const comparisonSummary = gaps.length
+    ? "The competitors use different ways to explain their services, build trust, and guide visitors toward action. The specific differences found are shown below."
+    : `The competitors use different ways to explain their services, build trust, and guide visitors toward action. We did not find a large enough difference in the areas reviewed to say that ${businessName} has a clear competitive weakness.`;
+  const gapList = gaps.length
+    ? gaps.slice(0, 10).map((gap) => {
+      const heading = (gap.observedCompetitorCoverage || []).join(", ") || gap.competitorDomain || gap.competitorPage || "A difference in the reviewed experience";
+      return `<article class="competitor-gap"><h4>${e(heading)}</h4><p><strong>What we found:</strong> ${e(gap.conversionRelevance || "The reviewed competitor showed a different visible experience in this area.")}</p><p><strong>What to review:</strong> Compare this area with the related pages and findings elsewhere in the report.</p></article>`;
+    }).join("")
+    : "<p>We did not find a difference strong enough to call out as a clear competitive disadvantage.</p>";
+  const opening = `We compared ${businessName} with ${competitorLabel} using the website signals available in this audit. We looked at things buyers can see and use, such as how clearly the offer is explained, how trust is built, and how easy it is to find the next step.`;
+  const clientTakeaway = gaps.length
+    ? "The named competitor difference is a useful point to review, but it does not mean the competitor leads in every area. Use the related findings and Priority Fixes to decide what deserves attention."
+    : `${businessSubject} does not appear clearly behind ${competitorNames.length === 2 ? "these two competitors" : "the named competitors"} in the conversion signals we reviewed. That does not mean the websites are equal in every way, and it does not mean ${businessName} leads the market. The useful takeaway is that the biggest opportunities are the specific issues already identified in Priority Fixes, rather than trying to copy competitors simply because they are competitors.`;
+
+  return `<section id="competitors" class="card">
+    <p class="muted small">Competitor Comparison</p>
+    <h2>How does your website compare with the competitors buyers are likely to consider?</h2>
+    <p class="small">${e(opening)}</p>
+    <p class="competitor-verdict">${e(directAnswer)}</p>
+    <h3>Who was compared</h3>
+    <div class="table-wrap"><table><thead><tr><th>Competitor</th><th>URL</th><th>What we could review</th></tr></thead><tbody>${sourceRows}</tbody></table></div>
+    <p class="muted small">Only the named competitors reviewed for this audit are shown. This comparison does not support a market-wide conclusion.</p>
+    <h3>What we compared</h3>
+    <ul class="small">${areaList}</ul>
+    <h3>What the comparison shows</h3>
+    <p class="small">${e(comparisonSummary)}</p>
+    <p class="small">${e(gaps.length ? "The useful next step is to review the specific difference below alongside the related findings in this report." : "That is useful because it means the priority is not to copy a competitor or rebuild the site just to match them. The better approach is to improve the specific issues already identified elsewhere in this report.")}</p>
+    <h3>Where meaningful differences were found</h3>
+    ${gaps.length ? `<div>${gapList}</div>` : gapList}
+    <h3>What this means for the client</h3>
+    <p class="small">${e(clientTakeaway)}</p>
+    <p class="small"><a href="#priority-fixes">See Priority Fixes</a></p>
+    <h3>What this comparison cannot tell us</h3>
+    <p class="small">This comparison covers only the named competitors and the website signals we could review. It does not tell us who gets more traffic, ranks higher in search, has more backlinks, has greater market share, or produces better business results. Those questions need other data.</p>
+  </section>
+  <section id="competitor-detail" class="card" data-supporting-section="competitive-trust-evidence">
+    <p class="muted small">Supporting Detail</p>
+    <h2>Competitive context</h2>
+    <p class="small">${e(directAnswer)}</p>
+    <h3>What we compared</h3>
+    <ul class="small">${areaList}</ul>
+    <h3>What this comparison cannot tell us</h3>
+    <p class="small">This comparison covers only the named competitors and the website signals we could review. It does not tell us who gets more traffic, ranks higher in search, has more backlinks, has greater market share, or produces better business results. Those questions need other data.</p>
+  </section>`;
+}
+
+function competitorSectionClient(model) {
+  const comparisons = model.competitors?.comparisons || [];
+  const assessed = comparisons.filter((comparison) => comparison?.status === SOURCE_STATUS.AVAILABLE);
+  const opportunityData = model.competitors?.opportunities || {};
+  const gaps = opportunityData.gaps || [];
+  const limitations = opportunityData.limitations || [];
+  const sourceStatus = model.sourceStatus?.competitors || SOURCE_STATUS.NOT_APPLICABLE;
+  const businessName = model.input?.businessName || model.businessName || "your website";
+  const businessSubject = businessName === "your website" ? "Your website" : businessName;
+  const unavailableExplanation = {
+    [SOURCE_STATUS.FAILED]: "The competitor review could not be completed, so no clear difference can be concluded.",
+    [SOURCE_STATUS.NOT_CONNECTED]: "Competitor data was not connected, so no clear difference can be concluded.",
+    [SOURCE_STATUS.BLOCKED]: "Competitor data could not be reviewed, so no clear difference can be concluded.",
+    [SOURCE_STATUS.PARTIAL]: "Only part of the competitor review was available, so no clear difference can be concluded.",
+    [SOURCE_STATUS.NOT_APPLICABLE]: "A competitor review was not part of this audit, so no clear difference can be concluded.",
+  }[sourceStatus] || "No usable competitor comparison was available, so no clear difference can be concluded.";
+  const dimensionDefinitions = [
+    ["offerClarity", "Offer clarity", "How clearly the website explains what the business does and who it is for.", "This helps buyers understand whether the service may fit their needs."],
+    ["trustProof", "Trust and proof", "How the website helps a visitor feel confident in the business.", "This may reduce doubt before someone decides what to do next."],
+    ["contentDepth", "Service depth", "How much useful detail the website gives about the service.", "This can help buyers decide whether they have enough information to continue."],
+    ["ctaClarity", "Next-step clarity", "How easy it is to understand what to do next.", "A clear next step can make the route forward easier to follow."],
+    ["pathClarity", "Conversion path", "How clearly the website guides someone toward action.", "A clear route may help buyers move from interest to a decision."],
+  ];
+  const availableDimensions = dimensionDefinitions.filter(([key]) => assessed.some((comparison) => Object.prototype.hasOwnProperty.call(comparison, key)));
+  const interpretation = (() => {
+    try { return interpretationFor(model); } catch { return { constructs: {} }; }
+  })();
+  const site = model.evidence?.site || {};
+  const ownValues = {
+    offerClarity: interpretation.constructs?.offerClarity,
+    trustProof: interpretation.constructs?.trustProof,
+    contentDepth: site.pageCount ? `${site.pageCount} page(s) reviewed` : undefined,
+    ctaClarity: interpretation.constructs?.ctaClarity,
+    pathClarity: interpretation.constructs?.conversionPathClarity,
+  };
+  const valueText = (value) => {
+    const text = String(value ?? "").trim();
+    if (!text || /^not assessed|^no .* observed|^unavailable|^unknown/i.test(text)) return "Not enough evidence";
+    if (/^(strong|moderate|limited)$/i.test(text)) return `${text} visible signal`;
+    return text;
+  };
+  const normalizedLevel = (value) => {
+    const text = String(value ?? "").trim().toLowerCase();
+    return ["limited", "moderate", "strong"].includes(text) ? text : null;
+  };
+  const levelRank = { limited: 1, moderate: 2, strong: 3 };
+  const clientCompetitorDisplayName = (comparison) => {
+    const supplied = String(comparison.name || "").trim();
+    const url = String(comparison.url || "").toLowerCase();
+    if (/redrhino|red-rhino\.com/.test(`${supplied.toLowerCase()} ${url}`)) return "RedRhino";
+    if (/zoo media|zoomedia\.ca/.test(`${supplied.toLowerCase()} ${url}`)) return "ZOO Media Group";
+    if (supplied && supplied.length <= 42) return supplied;
+    try { return new URL(comparison.url).hostname.replace(/^www\./i, ""); } catch { return supplied || "Named competitor"; }
+  };
+  const competitorNames = assessed.map(clientCompetitorDisplayName);
+  const competitorLabel = competitorNames.length === 1
+    ? competitorNames[0]
+    : competitorNames.length === 2
+      ? `${competitorNames[0]} and ${competitorNames[1]}`
+      : `${competitorNames.slice(0, -1).join(", ")}, and ${competitorNames[competitorNames.length - 1]}`;
+  const sourceRows = assessed.map((comparison) => `<tr><td class="small">${e(clientCompetitorDisplayName(comparison))}</td><td class="small">${e(comparison.url || "")}</td><td class="small">We could review how the site explains its offer, builds trust, and guides people toward a next step.</td></tr>`).join("");
+  const linkFor = (key) => {
+    if (["trustProof"].includes(key)) return '<a href="#eeat">See Trust &amp; Credibility</a>';
+    if (["offerClarity", "contentDepth", "pathClarity"].includes(key)) return '<a href="#content-ideas">See Content Opportunities</a>';
+    return '<a href="#priority-fixes">See Priority Fixes</a>';
+  };
+  const rows = availableDimensions.map(([key, label, meaning]) => {
+    const competitorCells = assessed.map((comparison) => `<td>${e(valueText(comparison[key]))}</td>`).join("");
+    return `<tr><th scope="row">${e(label)}</th><td>${e(valueText(ownValues[key]))}</td>${competitorCells}<td class="small">${e(meaning)}</td></tr>`;
+  }).join("");
+  const differences = availableDimensions.filter(([key]) => {
+    const values = assessed.map((comparison) => normalizedLevel(comparison[key])).filter(Boolean);
+    return new Set(values).size > 1;
+  }).slice(0, 5);
+  const parity = availableDimensions.filter(([key]) => {
+    const values = assessed.map((comparison) => normalizedLevel(comparison[key])).filter(Boolean);
+    return values.length === assessed.length && values.length > 1 && new Set(values).size === 1;
+  }).slice(0, 5);
+  const relativeStrengths = availableDimensions.flatMap(([key, label]) => {
+    const ownLevel = normalizedLevel(ownValues[key]);
+    if (!ownLevel) return [];
+    const levels = assessed.map((comparison) => normalizedLevel(comparison[key])).filter(Boolean);
+    if (!levels.length || !levels.every((level) => levelRank[ownLevel] >= levelRank[level])) return [];
+    return [{ key, label, state: levels.every((level) => levelRank[ownLevel] === levelRank[level]) ? "Similar" : "Stronger" }];
+  }).slice(0, 5);
+  const competitorAdvantages = availableDimensions.flatMap(([key, label]) => {
+    const ownLevel = normalizedLevel(ownValues[key]);
+    if (!ownLevel) return [];
+    return assessed.filter((comparison) => {
+      const level = normalizedLevel(comparison[key]);
+      return level && levelRank[level] > levelRank[ownLevel];
+    }).map((comparison) => ({ key, label, name: clientCompetitorDisplayName(comparison) }));
+  }).slice(0, 5);
+  const intro = `We compared ${businessName} with ${competitorLabel} using buyer-facing website signals available in this audit. We looked at how clearly each site explains its offer, builds trust, gives useful detail, and guides people toward action.`;
+  const overall = gaps.length
+    ? `The comparison shows a meaningful difference in ${gaps.length} area${gaps.length === 1 ? "" : "s"} within this named set. That does not make one site better in every way.`
+    : `We did not find a strong enough overall difference to say ${businessName} is clearly behind ${competitorNames.length === 2 ? "either competitor" : "the named competitors"} in the areas reviewed.`;
+  const safeGapArea = (gap) => (gap.observedCompetitorCoverage || []).join(", ") || gap.competitorDomain || gap.competitorPage || "A buyer-facing area";
+  const gapDifferences = gaps.slice(0, 5).map((gap) => {
+    const area = safeGapArea(gap);
+    return `<article class="competitor-interpretation"><h4>${e(area)}</h4><h5>What we saw</h5><p>The comparison records a meaningful difference in this buyer-facing area within the named set.</p><h5>Why a buyer may care</h5><p>This may change how easily a buyer can understand the offer, feel reassured, or decide what to do next. The comparison alone does not show the full business effect.</p><h5>What to do with this</h5><p>Review the related pages and findings before deciding whether this deserves action. <a href="#priority-fixes">See Priority Fixes</a></p></article>`;
+  }).join("");
+  const importantDifferences = differences.length || gaps.length
+    ? `${differences.map(([key, label, meaning]) => {
+      const observations = assessed.map((comparison, index) => `${competitorNames[index]}: ${valueText(comparison[key])}`).join("; ");
+      const verb = label === "Trust and proof" ? "are" : "is";
+      const action = key === "trustProof"
+        ? "Do not copy a competitor's design. Review what makes the stronger proof easier to see or understand, then compare that with the trust evidence already identified for your own site. Strengthen only the parts that make sense for your business."
+        : "Use this as a review point, not a reason to copy surface design.";
+      return `<article class="competitor-interpretation"><h4>${e(label)} ${verb} not the same across the named sites</h4><h5>What we saw</h5><p>${e(`The reviewed sites show different visible signals for ${label.toLowerCase()}. ${observations}.`)}</p><h5>Why a buyer may care</h5><p>${e(meaning)} Buyers may need different amounts of explanation or reassurance before they feel ready to continue.</p><h5>What to do with this</h5><p>${e(action)} ${linkFor(key)}.</p></article>`;
+    }).join("")}${gapDifferences}`
+    : "<p>We did not find enough evidence to explain a clear competitor difference in the supported areas.</p>";
+  const trustLevels = normalizedLevel(ownValues.trustProof) ? [normalizedLevel(ownValues.trustProof), ...assessed.map((comparison) => normalizedLevel(comparison.trustProof))] : [];
+  const trustPositionSupported = trustLevels.length === assessed.length + 1 && normalizedLevel(ownValues.trustProof) === "moderate" && trustLevels.includes("limited") && trustLevels.includes("strong");
+  const holdingOwn = trustPositionSupported
+    ? "<p>The current data does not support a broad claim that your site is stronger than the named competitors. The clearest supported comparison is trust and proof, where your site sits between the two competitors reviewed.</p>"
+    : relativeStrengths.length
+    ? `<ul>${relativeStrengths.map(({ label, state }) => `<li><strong>${e(label)} — ${e(state)}:</strong> The available values do not show a reason to change this area just to match a competitor.</li>`).join("")}</ul>`
+    : "<p>We did not find enough evidence to claim a clear advantage for your website relative to the named competitors.</p>";
+  const betterExperience = competitorAdvantages.length
+    ? `<ul>${competitorAdvantages.map(({ label, name, key }) => `<li><strong>${e(name)} — ${e(label)}:</strong> ${key === "trustProof" ? e("The site shows a stronger visible trust signal in the available comparison. Review how quickly a visitor can find proof, examples, or reassurance there, then compare that with your own Trust & Credibility findings.") : e("The available values show a stronger visible signal in this area. Review the buyer need behind the difference before deciding whether it matters here.")} ${linkFor(key)}</li>`).join("")}</ul>`
+    : `<p>We did not find a competitor advantage strong enough to justify changing the site simply to match them. ${gaps.length ? "Review the named difference above before deciding whether it deserves action." : "The available comparison does not prove that a competitor creates a better buying experience overall."}</p>`;
+  const standApart = "<p>The comparison does not show a clear market-wide gap, and several areas do not have enough client evidence for a fair side-by-side judgment.</p><p>That still leaves a useful strategic question: where can your site be more helpful to a buyer?</p><p>Use the opportunities already identified in this report—clearer buyer answers, stronger proof, better process information, or an easier next step—to make the buying experience more useful instead of simply matching a competitor. <a href=\"#content-ideas\">See Content Opportunities</a>.</p>";
+  const actionItems = gaps.length
+    ? `<ol><li><strong>IMPROVE:</strong> Review the supported competitor difference and decide whether it affects an important buyer question. ${linkFor("pathClarity")}</li><li><strong>PROTECT:</strong> Keep the parts of the current buying path that the audit already supports until stronger evidence says they should change. <a href="#paths">See Conversion Journey</a></li><li><strong>DIFFERENTIATE:</strong> Use the content plan to make the client's explanation, proof, or process more useful instead of copying surface design. <a href="#content-ideas">See Content Opportunities</a></li></ol>`
+    : `<ol><li><strong>PROTECT:</strong> Keep the parts of the current buying path that the audit already supports. <a href="#paths">See Conversion Journey</a></li><li><strong>IMPROVE:</strong> Address the client's own highest-priority issues instead of rebuilding the site to match a competitor. <a href="#priority-fixes">See Priority Fixes</a></li><li><strong>DIFFERENTIATE:</strong> Make buyer questions, proof, process, or next steps more useful where the report already shows an opportunity. <a href="#content-ideas">See Content Opportunities</a></li><li><strong>IGNORE:</strong> Do not chase differences that were not strong enough to establish a clear disadvantage.</li></ol>`;
+
+  if (!assessed.length) {
+    return `<section id="competitors" class="card"><p class="muted small">Competitor Comparison</p><h2>How does your website compare with the competitors buyers may consider?</h2><h3>Competitive position</h3><p>${e(unavailableExplanation)}</p><h3>Who was compared</h3><p class="small">No named competitor could be included from the available comparison data.</p><h3>Side-by-side buyer experience benchmark</h3><p>Not enough evidence.</p><h3>Where your website is holding its own</h3><p>We did not find enough evidence to claim a clear advantage.</p><h3>Where competitors create a better buying experience</h3><p>Not enough evidence.</p><h3>Where there may be room to stand apart</h3><p>Not enough evidence.</p><h3>What this comparison cannot tell us</h3><p>This comparison could not be completed from the available named competitor evidence.</p></section>`;
+  }
+
+  return `<section id="competitors" class="card">
+    <p class="muted small">Competitor Comparison</p>
+    <h2>How does your website compare with the competitors buyers may consider?</h2>
+    <h3>Competitive position</h3>
+    <p>${e(intro)}</p>
+    <p>${e(overall)}</p>
+    <p>That does not mean the websites are the same. The useful question is where each site makes the buying experience clearer, easier, or more reassuring.</p>
+    <h3>Who was compared</h3>
+    <div class="table-wrap"><table><thead><tr><th>Competitor</th><th>URL</th><th>What we could review</th></tr></thead><tbody>${sourceRows}</tbody></table></div>
+    <p class="muted small">Only the named competitors reviewed for this audit are shown. This comparison does not support a market-wide conclusion.</p>
+    <h3>Side-by-side buyer experience benchmark</h3>
+    <div class="table-wrap"><table><thead><tr><th>Area</th><th>Your website</th>${competitorNames.map((name) => `<th>${e(name)}</th>`).join("")}<th>What this means</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="muted small">The table uses descriptions from the available comparison records. It does not assign scores or a market rank.</p>
+    <p class="small"><strong>Not enough evidence</strong> does not mean the site performed poorly. It means we do not have enough comparable information to make a fair judgment in that area.</p>
+    <h3>Important differences</h3>
+    ${importantDifferences}
+    <h3>Where your website is holding its own</h3>
+    ${holdingOwn}
+    <h3>Where competitors create a better buying experience</h3>
+    ${betterExperience}
+    <h3>Where there may be room to stand apart</h3>
+    ${standApart}
+    <h3>What should you do because of this comparison?</h3>
+    ${actionItems}
+    <h3>What not to copy</h3>
+    <p>Do not change something simply because a competitor does it differently. Competitor presence is context, not proof. Copy useful buyer-experience principles, not surface design, and prioritize changes supported by your own evidence.</p>
+    <h3>What this comparison cannot tell us</h3>
+    <p>This comparison covers only the named competitors and the observable website evidence available. It does not establish traffic, search rankings, backlinks, market share, revenue, conversion rate, or business performance unless another authoritative source provides that data.</p>
+    ${limitations.length ? `<p class="small"><strong>Review limit:</strong> ${e(limitations.join(" "))}</p>` : ""}
+  </section>
+  <section id="competitor-detail" class="card" data-supporting-section="competitive-trust-evidence">
+    <p class="muted small">Supporting Detail</p><h2>Competitive context</h2>
+    <p class="small">${e(overall)}</p>
+    <p class="small">The benchmark above keeps the named competitors, available dimensions, and comparison boundaries visible without adding scores or market claims.</p>
   </section>`;
 }
 

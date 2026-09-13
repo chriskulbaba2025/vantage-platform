@@ -388,6 +388,54 @@ test("P10: content opportunities are presented as an actionable client plan", ()
   assert.ok((page4.match(/<li>/g) || []).length >= 20, "five opportunities retain actionable coverage points");
 });
 
+test("P11: competitor comparison explains the named set without market claims", () => {
+  const fixture = model();
+  fixture.input = { ...fixture.input, businessName: "Example Business" };
+  fixture.sourceStatus = { ...fixture.sourceStatus, competitors: "AVAILABLE" };
+  fixture.competitors = {
+    comparisons: [
+      { name: "Red Example", url: "https://red.example", status: "AVAILABLE", offerClarity: "Clear", trustProof: "Limited", ctaClarity: "Visible", pathClarity: "Clear" },
+      { name: "Blue Example", url: "https://blue.example", status: "AVAILABLE", offerClarity: "Clear", trustProof: "Strong", ctaClarity: "Visible", pathClarity: "Clear" },
+    ],
+    opportunities: { gaps: [], limitations: [] },
+  };
+  const html = renderReportV2(fixture);
+  const page5 = html.slice(html.indexOf('id="competitors"'), html.indexOf('id="eeat"'));
+
+  for (const text of [
+    "How does your website compare with the competitors buyers may consider?",
+    "We compared Example Business with Red Example and Blue Example",
+    "Offer clarity",
+    "Trust",
+    "Next-step clarity",
+    "Conversion path",
+    "Competitive position",
+    "Important differences",
+    "Where your website is holding its own",
+    "Where competitors create a better buying experience",
+    "Where there may be room to stand apart",
+    "What should you do because of this comparison?",
+    "What not to copy",
+    "What this comparison cannot tell us",
+    "See Priority Fixes",
+  ]) assert.match(page5, new RegExp(text.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")), text);
+  for (const url of ["https://red.example", "https://blue.example"]) assert.match(page5, new RegExp(url.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
+  assert.doesNotMatch(page5, /qualified comparative gap|comparative qualification threshold|material competitive gap|client remedy|inferred remediation|governed|assessed scope|conversion-readiness signals|SOL-[A-Z0-9-]+/i);
+  assert.doesNotMatch(page5, /sites are similar|similar in/i);
+  assert.match(page5, /Not enough evidence.*does not mean the site performed poorly/);
+
+  const gapFixture = structuredClone(fixture);
+  gapFixture.competitors.opportunities.gaps = [{
+    observedCompetitorCoverage: ["Clear process guidance"],
+    competitorDomain: "red.example",
+    conversionRelevance: "The competitor explains the next steps more clearly.",
+  }];
+  const gapHtml = renderReportV2(gapFixture);
+  const gapPage = gapHtml.slice(gapHtml.indexOf('id="competitors"'), gapHtml.indexOf('id="eeat"'));
+  assert.match(gapPage, /What we saw|What to do with this/);
+  assert.match(page5, /stronger visible trust signal|Trust and proof are not the same/);
+});
+
 test("WP-G-03: no invented evidence — every displayed ruleId exists in the model", () => {
   const m = model();
   const html = renderReportV2(m);
