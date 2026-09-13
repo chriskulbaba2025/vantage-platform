@@ -752,6 +752,69 @@ function priorityClientCopy(action) {
   };
 }
 
+function page2Kind(record) {
+  const key = `${record.problem || ""} ${record.siteAnchor?.locator || ""}`.toLowerCase();
+  if (/largest contentful paint|\blcp\b|above-fold/.test(key)) return "performance";
+  if (/buyer decision|buyer question|decision-support/.test(key)) return "buyer-decision";
+  if (/structured data|schema/.test(key)) return "structured-data";
+  if (/meta description|search-result description/.test(key)) return "meta-description";
+  if (/heading structure|headings/.test(key)) return "heading-structure";
+  if (/pricing|reassurance|risk/.test(key)) return "reassurance";
+  if (/alternative text|alt text/.test(key)) return "accessibility";
+  return "general";
+}
+
+function page2Title(record) {
+  return ({ performance: "The main content can take too long to appear.", "buyer-decision": "Some buyers may still have questions.", "structured-data": "Search engines could use clearer information about the business.", "meta-description": "Some pages are missing useful search-result descriptions.", "heading-structure": "Some pages could use a clearer heading structure.", reassurance: "Some visitors may need more pricing or reassurance before they act.", accessibility: "Some images may not be clear to everyone." }[page2Kind(record)] || plainLanguage(record.problem || "A page improvement needs attention."));
+}
+
+function page2Found(record) {
+  return ({ performance: "The largest part of the page is taking longer than ideal to load. This can make the page feel slow when someone first arrives.", "buyer-decision": "People may not have all the information they need before they are ready to contact the business.", "structured-data": "We did not detect structured data on the pages reviewed.", "meta-description": "Some reviewed pages do not have a meta description.", "heading-structure": "The heading order on some reviewed pages is not consistent.", reassurance: "People may need more information about cost, risk, or what happens next before they contact the business.", accessibility: "Some meaningful images do not have a short text description on the pages reviewed." }[page2Kind(record)] || plainLanguage(record.problem || "The review found an opportunity to improve the page."));
+}
+
+function page2Why(record) {
+  return ({ performance: "People often decide quickly whether to stay on a page. If the main content takes too long to appear, the site may feel less responsive.", "buyer-decision": "They may want to know how the process works, how long it takes, what it costs, or what happens next. If they cannot find those answers, they may leave and keep looking.", "structured-data": "Structured data helps search engines and other systems understand what the business does and what a page is about. It does not improve conversions by itself.", "meta-description": "A meta description can help explain a page in search results. Without one, the search engine may choose its own text.", "heading-structure": "Clear headings help people scan a page and understand how the information is organized. They can also help search engines understand the page structure.", reassurance: "If visitors cannot find the information they need before contacting the business, they may keep comparing instead of moving forward.", accessibility: "Without a text description, some visitors may miss part of the message in an image." }[page2Kind(record)] || plainLanguage(record.whyItMatters || "This may make it harder for visitors to decide what to do next."));
+}
+
+function page2Action(record) {
+  return ({ performance: "Start with the largest item near the top of the page. Reduce its file size or loading work if needed. Then check whether scripts, fonts, or other resources are slowing it down. Run the same speed test again after the change.", "buyer-decision": "Write down the questions customers ask most often. Add clear answers to the pages where people are most likely to need them. Keep each answer short and specific to the service.", "structured-data": "Add only structured data that matches the real business and page content. Start with the organization, services, or page types that are clearly supported. Check that the final structured data is valid after it is published.", "meta-description": "Write a short description for each affected page. Explain what the page is about and why someone may want to visit it. Keep it specific to that page and check that it appears in the page metadata.", "heading-structure": "Use one clear main heading for the page. Then organize the sections underneath it in a simple order. Check the final page to make sure the headings make sense from top to bottom.", reassurance: "Add only pricing or reassurance details the business can support. Put them where visitors are making the decision, explain any limits clearly, and check that the final page says exactly what the business intends.", accessibility: "Add short, accurate descriptions to meaningful images. Leave decorative images without a description, then check the affected pages to make sure the text is in place." }[page2Kind(record)] || [record.whatToChange, record.howToFix].filter(Boolean).map(plainLanguage).join(" "));
+}
+
+function page2Location(record) {
+  const type = String(record.siteAnchor?.type || "").toUpperCase();
+  const locator = String(record.siteAnchor?.locator || "");
+  const scope = String(record.siteAnchor?.scope || "");
+  if (type === "COMPONENT" && /largest-above-fold-asset/i.test(locator)) return "Homepage — the largest item near the top of the page";
+  if (type === "PAGE_TEMPLATE" && /buyer-decision-support-template/i.test(locator)) return "Main service and decision pages";
+  if (type === "COMPONENT" && /structured-data-block/i.test(locator)) return "Pages where business and service information is published";
+  if (type === "URL") return scope ? `The affected page — ${scope}` : "The affected page";
+  if (type === "HEADING") return scope ? `The headings on the affected page — ${scope}` : "The headings on the affected page";
+  return scope || "Pages covered by the review";
+}
+
+function page2Confidence(record) {
+  const grade = String(record.evidenceGrade || "").toUpperCase();
+  return grade === "SUPPORTED" || grade === "STRONG" ? "Strong evidence" : grade === "PARTIAL" || grade === "CONDITIONAL" ? "Some evidence — confirm before making the change" : "Not enough evidence yet";
+}
+
+function page2Roles(record) {
+  const capabilities = new Set(record.capabilityRequired || []);
+  const roles = { FRONT_END_DEVELOPMENT: "Web developer", HOSTING_PLATFORM_CONFIGURATION: "Hosting support", CONTENT_STRATEGY: "Content writer or strategist", SUBJECT_MATTER_INPUT: "someone who knows the customers well", TECHNICAL_SEO: "SEO specialist", COPY_CONTENT: "Content writer", ACCESSIBILITY: "accessibility specialist", DESIGN_UX: "designer or UX specialist", ANALYTICS: "analytics or marketing specialist" };
+  if (capabilities.has("CONTENT_STRATEGY") && capabilities.has("SUBJECT_MATTER_INPUT")) return "Content writer and someone who knows the customers well";
+  if (capabilities.has("TECHNICAL_SEO") && capabilities.has("FRONT_END_DEVELOPMENT")) return "SEO specialist or web developer";
+  if (capabilities.has("COPY_CONTENT") && capabilities.has("TECHNICAL_SEO")) return "Content writer or SEO specialist";
+  const translated = [...capabilities].map((item) => roles[item] || "Web or content specialist");
+  return [...new Set(translated)].join(" or ") || "Web or content specialist";
+}
+
+function page2Effort(record) {
+  return ({ LOW: "Low", MEDIUM: "Medium", HIGH: "High" }[String(record.effortBand || "").toUpperCase()] || "Not specified");
+}
+
+function page2Verify(record) {
+  return ({ performance: "Run the same speed test again and confirm the main content appears sooner.", "buyer-decision": "Review the relevant pages and confirm the common buyer questions are answered clearly.", "structured-data": "Check the published structured data with a validator and confirm it matches the page content.", "meta-description": "Check the affected pages and confirm each page has a useful description in its metadata.", "heading-structure": "Read the headings from top to bottom and confirm the order is clear and consistent." }[page2Kind(record)] || plainLanguage(record.implementationCheck?.passCondition || "Repeat the relevant check and confirm the issue has improved."));
+}
+
 function blockersSection(model, canonical) {
   const primary = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed);
   if (primary.length === 0) {
@@ -770,19 +833,18 @@ function blockersSection(model, canonical) {
         <span class="priority-rank" aria-label="Priority ${e(governedRank)}">${e(governedRank)}</span>
         <div>
           ${index === 0 ? '<span class="priority-start">Start here</span>' : ''}
-          <h3>${e(record.problem)}</h3>
+          <h3>${e(page2Title(record))}</h3>
         </div>
       </div>
       <dl class="priority-action-fields">
-        <div class="priority-field"><dt>Why it matters</dt><dd>${e(record.whyItMatters)}</dd></div>
-        <div class="priority-field"><dt>What to change</dt><dd>${e(record.whatToChange)}</dd></div>
-        <div class="priority-field"><dt>How to fix it</dt><dd>${e(record.howToFix)}</dd></div>
-        <div class="priority-field"><dt>Where it applies</dt><dd>${e(`${record.siteAnchor.type}: ${record.siteAnchor.locator} (${record.siteAnchor.scope})`)}</dd></div>
-        <div class="priority-field"><dt>Evidence qualification</dt><dd>${e(`${record.evidenceGrade} / ${record.prescriptionMode}`)}</dd></div>
-        <div class="priority-field"><dt>Capability required</dt><dd>${e(record.capabilityRequired.join(", "))}</dd></div>
-        <div class="priority-field"><dt>Effort</dt><dd>${e(record.effortBand)}</dd></div>
-        <div class="priority-field"><dt>How to confirm it improved</dt><dd>${e(record.implementationCheck.instruction)} ${e(record.implementationCheck.passCondition)}</dd></div>
-        <div class="priority-field"><dt>Disposition</dt><dd>${e(record.disposition)}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>What we found</dt><dd>${e(page2Found(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(page2Why(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>What to do</dt><dd>${e(page2Action(record))}</dd></div>
+        <div class="priority-field"><dt>Where to look</dt><dd>${e(page2Location(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(page2Verify(record))}</dd></div>
+        <div class="priority-field"><dt>Who may need to help</dt><dd>${e(page2Roles(record))}</dd></div>
+        <div class="priority-field"><dt>Confidence in this finding</dt><dd>${e(page2Confidence(record))}</dd></div>
+        <div class="priority-field"><dt>Effort</dt><dd>${e(page2Effort(record))}</dd></div>
       </dl>
     </article>`;
   }).join("");
@@ -791,7 +853,7 @@ function blockersSection(model, canonical) {
   <section id="blockers" class="card">
     <p class="muted small">Priority Fixes</p>
     <h2>What should you fix first?</h2>
-    <p>Start with #1 and work down the list. Supporting Detail contains the deeper evidence and technical checks.</p>
+    <p>Start with the first item and work down the list. Each fix below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks.</p>
     <div class="priority-sequence">${cards}</div>
     <p class="muted small">Supporting Detail retains the complete evidence, technical checks, and any additional observations.</p>
   </section>`;
@@ -965,6 +1027,7 @@ function conversionPathSection(model) {
       solution,
     });
   }
+
   if (findingIds.has("VAN-CONTENT-002")) {
     const solution = solutionForRule("VAN-CONTENT-002");
     momentumCards.push({

@@ -218,16 +218,17 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   const html = renderReportV2(priorityModel());
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
-  assert.match(blockers, /Start with #1 and work down the list\. Supporting Detail contains the deeper evidence and technical checks\./);
+  assert.match(blockers, /Start with the first item and work down the list\. Each fix below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
   assert.doesNotMatch(blockers, /These actions follow the governed priority order\./);
   assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
   for (const label of [
     "Why it matters",
-    "What to change",
-    "How to fix it",
-    "Where it applies",
-    "How to confirm it improved",
+    "What we found",
+    "Where to look",
+    "Confidence in this finding",
+    "Who may need to help",
+    "How to know it worked",
   ]) {
     assert.match(blockers, new RegExp(label), `required client field: ${label}`);
   }
@@ -238,11 +239,22 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.deepEqual(ranks, [1, 2, 3], "canonical sequence is rendered once in governed order");
   assert.match(cards[0][3], /Start here/);
   for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Start here/);
-  assert.match(cards[0][3], /The governed site evidence indicates that pricing or risk-reassurance information is missing/);
-  assert.match(cards[0][3], /PARTIAL \/ CONDITIONAL/);
-  assert.match(cards[0][3], /Inspect the governed/);
+  assert.match(cards[0][3], /Some visitors may need more pricing or reassurance before they act\./);
+  assert.match(cards[0][3], /Some evidence — confirm before making the change/);
+  assert.match(cards[0][3], /Add only pricing or reassurance details the business can support/);
+  assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|assessed scope|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, /businessImpact|legacy recommendation|affectedUrls|verificationMethod/i);
-  assert.doesNotMatch(blockers, /First Things First|Do Now|Do Next|Action Plan|governed priority order/i);
+  assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|assessed scope|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
+  assert.doesNotMatch(blockers, />(?:LOW|MEDIUM|HIGH|SUPPORTED|PARTIAL|CONDITIONAL|UNKNOWN|UNAVAILABLE|FIX_NOW|FIX_LATER|HOLD)</);
+  assert.doesNotMatch(blockers, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
+  const orderedLabels = ["What we found", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
+  let lastLabel = -1;
+  for (const label of orderedLabels) {
+    const nextLabel = blockers.indexOf(`<dt>${label}</dt>`);
+    assert.ok(nextLabel > lastLabel, `card field order includes ${label}`);
+    lastLabel = nextLabel;
+  }
+  assert.doesNotMatch(blockers, /First Things First|Do Now|Action Plan|governed priority order/i);
   assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 3, "no second action sequence is introduced");
 });
 
@@ -267,7 +279,7 @@ test("P2: blocker location lists client-owned affected URLs when available", () 
   finding.affectedUrls = ["https://x.com/services/consulting"];
   const html = renderReportV2(m);
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  assert.match(blockers, /Where it applies/);
+  assert.match(blockers, /Where to look/);
   assert.doesNotMatch(blockers, /https:\/\/x\.com\/services\/consulting/);
 });
 
@@ -278,8 +290,8 @@ test("P2: blocker location falls back to the governed evidence source when no UR
   finding.evidence = [{ field: "site.imagesMissingAlt" }];
   const html = renderReportV2(m);
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  assert.match(blockers, /Where it applies/);
-  assert.match(blockers, /assessed scope/);
+  assert.match(blockers, /Where to look/);
+  assert.match(blockers, /https:\/\/x\.com\//);
   assert.doesNotMatch(blockers, /site\.imagesMissingAlt/);
 });
 
@@ -467,6 +479,6 @@ test("AUTH-CLOSURE-02: final report has no independent remedy structures", () =>
     assert.doesNotMatch(html, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), forbidden);
   }
   assert.match(html, /data-solution-id=/);
-  assert.match(html, /How to fix it/);
+  assert.match(html, /What to do/);
   assert.match(html, /Canonical solution/);
 });
