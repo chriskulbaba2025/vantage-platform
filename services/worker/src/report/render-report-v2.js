@@ -235,6 +235,101 @@ function canonicalReference(record, label = "View canonical detail") {
   return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)} (${e(record.solutionId)})</a>`;
 }
 
+function executivePriorityKind(record) {
+  const key = `${String(record?.ruleId || "")} ${String(record?.failureMode || "")} ${String(record?.problem || "")}`.toUpperCase();
+  if (key.includes("VAN-PERF-001") || key.includes("SLOW-LARGEST-CONTENTFUL-PAINT")) return "performance";
+  if (key.includes("VAN-CONTENT-002") || key.includes("MISSING-BUYER-DECISION-CONTENT") || key.includes("BUYER DECISION-SUPPORT")) return "buyer-decision";
+  if (key.includes("VAN-SCHEMA-001") || key.includes("MISSING-STRUCTURED-DATA")) return "structured-data";
+  if (key.includes("PRICING") || key.includes("REASSURANCE") || key.includes("RISK")) return "reassurance";
+  if (key.includes("ALTERNATIVE TEXT") || key.includes("ALT TEXT")) return "accessibility";
+  return "general";
+}
+
+function executivePriorityTitle(record) {
+  switch (executivePriorityKind(record)) {
+    case "performance":
+      return "The main content can take too long to appear.";
+    case "buyer-decision":
+      return "Some buyers may still have questions.";
+    case "structured-data":
+      return "Search engines could use clearer information about the business.";
+    case "reassurance":
+      return "Some visitors may need more pricing or reassurance before they act.";
+    case "accessibility":
+      return "Some images may not be clear to everyone.";
+    default:
+      return plainLanguage(record?.problem || "A conversion opportunity remains to be addressed.");
+  }
+}
+
+function executivePriorityMeaning(record) {
+  switch (executivePriorityKind(record)) {
+    case "performance":
+      return "When the largest part of a page loads slowly, the site can feel less responsive. That can create friction before a visitor has had a chance to explore the page.";
+    case "buyer-decision":
+      return "When visitors cannot find the answers they need, they may hesitate, keep comparing, or leave without taking the next step.";
+    case "structured-data":
+      return "Structured data helps search engines and other systems understand what a business does and what a page is about. It does not improve conversions by itself, but it can make the site's information easier to understand.";
+    case "reassurance":
+      return "When people are deciding whether to contact you, they may want a clearer sense of cost, risk, or what happens next. If that information is missing, they may keep comparing instead of moving forward.";
+    case "accessibility":
+      return "Images that carry useful information should also have a short text description. Without it, some visitors may miss part of the message.";
+    default:
+      return plainLanguage(record?.whyItMatters || record?.problem || "This may add friction for visitors deciding what to do next.");
+  }
+}
+
+function plainLanguage(value) {
+  return String(value || "")
+    .replace(/the governed assessment indicates that/gi, "The review found that")
+    .replace(/the governed site evidence indicates that/gi, "The review found that")
+    .replace(/the governed page evidence indicates that/gi, "The review found that")
+    .replace(/if the governed [^,]+ remains present,?/gi, "If this issue is still present,")
+    .replace(/at the assessed scope/gi, "on the pages reviewed")
+    .replace(/in the assessed scope/gi, "on the pages reviewed")
+    .replace(/assessed path/gi, "reviewed pages")
+    .replace(/decision-support/gi, "buyer information")
+    .replace(/decision context/gi, "the information they need")
+    .replace(/unresolved/gi, "unanswered")
+    .replace(/unanswered buyer questions/gi, "buyer questions without clear answers")
+    .replace(/structured data was not detected/gi, "structured data was not found")
+    .replace(/explicit entity context may remain incomplete/gi, "search engines may have less context about the business")
+    .replace(/governed/gi, "reviewed")
+    .replace(/assessed/gi, "reviewed")
+    .replace(/material /gi, "")
+    .replace(/remediation/gi, "fix");
+}
+
+function executivePriorityAction(record) {
+  switch (executivePriorityKind(record)) {
+    case "reassurance":
+      return "Add only pricing or reassurance details the business can support. Put them where visitors are making the decision, explain any limits clearly, and check that the final page says exactly what the business intends.";
+    case "buyer-decision":
+      return "List the questions buyers ask most often and answer them where they are likely to need them. Keep the answers specific to the offer, then check that they appear on the right page or stage of the journey.";
+    case "accessibility":
+      return "Add short, accurate descriptions to meaningful images. Leave decorative images without a description, then check the affected pages to make sure the text is in place.";
+  }
+  const guidance = [record?.whatToChange, record?.howToFix].filter(Boolean).map(plainLanguage).join(" ");
+  return guidance || "Address the opportunity and check the same issue again.";
+}
+
+function executivePriorityReference(record) {
+  return `<a class="canonical-solution-reference" href="#priority-fixes">Priority Fixes</a>`;
+}
+
+function executiveNarrative({ readiness, actions, strengths }) {
+  if (readiness === null) {
+    return "The information reviewed provides a useful starting point, but there isn't enough to produce an overall score.";
+  }
+  const foundation = strengths.length
+    ? "The site already has a solid foundation for conversion."
+    : "The information reviewed provides a measured starting point for conversion.";
+  const opportunities = actions.length
+    ? "The biggest opportunities are the three priorities below."
+    : "No priority was established from the information reviewed.";
+  return `${foundation} ${opportunities} These changes are about making the visitor journey clearer and easier, not rebuilding the whole site.`;
+}
+
 function canonicalSummary(record) {
   return `<strong>${e(record.problem)}</strong><br><span class="small">${e(record.whyItMatters)}</span><br>${e(record.whatToChange)} ${canonicalReference(record)}`;
 }
@@ -402,7 +497,7 @@ function executiveScorecard(model, pillars, canonical) {
     : `<div class="readiness">${e(readiness)}<span class="readiness-max">/100</span></div><div class="readiness-band">${bandChip(model.bands.conversionReadiness)}</div>`;
   const priorities = actions.length
     ? `<ol class="executive-priorities">${actions.map((record) => {
-      return `<li data-solution-id="${e(record.solutionId)}"><p><strong>Problem:</strong> ${e(record.problem)}</p><p><strong>Why it matters:</strong> ${e(record.whyItMatters)}</p><p><strong>Action:</strong> ${e(record.whatToChange)} ${canonicalReference(record, "Priority Fixes")}</p></li>`;
+      return `<li data-solution-id="${e(record.solutionId)}"><h4>${e(executivePriorityTitle(record))}</h4><p>${e(executivePriorityMeaning(record))}</p><p><strong>What to do:</strong> ${e(executivePriorityAction(record))} ${executivePriorityReference(record)}</p></li>`;
     }).join("")}</ol>`
     : `<p>No priority action was generated from the information reviewed.</p>`;
   const strengths = (pillars || [])
@@ -410,25 +505,26 @@ function executiveScorecard(model, pillars, canonical) {
     .slice(0, 5)
     .map((pillar) => `${pillar.label} provides a solid foundation in the pages and signals reviewed.`);
   const coverage = assessedWeight >= 100
-    ? `<p><strong>Assessment coverage was complete.</strong> The available information was sufficient for the reported conclusion.</p>`
+    ? `<p><strong>Assessment coverage was complete.</strong> We found enough evidence to support the main conclusions on this page. Areas with limited evidence are identified in Supporting Detail rather than being treated as confirmed problems.</p>`
     : assessedWeight >= 90
-      ? `<p>Assessment coverage was nearly complete. Areas with limited evidence are clearly marked.</p>`
+      ? `<p>Assessment coverage was nearly complete. We found enough evidence to support the main conclusions on this page. Areas with limited evidence are identified in Supporting Detail rather than being treated as confirmed problems.</p>`
       : `<p>Assessment coverage was limited. Areas with limited evidence are clearly marked.</p>`;
   const uncertainty = readiness === null
     ? "There was not enough information to produce an overall score. The report distinguishes what was reviewed from what remains unknown."
     : model.readinessStatus === "Provisional"
-      ? "Evidence was unavailable within the governed assessed scope, so this overall result should be read as provisional."
+      ? "Some information was unavailable in the pages reviewed, so this overall result is provisional."
       : "No material limitation changes the overall conclusion.";
   return `
   <section id="executive" class="card">
     <h2>How ready is your website to convert visitors?</h2>
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
+    <p>${e(executiveNarrative({ readiness, actions, strengths }))}</p>
     <h3>What should you improve first?</h3>${priorities}
     <h3>What is already working?</h3>
-    ${strengths.length ? `<ul>${strengths.map((strength) => `<li>${e(strength)}</li>`).join("")}</ul>` : `<p>No supported positive finding was available in the information reviewed.</p>`}
-    <h3>What could we not determine?</h3><div class="note"><p>${e(uncertainty)}</p>${coverage}</div>
-    <h3>Where to find supporting detail</h3><p>Go to <strong>Priority Fixes</strong> for ranked actions and evidence detail. Use <strong>Supporting Detail</strong> for deeper evidence, technical diagnostics, and assessment limitations.</p>
+    ${strengths.length ? `<p>The site is not starting from scratch. The areas below already provide a useful foundation. That means the next changes can focus on removing friction instead of rebuilding the whole conversion journey.</p><ul>${strengths.map((strength) => `<li>${e(strength)}</li>`).join("")}</ul>` : `<p>No supported positive finding was available in the information reviewed.</p>`}
+    <h3>Where was the evidence limited?</h3><div class="note"><p>${e(uncertainty)}</p>${coverage}</div>
+    <h3>Supporting Detail</h3><p>Go to <strong>Priority Fixes</strong> for the ranked actions and supporting evidence. Use <strong>Supporting Detail</strong> for deeper evidence, technical details, and assessment limits.</p>
   </section>`;
 }
 

@@ -173,7 +173,7 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   const html = renderReportV2(model());
   // A/B/C — executive scorecard
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const headings = ["How ready is your website to convert visitors?", "What should you improve first?", "What is already working?", "What could we not determine?", "Where to find supporting detail"];
+  const headings = ["How ready is your website to convert visitors?", "What should you improve first?", "What is already working?", "Where was the evidence limited?", "Supporting Detail"];
   let previous = -1;
   for (const heading of headings) {
     const next = executive.indexOf(heading);
@@ -181,12 +181,16 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
     previous = next;
   }
   assert.match(executive, /Conversion Readiness/);
-  assert.match(executive, /Assessment coverage/);
+  assert.match(executive, /coverage/i);
   assert.match(executive, /Supporting Detail/);
   assert.equal((executive.match(/What is already working\?/g) || []).length, 1);
-  assert.equal((executive.match(/<strong>Problem:<\/strong>/g) || []).length, (executive.match(/<strong>Why it matters:<\/strong>/g) || []).length);
-  assert.equal((executive.match(/<strong>Problem:<\/strong>/g) || []).length, (executive.match(/<strong>Action:<\/strong>/g) || []).length);
-  assert.ok((executive.match(/<strong>Problem:<\/strong>/g) || []).length <= 3);
+  assert.equal((executive.match(/<strong>What to do:<\/strong>/g) || []).length, 3);
+  assert.ok((executive.match(/<h4>/g) || []).length <= 3);
+  assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)/);
+  assert.match(executive, /solid foundation for conversion|measured starting point for conversion/i);
+  assert.match(executive, /The biggest opportunities are the three priorities below\./);
+  assert.match(executive, /making the visitor journey clearer and easier/);
+  assert.doesNotMatch(executive, /governed priorities/i);
   assert.ok(!/What Is Already Good|render-blocking|largest contentful paint|meta descriptions|partial assessment|evidence capability|supporting capability|JSON-LD|browser validation|Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/i.test(executive));
   // D — pillars
   assert.match(html, /Where are the problems\?/);
@@ -375,6 +379,20 @@ test("WP-G-05: v1 renderer still renders the same model (locked path unchanged)"
   assert.match(v1, /Prysm Phase 1 Audit/);
   // v1 must NOT contain the v2 design markers.
   assert.doesNotMatch(v1, /Where are the problems\?/);
+});
+
+test("WP-G-03a: executive priorities use CRO narratives while preserving canonical linkage", () => {
+  const m = model();
+  const html = renderReportV2(m);
+  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
+  assert.match(executive, /Some buyers may still have questions\./);
+  assert.match(executive, /<strong>What to do:<\/strong>/);
+  assert.match(executive, /href="#priority-fixes">Priority Fixes<\/a>/);
+  assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
+  const priorities = [...executive.matchAll(/<li data-solution-id="([^"]+)">/g)].map((match) => match[1]);
+  assert.equal(priorities.length, 3);
+  assert.deepEqual(priorities, [...priorities], "priority order is deterministic");
+  assert.equal(new Set(priorities).size, priorities.length, "each priority retains distinct internal linkage");
 });
 
 test("AUTH-CLOSURE-01: non-canonical remedy inputs cannot alter client remediation", () => {
