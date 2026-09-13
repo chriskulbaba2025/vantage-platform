@@ -348,6 +348,46 @@ test("S03: conversion journey tells a bounded CRO story", () => {
   assert.doesNotMatch(page3, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
 });
 
+test("P10: content opportunities are presented as an actionable client plan", () => {
+  const fixture = model();
+  fixture.contentIdeas = {
+    tofu: [
+      { idea: "What Is Custom Websites?", question: "What is this?", whyItMatters: "Supports the stated goal: Generate qualified enquiries.", recommendedAsset: "Guide", placement: "Awareness content", funnelStage: "Awareness", evidenceStatus: "PARTIAL" },
+      { idea: "Signs You May Need Digital Marketing", question: "Does this apply to me?", whyItMatters: "Supports the stated goal: Generate qualified enquiries.", recommendedAsset: "Article", placement: "Awareness content", funnelStage: "Awareness", evidenceStatus: "PARTIAL" },
+      { idea: "Can Custom Websites Produce Measurable Change?", question: "Will this work?", whyItMatters: "Supports the stated goal: Generate qualified enquiries.", recommendedAsset: "Educational page", placement: "Awareness content", funnelStage: "Awareness", evidenceStatus: "AVAILABLE" },
+    ],
+    mofu: [
+      { idea: "Custom Websites: Options and Fit", question: "Which option is right?", whyItMatters: "Supports the stated goal: Generate qualified enquiries.", recommendedAsset: "Comparison page", placement: "Consideration content", funnelStage: "Consideration", evidenceStatus: "PARTIAL" },
+      { idea: "What Happens in the Process", question: "What should I expect?", whyItMatters: "Supports the stated goal: Generate qualified enquiries.", recommendedAsset: "Process page", placement: "Consideration content", funnelStage: "Consideration", evidenceStatus: "PARTIAL" },
+    ],
+    bofu: [],
+    leading: [],
+  };
+  const html = renderReportV2(fixture);
+  const page4 = html.slice(html.indexOf('id="content-ideas"'), html.indexOf('id="content-opportunities-detail"'));
+  const titles = [
+    "Explain what a custom website is",
+    "Help people decide whether they need digital marketing",
+    "Show what kind of results a custom website may support",
+    "Help buyers compare website options",
+    "Explain what happens during the process",
+  ];
+  let previous = -1;
+  for (const title of titles) {
+    const position = page4.indexOf(title);
+    assert.ok(position > previous, `opportunity order includes ${title}`);
+    previous = position;
+  }
+  for (const label of ["What buyers are asking", "Why this matters", "What to create", "What it should cover", "Where it helps", "How to use it", "Confidence in this opportunity"]) {
+    assert.match(page4, new RegExp(label));
+  }
+  assert.match(page4, /The site already has useful content in several parts of the buyer journey/);
+  assert.match(page4, /when someone is first trying to understand the service/);
+  assert.match(page4, /Some evidence — confirm before creating new content/);
+  assert.doesNotMatch(page4, /governed|assessed scope|qualified opportunity|evidence qualification|decision-support context|partial content coverage|canonical|remediation|price|timeline/i);
+  assert.ok((page4.match(/<li>/g) || []).length >= 20, "five opportunities retain actionable coverage points");
+});
+
 test("WP-G-03: no invented evidence — every displayed ruleId exists in the model", () => {
   const m = model();
   const html = renderReportV2(m);

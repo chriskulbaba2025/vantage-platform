@@ -1620,6 +1620,105 @@ function meaningfulClientTopic(value) {
   return !/^(?:4\s*0|create|tagged by kindness inc|tbk incubates go fog it)$/i.test(text);
 }
 
+function clientContentOpportunityKind(idea) {
+  const text = String(idea || "").toLowerCase();
+  if (/what is .*custom website|custom website/.test(text) && !/option|fit|result|measurable|process/.test(text)) return "custom-website";
+  if (/signs you may need digital marketing|digital marketing/.test(text)) return "digital-marketing-fit";
+  if (/measurable|result|outcome|will this work/.test(text)) return "website-results";
+  if (/compare|option|fit/.test(text)) return "website-options";
+  if (/process|what happens/.test(text)) return "process";
+  return "general";
+}
+
+function clientContentOpportunityTitle(idea) {
+  switch (clientContentOpportunityKind(idea)) {
+    case "custom-website": return "Explain what a custom website is";
+    case "digital-marketing-fit": return "Help people decide whether they need digital marketing";
+    case "website-results": return "Show what kind of results a custom website may support";
+    case "website-options": return "Help buyers compare website options";
+    case "process": return "Explain what happens during the process";
+    default: return String(idea || "Content idea");
+  }
+}
+
+function clientContentBuyerQuestion(idea, question) {
+  if (clientContentOpportunityKind(idea) === "custom-website") return "What is this, and how is it different from a standard template website?";
+  if (clientContentOpportunityKind(idea) === "digital-marketing-fit") return "Does this apply to my business?";
+  if (clientContentOpportunityKind(idea) === "website-results") return "Will this actually help my business?";
+  if (clientContentOpportunityKind(idea) === "website-options") return "Which option is right for me?";
+  if (clientContentOpportunityKind(idea) === "process") return "What happens after I decide to move forward?";
+  return String(question || "What do buyers need to know before they decide?");
+}
+
+function clientContentWhy(idea, sourceWhy) {
+  const kind = clientContentOpportunityKind(idea);
+  if (kind === "custom-website") return "People need to understand the service before they can decide whether it is relevant to them. A clear explanation can help visitors understand what “custom” means and whether that level of website work fits their needs.";
+  if (kind === "digital-marketing-fit") return "Some visitors may understand what digital marketing is but still not know whether they need help. Showing common signs or situations can help them recognize whether the service is relevant. It gives them a clearer way to think about their own situation.";
+  if (kind === "website-results") return "Before investing in a website, buyers often want to understand what improvement could look like. They may need proof, examples, or a clearer explanation of how the website supports business goals. Careful wording can build understanding without promising a result.";
+  if (kind === "website-options") return "Buyers may know they need a website but still be unsure what level of service fits their situation. Clear comparison content can help them understand the trade-offs without forcing them to guess. It can also make the next conversation more focused.";
+  if (kind === "process") return "Uncertainty about the process can make a service feel harder to buy. People may want to know what they need to provide, what the main steps are, and what happens after they say yes. A clear explanation can make the next step easier to understand.";
+  const text = String(sourceWhy || "");
+  return /supports the stated goal/i.test(text) || !text.trim()
+    ? "This topic may help a buyer understand the service and decide whether it fits their needs. Before creating it, confirm the questions customers ask most often and the information the business can support."
+    : text;
+}
+
+function clientContentRecommendation(idea, sourceAsset) {
+  const kind = clientContentOpportunityKind(idea);
+  if (kind === "custom-website") return "Create a simple service explainer or a strong section on the main website service page.";
+  if (kind === "digital-marketing-fit") return "Create a practical guide, page section, or checklist explaining situations where digital marketing support may help.";
+  if (kind === "website-results") return "Create content that explains the kinds of business outcomes a better website may support.";
+  if (kind === "website-options") return "Create comparison or fit guidance. Use the options the business actually offers or competes against.";
+  if (kind === "process") return "Create a clear process section or guide using the real steps the business can confirm.";
+  return sourceAsset
+    ? `Create a ${String(sourceAsset).toLowerCase()} after confirming the questions and information it should cover.`
+    : "Create a short guide or page section after confirming the questions buyers ask most often.";
+}
+
+function clientContentCoverage(idea) {
+  switch (clientContentOpportunityKind(idea)) {
+    case "custom-website":
+      return ["what a custom website means", "how it differs from a basic template site", "who may benefit from one", "what business problem it is meant to solve", "when a simpler option may be enough"];
+    case "digital-marketing-fit":
+      return ["common business problems that may lead someone to seek help", "goals the service can support", "signs that the issue may need attention", "questions a business owner should ask before choosing support", "clear limits so the guide does not create fear or pressure"];
+    case "website-results":
+      return ["the business goals the website is meant to support", "examples or case studies where proof exists", "measurable changes that can be shown clearly", "what a better website may help with and what it cannot guarantee", "a reminder that results depend on the situation and implementation"];
+    case "website-options":
+      return ["the main website options the business actually offers or competes against", "who each option may suit", "the most important differences between them", "trade-offs a buyer should understand", "questions to ask before choosing"];
+    case "process":
+      return ["the main stages of the real process", "what the client needs to provide", "what the business handles", "important decision points", "what the client can expect after each confirmed step"];
+    default:
+      return ["the question buyers are trying to answer", "the information the business can support", "a clear example where one is available", "the next question a buyer may have"];
+  }
+}
+
+function clientBuyerJourneyStage(stage) {
+  const value = String(stage || "").toLowerCase();
+  if (/awareness|tofu/.test(value)) return "Early in the journey, when someone is first trying to understand the service.";
+  if (/consideration|evaluation|mofu/.test(value)) return "When someone understands the service and is deciding whether it fits their needs.";
+  if (/comparison/.test(value)) return "When someone is comparing options or providers.";
+  if (/decision|bofu/.test(value)) return "When someone is close to taking the next step and wants reassurance.";
+  return "At the point in the journey where this question becomes important.";
+}
+
+function clientContentPlacement(idea, placement) {
+  const kind = clientContentOpportunityKind(idea);
+  if (kind === "custom-website") return "Place the explanation where visitors first learn about custom website services. Link to deeper information only when they need it.";
+  if (kind === "digital-marketing-fit") return "Connect the content to the appropriate digital marketing service pages.";
+  if (kind === "website-results") return "Connect proof and examples to relevant service pages and trust content.";
+  if (kind === "website-options") return "Place the guidance on the main website service page or create a supporting comparison guide linked from it.";
+  if (kind === "process") return "Place process guidance close to the relevant service and contact or quote path.";
+  return placement
+    ? `Use it in the ${String(placement).toLowerCase()} area and connect it to the related service page.`
+    : "Place it near the related service explanation and link it to the next step when that location is confirmed.";
+}
+
+function clientOpportunityConfidence(status) {
+  if (String(status || "").toUpperCase() === "AVAILABLE") return "Strong evidence";
+  if (String(status || "").toUpperCase() === "PARTIAL") return "Some evidence — confirm before creating new content";
+  return "Not enough evidence yet";
+}
+
 function contentOpportunitiesSection(model) {
   const ideas = model.contentIdeas || {};
   const tofu = ideas.tofu || [];
@@ -1634,7 +1733,7 @@ function contentOpportunitiesSection(model) {
 
   const coverageState = (count, positive = false) => {
     if (positive || count >= 3) return "Good foundation";
-    if (count >= 1) return "Support observed within the governed assessed scope";
+    if (count >= 1) return "More information could help";
     return "Limited information";
   };
 
@@ -1643,25 +1742,25 @@ function contentOpportunitiesSection(model) {
       "Understand the problem",
       tofu.length,
       false,
-      "Awareness-stage questions and educational context.",
+      "People can find information that helps them understand the problem or need.",
     ],
     [
       "Understand the service",
       (site.services || []).length,
       (site.services || []).length > 0,
-      "Clear explanation of services or offers.",
+      "Visitors can see what the business offers and begin to understand the service.",
     ],
     [
       "Evaluate fit",
       mofu.length,
       false,
-      "Comparison, fit, and decision-support content.",
+      "Some content helps visitors think about whether the service fits their situation.",
     ],
     [
       "Build trust",
       model.scores?.trustEeatDimension ?? model.scores?.trust,
       (model.scores?.trustEeatDimension ?? model.scores?.trust) >= 60,
-      "Proof and reassurance needed before action.",
+      "Trust signals can help visitors feel more confident before they contact the business.",
     ],
     [
       "Compare options",
@@ -1669,22 +1768,17 @@ function contentOpportunitiesSection(model) {
         /compar|option|fit/i.test(`${i.idea || ""} ${i.frame || ""}`)
       ).length,
       false,
-      "Content that helps a buyer understand alternatives.",
+      "More information could help visitors compare choices and understand which option fits.",
     ],
     [
       "Take action",
       (site.ctas || []).length,
       (site.ctas || []).length > 0,
-      "An observed conversion action visitors can take.",
+      "Visitors can find a next step when they are ready to contact the business.",
     ],
   ];
 
-  const directAnswer =
-    contentScore === null
-      ? "PRYSM has limited evidence for judging whether current content answers the full set of buyer questions."
-      : contentScore >= 60
-        ? `The site has a usable content foundation (${contentScore}/100), but qualified opportunities remain to strengthen buyer questions that are not fully supported.`
-        : `Content and funnel coverage is limited at ${contentScore}/100. Buyers are likely to encounter unanswered questions as they move from understanding the problem toward taking action.`;
+  const directAnswer = "The site already has useful content in several parts of the buyer journey. The biggest opportunity is to answer more of the questions people may have before they are ready to contact the business.";
 
   const coverageCards = buyerNeeds
     .map(([need, count, positive, meaning]) => {
@@ -1703,7 +1797,7 @@ function contentOpportunitiesSection(model) {
     ...bofu.map((i) => ({ ...i, stage: "Decision" })),
   ];
 
-  const clientWhyItMatters = (i) => {
+  const legacyClientWhyItMatters = (i) => {
     const idea = String(i.idea || "");
     if (/what is|what are/i.test(idea)) {
       return "Helps an early-stage buyer understand the service before deciding whether it is relevant.";
@@ -1729,30 +1823,37 @@ function contentOpportunitiesSection(model) {
     return "Helps a prospective buyer evaluate the service before taking the next step.";
   };
 
-  const evidenceLabel = (i) =>
+  const legacyEvidenceLabel = (i) =>
     i.evidenceStatus === "AVAILABLE"
       ? "Supported within assessed content"
       : i.evidenceStatus === "PARTIAL"
         ? "Qualified opportunity — partial content coverage"
         : "Qualified opportunity — content evidence unavailable";
 
+  const evidenceLabel = (i) => clientOpportunityConfidence(i.evidenceStatus);
+
   const renderOpportunityCards = (items, startIndex = 0, primary = false) =>
     items
       .map((i, offset) => {
         const index = startIndex + offset;
         const detail = primary ? "" : ` ${e(i.gap || "")}`;
+        const title = clientContentOpportunityTitle(i.idea);
+        const stage = i.funnelStage || i.stage || "";
+        const coverage = clientContentCoverage(i.idea);
         return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}">
           <div class="content-opportunity-card-header">
             ${primary ? `<span class="content-opportunity-rank">${index + 1}</span>` : ""}
             ${index === 0 ? '<span class="content-opportunity-start">Start here</span>' : ""}
           </div>
-          <h4>${e(i.idea === "What Is Custom Websites?" ? "What Is a Custom Website?" : (i.idea || "Qualified content opportunity"))}</h4>
+          <h4>${e(title)}</h4>
           <dl class="content-opportunity-fields">
-            <div><dt>Buyer question / need</dt><dd>${e(i.question || "Buyer decision support")}</dd></div>
-            <div><dt>Buyer stage</dt><dd>${e(i.funnelStage || i.stage || "Assessed buyer journey")}</dd></div>
-            <div><dt>Why it matters</dt><dd>${e(/supports the stated goal/i.test(String(i.whyItMatters || "")) ? clientWhyItMatters(i) : (i.whyItMatters || clientWhyItMatters(i)))}</dd></div>
-            <div><dt>Decision-support context</dt><dd>${e(i.frame || i.placement || "Supports buyer decision-making")}</dd></div>
-            ${primary ? `<div><dt>Evidence qualification</dt><dd>${e(evidenceLabel(i))}</dd></div>` : `<div class="content-opportunity-uncertainty"><dt>Evidence qualification</dt><dd>${e(evidenceLabel(i))}${detail}</dd></div>`}
+            <div><dt>What buyers are asking</dt><dd>${e(clientContentBuyerQuestion(i.idea, i.question))}</dd></div>
+            <div><dt>Why this matters</dt><dd>${e(clientContentWhy(i.idea, i.whyItMatters))}</dd></div>
+            <div><dt>What to create</dt><dd>${e(clientContentRecommendation(i.idea, i.recommendedAsset || i.type))}</dd></div>
+            <div class="content-opportunity-coverage"><dt>What it should cover</dt><dd><ul>${coverage.map((point) => `<li>${e(point)}</li>`).join("")}</ul></dd></div>
+            <div><dt>Where it helps</dt><dd><strong>${e(stage || "Buyer journey")}</strong><br>${e(clientBuyerJourneyStage(stage))}</dd></div>
+            <div><dt>How to use it</dt><dd>${e(clientContentPlacement(i.idea, i.placement))}</dd></div>
+            ${primary ? `<div><dt>Confidence in this opportunity</dt><dd>${e(evidenceLabel(i))}</dd></div>` : `<div class="content-opportunity-uncertainty"><dt>Confidence in this opportunity</dt><dd>${e(evidenceLabel(i))}${detail}</dd></div>`}
           </dl>
         </article>`;
       })
@@ -1775,7 +1876,7 @@ function contentOpportunitiesSection(model) {
     ? `<details class="content-supporting-signals">
         <summary>Supporting content signals</summary>
         ${coveredTopics.length ? `<h4>Observed topics</h4><ul>${coveredTopics.map((topic) => `<li>${e(topic)}</li>`).join("")}</ul>` : ""}
-        ${leading.length ? `<h4>Additional qualified search intents</h4><div class="table-wrap"><table>
+        ${leading.length ? `<h4>Additional search topics</h4><div class="table-wrap"><table>
           <thead><tr><th>Query</th><th>Rationale</th><th>Priority</th></tr></thead>
           <tbody>${leading.map((q) => `<tr><td>${e(q.query || "")}</td><td class="small">${e(q.rationale || "")}</td><td>${e(q.priority || "")}</td></tr>`).join("")}</tbody>
         </table></div>` : ""}
@@ -1787,34 +1888,33 @@ function contentOpportunitiesSection(model) {
     <p class="muted small">Content Opportunities</p>
     <h2>What content would help buyers move forward?</h2>
 
-    <p class="content-opportunities-verdict">${e(contentScore === null
-      ? "The site has a usable content foundation, but the available content-body evidence is partial. The main opportunity is stronger buyer decision support."
-      : "The site has a usable content foundation. The main opportunity is stronger buyer decision support, while content-body evidence remains partial.")}</p>
+    <p class="content-opportunities-verdict">${e(directAnswer)}</p>
+    <p>The ideas below are based on the business information and website content we could review. Each opportunity explains what buyers may be asking, why the topic matters, and what useful content could include.</p>
 
     <h3>What is already helping buyers</h3>
     <div class="content-coverage-grid">${coverageCards}</div>
 
-    <h3>Where decision support is thin</h3>
-    <p class="content-opportunities-gap">The assessed content signals identify qualified opportunities to answer buyer questions. This does not establish that unassessed pages lack the same support.</p>
+    <h3>Where more content may help</h3>
+    <p class="content-opportunities-gap">The pages reviewed show useful starting points, but some buyer questions may need clearer answers. This does not mean these topics are missing everywhere on the site.</p>
 
-    <h3>Qualified content opportunities</h3>
+    <h3>Content that could help buyers move forward</h3>
     ${opportunityCards
       ? `<div class="content-opportunity-list">${opportunityCards}</div>`
-      : `<p><span class="chip cap-ok">PASS</span> No qualified content opportunity was generated from the assessed evidence.</p>`}
+      : `<p>No content idea was generated from the information reviewed.</p>`}
 
     <h3>Evidence limitations</h3>
-    <p class="small">Ideas are derived from existing business-context topics and crawl-visible content. Content coverage was partial, so unassessed pages remain unknown. Search demand or competitor coverage may strengthen an opportunity, but neither alone creates a recommendation.</p>
+    <p class="small">These ideas come from the business information and website content we could review. Some pages were not fully assessed, so we cannot say these topics are missing everywhere on the site. Search demand or competitor activity may make an idea more useful, but neither is enough on its own to recommend creating new content. Before starting a large piece of content, confirm that the information is not already covered well somewhere else.</p>
   </section>
 
   <section id="content-opportunities-detail" class="card" data-supporting-section="conversion-content-evidence">
     <p class="muted small">Supporting Detail</p>
     <h2>Content Opportunity Detail</h2>
-    <p class="small">Additional qualified opportunities and supporting content signals remain available here for planning and verification.</p>
+    <p class="small">Additional content ideas and supporting signals remain available here for planning.</p>
     ${supportingIdeas.length
-      ? `<p class="small">${e(supportingIdeas.length)} additional qualified opportunit${supportingIdeas.length === 1 ? "y" : "ies"} remain available in Supporting Detail. Two representative examples are shown below; the existing priority order is preserved.</p>
+      ? `<p class="small">${e(supportingIdeas.length)} additional content idea${supportingIdeas.length === 1 ? "" : "s"} remain available in Supporting Detail. Two representative examples are shown below; the existing order is preserved.</p>
          <div class="content-opportunity-list">${supportingPreviewCards}</div>
          ${supportingRemainderCards ? `<details class="supporting-detail-disclosure"><summary>Show remaining additional opportunities</summary><div class="content-opportunity-list">${supportingRemainderCards}</div></details>` : ""}`
-      : `<p class="small">No additional qualified opportunities were generated.</p>`}
+      : `<p class="small">No additional content ideas were generated.</p>`}
     ${supportingSignals}
   </section>`;
 }
@@ -3244,6 +3344,19 @@ a {
   font-size:15px;
   line-height:1.45;
   margin:0;
+}
+
+.content-opportunity-coverage {
+  grid-column:1 / -1;
+}
+
+.content-opportunity-fields dd ul {
+  margin:.15rem 0 0;
+  padding-left:1.1rem;
+}
+
+.content-opportunity-fields dd li {
+  margin:.2rem 0;
 }
 
 .content-opportunity-uncertainty {

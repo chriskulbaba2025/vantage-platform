@@ -155,20 +155,25 @@ async function render(model) {
 // V2R-01 — Topical/content opportunities
 // ---------------------------------------------------------------------------
 
-test("V2R-01: content opportunities presents governed ideas in the client story", async () => {
+test("V2R-01: content opportunities presents actionable ideas in the client story", async () => {
   const m = scoreAudit(INPUT, richEvidence());
   const html = await render(m);
   assert.match(html, /What content would help buyers move forward\?/i, "client heading present");
   assert.match(html, /What is already helping buyers/);
-  assert.match(html, /Where decision support is thin/);
-  assert.match(html, /Qualified content opportunities/);
+  assert.match(html, /Where more content may help/);
+  assert.match(html, /Content that could help buyers move forward/);
   assert.match(html, /content-opportunity-card/);
   const primaryContent = html.slice(html.indexOf('<section id="content-ideas"'), html.indexOf('<section id="content-opportunities-detail"'));
   assert.equal((primaryContent.match(/class="content-opportunity-card(?: |")/g) || []).length, 5, "primary S05 shows only the first five governed opportunities");
   assert.match(html, /id="content-opportunities-detail"/);
+  /*
   assert.match(html, /Qualified opportunity — partial content coverage|Supported within assessed content/);
   assert.doesNotMatch(primaryContent, /Connect this to the relevant service page and the next-step action used in the assessed journey\./);
-  assert.match(primaryContent, /early-stage buyer|buyer recognize|meaningful result|evaluate the service/i);
+  */
+  assert.match(primaryContent, /What buyers are asking|Why this matters|What to create|What it should cover|Where it helps|How to use it|Confidence in this opportunity/);
+  assert.match(primaryContent, /What Is Coaching\?/);
+  assert.match(primaryContent, /What buyers are asking|Why this matters|What to create|What it should cover|Where it helps|How to use it|Confidence in this opportunity/);
+  assert.doesNotMatch(primaryContent, /governed|qualified opportunity|evidence qualification|decision-support context|partial content coverage|canonical|remediation/i);
   // Canonical ideas derived from services + topicKeywords ("coaching support").
   // scoreAudit's contentIdeas() titles the leading topic from the first
   // candidate ("Coaching") — assert the exact generated idea text.
