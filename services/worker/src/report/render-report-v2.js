@@ -268,7 +268,7 @@ function canonicalSolutionContext(model) {
 }
 
 function canonicalReference(record, label = "View canonical detail") {
-  return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)} (${e(record.solutionId)})</a>`;
+  return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)}</a>`;
 }
 
 function clientJourneyReference(record, label) {
@@ -725,10 +725,10 @@ function pillarSection(pillars) {
         ? `<div class="pillar-score">${e(p.score)}/100 on assessed technical checks</div>`
         : `<div class="pillar-score">${e(p.score)}<span class="readiness-max">/100</span></div>`;
     const modules = p.modules
-      .map((m) => `<li>${e(m.moduleId)}: ${m.score === null ? "suppressed" : e(m.score)} (weight ${e(m.weight)})</li>`)
+      .map((m) => `<li>${e(clientModuleLabel(m.moduleId))}: ${m.score === null ? "Not assessed" : e(m.score)} (weight ${e(m.weight)})</li>`)
       .join("");
     const caps = p.capabilities
-      .map((c) => `<span class="chip ${capabilityStatusClass(c.status)}">${e(c.key)}: ${e(c.status)}</span>`)
+      .map((c) => `<span class="chip ${capabilityStatusClass(c.status)}">${e(clientCapabilityLabel(c.key))}: ${e(c.status)}</span>`)
       .join(" ");
     const coverageNote =
       p.id === "technical_health" &&
@@ -2375,7 +2375,7 @@ function internalLinksSection(model) {
     ? `<h3>Orphan / Weakly Linked Pages (${orphans.length})</h3>
 <p class="small">${e(orphans.length)} identified · showing ${e(orphanShown)} examples.</p>
 <details class="supporting-detail-disclosure"><summary>Show ${e(orphanShown)} representative orphan-page examples</summary><div class="table-wrap"><table><thead><tr><th>URL</th><th>Title</th></tr></thead><tbody>${renderOrphanRows(orphans.slice(0, 5))}</tbody></table></div>${orphans.length > orphanShown
-  ? `<details class="supporting-detail-disclosure"><summary>Show all ${e(orphans.length)} governed orphan pages</summary><div class="table-wrap"><table><thead><tr><th>URL</th><th>Title</th></tr></thead><tbody>${renderOrphanRows(orphans)}</tbody></table></div></details>`
+  ? `<details class="supporting-detail-disclosure"><summary>Show all ${e(orphans.length)} pages identified as weakly linked</summary><div class="table-wrap"><table><thead><tr><th>URL</th><th>Title</th></tr></thead><tbody>${renderOrphanRows(orphans)}</tbody></table></div></details>`
   : ""}</details>`
     : opp?.coverage?.crawlComplete === false
       ? `<p class="small">Orphan analysis: crawl coverage is incomplete — definitive orphan claims cannot be made.</p>`
@@ -2403,7 +2403,151 @@ function internalLinksSection(model) {
     }
   </section>`;
 }
+function clientEvidenceLabel(field) {
+  const labels = {
+    meta_description: "Meta description",
+    h1_missing: "Missing main heading",
+    h1_multiple: "Multiple main headings",
+    "trust.faq": "FAQ content",
+  };
+  return labels[field] || "Evidence item";
+}
+
+function clientEvidenceValue(value) {
+  if (value === null || value === undefined || value === "null") return "Not available";
+  if (value === false) return "Not detected";
+  if (value === true) return "Detected";
+  return String(value);
+}
+
+function clientEvidenceStatus(status) {
+  const value = String(status || "UNKNOWN").toUpperCase();
+  if (value === "AVAILABLE") return "Available";
+  if (value === "PARTIAL") return "PARTIAL";
+  if (value === "UNAVAILABLE") return "UNAVAILABLE";
+  if (value === "NOT_APPLICABLE") return "NOT APPLICABLE";
+  return "UNKNOWN";
+}
+
+function clientCapabilityLabel(key) {
+  const labels = {
+    "content.body": "Page content",
+    "offer.clarity": "Offer clarity",
+    "trust.proof": "Trust and proof",
+    "conversion.cta": "Call to action",
+    "conversion.form": "Contact form",
+    "conversion.path": "Conversion path",
+    "technical.indexability": "Search indexing",
+    "technical.redirects": "Redirects",
+    "technical.resources": "Page resources",
+    "schema.structured_data": "Structured data",
+    "performance.lab": "Page speed checks",
+    "performance.field": "Real-user performance data",
+  };
+  return labels[key] || String(key || "Evidence area")
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function clientModuleLabel(key) {
+  const labels = {
+    offer_clarity: "Offer clarity",
+    content_depth: "Content depth",
+    funnel_coverage: "Buyer-journey coverage",
+    trust_signals: "Trust signals",
+    risk_reduction: "Risk reduction",
+    conversion_paths: "Conversion paths",
+    technical_hygiene: "Technical checks",
+    performance: "Page performance",
+  };
+  return labels[key] || String(key || "Report area")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function clientSourceLabel(key) {
+  return {
+    site: "Website crawl",
+    performance: "Page performance",
+    competitors: "Competitor review",
+    backlinks: "Backlink review",
+    ga4: "Website analytics",
+    gsc: "Search data",
+  }[key] || "Other evidence";
+}
+
+function clientFindingEvidenceSummary(confidence) {
+  const value = String(confidence || "").toLowerCase();
+  if (value === "supported") return "Evidence supports this finding.";
+  if (value === "partial" || value === "qualified") return "The evidence is partial.";
+  if (value === "unavailable" || value === "unknown") return "The evidence is limited.";
+  return "The finding is based on the evidence reviewed.";
+}
+
+function clientLimitationText(value) {
+  return String(value || "")
+    .replace(/dataforseo_onpage/gi, "the page review")
+    .replace(/playwright-conversion-path/gi, "the conversion-path check")
+    .replace(/\binferred\b/gi, "based on the available evidence");
+}
+
 function deepEvidenceLayer(model) {
+  const findings = (model.findings || [])
+    .map((f) => `
+      <li>
+        <strong>${e(f.title)}</strong>
+        <span class="small">${e(clientFindingEvidenceSummary(f.confidence))}</span>
+        <ul class="small">
+          ${(f.evidence || []).map((ev) =>
+            `<li>${e(clientEvidenceLabel(ev.field))}: ${e(clientEvidenceValue(ev.observedValue))} (${e(clientEvidenceStatus(ev.sourceStatus))})</li>`,
+          ).join("")}
+        </ul>
+      </li>`)
+    .join("");
+
+  const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"]
+    .map((key) => {
+      const ev = model.evidence?.[key];
+      if (!ev) return `<li>${e(clientSourceLabel(key))}: Not collected</li>`;
+      return `<li>${e(clientSourceLabel(key))}: ${e(clientEvidenceStatus(ev.sourceStatus))}${ev.collectedAt ? ` (${e(ev.collectedAt)})` : ""}</li>`;
+    })
+    .join("");
+
+  const caps = model.capabilityEvidence?.capabilities || {};
+  const capRows = Object.entries(caps)
+    .filter(([key]) => key !== "technical.headers")
+    .map(([key, c]) =>
+      `<tr><td>${e(clientCapabilityLabel(key))}</td><td><span class="chip ${capabilityStatusClass(c.status)}">${e(c.status)}</span></td><td class="small">${e(clientLimitationText((c.limitations || []).join("; ")))}</td><td class="small">${c.validated ? "Direct check" : "Based on the available evidence"}</td></tr>`,
+    )
+    .join("");
+
+  const suppressed = (model.suppressedFindingReasons || [])
+    .map((reason) => `<li>This check was not completed because the required evidence was ${e(clientEvidenceStatus(reason.capabilityStatus))}.</li>`)
+    .join("");
+  const deferredBlock = suppressed.length
+    ? `<h3>Deferred &amp; unavailable analysis</h3><ul class="small">${suppressed}</ul>`
+    : `<h3>Deferred &amp; unavailable analysis</h3><p class="small">None deferred: all analyses with eligible evidence are rendered above; unavailable sources are shown in Source statuses.</p>`;
+
+  return `
+  <section id="evidence" class="card" data-supporting-section="evidence-limitations">
+    <h2>Evidence detail</h2>
+    <h3>Findings (${e((model.findings || []).length)})</h3>
+    <p class="small">The report contains ${e((model.findings || []).length)} assessed finding${(model.findings || []).length === 1 ? "" : "s"}. Material limitations are retained below; the details explain what was found and how complete the evidence is.</p>
+    <details class="supporting-detail-disclosure"><summary>Show detailed findings and source coverage</summary>
+    <ul class="findings">${findings}</ul>
+    <h3>Source statuses</h3>
+    <ul class="small">${sources}</ul>
+    </details>
+    <h3>Evidence capabilities</h3>
+    <details class="supporting-detail-disclosure"><summary>Show evidence coverage detail</summary><div class="table-wrap"><table>
+      <thead><tr><th>Evidence area</th><th>Status</th><th>Limits</th><th>How it was checked</th></tr></thead>
+      <tbody>${capRows}</tbody>
+    </table></div></details>
+    ${deferredBlock}
+  </section>`;
+}
+
+function deepEvidenceLayerLegacy(model) {
   const findings = (model.findings || [])
     .map(
       (f) => `

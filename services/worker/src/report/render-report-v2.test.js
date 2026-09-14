@@ -359,6 +359,18 @@ test("TECH-CLIENT-01: security headers stay out of client-facing report surfaces
   assert.doesNotMatch(html, /Show server and security-header evidence|technical\.headers/);
   assert.doesNotMatch(html, /security headers?|response headers?/i);
   assert.match(html, /on assessed technical checks|Based on \d+ of \d+ technical points assessed\./);
+  const visibleText = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  const supportingDetail = html.slice(html.indexOf('<section id="pillars"'), html.indexOf('<footer>'))
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  assert.doesNotMatch(supportingDetail, /SOL-[A-Z0-9-]+|VAN-[A-Z0-9-]+/i);
+  assert.doesNotMatch(supportingDetail, /governed assessment|governed page evidence|governed decision-support|governed meta|governed heading|Inspect the governed|Governed E-E-A-T|governed metadata scope|dataforseo_onpage|playwright-conversion-path|score-bearing/i);
+  assert.doesNotMatch(visibleText, /dataforseo_onpage|playwright-conversion-path/i);
+  assert.match(html, /data-solution-id="SOL-[A-Z0-9-]+"/);
 });
 
 test("P10: content opportunities are presented as an actionable client plan", () => {

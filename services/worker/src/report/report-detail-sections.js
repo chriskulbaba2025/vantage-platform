@@ -420,7 +420,7 @@ export function eeatSection(model) {
             )}</strong>${(() => {
               const solution = solutionByFindingId.get(finding.findingId);
               return solution
-                ? ` — <a href="#priority-fixes" data-solution-id="${e(solution.solutionId)}">Canonical solution ${e(solution.solutionId)}</a>`
+                ? ` — <a href="#priority-fixes" data-solution-id="${e(solution.solutionId)}">See Priority Fixes</a>`
                 : " — no canonical client solution is displayed for this evidence.";
             })()}</li>`,
         )
@@ -518,7 +518,7 @@ export function eeatSection(model) {
     .replace(/<h3>How confidence should build<\/h3>[\s\S]*?<h3>Where confidence breaks down<\/h3>/, "<h3>Where confidence may still need strengthening</h3><p>No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.</p>")
     .replace(/<p>No checked trust-proof signal was absent from the assessed content\.<\/p>/, "")
     .replace(/<h3>Proof already available but underused<\/h3>[\s\S]*?<h3>Material trust findings<\/h3>/, `${proofAction}<h3>Material trust findings</h3>`)
-    + `<section id="eeat-detail" class="card" data-supporting-section="trust-evidence"><p class="muted small">Supporting Detail</p><h2>E-E-A-T Trust Readiness Detail</h2><details class="supporting-detail-disclosure"><summary>Show detailed trust dimensions</summary><h3>Governed E-E-A-T dimensions</h3><div class="pillar-grid">${dimensionCards}</div><h3>Detailed trust interpretation</h3><p>${e(verdict)}</p>${findingBlock}</details></section>`;
+    + `<section id="eeat-detail" class="card" data-supporting-section="trust-evidence"><p class="muted small">Supporting Detail</p><h2>E-E-A-T Trust Readiness Detail</h2><details class="supporting-detail-disclosure"><summary>Show detailed trust dimensions</summary><h3>Trust dimensions</h3><div class="pillar-grid">${dimensionCards}</div><h3>Detailed trust interpretation</h3><p>${e(verdict)}</p>${findingBlock}</details></section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +624,7 @@ export function technicalDetailSection(model) {
       } of ${pages} page(s) missing a canonical.`,
       explanation:
         avail.canonicals === true
-          ? "Canonical evidence was collected for the governed metadata scope."
+          ? "Canonical evidence was collected for the pages reviewed."
           : "Canonical evidence was not collected.",
     },
     {
@@ -842,7 +842,7 @@ export function technicalDetailSection(model) {
           <thead><tr><th>#</th><th>Page</th><th>Observed title</th><th>Heading evidence</th></tr></thead>
           <tbody>${pageRows}</tbody>
         </table></div>
-        <p class="muted small">This table uses the page-level evidence carried into the report model. It does not infer page importance where the model does not provide a governed priority label.</p>`
+        <p class="muted small">This table uses the page-level evidence carried into the report model. It does not infer page importance where the report does not provide a priority label.</p>`
         : `<p><span class="chip cap-neutral">${e(
             UNAVAILABLE,
           )}</span> No page-level technical evidence was available.</p>`
@@ -1586,7 +1586,7 @@ export function schemaSection(model) {
     </div>
 
     <h3>Material findings only</h3>
-    <p class="small">Schema type counts are evidence context only. They do not become a client remedy without a separately governed canonical solution.</p>
+    <p class="small">Schema type counts are evidence context only. They do not become a client action without a separate supported recommendation.</p>
 
     <h3>Unavailable or partial evidence</h3>
     ${
@@ -2107,7 +2107,7 @@ export function performanceDetailSection(model) {
                   "Evidence-backed performance finding.",
                 )}${
                   canonicalByFindingId.has(finding.findingId)
-                    ? ` <a href="#priority-fixes" data-solution-id="${e(canonicalByFindingId.get(finding.findingId).solutionId)}">Canonical solution ${e(canonicalByFindingId.get(finding.findingId).solutionId)}</a>`
+                    ? ` <a href="#priority-fixes" data-solution-id="${e(canonicalByFindingId.get(finding.findingId).solutionId)}">See Priority Fixes</a>`
                     : ""
                 }</li>`,
             )
@@ -2716,7 +2716,6 @@ function actionRows(records) {
         <th>#</th>
         <th>What we change</th>
         <th>Why</th>
-        <th>Class</th>
         <th>Effort</th>
       </tr>
     </thead>
@@ -2727,17 +2726,14 @@ function actionRows(records) {
           <td>${e(
             record.sequenceInputs?.governedRank ?? index + 1,
           )}</td>
-          <td><strong>${e(
+          <td><strong>${e(clientActionText(
             record.problem,
-          )}</strong><br><span class="small">${e(
+          ))}</strong><br><span class="small">${e(clientActionText(
             record.whatToChange,
-          )}</span></td>
-          <td class="small">${e(
+          ))}</span></td>
+          <td class="small">${e(clientActionText(
             record.whyItMatters,
-          )}</td>
-          <td class="small">${e(
-            record.solutionId,
-          )}</td>
+          ))}</td>
           <td class="small">${e(
             record.effortBand,
           )}</td>
@@ -2745,6 +2741,19 @@ function actionRows(records) {
       )
       .join("")}</tbody>
   </table></div>`;
+}
+
+function clientActionText(value) {
+  return String(value || "")
+    .replace(/the governed assessment indicates that/gi, "The review found that")
+    .replace(/the governed site evidence indicates that/gi, "The review found that")
+    .replace(/the governed page evidence indicates that/gi, "The page evidence shows that")
+    .replace(/if the governed [^,]+ remains present,?/gi, "If this issue remains present,")
+    .replace(/inspect the governed [^.]+ at the assessed scope/gi, "Review the relevant pages")
+    .replace(/at the scoped page or journey stage/gi, "on the relevant page or journey stage")
+    .replace(/in the assessed scope/gi, "on the pages reviewed")
+    .replace(/at the assessed scope/gi, "on the pages reviewed")
+    .replace(/\bgoverned\b/gi, "reviewed");
 }
 
 export function actionPlanSection(canonical, checklist) {
@@ -2821,11 +2830,11 @@ export function actionPlanSection(canonical, checklist) {
             .map(
               (m) =>
                 `<li>${e(
-                  m,
+                  clientActionText(m),
                 )}</li>`,
             )
             .join("")}</ul>`
-        : '<p class="small">No verification step is available because no score-bearing action was produced.</p>'
+        : '<p class="small">No verification step is available because no measured action was produced.</p>'
     }
     </details>
   </section>`;
