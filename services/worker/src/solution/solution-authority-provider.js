@@ -14,7 +14,7 @@ import { generateCanonicalSolutions } from "./solution-generator.js";
 export const SOLUTION_AUTHORITY_PROVIDER_VERSION = "1.0.0";
 export const SOLUTION_AUTHORITY_SOURCE =
   "prysm-static-solution-authority/1.0.0";
-export const SOLUTION_RULE_VERSION = "4.1.1";
+export const SOLUTION_RULE_VERSION = "4.1.2";
 
 export const SOLUTION_PAGE_REGISTRY = Object.freeze([
   "executive-scorecard",

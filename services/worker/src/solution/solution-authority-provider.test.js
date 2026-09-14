@@ -98,9 +98,21 @@ test("every supported actionable rule/version has exactly one authority entry", 
   }
 });
 
+test("current performance finding version resolves to exact authority", () => {
+  const entry = SOLUTION_AUTHORITY_REGISTRY["VAN-PERF-001@4.1.2"];
+  assert.ok(entry);
+  assert.equal(entry.ruleId, "VAN-PERF-001");
+  assert.equal(entry.ruleVersion, "4.1.2");
+  const records = buildSolutionAuthorityRecords(input({
+    findings: [finding("VAN-PERF-001", 1, { ruleVersion: "4.1.2" })],
+  }));
+  assert.equal(records["F-1"].failureMode, "slow-largest-contentful-paint");
+});
+
 test("duplicate and mismatched registry authority fail closed", () => {
   const entry = SOLUTION_AUTHORITY_REGISTRY[`VAN-TECH-001@${SOLUTION_RULE_VERSION}`];
   assert.throws(() => createSolutionAuthorityRegistry([entry, entry]), (error) => error.code === "AUTHORITY-DUPLICATE");
+  providerFails(input({ findings: [finding("VAN-PERF-001", 1, { ruleVersion: "4.1.1" })] }), "AUTHORITY-VERSION");
   providerFails(input({ findings: [finding("VAN-TECH-001", 1, { ruleVersion: "9.9.9" })] }), "AUTHORITY-VERSION");
 });
 
