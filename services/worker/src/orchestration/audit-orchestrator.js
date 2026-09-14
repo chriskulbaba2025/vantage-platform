@@ -1147,7 +1147,7 @@ export function createAuditOrchestrator({
     // 1.0.0 and governs v1 manifests only).
     const manifest = {
       contractVersion: "1.0.0", artifactVersion: "1.0.0",
-      reportVersion: scoringModel.scoringVersion || "4.1.1",
+      reportVersion: scoringModel.scoringVersion || "4.1.2",
       reportDesignVersion: REPORT_DESIGN_V2,
       runId: executionId,
       slug: String(auditRequest.businessName || auditRequest.targetUrl || "audit").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),

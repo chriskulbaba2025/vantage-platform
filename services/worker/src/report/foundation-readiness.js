@@ -536,29 +536,6 @@ function primaryContact(model) {
     "No contact detail was detected on the assessed pages. Visitors ready to act have no direct way to reach the business.");
 }
 
-function securityHeaders(model) {
-  const site = model?.evidence?.site || {};
-  if (!capAvailable(model, "technical.headers")) {
-    return item("security_headers", "Basic security headers", FOUNDATION_STATUS.NOT_ASSESSED,
-      "HTTP response headers were not returned by the crawl provider, so security headers were not evaluated.",
-      { requires: "a crawl source that returns HTTP response headers" });
-  }
-  const headers = site.securityHeaders || {};
-  // A capability that claims AVAILABLE but carries no observed header keys
-  // proves nothing — an empty object must not render as "all headers present".
-  if (Object.keys(headers).length === 0) {
-    return item("security_headers", "Basic security headers", FOUNDATION_STATUS.NOT_ASSESSED,
-      "No response-header values were recorded, so security headers were not evaluated.",
-      { requires: "a crawl source that returns HTTP response headers" });
-  }
-  const absent = Object.entries(headers).filter(([, present]) => !present).map(([name]) => name);
-  return absent.length > 0
-    ? item("security_headers", "Basic security headers", FOUNDATION_STATUS.ACTION_REQUIRED,
-        `Observed response headers do not include: ${absent.join(", ")}.`)
-    : item("security_headers", "Basic security headers", FOUNDATION_STATUS.PASS,
-        "The checked browser-protection headers were present in the response.");
-}
-
 function mobileExperience(model) {
   const mobile = model?.evidence?.performance?.mobile;
   const score = mobile?.scores?.performance;
@@ -610,7 +587,6 @@ export function buildFoundationChecklist(model) {
     conversionMeasurement(model),
     primaryContact(model),
     mobileExperience(model),
-    securityHeaders(model),
     ...unassessableCandidates(),
   ];
 }

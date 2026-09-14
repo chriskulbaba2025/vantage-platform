@@ -607,13 +607,13 @@ test("V3 module weights within each dimension sum to the dimension total", () =>
   }
 });
 
-test("V4 scoring version is exposed (PRYSM-NEXT-01 WP-D-08 / WP-E-05 / WP-J: 4.1.1)", () => {
-  assert.equal(SCORING_VERSION, "4.1.1");
+test("V4 scoring version is exposed (PRYSM-NEXT-01 WP-D-08 / WP-E-05 / WP-J: 4.1.2)", () => {
+  assert.equal(SCORING_VERSION, "4.1.2");
   const model = scoreAudit(
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
     evidence(),
   );
-  assert.equal(model.scoringVersion, "4.1.1");
+  assert.equal(model.scoringVersion, "4.1.2");
   assert.equal(model.capabilityEvidence.capabilityEvidenceVersion, "2.0.0");
 });
 

@@ -481,7 +481,7 @@ test("CR-06: readiness dimension weights and the readiness score are unchanged",
 
   const model = scoreWith(assessedSite());
 
-  assert.equal(model.scoringVersion, "4.1.1", "scoring version must not change");
+  assert.equal(model.scoringVersion, "4.1.2", "scoring version must use the technical normalization patch");
   assert.equal(typeof model.scores.conversionReadiness, "number");
 
   const again = scoreWith(assessedSite());
@@ -540,26 +540,17 @@ test("CR-08: CMS section never presents generic feasibility as verified site fac
   );
 });
 
-test("CR-09: technical sub-panels respect capability availability", () => {
+test("CR-09: technical detail omits security-header client surfaces", () => {
   const unassessed = renderReportV2(scoreWith(unassessedSite()));
   const tech = unassessed.slice(unassessed.indexOf('id="technical"'), unassessed.indexOf('id="technical"') + 4000);
 
   assert.ok(tech.length > 0, "technical detail section must exist");
-  assert.match(tech, /Not Assessed/i, "unavailable header evidence renders Not Assessed");
-
-  assert.ok(
-    !/Security headers[\s\S]{0,200}?\bMissing\b/i.test(tech),
-    "unavailable security-header evidence must never render as Missing",
-  );
+  assert.doesNotMatch(tech, /security headers|security-header|referrer-policy|x-frame-options/i);
 
   const assessed = renderReportV2(scoreWith(assessedSite()));
   const assessedTech = assessed.slice(assessed.indexOf('id="technical"'), assessed.indexOf('id="technical"') + 8000);
 
-  assert.match(
-    assessedTech,
-    /referrerPolicy|Referrer-Policy/i,
-    "assessed headers are reported individually",
-  );
+  assert.doesNotMatch(assessedTech, /security headers|security-header|referrer-policy|x-frame-options/i);
 });
 
 test("CR-10: heading evidence is scoped to the named evaluated page", () => {

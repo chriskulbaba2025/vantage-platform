@@ -149,15 +149,51 @@ export function clientFacingPageUrls(model, urls) {
 }
 
 function clientFacingReportModel(model) {
-  return {
-    ...model,
-    findings: (model?.findings || []).map((finding) => ({
+  const findings = (model?.findings || [])
+    .filter((finding) => finding.ruleId !== "VAN-TECH-003")
+    .map((finding) => ({
       ...finding,
       affectedUrls: clientFacingPageUrls(
         model,
         finding.affectedUrls,
       ),
-    })),
+    }));
+
+  const suppressedFindingReasons = (model?.suppressedFindingReasons || [])
+    .filter((reason) => reason.ruleId !== "VAN-TECH-003");
+
+  const canonicalSolutions = model?.canonicalSolutions;
+  const securityFindingIds = new Set(
+    (model?.findings || [])
+      .filter((finding) => finding.ruleId === "VAN-TECH-003")
+      .map((finding) => finding.findingId),
+  );
+  const visibleCanonicalRecords = Array.isArray(canonicalSolutions?.records)
+    ? canonicalSolutions.records.filter(
+        (record) =>
+          !record.findingRefs?.some((findingId) =>
+            securityFindingIds.has(findingId),
+          ),
+      )
+    : canonicalSolutions?.records;
+
+  return {
+    ...model,
+    findings,
+    suppressedFindingReasons,
+    canonicalSolutions: canonicalSolutions
+      ? {
+          ...canonicalSolutions,
+          records: visibleCanonicalRecords,
+          sequence: Array.isArray(canonicalSolutions.sequence)
+            ? canonicalSolutions.sequence.filter((solutionId) =>
+                visibleCanonicalRecords?.some(
+                  (record) => record.solutionId === solutionId,
+                ),
+              )
+            : canonicalSolutions.sequence,
+        }
+      : canonicalSolutions,
   };
 }
 
@@ -577,6 +613,13 @@ function executiveText(value) {
 function executiveScorecard(model, pillars, canonical) {
   const readiness = model.scores.conversionReadiness;
   const assessedWeight = Number(model.assessedWeight ?? 0);
+  const technicalHealth = (pillars || []).find((pillar) => pillar.id === "technical_health");
+  const technicalCoverageLimited = technicalHealth &&
+    technicalHealth.subWeightTotal > 0 &&
+    technicalHealth.subWeightAssessed < technicalHealth.subWeightTotal;
+  const technicalCoverageText = technicalCoverageLimited
+    ? ` Technical Health is based on ${technicalHealth.subWeightAssessed} of ${technicalHealth.subWeightTotal} technical points assessed.`
+    : "";
   const actions = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed).slice(0, 3);
   const readinessLine = readiness === null
     ? `<div class="readiness-none">${e(model.readinessStatus || "Overall score unavailable")}</div>`
@@ -589,12 +632,14 @@ function executiveScorecard(model, pillars, canonical) {
   const strengths = (pillars || [])
     .filter((pillar) => typeof pillar.score === "number" && pillar.score >= 60)
     .slice(0, 5)
-    .map((pillar) => `${pillar.label} provides a solid foundation in the pages and signals reviewed.`);
+    .map((pillar) => pillar.id === "technical_health" && technicalCoverageLimited
+      ? "Technical checks reviewed were strong, but coverage was limited."
+      : `${pillar.label} provides a solid foundation in the pages and signals reviewed.`);
   const coverage = assessedWeight >= 100
     ? `<p><strong>Assessment coverage was complete.</strong> We found enough evidence to support the main conclusions on this page. Areas with limited evidence are identified in Supporting Detail rather than being treated as confirmed problems.</p>`
     : assessedWeight >= 90
       ? `<p>Assessment coverage was nearly complete. We found enough evidence to support the main conclusions on this page. Areas with limited evidence are identified in Supporting Detail rather than being treated as confirmed problems.</p>`
-      : `<p>Assessment coverage was limited. Areas with limited evidence are clearly marked.</p>`;
+      : `<p>Assessment coverage was limited.${technicalCoverageText} Areas with limited evidence are clearly marked.</p>`;
   const uncertainty = readiness === null
     ? "There was not enough information to produce an overall score. The report distinguishes what was reviewed from what remains unknown."
     : model.readinessStatus === "Provisional"
@@ -617,7 +662,11 @@ function executiveScorecard(model, pillars, canonical) {
 function pillarSection(pillars) {
   const available = (pillars || []).filter((p) => typeof p.score === "number");
   const weak = available.filter((p) => p.score < 60).sort((a, b) => a.score - b.score);
-  const strong = available.filter((p) => p.score >= 60).sort((a, b) => b.score - a.score);
+  const strong = available.filter((p) => {
+    if (p.score < 60) return false;
+    if (p.id !== "technical_health") return true;
+    return !(p.subWeightTotal > 0 && p.subWeightAssessed < p.subWeightTotal);
+  }).sort((a, b) => b.score - a.score);
 
   const bandLabel = (score) => {
     if (score === null || score === undefined) return "Limited Evidence";
@@ -666,20 +715,35 @@ function pillarSection(pillars) {
   }).join("");
 
   const cards = pillars.map((p) => {
+    const technicalCoverageLimited =
+      p.id === "technical_health" &&
+      p.subWeightTotal > 0 &&
+      p.subWeightAssessed < p.subWeightTotal;
     const scoreHtml = p.score === null
       ? `<div class="pillar-score none">Not Assessed</div>`
-      : `<div class="pillar-score">${e(p.score)}<span class="readiness-max">/100</span></div>`;
+      : technicalCoverageLimited
+        ? `<div class="pillar-score">${e(p.score)}/100 on assessed technical checks</div>`
+        : `<div class="pillar-score">${e(p.score)}<span class="readiness-max">/100</span></div>`;
     const modules = p.modules
       .map((m) => `<li>${e(m.moduleId)}: ${m.score === null ? "suppressed" : e(m.score)} (weight ${e(m.weight)})</li>`)
       .join("");
     const caps = p.capabilities
       .map((c) => `<span class="chip ${capabilityStatusClass(c.status)}">${e(c.key)}: ${e(c.status)}</span>`)
       .join(" ");
+    const coverageNote =
+      p.id === "technical_health" &&
+      p.subWeightTotal > 0 &&
+      p.subWeightAssessed < p.subWeightTotal
+        ? `Based on ${p.subWeightAssessed} of ${p.subWeightTotal} technical points assessed.`
+        : "";
     return `
       <div class="pillar">
         <h3>${e(p.label)}</h3>
         ${scoreHtml}
-        <p class="small"><strong>${e(bandLabel(p.score))}</strong>${p.hasIncompleteFieldEvidence ? " · Real-user performance data was not available, so this result reflects lab measurements and is not a complete real-user readiness conclusion." : ""}</p>
+        ${coverageNote ? `<p class="small">${e(coverageNote)}</p>` : ""}
+        ${technicalCoverageLimited
+          ? `<p class="small"><strong>Technical checks reviewed were strong, but coverage was limited.</strong></p>`
+          : `<p class="small"><strong>${e(bandLabel(p.score))}</strong>${p.hasIncompleteFieldEvidence ? " · Real-user performance data was not available, so this result reflects lab measurements and is not a complete real-user readiness conclusion." : ""}</p>`}
         <ul class="pillar-modules">${modules}</ul>
         <div class="pillar-caps">${caps}</div>
       </div>`;
@@ -2221,7 +2285,6 @@ function cmsPlatformSection(model) {
     "Can JSON-LD structured data be added globally and per service page?",
     "Can semantic heading levels be chosen independently of visual styling?",
     "Does the current plan allow dedicated service, FAQ, and policy pages?",
-    "Can response headers be configured at the host, CDN, or platform layer?",
     "Can a lead-capture form be embedded on the pages that need it?",
   ];
 
@@ -2385,6 +2448,7 @@ function deepEvidenceLayer(model) {
 
   const caps = model.capabilityEvidence?.capabilities || {};
   const capRows = Object.entries(caps)
+    .filter(([key]) => key !== "technical.headers")
     .map(
       ([key, c]) =>
         `<tr><td>${e(key)}</td><td><span class="chip ${capabilityStatusClass(

@@ -21,7 +21,7 @@ export const PILLAR_DEFS = Object.freeze([
     id: "trust_proof",
     label: "Trust & Proof",
     modules: ["trust_signals", "risk_reduction"],
-    capabilities: ["trust.proof", "technical.headers"],
+    capabilities: ["trust.proof"],
   },
   {
     id: "conversion_path",
@@ -37,7 +37,6 @@ export const PILLAR_DEFS = Object.freeze([
       "technical.indexability",
       "technical.redirects",
       "technical.resources",
-      "technical.headers",
     ],
   },
   {
@@ -73,7 +72,13 @@ export function computePillars(model) {
         weighted += score * weight;
         weightSum += weight;
       }
-      modules.push({ moduleId, score, weight });
+      modules.push({
+        moduleId,
+        score,
+        weight,
+        subWeightAssessed: entry?.subWeightAssessed,
+        subWeightTotal: entry?.subWeightTotal,
+      });
     }
 
     const capabilities = def.capabilities.map((key) => ({
@@ -95,6 +100,16 @@ export function computePillars(model) {
       assessedWeight: weightSum,
       totalWeight: def.modules.reduce(
         (sum, m) => sum + (MODULES[m]?.weight ?? 0),
+        0,
+      ),
+      subWeightAssessed: modules.reduce(
+        (sum, module) =>
+          sum + (Number.isFinite(module.subWeightAssessed) ? module.subWeightAssessed : 0),
+        0,
+      ),
+      subWeightTotal: modules.reduce(
+        (sum, module) =>
+          sum + (Number.isFinite(module.subWeightTotal) ? module.subWeightTotal : 0),
         0,
       ),
       modules,

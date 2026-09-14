@@ -145,7 +145,7 @@ test(
         "2.0.0",
 
       scoringVersion:
-        "4.1.1",
+        "4.1.2",
 
       generatedAt:
         "2026-09-06T20:00:00.000Z",

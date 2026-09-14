@@ -1094,7 +1094,7 @@ test("NV2-PROD-05: production v2 model preserves readiness detail and rendering 
   const model = buildV2Model({
     auditRequest: { businessName: "Proof", targetUrl: "https://proof.example.com" },
     scoreSet: {
-      scoringVersion: "4.1.1",
+      scoringVersion: "4.1.2",
       generatedAt: FIXED_TS,
       scores: {},
       bands: {},

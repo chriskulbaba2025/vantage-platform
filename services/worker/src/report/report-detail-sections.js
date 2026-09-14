@@ -557,16 +557,6 @@ export function technicalDetailSection(model) {
     "content.body",
   );
 
-  const headersAssessed = capAssessed(
-    model,
-    "technical.headers",
-  );
-
-  const headersPartial = capPartial(
-    model,
-    "technical.headers",
-  );
-
   const schemaAssessed = capAssessed(
     model,
     "schema.structured_data",
@@ -589,33 +579,6 @@ export function technicalDetailSection(model) {
     if (row.partial) return "PARTIAL";
     return row.issue ? "FINDING" : "PASS";
   };
-
-  const headerNames = [
-    "xFrameOptions",
-    "xContentTypeOptions",
-    "referrerPolicy",
-    "contentSecurityPolicy",
-  ];
-
-  const headerRows = headerNames
-    .map((name) => {
-      const present =
-        site.securityHeaders?.[name] === true;
-
-      return techRow(
-        name,
-        headersAssessed,
-        present
-          ? "Present"
-          : "Not present in the observed response",
-        !headersAssessed
-          ? "Response headers were not returned by the crawl provider."
-          : headersPartial
-            ? "Observed within PARTIAL response-header coverage; absence outside the available coverage is not established."
-            : "",
-      );
-    })
-    .join("");
 
   const rows = [
     {
@@ -733,28 +696,6 @@ export function technicalDetailSection(model) {
       explanation: performancePartial
         ? "Performance evidence was PARTIAL. Available measurements remain usable, but they do not establish complete performance coverage."
         : "Performance matters when delivery friction affects important user and conversion paths.",
-    },
-    {
-      group: "Deliver",
-      area: "Server and security headers",
-      assessed: headersAssessed,
-      partial: headersPartial,
-      issue:
-        !headersPartial &&
-        headersAssessed &&
-        Object.values(
-          site.securityHeaders ||
-            {},
-        ).some(
-          (present) =>
-            present === false,
-        ),
-      assessedText: headersAssessed
-        ? "Observed response-header evidence was assessed."
-        : "Response-header evidence was not collected.",
-      explanation: headersPartial
-        ? "Response-header coverage was PARTIAL. Observed headers are reported, but missing headers are not converted into a complete finding."
-        : "Header observations are technical evidence; they become recommendations only when materially relevant.",
     },
     {
       group: "Deliver",
@@ -938,18 +879,6 @@ export function technicalDetailSection(model) {
             .join("")}</ul>`
         : "<p>No material technical finding was created from fully assessed coverage.</p>"
     }
-
-    <details class="supporting-detail-disclosure"><summary>Show server and security-header evidence</summary><h3>Server &amp; security headers</h3>
-    <div class="table-wrap"><table>
-      <thead>
-        <tr>
-          <th>Header</th>
-          <th>Observed</th>
-          <th>Note</th>
-        </tr>
-      </thead>
-      <tbody>${headerRows}</tbody>
-    </table></div></details>
 
     <h3>Secondary observations</h3>
     <p class="small">Technical metrics and counts are supporting evidence, not conclusions by themselves. Items such as HTTP→HTTPS validation, redirect chains/loops, mixed content, compression diagnostics, material JavaScript errors, and Open Graph metadata are only stated when corresponding evidence exists in the report model.</p>

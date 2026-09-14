@@ -148,7 +148,10 @@ test("WP-G-02: five pillars with weighted means and capability statuses", () => 
   const technical = pillars.find((p) => p.id === "technical_health");
   assert.equal(typeof technical.score, "number", "technical hygiene eligible → score");
   assert.ok(technical.modules.some((mod) => mod.moduleId === "technical_hygiene" && mod.score !== null));
-  assert.ok(technical.capabilities.some((c) => c.key === "technical.headers" && c.status === "AVAILABLE"));
+  assert.ok(
+    !technical.capabilities.some((c) => c.key === "technical.headers"),
+    "security-header capability is not a client-facing pillar signal",
+  );
 
   const perf = pillars.find((p) => p.id === "performance_experience");
   assert.equal(perf.score, 75, "performance pillar = round((60+90)/2) = 75");
@@ -211,7 +214,7 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   assert.match(html, /Competitive context/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
-  assert.ok(html.includes("Scoring version 4.1.1"));
+  assert.ok(html.includes("Scoring version 4.1.2"));
 });
 
 test("S02: Priority Fixes is one ranked client sequence with bounded fields", () => {
@@ -346,6 +349,16 @@ test("S03: conversion journey tells a bounded CRO story", () => {
   assert.doesNotMatch(page3Text, /SOL-[A-Z0-9-]+|View canonical detail|governed|canonical|client remediation|material route blocker|assessed scope/i);
   assert.match(page3, /data-solution-id="[^"]+"/);
   assert.doesNotMatch(page3, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
+});
+
+test("TECH-CLIENT-01: security headers stay out of client-facing report surfaces", () => {
+  const html = renderReportV2(priorityModel());
+
+  assert.doesNotMatch(html, /VAN-TECH-003/);
+  assert.doesNotMatch(html, /Basic security headers|Server and security headers|Server &amp; security headers/);
+  assert.doesNotMatch(html, /Show server and security-header evidence|technical\.headers/);
+  assert.doesNotMatch(html, /security headers?|response headers?/i);
+  assert.match(html, /on assessed technical checks|Based on \d+ of \d+ technical points assessed\./);
 });
 
 test("P10: content opportunities are presented as an actionable client plan", () => {

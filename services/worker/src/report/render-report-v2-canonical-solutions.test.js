@@ -40,7 +40,7 @@ function model(canonicalSolutions) {
     clientConclusion: "governed conclusion", prohibitedUpgrades: [], evidenceRefs: [],
   }]));
   return {
-    scoringVersion: "4.1.1",
+    scoringVersion: "4.1.2",
     generatedAt: "2026-09-09T00:00:00.000Z",
     scores: { conversionReadiness: 50 },
     bands: { conversionReadiness: "Moderate", evidenceConfidence: "Moderate" },

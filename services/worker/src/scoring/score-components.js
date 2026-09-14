@@ -25,7 +25,9 @@ import {
 //           changes assessed sub-weights, never the dimension weights).
 // ---------------------------------------------------------------------------
 
-export const SCORING_VERSION = "4.1.1";
+// 4.1.2: normalize technical sub-rules from earned assessed points and keep
+// security-header evidence out of client-facing score/finding surfaces.
+export const SCORING_VERSION = "4.1.2";
 
 // ---------------------------------------------------------------------------
 // Severity / band helpers
@@ -133,7 +135,7 @@ export const MODULES = Object.freeze({
     dimension: "trust_eeat",
     weight: 12.5,
     sources: ["crawl"],
-    requiredCapabilities: ["trust.proof", "technical.headers"],
+    requiredCapabilities: ["trust.proof"],
     label: "Risk Reduction",
     scorer: (_site, _perf, modelDeps) => scoreRiskReductionV4(modelDeps),
   },
@@ -895,36 +897,6 @@ function scoreRiskReductionV4({
       "trust.proof",
     );
 
-  const headersAssessed =
-    capabilityUsable(
-      capabilities,
-      "technical.headers",
-    );
-
-  const headerCapability =
-    capabilities?.[
-      "technical.headers"
-    ];
-
-  const securityHeaders =
-    headerCapability
-      ?.observedHeaders &&
-    typeof headerCapability
-      .observedHeaders ===
-      "object"
-      ? headerCapability
-          .observedHeaders
-      : site.securityHeaders;
-
-  const securityPoints =
-    25 *
-    (
-      Object.values(
-        securityHeaders || {},
-      ).filter(Boolean).length /
-      4
-    );
-
   return scoreAssessedTerms([
     {
       key: "policies",
@@ -945,15 +917,6 @@ function scoreRiskReductionV4({
         site.trust.contact
           ? 20
           : 0,
-    },
-    {
-      key:
-        "security_headers",
-      max: 25,
-      assessed:
-        headersAssessed,
-      points:
-        securityPoints,
     },
     {
       key: "https",
@@ -1705,91 +1668,15 @@ function scoreTechnicalV4({
     });
   }
 
-  const headerCapability =
-    capabilities?.[
-      "technical.headers"
-    ];
-
-  const securityHeaders =
-    headerCapability
-      ?.observedHeaders &&
-    typeof headerCapability
-      .observedHeaders ===
-      "object"
-      ? headerCapability
-          .observedHeaders
-      : site.securityHeaders;
-
-  const hasHeaderEvidence =
-    securityHeaders &&
-    typeof securityHeaders ===
-      "object" &&
-    Object.keys(
-      securityHeaders,
-    ).length > 0;
-
-  const headersPresent =
-    hasHeaderEvidence
-      ? Object.values(
-          securityHeaders,
-        ).filter(Boolean).length
-      : 0;
-
-  const completeHeaders =
-    headerCapability?.status ===
-      SOURCE_STATUS.AVAILABLE &&
-    hasHeaderEvidence;
-
-  const observedPartialHeaderDefect =
-    headerCapability?.status ===
-      SOURCE_STATUS.PARTIAL &&
-    hasHeaderEvidence &&
-    headersPresent < 4;
-
-  if (
-    completeHeaders ||
-    observedPartialHeaderDefect
-  ) {
-    const score =
-      Math.round(
-        10 *
-          (
-            headersPresent /
-            4
-          ),
-      );
-
-    subRules.push({
-      key: "headers",
-      weight: 10,
-      score,
-    });
-  }
-
   const totalWeight =
     subRules.reduce(
       (sum, rule) =>
         sum +
         rule.weight,
-      0,
+        0,
     );
 
-  const weighted =
-    subRules.reduce(
-      (sum, rule) =>
-        sum +
-        rule.score *
-          rule.weight,
-      0,
-    );
-
-  const score =
-    totalWeight > 0
-      ? clamp(
-          weighted /
-            totalWeight,
-        )
-      : null;
+  const score = normalizeAssessedSubRules(subRules);
 
   return {
     score,
@@ -1798,6 +1685,21 @@ function scoreTechnicalV4({
     subWeightTotal: 100,
     subScores: subRules,
   };
+}
+
+export function normalizeAssessedSubRules(subRules) {
+  const assessedWeight = (subRules || []).reduce(
+    (sum, rule) => sum + rule.weight,
+    0,
+  );
+  const earnedPoints = (subRules || []).reduce(
+    (sum, rule) => sum + rule.score,
+    0,
+  );
+
+  return assessedWeight > 0
+    ? clamp((earnedPoints / assessedWeight) * 100)
+    : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -2776,100 +2678,6 @@ export function buildFindings(site, performance, gsc, opts = {}) {
       competitiveSignal: 30,
       implementationPracticality: 70,
       verificationMethod: "Re-crawl and verify heading structure on all pages.",
-    });
-  }
-
-  const headerCapability =
-    capabilities[
-      "technical.headers"
-    ];
-
-  const securityHeaderEvidence =
-    headerCapability
-      ?.observedHeaders &&
-    typeof headerCapability
-      .observedHeaders === "object"
-      ? headerCapability
-          .observedHeaders
-      : site.securityHeaders;
-
-  const missingSecurity =
-    Object.entries(
-      securityHeaderEvidence || {},
-    )
-      .filter(
-        ([, present]) =>
-          present === false,
-      )
-      .map(([name]) => name);
-
-    if (missingSecurity.length) {
-    const browserHeaderEvidence =
-      headerCapability
-        ?.observedHeaders &&
-      typeof headerCapability
-        .observedHeaders ===
-        "object";
-
-    add({
-      ruleId: "VAN-TECH-003",
-      requires: "technical.headers",
-      absenceFinding: true,
-      partialTitle:
-        "Security headers were incomplete on the assessed browser pages",
-      partialEvidenceText:
-        `The available partial assessment observed these missing response headers: ${missingSecurity.join(", ")}`,
-      partialBusinessImpact:
-        "The partial browser assessment observed missing response protections on assessed pages, which may weaken technical trust there; unassessed pages remain unknown.",
-      partialConfidence:
-        CONFIDENCE_LEVELS.SUPPORTED,
-      dimension:
-        "technical_performance",
-      module:
-        "technical_hygiene",
-      title:
-        "Security headers are incomplete",
-      severity: "Medium",
-      key: "security",
-      confidence:
-        CONFIDENCE_LEVELS.DETERMINISTIC,
-      evidence: [
-        {
-          provider:
-            browserHeaderEvidence
-              ? (
-                  headerCapability
-                    .validatedBy ||
-                  "playwright-conversion-path"
-                )
-              : "dataforseo_onpage",
-
-          sourceStatus:
-            browserHeaderEvidence
-              ? headerCapability.status
-              : SOURCE_STATUS.AVAILABLE,
-
-          field:
-            "security_headers",
-
-          observedValue:
-            missingSecurity.join(", "),
-        },
-      ],
-      evidenceText:
-        missingSecurity.join(", "),
-      businessImpact:
-        "Missing browser protections may weaken technical trust.",
-      recommendation:
-        "Configure the missing response headers at the hosting layer",
-      effort: "L",
-      conversionImpact: 35,
-      gapSeverity: 45,
-      businessRelevance: 50,
-      competitiveSignal: 25,
-      implementationPracticality: 75,
-      verificationMethod:
-        "Re-crawl and confirm security headers are present in response.",
     });
   }
 

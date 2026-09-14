@@ -5,6 +5,7 @@ import {
   checkModuleEligibility,
   calculateEvidenceConfidence,
   MODULES,
+  normalizeAssessedSubRules,
 } from "./score-components.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
@@ -151,8 +152,8 @@ test(
   () => {
     const model = scoreAudit(INPUT, evidenceOf());
 
-    assert.equal(model.assessedWeight, 97);
-    assert.equal(model.scores.conversionReadiness, 33);
+    assert.equal(model.assessedWeight, 96);
+    assert.equal(model.scores.conversionReadiness, 34);
 
     const partial = scoreAudit(
       INPUT,
@@ -163,13 +164,14 @@ test(
       }),
     );
 
-    assert.equal(partial.assessedWeight, 84);
-    assert.equal(partial.scores.conversionReadiness, 29);
+    assert.equal(partial.assessedWeight, 96);
+    assert.equal(partial.scores.conversionReadiness, 34);
 
     assert.ok(
-      partial.suppressedModules.some(
+      !partial.suppressedModules.some(
         (m) => m.moduleId === "risk_reduction",
       ),
+      "Risk Reduction no longer depends on security-header evidence",
     );
   },
 );
@@ -1050,6 +1052,72 @@ test(
       tech.subWeightAssessed <
         tech.subWeightTotal,
       "unknown evidence reduces the assessed sub-weight",
+    );
+  },
+);
+
+test(
+  "4.1.2: technical normalization uses earned assessed points",
+  () => {
+    assert.equal(
+      normalizeAssessedSubRules([
+        { key: "indexability", weight: 10, score: 7 },
+        { key: "redirects", weight: 10, score: 10 },
+        { key: "headers", weight: 10, score: 0 },
+      ]),
+      57,
+      "7 + 10 + 0 earned points across 30 assessed points normalizes to about 56.7",
+    );
+
+    const withHeaders = evidenceOf();
+    const withoutHeaders = evidenceOf();
+    withHeaders.site.securityHeaders = {
+      xFrameOptions: false,
+      xContentTypeOptions: false,
+      referrerPolicy: false,
+      contentSecurityPolicy: false,
+    };
+    withoutHeaders.site.securityHeaders = {
+      xFrameOptions: true,
+      xContentTypeOptions: true,
+      referrerPolicy: true,
+      contentSecurityPolicy: true,
+    };
+
+    const withHeaderModel = scoreAudit(INPUT, withHeaders);
+    const withoutHeaderModel = scoreAudit(INPUT, withoutHeaders);
+    assert.equal(
+      withHeaderModel.moduleScores.technical_hygiene.score,
+      withoutHeaderModel.moduleScores.technical_hygiene.score,
+      "security-header evidence cannot change Technical Hygiene",
+    );
+    assert.equal(
+      withHeaderModel.moduleScores.risk_reduction.score,
+      withoutHeaderModel.moduleScores.risk_reduction.score,
+      "security-header evidence cannot change Risk Reduction",
+    );
+    assert.ok(
+      !withHeaderModel.findings.some((finding) => finding.ruleId === "VAN-TECH-003"),
+      "security headers do not produce a client-facing finding",
+    );
+  },
+);
+
+test(
+  "4.1.2: metadata counts stay excluded when canonical availability is false",
+  () => {
+    const ev = evidenceOf();
+    ev.site._metaCountersAvailable = false;
+    ev.site.missingTitles = 26;
+    ev.site.missingDescriptions = 34;
+    ev.site.missingCanonicals = 26;
+    ev.site.h1Missing = 31;
+    ev.site.h1Multiple = 4;
+
+    const technical = scoreAudit(INPUT, ev).moduleScores.technical_hygiene;
+    assert.ok(
+      !technical.subScores.some((row) => row.key === "meta"),
+      "metadata counts marked unavailable do not become score inputs",
     );
   },
 );
