@@ -1097,6 +1097,27 @@ if (localPersistenceEnabled) {
   console.log("DEVELOPMENT: seeded local mock identity local-test-user@local.test in local-sandbox");
 }
 
+// Stage 2 isolated staging: re-establish the accepted reviewer identity on
+// every worker startup. This is deliberately narrower than generic
+// self-registration: it runs only inside the existing non-production
+// local-persistence composition and only for the exact staging tenant.
+if (localPersistenceEnabled) {
+  const {
+    STAGE2_STAGING_TENANT_ID,
+    ensureStage2StagingIdentity,
+    shouldBootstrapStage2StagingIdentity,
+  } = await import("./local/stage2-staging-identity-bootstrap.js");
+  if (shouldBootstrapStage2StagingIdentity({
+    localPersistenceEnabled,
+    configuredTenantId: config.vantageTenantId,
+  })) {
+    const stagingIdentity = await ensureStage2StagingIdentity({ identityRepo });
+    console.log(
+      `DEVELOPMENT: ensured Stage 2 staging reviewer ${stagingIdentity.email} in ${STAGE2_STAGING_TENANT_ID}`,
+    );
+  }
+}
+
 // Stage 2 local-only registration: expose the accepted frozen audit through
 // the same lifecycle and governed artifact lookup used by the web application.
 // The registration stores lifecycle identity/state only; the artifact bridge
