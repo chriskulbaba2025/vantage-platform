@@ -7,6 +7,9 @@
  * Every browser action → same-origin Next.js Route Handler → this client → Railway worker.
  */
 
+if (process.env.VERCEL_ENV === "preview" && !process.env.VANTAGE_WORKER_API_URL) {
+  throw new Error("Vercel Preview worker target is not configured");
+}
 const WORKER_BASE = process.env.VANTAGE_WORKER_API_URL || "http://localhost:3000";
 const WORKER_SECRET = process.env.VANTAGE_WEBHOOK_SECRET || "";
 

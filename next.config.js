@@ -1,4 +1,11 @@
 /** @type {import('next').NextConfig} */
+const isVercelPreview = process.env.VERCEL_ENV === "preview";
+if (isVercelPreview && (!process.env.VANTAGE_WORKER_API_URL || !process.env.VANTAGE_TENANT_ID)) {
+  throw new Error(
+    "Vercel Preview requires explicit VANTAGE_WORKER_API_URL and VANTAGE_TENANT_ID configuration",
+  );
+}
+
 const nextConfig = {
   // Server-only env vars — never exposed to browser
   serverRuntimeConfig: {

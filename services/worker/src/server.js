@@ -13,6 +13,7 @@ import { resolveAuthorization, canAccessTenant } from "./identity/authorization.
 import { authorizeReportAccess } from "./identity/report-authorization.js";
 import { createSlidingWindowLimiter } from "./utils/rate-limiter.js";
 import { LOCAL_DETERMINISTIC_ONPAGE_FIXTURES } from "./local/deterministic-audit-fixture.js";
+import { validateStage2StagingPersistence } from "./local/stage2-staging-persistence.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -902,13 +903,21 @@ import { createGovernedArtifactStore, createFsArtifactStore, buildKey as buildAr
 import { createFileLifecycleRepository } from "./lifecycle/file-repository.js";
 
 const config = loadConfig();
+const stage2StagingPersistence = validateStage2StagingPersistence({
+  env: process.env,
+  databaseUrl: config.databaseUrl,
+});
 const localPersistenceEnabled = (
   process.env.NODE_ENV !== "production" &&
   process.env.VANTAGE_DEV_MEMORY_STORE === "true" &&
   process.env.PRYSM_LOCAL_PERSISTENCE === "true" &&
   !config.databaseUrl
 );
-const localDataDir = resolve(process.env.PRYSM_LOCAL_DATA_DIR || join(homedir(), "AppData", "Local", "PRYSM", "sandbox"));
+const localDataDir = resolve(
+  stage2StagingPersistence.dataDir ||
+    process.env.PRYSM_LOCAL_DATA_DIR ||
+    join(homedir(), "AppData", "Local", "PRYSM", "sandbox"),
+);
 const localReportDir = localPersistenceEnabled ? join(localDataDir, "reports") : config.artifactDir;
 const localStore = createLocalReportStore({ baseDir: localReportDir, publicBaseUrl: config.publicReportBaseUrl });
 const store = createReportStore(localPersistenceEnabled ? { ...config, artifactDir: localReportDir } : config);
