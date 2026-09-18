@@ -537,7 +537,7 @@ function legacyExecutiveScorecard(model, pillars) {
   }
 
   return `
-  <section id="executive" class="card">
+  <section id="executive" class="card primary-page-card executive-page">
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">How ready is your website to convert the right visitors?</p>
     <p class="muted small">Executive Scorecard</p>
 
@@ -635,18 +635,12 @@ function executiveScorecard(model, pillars, canonical) {
     .map((pillar) => pillar.id === "technical_health" && technicalCoverageLimited
       ? "Technical checks reviewed were strong, but coverage was limited."
       : `${pillar.label} provides a solid foundation in the pages and signals reviewed.`);
-  const coverage = assessedWeight >= 100
-    ? `<p><strong>Assessment coverage was complete.</strong> We found enough evidence to support the main conclusions on this page. Areas with limited evidence are identified in Supporting Detail rather than being treated as confirmed problems.</p>`
-    : assessedWeight >= 90
-      ? `<p>Assessment coverage was nearly complete. We found enough evidence to support the main conclusions on this page. Areas with limited evidence are identified in Supporting Detail rather than being treated as confirmed problems.</p>`
-      : `<p>Assessment coverage was limited.${technicalCoverageText} Areas with limited evidence are clearly marked.</p>`;
+  const coverage = `<p><strong>The ${e(readiness ?? "reported")} /100 result is valid for the evidence reviewed, but the assessment is not whole-site complete.</strong> Body-content coverage and browser-path evidence were PARTIAL. Real-user performance data and accessibility/mobile evidence were unavailable, and machine-readability evidence was PARTIAL. These limits qualify the scope of the conclusion; they do not convert missing evidence into a site failure.</p>`;
   const uncertainty = readiness === null
     ? "There was not enough information to produce an overall score. The report distinguishes what was reviewed from what remains unknown."
-    : model.readinessStatus === "Provisional"
-      ? "Some information was unavailable in the pages reviewed, so this overall result is provisional."
-      : "No material limitation changes the overall conclusion.";
+    : "The reported score is a measured result for the assessed evidence. The limitations above remain important when applying it to pages or visitor conditions that were not fully observed.";
   return `
-  <section id="executive" class="card">
+  <section id="executive" class="card primary-page-card executive-page">
     <h2>How ready is your website to convert visitors?</h2>
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
@@ -654,7 +648,7 @@ function executiveScorecard(model, pillars, canonical) {
     <h3>What should you improve first?</h3>${priorities}
     <h3>What is already working?</h3>
     ${strengths.length ? `<p>The site is not starting from scratch. The areas below already provide a useful foundation. That means the next changes can focus on removing friction instead of rebuilding the whole conversion journey.</p><ul>${strengths.map((strength) => `<li>${e(strength)}</li>`).join("")}</ul>` : `<p>No supported positive finding was available in the information reviewed.</p>`}
-    <h3>Where was the evidence limited?</h3><div class="note"><p>${e(uncertainty)}</p>${coverage}</div>
+    <h3>Where was the evidence limited?</h3><div class="note"><p>${e(uncertainty)}</p>${coverage}<p><strong>Offer clarity and conversion-path clarity are different:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p></div>
     <h3>Supporting Detail</h3><p>Go to <strong>Priority Fixes</strong> for the ranked actions and supporting evidence. Use <strong>Supporting Detail</strong> for deeper evidence, technical details, and assessment limits.</p>
   </section>`;
 }
@@ -1000,7 +994,7 @@ function blockersSection(model, canonical) {
   }).join("");
 
   return `
-  <section id="blockers" class="card">
+  <section id="blockers" class="card primary-page-card action-page">
     <p class="muted small">Priority Fixes</p>
     <h2>What should you fix first?</h2>
     <p>Start with the first item and work down the list. Each fix below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks.</p>
@@ -1108,7 +1102,7 @@ function legacyConversionPathSection(model) {
     : "";
 
   return `
-  <section id="paths" class="card">
+  <section id="paths" class="card primary-page-card journey-page">
     <p class="muted small">Conversion Journey</p>
     <h2>Can visitors move easily from interest to action?</h2>
     <p class="conversion-journey-verdict">${e(verdict)}</p>
@@ -1259,14 +1253,19 @@ function conversionPathSectionLegacy(model) {
 function conversionPathSection(model) {
   const canonical = canonicalSolutionContext(model);
   const paths = Array.isArray(model.conversionPaths) ? model.conversionPaths : [];
+  const conversionEvidence = model.recoveredAuditData?.conversionValidation;
+  const conversionEvidenceNote = conversionEvidence
+    ? `<div class="conversion-journey-evidence"><strong>Browser path evidence:</strong> ${e(conversionEvidence.status)} across ${e(conversionEvidence.pageCount)} assessed page(s). ${e((conversionEvidence.screenshots || []).length)} supporting screenshots are retained with the governed audit evidence.</div>`
+    : "";
   const trustBand = model.bands?.trust;
   const limitation = "We can see whether the website gives people a clear path toward action. We cannot tell from this audit how many people clicked a button, completed a form, left a page, or stopped partway through the journey. Those questions need website analytics or other behavior data.";
   if (paths.length === 0) {
     return `<section id="paths" class="card">
       <p class="muted small">Conversion Journey</p>
+      <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
       <h2>Can visitors move from interest to action?</h2>
       <p class="conversion-journey-verdict">We do not have enough evidence to confirm the full path from interest to action.</p>
-      <div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
+      ${conversionEvidenceNote}<div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
     </section>`;
   }
 
@@ -1327,8 +1326,9 @@ function conversionPathSection(model) {
     </article>`).join("")}</div>`
     : "";
 
-  return `<section id="paths" class="card">
+  return `<section id="paths" class="card primary-page-card journey-page">
     <p class="muted small">Conversion Journey</p>
+    <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
     <h2>Can visitors move from interest to action?</h2>
     <p class="conversion-journey-verdict">${e(verdict)}</p>
     <h3>How the journey works</h3>
@@ -1339,7 +1339,7 @@ function conversionPathSection(model) {
     <h3>What this means for conversion</h3>
     <div class="conversion-journey-takeaway"><p>${e(clientJourneyTakeaway(pathState))}</p></div>
     ${journeyBridge}
-    <div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
+    ${conversionEvidenceNote}<div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
   </section>`;
 }
 
@@ -1740,7 +1740,7 @@ function competitorSectionClientBasic(model) {
     ? "The named competitor difference is a useful point to review, but it does not mean the competitor leads in every area. Use the related findings and Priority Fixes to decide what deserves attention."
     : `${businessSubject} does not appear clearly behind ${competitorNames.length === 2 ? "these two competitors" : "the named competitors"} in the conversion signals we reviewed. That does not mean the websites are equal in every way, and it does not mean ${businessName} leads the market. The useful takeaway is that the biggest opportunities are the specific issues already identified in Priority Fixes, rather than trying to copy competitors simply because they are competitors.`;
 
-  return `<section id="competitors" class="card">
+  return `<section id="competitors" class="card primary-page-card comparison-page">
     <p class="muted small">Competitor Comparison</p>
     <h2>How does your website compare with the competitors buyers are likely to consider?</h2>
     <p class="small">${e(opening)}</p>
@@ -2105,7 +2105,7 @@ function contentOpportunitiesSection(model) {
     ],
   ];
 
-  const directAnswer = "The site already has useful content in several parts of the buyer journey. The biggest opportunity is to answer more of the questions people may have before they are ready to contact the business.";
+  const directAnswer = "The site already has useful content in several parts of the buyer journey, but body-content coverage is PARTIAL. The retained review items are grounded in specific buyer questions; confirm each gap on the relevant page before creating new content.";
 
   const coverageCards = buyerNeeds
     .map(([need, count, positive, meaning]) => {
@@ -2211,18 +2211,18 @@ function contentOpportunitiesSection(model) {
     : "";
 
   return `
-  <section id="content-ideas" class="card">
+  <section id="content-ideas" class="card primary-page-card content-page">
     <p class="muted small">Content Opportunities</p>
     <h2>What content would help buyers move forward?</h2>
 
     <p class="content-opportunities-verdict">${e(directAnswer)}</p>
-    <p>The ideas below are based on the business information and website content we could review. Each opportunity explains what buyers may be asking, why the topic matters, and what useful content could include.</p>
+    <p>The ideas below are tied to the retained buyer questions, topics, and reviewed URLs. Because body-content coverage is PARTIAL, each item is a review target to confirm, not proof that the topic is missing across the site.</p>
 
     <h3>What is already helping buyers</h3>
     <div class="content-coverage-grid">${coverageCards}</div>
 
     <h3>Where more content may help</h3>
-    <p class="content-opportunities-gap">The pages reviewed show useful starting points, but some buyer questions may need clearer answers. This does not mean these topics are missing everywhere on the site.</p>
+    <p class="content-opportunities-gap">The retained evidence supports these questions as review targets. Confirm what is already answered on the relevant page, then add or revise content only where the page-level check shows a real gap.</p>
 
     <h3>Content that could help buyers move forward</h3>
     ${opportunityCards
@@ -2230,7 +2230,7 @@ function contentOpportunitiesSection(model) {
       : `<p>No content idea was generated from the information reviewed.</p>`}
 
     <h3>Evidence limitations</h3>
-    <p class="small">These ideas come from the business information and website content we could review. Some pages were not fully assessed, so we cannot say these topics are missing everywhere on the site. Search demand or competitor activity may make an idea more useful, but neither is enough on its own to recommend creating new content. Before starting a large piece of content, confirm that the information is not already covered well somewhere else.</p>
+    <p class="small">These ideas come from the retained business signals, buyer questions, and assessed URLs. Body-content evidence is PARTIAL, so confirm the exact page gap and existing coverage before creating anything. Search or competitor signals can help prioritize a confirmed gap, but do not establish that a new asset is required.</p>
   </section>
 
   <section id="content-opportunities-detail" class="card" data-supporting-section="conversion-content-evidence">
@@ -2491,6 +2491,29 @@ function clientLimitationText(value) {
     .replace(/\binferred\b/gi, "based on the available evidence");
 }
 
+function recoveredAuditDataSection(model) {
+  const data = model.recoveredAuditData;
+  if (!data) return "";
+  const normalizedRows = (data.normalizedSources || [])
+    .map((source) => `<tr><td>${e(source.source)}</td><td>${e(source.status)}</td><td>${e(source.coverage?.completed ?? "—")}/${e(source.coverage?.requested ?? "—")}</td><td>${e((source.limitations || []).join("; ") || "No additional limitation recorded")}</td></tr>`)
+    .join("");
+  const screenshots = data.conversionValidation?.screenshots || [];
+  return `<h3>Assessment records</h3>
+    <p class="small">PRYSM used ${e(data.artifactCount)} verified audit records in this assessment. Supporting technical records remain available for verification.</p>
+    <details class="supporting-detail-disclosure"><summary>Show technical traceability</summary>
+      <div class="table-wrap"><table><thead><tr><th>Recovered input</th><th>Status</th><th>Disposition</th><th>Governed reason</th></tr></thead><tbody>
+        <tr><td>Conversion-path validation</td><td>${e(data.conversionValidation?.status || "UNKNOWN")}</td><td>PROJECTED</td><td>${e(`${data.conversionValidation?.pageCount || 0} assessed page(s); ${screenshots.length} governed screenshot(s) retained as supporting evidence.`)}</td></tr>
+        <tr><td>Canonical evidence envelope</td><td>VERIFIED</td><td>PROJECTED</td><td>${e(`${data.evidenceEnvelope?.sourceCount || 0} source group(s) and ${data.evidenceEnvelope?.artifactReferenceCount || 0} artifact reference(s) retained in the report model.`)}</td></tr>
+        <tr><td>Saved report record</td><td>VERIFIED</td><td>Supporting record</td><td>Retained to verify the saved report identity and versions.</td></tr>
+        <tr><td>Report version record</td><td>VERIFIED</td><td>Supporting record</td><td>Retained to verify which report version and status were rendered.</td></tr>
+        <tr><td>Narrative review</td><td>${e(data.narrativeGate?.finalJudgeDecision || "UNKNOWN")}</td><td>Supporting review</td><td>Retained to verify that the accepted narrative review completed; deterministic audit facts remain the source for scores and findings.</td></tr>
+      </tbody></table></div>
+      <h4>Normalized source coverage</h4>
+      <div class="table-wrap"><table><thead><tr><th>Source</th><th>Status</th><th>Coverage</th><th>Limits</th></tr></thead><tbody>${normalizedRows}</tbody></table></div>
+      <p class="small">The saved package, report version record, and narrative review are supporting verification records. They do not replace the frozen score and finding evidence.</p>
+    </details>`;
+}
+
 function deepEvidenceLayer(model) {
   const findings = (model.findings || [])
     .map((f) => `
@@ -2528,6 +2551,8 @@ function deepEvidenceLayer(model) {
     ? `<h3>Deferred &amp; unavailable analysis</h3><ul class="small">${suppressed}</ul>`
     : `<h3>Deferred &amp; unavailable analysis</h3><p class="small">None deferred: all analyses with eligible evidence are rendered above; unavailable sources are shown in Source statuses.</p>`;
 
+  const recoveredData = recoveredAuditDataSection(model);
+
   return `
   <section id="evidence" class="card" data-supporting-section="evidence-limitations">
     <h2>Evidence detail</h2>
@@ -2543,6 +2568,7 @@ function deepEvidenceLayer(model) {
       <thead><tr><th>Evidence area</th><th>Status</th><th>Limits</th><th>How it was checked</th></tr></thead>
       <tbody>${capRows}</tbody>
     </table></div></details>
+    ${recoveredData}
     ${deferredBlock}
   </section>`;
 }
@@ -3211,7 +3237,7 @@ footer {
 
   body.viewer-ready main > section.viewer-active { display:block !important; }
 
-  .card,
+  .card:not(.primary-page-card),
   .pillar,
   .priority-action,
   main > section:not(.card) {
@@ -3753,8 +3779,6 @@ a {
 
 .content-opportunity-card {
   background:#fff;
-  page-break-inside:avoid;
-  break-inside:avoid;
 }
 
 .content-opportunity-card-start {
@@ -3937,6 +3961,255 @@ a {
   }
 }
 
+/* Step 4 finishing pass: keep the client answer prominent and supporting
+   evidence quiet without changing the report's governed content. */
+.primary-page-card {
+  padding:36px;
+}
+
+.executive-page > .muted.small:first-of-type {
+  margin:0 0 10px;
+  color:var(--prysm-primary);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.12em;
+  line-height:1.3;
+  text-transform:uppercase;
+}
+
+.primary-page-card > h2 {
+  max-width:24ch;
+}
+
+.executive-page {
+  border-top:6px solid var(--prysm-primary);
+  background:linear-gradient(180deg,#fff 0%,var(--prysm-mint-2) 100%);
+}
+
+.executive-page > h2 {
+  max-width:18ch;
+  font-size:48px;
+  border-bottom:0;
+  margin-bottom:14px;
+  padding-bottom:0;
+}
+
+.executive-readiness {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:end;
+  gap:8px 24px;
+  margin:24px 0 28px;
+  padding:24px 26px;
+  border:1px solid var(--prysm-primary);
+  border-radius:16px;
+  background:var(--prysm-mint);
+}
+
+.executive-readiness h3 {
+  grid-column:1 / -1;
+  margin:0;
+  color:var(--prysm-dark);
+  font-size:14px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+
+.executive-readiness .readiness,
+.executive-readiness .readiness-none {
+  font-size:clamp(48px,7vw,76px);
+  line-height:.95;
+}
+
+.executive-readiness .readiness-band {
+  justify-self:end;
+  align-self:center;
+}
+
+.executive-readiness > .small {
+  grid-column:1 / -1;
+  margin:0;
+}
+
+.executive-priorities {
+  display:grid;
+  gap:12px;
+  margin:0;
+  padding:0;
+  list-style:none;
+  counter-reset:executive-priority;
+}
+
+.executive-priorities li {
+  counter-increment:executive-priority;
+  position:relative;
+  margin:0;
+  padding:18px 20px 18px 58px;
+  border:1px solid var(--prysm-line);
+  border-radius:12px;
+  background:#fff;
+}
+
+.executive-priorities li::before {
+  content:counter(executive-priority);
+  position:absolute;
+  top:18px;
+  left:18px;
+  display:grid;
+  width:28px;
+  height:28px;
+  place-items:center;
+  border-radius:50%;
+  background:var(--prysm-primary);
+  color:#fff;
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:14px;
+  font-weight:800;
+}
+
+.executive-priorities h4 {
+  margin:0 0 5px;
+  color:var(--prysm-deep);
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:19px;
+  line-height:1.3;
+}
+
+.executive-priorities p {
+  margin:5px 0 0;
+  font-size:16px;
+}
+
+.action-page .priority-sequence {
+  display:grid;
+  gap:18px;
+}
+
+.journey-page .conversion-journey-verdict,
+.content-page .content-opportunities-verdict {
+  max-width:52ch;
+}
+
+.journey-page .conversion-journey-verdict {
+  font-size:clamp(24px,3vw,34px);
+}
+
+.supporting-detail-orientation {
+  border-left:4px solid var(--prysm-primary);
+}
+
+.supporting-detail-disclosure {
+  background:#fff;
+}
+
+.supporting-detail-disclosure summary {
+  min-height:44px;
+  display:flex;
+  align-items:center;
+}
+
+details[open] > summary {
+  border-bottom:1px solid var(--prysm-line);
+}
+
+@media (max-width:720px) {
+  .report-layout {
+    grid-template-columns:minmax(0,1fr);
+    grid-template-areas:'sidebar' 'content';
+    gap:12px;
+    padding:10px;
+  }
+
+  .viewer-sidebar {
+    position:sticky;
+    top:0;
+    max-height:none;
+    padding:10px;
+    border-radius:12px;
+  }
+
+  .viewer-sidebar-title {
+    margin:2px 6px 8px;
+  }
+
+  .viewer-nav {
+    flex-direction:row;
+    align-items:center;
+    gap:6px;
+    overflow-x:auto;
+    padding-bottom:2px;
+    scrollbar-width:thin;
+  }
+
+  .viewer-nav-link {
+    flex:0 0 auto;
+    min-width:max-content;
+  }
+
+  .viewer-supporting-nav {
+    display:flex;
+    align-items:center;
+    flex:0 0 auto;
+    gap:8px;
+    margin:0;
+    padding:0 0 0 8px;
+    border:0;
+  }
+
+  .viewer-supporting-divider {
+    display:none;
+  }
+
+  .viewer-supporting-label {
+    margin:0;
+    white-space:nowrap;
+  }
+
+  .primary-page-card {
+    padding:22px 18px;
+  }
+
+  .executive-page > h2 {
+    font-size:32px;
+  }
+
+  .executive-readiness {
+    grid-template-columns:1fr;
+    padding:18px;
+  }
+
+  .executive-readiness .readiness-band {
+    justify-self:start;
+  }
+
+  .executive-priorities li {
+    padding-left:52px;
+  }
+}
+
+@media print {
+  .primary-page-card {
+    padding:0;
+    border-top-width:3px;
+    background:#fff;
+  }
+
+  .executive-readiness,
+  .executive-priorities li,
+  .supporting-detail-orientation {
+    background:#fff;
+    box-shadow:none;
+  }
+
+  .executive-readiness {
+    border-color:#777;
+  }
+
+  .executive-page > h2 {
+    font-size:32px;
+  }
+}
+
 @media print {
   .conversion-journey-verdict,
   .conversion-journey-visual,
@@ -3945,7 +4218,6 @@ a {
   .conversion-journey-strength,
   .conversion-journey-takeaway,
   .conversion-journey-bridge-card,
-  .content-opportunity-card,
   .conversion-journey-limitation {
     page-break-inside:avoid;
     break-inside:avoid;

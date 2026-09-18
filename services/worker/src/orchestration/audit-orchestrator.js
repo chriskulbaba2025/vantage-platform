@@ -25,6 +25,8 @@ import { selectImportantPages } from "../evidence/important-page-selector.js";
 import { REPORT_DESIGN_V2, isReportDesignV2, DEFAULT_REPORT_DESIGN } from "../report/report-design.js";
 import { loadAuditRequest } from "./audit-request-persistence.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
+import { hydrateCurrentReportModel } from "../report-model/current-model.js";
+import { buildCanonicalSolutionSet } from "../solution/solution-authority-provider.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -33,6 +35,40 @@ export function hasRequiredReportV2Structure(html, { requireNarrativeLayer = fal
     && /^<!doctype html>/i.test(html)
     && html.includes("Where are the problems?")
     && (!requireNarrativeLayer || html.includes('id="narrative-layer"'));
+}
+
+/**
+ * Assemble the v2 renderer model from the already-loaded governed artifacts.
+ * This is an adapter only: it does not score, recollect, or reconstruct data.
+ */
+export function buildPersistedV2RenderModel({ auditRequest, scoreSet, findings, decisionEvidence, capabilityEvidence, recoveredInputs = null, solutionAuthorityRegistry = undefined }) {
+  const canonicalSolutions = buildCanonicalSolutionSet({
+    findings,
+    scoreSet,
+    decisionEvidence,
+    registry: solutionAuthorityRegistry,
+  });
+  const current = hydrateCurrentReportModel({
+    scoreSet,
+    findings,
+    decisionEvidence,
+    capabilityEvidence,
+    canonicalSolutions,
+  });
+
+  return {
+    ...current,
+    sourceStatus: {
+      competitors: decisionEvidence?.sourceStatus?.competitors || "NOT_APPLICABLE",
+    },
+    input: {
+      businessName: auditRequest.businessName || "",
+      targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
+    },
+    ...(recoveredInputs?.projection
+      ? { recoveredAuditData: recoveredInputs.projection }
+      : {}),
+  };
 }
 
 const SOURCE_EVIDENCE_MAP = Object.freeze({
@@ -1070,39 +1106,13 @@ export function createAuditOrchestrator({
       throw new Error("Report v2 rendering failed: " + err.message);
     }
 
-    const v2Model = {
-      scoringVersion: scoringModel.scoringVersion || "4.1.0",
-      generatedAt: scoringModel.generatedAt,
-      scores: scoringModel.scores || {},
-      bands: scoringModel.bands || {},
-      assessedWeight: scoringModel.assessedWeight ?? 0,
-      readinessStatus: scoringModel.readinessStatus || "",
-      readinessStatusDetail: scoringModel.readinessStatusDetail || scoringModel.readinessStatus || "",
-      showNumericScore: scoringModel.showNumericScore ?? false,
-      evidenceConfidenceScore: scoringModel.evidenceConfidenceScore ?? 0,
-      evidenceConfidenceFactorAvailability: scoreSet.evidenceConfidenceFactorAvailability || [],
-      rootCause: scoringModel.rootCause || "",
+    const v2Model = buildPersistedV2RenderModel({
+      auditRequest,
+      scoreSet,
       findings: scoringModel.findings || [],
-      // PRYSM-V2-REPORT-DEPTH-01 — carry the governed rendering-integrity
-      // diagnostics into the v2 model.  Absent (undefined) renders as Not
-      // Assessed; an empty array is the only proof that none was raised.
-      renderingDiagnostics: scoringModel.renderingDiagnostics,
-      suppressedFindingReasons: scoreSet.suppressedFindingReasons || [],
-      moduleEligibility: scoreSet.moduleEligibility || {},
-      moduleScores: scoreSet.moduleScores || {},
-      suppressedModules: scoreSet.suppressedModules || [],
+      decisionEvidence,
       capabilityEvidence,
-      evidence: decisionEvidence,
-      input: {
-        businessName: auditRequest.businessName || "",
-        targetUrl: decisionEvidence.site?.targetUrl || auditRequest.targetUrl,
-      },
-      conversionPaths: scoreSet.conversionPaths || [],
-      readinessMap: scoreSet.readinessMap || [],
-      contentIdeas: scoreSet.contentIdeas || { tofu: [], mofu: [], bofu: [], leading: [] },
-      competitors: scoreSet.competitors || { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
-      crossReportInterpretation: scoreSet.crossReportInterpretation,
-    };
+    });
 
     const { renderReportV2 } = await import("../report/render-report-v2.js");
     rendererCallCount += 1;

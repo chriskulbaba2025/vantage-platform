@@ -384,7 +384,7 @@ test("INTERNAL-LINKS-DISCLOSURE-01: orphan count and governed full list are prog
   const html = await render(scoreAudit(INPUT, evidence));
   const links = html.slice(html.indexOf('id="internal-links"'), html.indexOf('id="evidence"'));
   assert.match(links, /6 identified .* showing 5 examples/);
-  assert.match(links, /Show all 6 governed orphan pages/);
+  assert.match(links, /Show all 6 pages identified as weakly linked/);
   assert.equal((links.match(/https:\/\/x\.com\/orphan-/g) || []).length, 11);
 });
 
@@ -456,10 +456,10 @@ test("V2R-08: v2 draft represents the complete 15-area required-section contract
   const areas = [
     ["1 executive scorecard", /How ready is your website to convert visitors\?/],
     ["2 priority fixes", /What should you fix first\?/],
-    ["3 conversion journey", /Can visitors move easily from interest to action\?/],
+    ["3 conversion journey", /Can visitors move from interest to action\?/],
     ["4 conversion readiness map", /Where are the problems\?/],
     ["5 content opportunities", /What content would help buyers move forward\?/],
-    ["6 competitor benchmark", /Competitive context/],
+    ["6 competitor benchmark", /How does your website compare with the competitors buyers may consider\?/],
     ["7 trust and E-E-A-T", /Trust &amp; Proof|Trust & Proof/],
     ["8 CMS and platform constraints", /CMS[\s&]*(&amp;)?[\s/]*Platform Constraints/],
     ["9 technical SEO hygiene", /Technical Health/],

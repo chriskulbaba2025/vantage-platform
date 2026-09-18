@@ -7,6 +7,8 @@
  */
 
 import { randomUUID, createHash } from "node:crypto";
+import { buildCrossReportInterpretation } from "../src/report-model/cross-report-interpretation.js";
+import { buildCapabilityEvidence } from "../src/evidence/capability-evidence.js";
 
 function sha256(input) { return createHash("sha256").update(input).digest("hex"); }
 
@@ -143,7 +145,45 @@ async function seedFullAudit(targetUrl, businessName, tenantId) {
   };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(decisionEvidence), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" } });
 
-  const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
+  const capabilityEvidence = buildCapabilityEvidence({
+    decisionEvidence,
+    auditId,
+    generatedAt: new Date().toISOString(),
+  });
+  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(capabilityEvidence), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "capability-evidence.json" } });
+
+  const scores = {
+    contractVersion: "2.0.0",
+    scoringVersion: "3.0.0",
+    generatedAt: new Date().toISOString(),
+    scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 },
+    bands: { conversionReadiness: "Moderate" },
+    assessedWeight: 75,
+    readinessStatus: "Provisional",
+    showNumericScore: true,
+    evidenceConfidenceScore: 70,
+    rootCauseRuleId: "VAN-CONV-001",
+    rootCause: "",
+    decisionHierarchy: {
+      version: "1.0.0",
+      rootCauseRuleId: "VAN-CONV-001",
+      orderedFindingIds: [],
+      actions: [],
+    },
+    findings: [],
+    dimensionEligibility: {},
+    moduleEligibility: {},
+    suppressedModules: [],
+    evidence: {},
+    crossReportInterpretation: buildCrossReportInterpretation({
+      site: decisionEvidence.site,
+      performance: decisionEvidence.performance,
+      scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 },
+      bands: { conversionReadiness: "Moderate" },
+      conversionPaths: [],
+      capabilities: {},
+    }),
+  };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify([]), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
 

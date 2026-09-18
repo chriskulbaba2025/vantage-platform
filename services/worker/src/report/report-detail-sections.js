@@ -445,6 +445,9 @@ export function eeatSection(model) {
     : hasMaterialTrustFinding
       ? "Material trust findings are linked to their canonical Priority Fix records. The remaining question is whether observed proof appears close enough to important decision points."
       : "No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.";
+  const scoreExplanation = typeof score === "number"
+    ? `The Trust & Proof score is ${score}/100 because it summarizes the broader assessed trust dimension, including the strength and coverage of observable proof. The buyer-question checks below are individual observed signals; PASS means each checked signal was present in the assessed scope, not that every trust dimension or every page is fully covered.`
+    : "The buyer-question checks below are individual observed signals and should not be read as a complete whole-site trust score.";
   const limitation = trustComplete
     ? "This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources."
     : trustPartial
@@ -455,10 +458,11 @@ export function eeatSection(model) {
     : `<h3>How to use the proof you already have</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. Check which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Review the relevant pages again before deciding what to add or change.</p>`;
 
   const rendered = `
-  <section id="eeat" class="card" data-supporting-section="trust-evidence">
+  <section id="eeat" class="card primary-page-card trust-page" data-supporting-section="trust-evidence">
     <p class="muted small">Trust &amp; Credibility</p>
     <h2>Can buyers find enough proof to feel confident taking the next step?</h2>
     <p class="trust-verdict">${e(primaryVerdict)}</p>
+    <p class="small trust-score-explanation">${e(scoreExplanation)}</p>
     <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>
 
     <h3>What already builds confidence</h3>
@@ -1802,6 +1806,9 @@ export function performanceDetailSection(model) {
     perf.desktop?.status ===
       "PARTIAL";
 
+  const slowLcp = (data) => Number.isFinite(data?.metrics?.lcpMs) && data.metrics.lcpMs >= 4000;
+  const performanceFinding = slowLcp(perf.mobile) || slowLcp(perf.desktop);
+
   const verdict =
     weakest === null
       ? "Performance evidence exists, but no usable mobile or desktop performance score was returned. PRYSM withholds a speed judgment."
@@ -1814,7 +1821,9 @@ export function performanceDetailSection(model) {
           } produced measurable results, including a weakest available performance score of ${weakest}/100, but incomplete coverage prevents a complete site-level PASS or FINDING.`
         : interpretation.constructs.mobileUsability === "Strong" && weakest >= 90
           ? "The available performance evidence is strong across the tested profiles."
-          : weakest >= 60
+          : performanceFinding
+            ? "The tested evidence identifies a performance finding: at least one profile has slow largest contentful paint (LCP), so the issue remains a priority even though the overall performance score is above the finding threshold."
+            : weakest >= 60
             ? "The tested experience is usable but leaves measurable performance headroom on at least one profile."
             : "At least one tested profile shows material performance friction that can affect important visitor and conversion paths.";
 
@@ -1867,7 +1876,9 @@ export function performanceDetailSection(model) {
             : typeof performanceScore !==
                 "number"
               ? "PARTIAL"
-              : performanceScore >=
+              : slowLcp(data)
+                ? "FINDING"
+                : performanceScore >=
                   60
                 ? "PASS"
                 : "FINDING";

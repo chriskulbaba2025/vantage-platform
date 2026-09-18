@@ -336,8 +336,8 @@ test("CR-03: a verified foundation blocker outranks a higher-scoring optimizatio
   );
   assert.doesNotMatch(sectionE, /VAN-PATH-001|VAN-TECH-001|Foundation blocker/);
   assert.doesNotMatch(sectionE, /<dt>What needs attention<\/dt>/);
-  assert.match(sectionE, /Where it applies/);
-  assert.match(sectionE, /How to confirm it improved/);
+  assert.match(sectionE, /Where to look/);
+  assert.match(sectionE, /How to know it worked/);
 });
 
 test("CR-04: Conversion-First ranking uses confidence as a lead gate, not a confidence-first sort", () => {
@@ -1340,9 +1340,6 @@ const REACHABLE_BRANCHES = [
   "primary_contact:NOT_ASSESSED",
   "primary_contact:PASS",
   "robots_txt:NOT_ASSESSED",
-  "security_headers:ACTION_REQUIRED",
-  "security_headers:NOT_ASSESSED",
-  "security_headers:PASS",
   "site_availability:ACTION_REQUIRED",
   "site_availability:NOT_ASSESSED",
   "site_availability:PASS",
@@ -1635,33 +1632,33 @@ test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", (
 // ---------------------------------------------------------------------------
 
 const CHECKLIST_GOLDEN = {
-  assessed: "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  unassessed: "1ab14008b83d55af0d91ac2cb54b7fc187ece111f877c4f87154c2e9fe395693",
-  "provider-failed": "bbe77121f8d4396c8a7e2e32834ccc49aff8e95caebd5ed9bbee0d83e2fb4bd0",
-  "crawl-blocked": "f87770094b25d3395b99c38e73de66763cafbc4384d2b4ddc17fa0ad742b15eb",
-  "target-outage": "4d7a3e205c3a95afb5b078d3448f5001d28fd7d3e5c5338db1e6a85f22f12f7f",
-  "outage-with-limitations": "f089366910448919119efd4aa4671467c8a1a10a2eb5c7c4584eec446b286e95",
-  "http-and-noindex": "83a3886e04f415194fab8ed4d2b7afd94177f13e12a14b12cd927b09fe6f959c",
-  "robots-retrieved": "af789c41d36fe53f8d0754e69f95a3bea30fcef2eee08e57f29211c8bf06194b",
-  "canonical-missing": "07029eac5e25593d814344e9232f21016d706ec34adce27c58e999d4c966658a",
-  "no-conversion-mechanism": "b0ecd7cf4bc3f42fa56d8c18d69dbc27b8b11c26a52422df7f3c73b439cca830",
-  "no-contact": "cdeb67e3932ba1f76ee3fdc93e60ee02f88fae070280c172c7244aede0f7ebcb",
-  "headers-all-present": "f116b3309ab6094b7c83e758885c0b14655b59d239bf80a47a2bda33b9363085",
-  "ga4-ready": "d1ee32bdc27b065cdaf2e42814951e05c0b34f42ba14b4c85d88e81491e2a6b7",
-  "ga4-issues": "3e8a0b52baa19af98c7c46e822806984830f86615d6ad386b1ba0b85b77a6d34",
-  "ga4-not-applicable": "2863263866b9b5075924b495cb1c796b84a53248a3dd46fe7c806ab3b08d251e",
-  "slow-mobile": "b080355132e45f828fd3ac6f0d6d60fcaa8761d1085df527ee9044eabfa27274",
-  "no-performance": "7edb24e4817aaaec6c69458ca6475779cfbd2a093f89c71224e507bd2b674e7b",
-  "path-validated-blocker": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "competitor-present": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "proprietary-platform": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "untraced-broken-links": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "schema-confirmed-absent": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "headings-absent-h1": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "headings-multiple-h1": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "device-profile-failed": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "competitor-with-limitations": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
-  "perf-field-and-multipage": "16e012c859565dd67a93f72db0fe8b0847babeba1cf58a7207d4fead8b378e4b",
+  assessed: "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  unassessed: "d899b9f3bcaf239ce8553a637f7f17befeef9beb66d82b853eac023846a9a17c",
+  "provider-failed": "8c6cf6d60d9e4f9ec0ddfbe1d7a712d3ff739c4413e7c309e49e038a4ee6cb33",
+  "crawl-blocked": "2fa7e99eb7915c4285ba642aba8440aaaa01d8340bcb976a7bd1bcb63c1352b7",
+  "target-outage": "a8f750d0c5231ecbb6def287e25d249061d044d488e9be9f13cd5517bd06e951",
+  "outage-with-limitations": "8107ab0fb947c806cac7b3562434f10212430d33f7b395ddbbd797c8c669164b",
+  "http-and-noindex": "9e30768430f952ea4366f023b06d28fab4dae204e2f805bf63bf140ccb87fa94",
+  "robots-retrieved": "f5699411c18038843879bd8b643fa4753c523723db29a992c997aef40097aa44",
+  "canonical-missing": "acad5cef95652e778488bc1a5fcc99d59dadceaad2ee78a76240086db9d2cc61",
+  "no-conversion-mechanism": "61b2d8457d3bbb39abbace0831de7013814c5760da2cf15e8029621e1bc66b06",
+  "no-contact": "c815441f93c8d4c5054274de944a18dfb2b2552d195cc01a99a7b14e78082e5f",
+  "headers-all-present": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "ga4-ready": "5688a07257041f15ff6de9c1134e31c4e3b29211379c957384545dbbb658f9f6",
+  "ga4-issues": "12904ed9581330c80a8f2cf972d235befb117d73a004a4f4a914916d36f43464",
+  "ga4-not-applicable": "b17952711313780db15789ab93e3e06083d895a9248dc01b85cf4ae09075c9eb",
+  "slow-mobile": "8fa095e45e25f1d7be4411df0d84b52875b3de8fee64f176da8ade4120dc2a4c",
+  "no-performance": "66c118ab8a7fe7255c401cf1316be6ba417e3c00047609e2ac9520baefa2c947",
+  "path-validated-blocker": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "competitor-present": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "proprietary-platform": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "untraced-broken-links": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "schema-confirmed-absent": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "headings-absent-h1": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "headings-multiple-h1": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "device-profile-failed": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "competitor-with-limitations": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
+  "perf-field-and-multipage": "acf5c8be194b2e62ccca920ba820be00a62f6b569183a908643fa1cd4bb15fa3",
 };
 
 test("CR-40: the complete foundation checklist is frozen for every branch", () => {
@@ -2037,90 +2034,90 @@ if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(m
   });
   Object.assign(canonicalRenderGolden, {
     assessed: "85aaf5183786e52aef5c46e2461e2cecc7d5a1c87b6209e2f351f1227ca9b607",
-    unassessed: "417693466efa8f96a4edd0eab5c10894d84e9c729313ed62ddb37b27f8c157ce",
-    "provider-failed": "93866ce35a36178d50886edde3269f3ba75e9ef23ffa5730d75bd077b6c95413",
-    "crawl-blocked": "a5da9839a8d563e6ebfe6f9a78c3daf02a85c7d1586cf6a2dddd67885005505a",
-    "target-outage": "cd3242ba1af425f6d8c002d8b2fa6fa65a8b0dc33f134c579357d903faa3e18f",
-    "outage-with-limitations": "9066cfdf6d88ef7073a80998cd5f2c7b3d0caf2dbc79cb1cff241333d0121f94",
-    "http-and-noindex": "93c7b8037217dc4d2b628c0e9f2f3e37fa7a584f7d0d8391df09518a165a11d7",
-    "robots-retrieved": "053c5b3b6122eb0ce6381d78d453a16d4dd4503bce82758d1d4c6f8e6854c609",
-    "canonical-missing": "d9ac5770a1ebefc821149fa03f870f13db1fd3a075f5722c98576eb9fca6fcc0",
-    "no-conversion-mechanism": "453ecb0892a7c3659f21ed06fcfe813e99b3ece299ae3468a118476ea3803f76",
-    "no-contact": "fb3b558616d993db2e78346073e761b205cbd2585fec99498a1a972bd882a356",
-    "headers-all-present": "5ba40e01d5c7a1b9ecdf5673d584e10593cb4cfec77ec0298d1462bcb610cf52",
-    "ga4-ready": "72c7a9976d395a645ffd451a0fc292dbfc063c0095607db40903d25880a68b69",
-    "ga4-issues": "2766a4f2fa72a329bf470bdd97f5a9c2741f165011edc014af463798ff3e0c5e",
-    "ga4-not-applicable": "d9f2e0f649f01022d2e302688755edbbefb348e8436ccf7c3d60651356bed6be",
-    "slow-mobile": "b3d96155df755ccfac117457af215713b9467796e89eb6d64ade1f8561813cef",
-    "no-performance": "84cd08db6feec508ea7f891daff1b6d541161c97db35e0acc8d16d55182487fb",
-    "path-validated-blocker": "760cd6d348db05ccd47dc6eb6960ee370a49fc6ba3520b26460d82a6ac06fcbc",
-    "competitor-present": "d365b285be92105da3c4921063c839a13292d2a3eed61566c7cced2667a89ead",
-    "proprietary-platform": "ae5ef877ba516d1012828ce7c0444285caf24dd0e1f85f483d84baf90f0c077c",
-    "untraced-broken-links": "451556b31de99e5c915c6a09fb51d6350c06124e286645db70f01a9ec1325341",
-    "schema-confirmed-absent": "259a02dba6f78721d5209abfea2d30a09c6b85878c5ec40c23dda60beaa1e4b3",
-    "headings-absent-h1": "57074dfa7abf7974b03843f240a506662db6b8ed4f134b63589bff10adf3c81f",
-    "headings-multiple-h1": "bf786d408592839c2ba9a83dbd3d56255c8b09461b85254156f710bef3134c81",
-    "perf-field-and-multipage": "d3f74ea5dd7bb044d53b855adeea1fa98e0b07c4daaad7e082d8a0896d437568",
-    "competitor-with-limitations": "fafcbb32c0ce2aef00b63b127afc84fc8580405eef204257cdea5fcc97ebb281",
-    "device-profile-failed": "ea0425598002d8002f3a4c2f7460794ca02b79a381fc1d04bd3871bd5b839b8f",
+    unassessed: "3e61175dbb4bfbbc04177fb7aeabb0a3013e2166b8c85d0ef15466f991977a64",
+    "provider-failed": "012052f04f195df0ed31ca351623350fa6fd9bbb5dc8256964c08d5ec39525f0",
+    "crawl-blocked": "b70a0c56acca3501f367566dbd7422e7695983dd4c15eade23080ad2381ebd42",
+    "target-outage": "012c05b72190fe3e3b4d2c2fbb99ff2a5f5e9b9dd3dca9318bbc3444a7518801",
+    "outage-with-limitations": "b28eb48ab599a2fe1cc9a3f72f115b4956f552fd93a6965e4b781ea7a0fdce43",
+    "http-and-noindex": "2429ebc087c6c473241606c900c7d0af6ef9a4be467aa9e0f9bce5170c6d4816",
+    "robots-retrieved": "fe07d12795684127f433f6592294c3cf8e78980b3c618be7c3917aad91e4a626",
+    "canonical-missing": "23486b7eddeda6a98cdf7892136c4dc6f3682b6c802fbb9ab024418fd9beacef",
+    "no-conversion-mechanism": "2fcb5af5fbcdafd64f3c04f1d7209353905596c9ea9c43c85210e45e547b8157",
+    "no-contact": "a8773cebc4540d9ca18370d3fc7bfb11b611f76980bbb7ae9f7930a279b0816b",
+    "headers-all-present": "29db4f27ba0ae96193d2c8323c89cd1c149d4bbf08a5c5003044300490059ddb",
+    "ga4-ready": "6ed68b9a888cf843d4d9f4c25f546197a302aa9743c919edc337963fdbd63e06",
+    "ga4-issues": "cc5caecaa7bd7720c3514d450985a8857af8d900fd47ca87dcfa3180d476a46f",
+    "ga4-not-applicable": "cc268499b9dd932f31c56f625423a4aac006262cc82b07664f2bcc462caec820",
+    "slow-mobile": "e867adab49d7fdf4f658eb5a7477fcbbbb240f2312db044ff429426c0487b04f",
+    "no-performance": "c25e64ffa138ac6696b771586fbef8c0ca30d4358005bb0b6ddbf04a2bcc2c44",
+    "path-validated-blocker": "6a7909d174ceeba5df1d6d222541d60afc571c572f42d57bd31724e7386ce784",
+    "competitor-present": "4fd0f0edcf09826a2e56c623bb2c3de483a90dc2df62b7e47ef80fd381801ea2",
+    "proprietary-platform": "2fae33dc10077eea64f46278d202ef3697bb845ed0d285380eefb0f7d6124bef",
+    "untraced-broken-links": "a9c20b1c688e373201fde60dda73ee841558a116d09878225071c841a682ca36",
+    "schema-confirmed-absent": "ba5ca5877eeea996ab24b64d5775aa53935c59554e1963465d6b1fd048200136",
+    "headings-absent-h1": "ac59b11e010cac68f946ffc03a48c103e5343b4ac6e8b6a1ff82d95e2a075a24",
+    "headings-multiple-h1": "e882e396120679097f63ae235e0f455b62354db6ea6a19236ae1167b404a2acd",
+    "perf-field-and-multipage": "7934056c92fb6605b483e7e17e882a7e805247da28864cb50d20a8fde78631f1",
+    "competitor-with-limitations": "dde95f014405e8d63e29dc52ea1b79c73dd241109391368b95a22be0c501551f",
+    "device-profile-failed": "bdcbe876c7e78dad7e67afe41b15214defcefb976604bd14e2080274abf6e938",
   });
   Object.assign(canonicalRenderGolden, {
-    assessed: "bb5ee8889b4254b59c989a2fe390b51ae79a1a875e4a130e4e6860d62a829c8c",
-    unassessed: "eb42f7feeecb34eedcbbd347fd5059373367bc671a0f5e383d856beb24951fc4",
-    "provider-failed": "f2702852cec57d8523e57f5a09fb241f2042b19d83f465b6ae3cd18d9dafcbdc",
-    "crawl-blocked": "681f53187d222c0435715b56f98312d4fc71923e047680d18ebdc8e9bcafc1b2",
-    "target-outage": "b95f5b92649e6b4cfa7375fe531a80d6699b9c90f14c251303f2e9d45073813b",
-    "outage-with-limitations": "d1f8d9deb36be3afdef32ae90d41d504b0edbc38ee4807096149c005ad8977c4",
-    "http-and-noindex": "0c1d296b83f0a625e49e8986e93846f63b0c73268a1e655834857b2fef3594cd",
-    "robots-retrieved": "aa0d61f959c6a9a31fe7abdb90e712bb004b2986a3b36bf6c40fc8beb65077ad",
-    "canonical-missing": "f4fe4cdc937fbe400e02e0184f54943eaff08e6e6046da4d72c1c8a7b4a451b2",
-    "no-conversion-mechanism": "8b43c4d7c02a5c7bd6cba0ebaea9a313be5aef8fb61c24a7b6c25e3ef06f1c25",
-    "no-contact": "811aefd68b3664eb6f42bd7d022e86890c865f38726e0f3aa71413c9f962f77e",
-    "headers-all-present": "f53858d8cc1e75a6510adca450c9b90001c64a996259126d13353eb6409ea911",
-    "ga4-ready": "083ccee79fc343b97be34435c8ea12ad3d5f7443b6729ce262455ce66fd9d193",
-    "ga4-issues": "8c8bc51db751a2603dfa9119dc4716084b5e6b9d8ca63e4ca499be25ab5ca747",
-    "ga4-not-applicable": "c7e8bbfeb4977bf85349a63ed7f3a597c9671df43a795c6130ee57d7fafc016e",
-    "slow-mobile": "b17ff91d6651bede6926968af0c3475c24603751a60b51c9b5255486db5dee00",
-    "no-performance": "3d0aae01723866ebbff6452df97427552df1f96746935a5c17a843f721beaaa4",
-    "path-validated-blocker": "b954fb035ae8c50c9e74ad2670991d3b4db3ad9ae9ae9a85cfd9f5a6d67d15a0",
-    "competitor-present": "49f5aa7e363e1b2f880dfbfaa8dcbdd8bbb589ad7cb71373fde3ce36d44323de",
-    "proprietary-platform": "5cc6447965d75d5a4ed90791e26f44896286e0804e7b99c5dc7ea97fe781914a",
-    "untraced-broken-links": "2dab199b20073b1626f41b1665fb3768336edb77b4cf4b4f9cc1550e0bc71c45",
-    "schema-confirmed-absent": "d39717b4ef6e0b2d5874715f62dc75abb18e82730f782a9543cee8831eb6cc82",
-    "headings-absent-h1": "b1fd3d83c0ce1e696c92825689bb93d4794766deeccd3cdbf4e991abc30272df",
-    "headings-multiple-h1": "70e09b9427983278c52aa0260993226cf4d15711e0f5352f327ed5fad9b4a829",
-    "perf-field-and-multipage": "8537f65cc7f163d0ffe46347018632cc36d22621f98ffe15e9fcb61e6fe98450",
-    "competitor-with-limitations": "c3c02e4e3d741e24db92f878dd86729efdd54ed3549beb235fa378e55c98bc8f",
-    "device-profile-failed": "0e1a4c14935ea3eff706986968d68551331ec343420457cb6debb3328809277a",
+    assessed: "85aaf5183786e52aef5c46e2461e2cecc7d5a1c87b6209e2f351f1227ca9b607",
+    unassessed: "3e61175dbb4bfbbc04177fb7aeabb0a3013e2166b8c85d0ef15466f991977a64",
+    "provider-failed": "012052f04f195df0ed31ca351623350fa6fd9bbb5dc8256964c08d5ec39525f0",
+    "crawl-blocked": "b70a0c56acca3501f367566dbd7422e7695983dd4c15eade23080ad2381ebd42",
+    "target-outage": "012c05b72190fe3e3b4d2c2fbb99ff2a5f5e9b9dd3dca9318bbc3444a7518801",
+    "outage-with-limitations": "b28eb48ab599a2fe1cc9a3f72f115b4956f552fd93a6965e4b781ea7a0fdce43",
+    "http-and-noindex": "2429ebc087c6c473241606c900c7d0af6ef9a4be467aa9e0f9bce5170c6d4816",
+    "robots-retrieved": "fe07d12795684127f433f6592294c3cf8e78980b3c618be7c3917aad91e4a626",
+    "canonical-missing": "23486b7eddeda6a98cdf7892136c4dc6f3682b6c802fbb9ab024418fd9beacef",
+    "no-conversion-mechanism": "2fcb5af5fbcdafd64f3c04f1d7209353905596c9ea9c43c85210e45e547b8157",
+    "no-contact": "a8773cebc4540d9ca18370d3fc7bfb11b611f76980bbb7ae9f7930a279b0816b",
+    "headers-all-present": "29db4f27ba0ae96193d2c8323c89cd1c149d4bbf08a5c5003044300490059ddb",
+    "ga4-ready": "6ed68b9a888cf843d4d9f4c25f546197a302aa9743c919edc337963fdbd63e06",
+    "ga4-issues": "cc5caecaa7bd7720c3514d450985a8857af8d900fd47ca87dcfa3180d476a46f",
+    "ga4-not-applicable": "cc268499b9dd932f31c56f625423a4aac006262cc82b07664f2bcc462caec820",
+    "slow-mobile": "e867adab49d7fdf4f658eb5a7477fcbbbb240f2312db044ff429426c0487b04f",
+    "no-performance": "c25e64ffa138ac6696b771586fbef8c0ca30d4358005bb0b6ddbf04a2bcc2c44",
+    "path-validated-blocker": "6a7909d174ceeba5df1d6d222541d60afc571c572f42d57bd31724e7386ce784",
+    "competitor-present": "4fd0f0edcf09826a2e56c623bb2c3de483a90dc2df62b7e47ef80fd381801ea2",
+    "proprietary-platform": "2fae33dc10077eea64f46278d202ef3697bb845ed0d285380eefb0f7d6124bef",
+    "untraced-broken-links": "a9c20b1c688e373201fde60dda73ee841558a116d09878225071c841a682ca36",
+    "schema-confirmed-absent": "ba5ca5877eeea996ab24b64d5775aa53935c59554e1963465d6b1fd048200136",
+    "headings-absent-h1": "ac59b11e010cac68f946ffc03a48c103e5343b4ac6e8b6a1ff82d95e2a075a24",
+    "headings-multiple-h1": "e882e396120679097f63ae235e0f455b62354db6ea6a19236ae1167b404a2acd",
+    "perf-field-and-multipage": "7934056c92fb6605b483e7e17e882a7e805247da28864cb50d20a8fde78631f1",
+    "competitor-with-limitations": "dde95f014405e8d63e29dc52ea1b79c73dd241109391368b95a22be0c501551f",
+    "device-profile-failed": "bdcbe876c7e78dad7e67afe41b15214defcefb976604bd14e2080274abf6e938",
   });
   Object.assign(canonicalRenderGolden, {
-    assessed: "1c5d1b457953a8eb106d6363ed15c24bbb15e73e79f1829611335d12e40673a3",
-    unassessed: "8338538d5faf8f4c4a0aea49014963440ddaab1433d58c9024dc7b81c45ae67e",
-    "provider-failed": "fef74e97a36982e4a29620c809cc9656c69d45507d601b2d3822b58e5d510461",
-    "crawl-blocked": "534922a39b9b3a381cff83073dbc920c09283901df105a2846a71d5ae2fc8bcb",
-    "target-outage": "05379704b1b19eaeb5e42f9568a5142093bb3d743bbbbc8b158d74409c6fc5be",
-    "outage-with-limitations": "72420f0dea2c8b17bea2b710e71303b2a01300a0111abda081defdd54b2c6d4c",
-    "http-and-noindex": "c42381241b7e6c274f298a54d72b8cea8d79856850782ed1a7d3beb4c7cfc458",
-    "robots-retrieved": "79b666348fe524f01382c83baabc7899d5cd78142f9975c594cbd3f9d0b021b2",
-    "canonical-missing": "51a1530f7e8590729d2aca65658279fe6fe6f3a806ffbf3ba8e3a48b3ca3914e",
-    "no-conversion-mechanism": "2b32c6cf5ed8474c19f9d98537f4dd996870044c492ccf88edcba47da4967047",
-    "no-contact": "8d4dc3e017dce8631965caf74e06acdc0a9fadb5b07fb3e6859bfc971360a7b9",
-    "headers-all-present": "e6f18f54d1e6b89bd4ff8cce02dc0e8bc96bb9418a749e4d93eedaa4d0332867",
-    "ga4-ready": "65fde5b80390125a1525a05fa00cb358056569140c0bd2bc23ed5a5ab52a63be",
-    "ga4-issues": "23ddaa674a28b04dbbee494aa2d576678a758f480135b0c2e58f91a5023931c1",
-    "ga4-not-applicable": "2fea26d3560e0e0cd45cf0573f7f60ab4324dae378cbf6241432579bfebfcb7d",
-    "slow-mobile": "42dda2fcc30e3e8427657ecc99083568dfb74a5008c0be241fd8d273e3025b1f",
-    "no-performance": "ea5b4ee185e575e65c997ff1370e72ceb72404bcb73d50093465cf5d8a38d663",
-    "path-validated-blocker": "8a88642c414c9b1de941628701a0dc4f5e0b494929be6c7706742a777c66f56a",
-    "competitor-present": "6c481b41bd8f507194f46625a977bb47331e0913fe13cb2028eaa6451b580f9c",
-    "proprietary-platform": "a07dbabb2b7279e6bb6b4f85c2203b9b7d9b4e26e3f83a18c6c15a045900855b",
-    "untraced-broken-links": "27570f55dbe37cdd413667f9d6ad449eccdc309d5911905a4a53067929cc55ce",
-    "schema-confirmed-absent": "064663c58991d92c97d0201ba21a7c3b8fa2874adfaef36432dbbbfe36fddd7f",
-    "headings-absent-h1": "20ddc8e0c4e1bf242767936ed285dc298fd246f9af4e54be823c44d31e5eb8e2",
-    "headings-multiple-h1": "161c623cec6f17bc038fb50950c8821b33e6edb7b88d148b4e4e52b04e6e5671",
-    "perf-field-and-multipage": "afa1911b536759417bbafa0091a95030da20f3ca8376d3c3b52d45b68bac5291",
-    "competitor-with-limitations": "22bb48893992f8d62e14ec402900337b76f184c9763ba3b812588282b29e2a7b",
-    "device-profile-failed": "e32fea1ce94efbe3ff7a22a81cb9fe61cea7cbf7fd3df982abc53c0eb541b437",
+    assessed: "29db4f27ba0ae96193d2c8323c89cd1c149d4bbf08a5c5003044300490059ddb",
+    unassessed: "3e61175dbb4bfbbc04177fb7aeabb0a3013e2166b8c85d0ef15466f991977a64",
+    "provider-failed": "012052f04f195df0ed31ca351623350fa6fd9bbb5dc8256964c08d5ec39525f0",
+    "crawl-blocked": "b70a0c56acca3501f367566dbd7422e7695983dd4c15eade23080ad2381ebd42",
+    "target-outage": "012c05b72190fe3e3b4d2c2fbb99ff2a5f5e9b9dd3dca9318bbc3444a7518801",
+    "outage-with-limitations": "b28eb48ab599a2fe1cc9a3f72f115b4956f552fd93a6965e4b781ea7a0fdce43",
+    "http-and-noindex": "2429ebc087c6c473241606c900c7d0af6ef9a4be467aa9e0f9bce5170c6d4816",
+    "robots-retrieved": "fe07d12795684127f433f6592294c3cf8e78980b3c618be7c3917aad91e4a626",
+    "canonical-missing": "23486b7eddeda6a98cdf7892136c4dc6f3682b6c802fbb9ab024418fd9beacef",
+    "no-conversion-mechanism": "2fcb5af5fbcdafd64f3c04f1d7209353905596c9ea9c43c85210e45e547b8157",
+    "no-contact": "a8773cebc4540d9ca18370d3fc7bfb11b611f76980bbb7ae9f7930a279b0816b",
+    "headers-all-present": "29db4f27ba0ae96193d2c8323c89cd1c149d4bbf08a5c5003044300490059ddb",
+    "ga4-ready": "6ed68b9a888cf843d4d9f4c25f546197a302aa9743c919edc337963fdbd63e06",
+    "ga4-issues": "cc5caecaa7bd7720c3514d450985a8857af8d900fd47ca87dcfa3180d476a46f",
+    "ga4-not-applicable": "cc268499b9dd932f31c56f625423a4aac006262cc82b07664f2bcc462caec820",
+    "slow-mobile": "e867adab49d7fdf4f658eb5a7477fcbbbb240f2312db044ff429426c0487b04f",
+    "no-performance": "c25e64ffa138ac6696b771586fbef8c0ca30d4358005bb0b6ddbf04a2bcc2c44",
+    "path-validated-blocker": "6a7909d174ceeba5df1d6d222541d60afc571c572f42d57bd31724e7386ce784",
+    "competitor-present": "4fd0f0edcf09826a2e56c623bb2c3de483a90dc2df62b7e47ef80fd381801ea2",
+    "proprietary-platform": "2fae33dc10077eea64f46278d202ef3697bb845ed0d285380eefb0f7d6124bef",
+    "untraced-broken-links": "a9c20b1c688e373201fde60dda73ee841558a116d09878225071c841a682ca36",
+    "schema-confirmed-absent": "ba5ca5877eeea996ab24b64d5775aa53935c59554e1963465d6b1fd048200136",
+    "headings-absent-h1": "ac59b11e010cac68f946ffc03a48c103e5343b4ac6e8b6a1ff82d95e2a075a24",
+    "headings-multiple-h1": "e882e396120679097f63ae235e0f455b62354db6ea6a19236ae1167b404a2acd",
+    "perf-field-and-multipage": "7934056c92fb6605b483e7e17e882a7e805247da28864cb50d20a8fde78631f1",
+    "competitor-with-limitations": "dde95f014405e8d63e29dc52ea1b79c73dd241109391368b95a22be0c501551f",
+    "device-profile-failed": "bdcbe876c7e78dad7e67afe41b15214defcefb976604bd14e2080274abf6e938",
   });
 
   assert.deepEqual(
@@ -2131,8 +2128,8 @@ if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(m
 });
 
 const RENDERER_BRANCH_MARKERS = [
-  ["Priority Fixes client action sequence", "How to fix it"],
-  ["competitor comparison note", "does not claim traffic, rankings"],
+  ["Priority Fixes client action sequence", "What to do"],
+  ["competitor comparison note", "does not establish traffic, search rankings"],
   ["proprietary-platform migration risk", "proprietary platform constraints"],
   ["untraced broken-links note", "could not be traced"],
   ["schema confirmed-absent branch", "No structured-data type was observed"],
@@ -2417,7 +2414,7 @@ test("CR-22: the governed verification method carries through to the plan", () =
   const html = renderReportV2(model);
   const blocker = findingByRule(model, "VAN-PATH-001");
 
-  assert.match(html, /Inspect the governed .* at the assessed scope\./, "canonical implementation check rendered in the report");
+  assert.match(html, /Review the relevant pages|Review the related pages/, "canonical implementation check rendered in the report");
 
   assert.match(
     html,
@@ -2652,13 +2649,13 @@ test("CR-26: client competitor comparison uses only usable evidence and governed
 
   assert.match(
     comp,
-    /<td><strong>Next-step invitation<\/strong><\/td>\s*<td>Clear<\/td>/,
+    /<th scope="row">Next-step clarity<\/th>\s*<td>Clear<\/td>/,
     "own-site buyer action clarity must consume the governed CTA-visibility state",
   );
 
   assert.match(
     comp,
-    /<td><strong>Assessed conversion route<\/strong><\/td>\s*<td>Weak<\/td>/,
+    /<th scope="row">Conversion path<\/th>\s*<td>Weak<\/td>/,
     "own-site conversion path must consume the same governed conversion state as the main report",
   );
 });
@@ -2695,7 +2692,7 @@ test("CR-27: competitor no-comparison rendering preserves canonical source statu
 
   assert.match(
     failed,
-    /attempted but failed/i,
+    /competitor review could not be completed/i,
     "FAILED must be described as an attempted collection failure",
   );
 
@@ -2707,13 +2704,13 @@ test("CR-27: competitor no-comparison rendering preserves canonical source statu
 
   assert.match(
     notConnected,
-    /source was not connected/i,
+    /competitor data was not connected/i,
     "NOT_CONNECTED must remain distinct from FAILED",
   );
 
   assert.match(
     notApplicable,
-    /Competitor analysis was not applicable/i,
+    /competitor review was not part of this audit/i,
     "NOT_APPLICABLE must remain distinct from FAILED and NOT_CONNECTED",
   );
 
@@ -2764,7 +2761,16 @@ test("P1-CROSS-04: renderer consumes persisted interpretation and fails closed w
     },
     competitors: {
       ...(model.competitors || {}),
-      comparisons: [{ name: "Comparable", url: "https://comparable.example", status: "AVAILABLE" }],
+      comparisons: [{
+        name: "Comparable",
+        url: "https://comparable.example",
+        status: "AVAILABLE",
+        offerClarity: "Strong visible signal",
+        trustProof: "Moderate visible signal",
+        ctaClarity: "Strong visible signal",
+        contentDepth: "3 page(s)",
+        pathClarity: "Clear",
+      }],
     },
   };
   assert.match(renderReportV2(tampered), /Persisted test value/);

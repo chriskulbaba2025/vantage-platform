@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
 import { extname } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { runAudit, submitReview, approveAudit, getAuditStatus } from "./audit/run-audit.js";
 import { loadConfig } from "./config.js";
@@ -10,6 +12,7 @@ import { createOAuthService } from "./auth/oauth-service.js";
 import { resolveAuthorization, canAccessTenant } from "./identity/authorization.js";
 import { authorizeReportAccess } from "./identity/report-authorization.js";
 import { createSlidingWindowLimiter } from "./utils/rate-limiter.js";
+import { LOCAL_DETERMINISTIC_ONPAGE_FIXTURES } from "./local/deterministic-audit-fixture.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -384,7 +387,27 @@ export function createRequestHandler({
         }
         try {
           const input = await readJson(req);
-          const result = await auditService.createAudit(input, tenantId);
+          const deterministicLocalAudit = (
+            process.env.PRYSM_LOCAL_DETERMINISTIC_AUDIT === "true" &&
+            process.env.NODE_ENV !== "production" &&
+            process.env.VANTAGE_DEV_MEMORY_STORE === "true" &&
+            process.env.PRYSM_LOCAL_PERSISTENCE === "true" &&
+            !process.env.DATABASE_URL
+          );
+          const auditInput = deterministicLocalAudit
+            ? {
+                ...input,
+                report: {
+                  ...(input.report || {}),
+                  designVersion: "2.0.0",
+                },
+                crawl: {
+                  ...(input.crawl || {}),
+                  fixtures: LOCAL_DETERMINISTIC_ONPAGE_FIXTURES,
+                },
+              }
+            : input;
+          const result = await auditService.createAudit(auditInput, tenantId);
           return send(res, 201, result);
         } catch (err) {
           return sendRouteError(res, err, { errors: err.errors || null });
@@ -875,11 +898,20 @@ export function createRequestHandler({
 
 import { createProductionRuntime } from "./application/production-runtime.js";
 import { createPostgresLifecycleRepository } from "./lifecycle/postgres-repository.js";
-import { createGovernedArtifactStore, buildKey as buildArtifactKey } from "./storage/governed-artifact-store.js";
+import { createGovernedArtifactStore, createFsArtifactStore, buildKey as buildArtifactKey } from "./storage/governed-artifact-store.js";
+import { createFileLifecycleRepository } from "./lifecycle/file-repository.js";
 
 const config = loadConfig();
-const localStore = createLocalReportStore({ baseDir: config.artifactDir, publicBaseUrl: config.publicReportBaseUrl });
-const store = createReportStore(config);
+const localPersistenceEnabled = (
+  process.env.NODE_ENV !== "production" &&
+  process.env.VANTAGE_DEV_MEMORY_STORE === "true" &&
+  process.env.PRYSM_LOCAL_PERSISTENCE === "true" &&
+  !config.databaseUrl
+);
+const localDataDir = resolve(process.env.PRYSM_LOCAL_DATA_DIR || join(homedir(), "AppData", "Local", "PRYSM", "sandbox"));
+const localReportDir = localPersistenceEnabled ? join(localDataDir, "reports") : config.artifactDir;
+const localStore = createLocalReportStore({ baseDir: localReportDir, publicBaseUrl: config.publicReportBaseUrl });
+const store = createReportStore(localPersistenceEnabled ? { ...config, artifactDir: localReportDir } : config);
 
 const tokenStore = createTokenStore({
   encryptionKey: config.vantageEncryptionKey,
@@ -951,7 +983,10 @@ if (config.databaseUrl && !config.webhookSecret) {
 }
 
 let artifactStore;
-if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
+if (localPersistenceEnabled) {
+  artifactStore = createGovernedArtifactStore({ type: "fs", baseDir: join(localDataDir, "artifacts") });
+  console.warn(`DEVELOPMENT: using filesystem artifact store at ${join(localDataDir, "artifacts")}`);
+} else if (process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
   if (process.env.NODE_ENV === "production") {
     throw new Error("VANTAGE_DEV_MEMORY_STORE is not allowed in production");
   }
@@ -1023,11 +1058,77 @@ if (config.databaseUrl) {
 
 // Fallback to memory repo when no DATABASE_URL (development only)
 if (!lifecycleRepo) {
-  console.warn("No DATABASE_URL configured — using in-memory lifecycle repository (NOT for production)");
-  const { createMemoryLifecycleRepository } = await import("./lifecycle/memory-repository.js");
-  lifecycleRepo = createMemoryLifecycleRepository();
+  if (localPersistenceEnabled) {
+    console.warn(`No DATABASE_URL configured — using file-backed local lifecycle repository at ${join(localDataDir, "lifecycle.json")}`);
+    lifecycleRepo = createFileLifecycleRepository({ filePath: join(localDataDir, "lifecycle.json") });
+  } else {
+    console.warn("No DATABASE_URL configured — using in-memory lifecycle repository (NOT for production)");
+    const { createMemoryLifecycleRepository } = await import("./lifecycle/memory-repository.js");
+    lifecycleRepo = createMemoryLifecycleRepository();
+  }
+  if (!localPersistenceEnabled && process.env.VANTAGE_DEV_MEMORY_STORE === "true") {
+    const { addListByTenantToLocalMemoryRepo } = await import("./lifecycle/local-memory-history.js");
+    lifecycleRepo = addListByTenantToLocalMemoryRepo(lifecycleRepo);
+  }
   const { createMemoryIdentityRepository } = await import("./identity/memory-identity-repository.js");
   identityRepo = createMemoryIdentityRepository();
+}
+
+// Local sandbox only: the mock web principal must resolve after a worker
+// restart just like the file-backed audit/report state does.  This branch is
+// guarded by the existing local persistence composition gate above, so it
+// cannot seed identities in Cognito or any database-backed runtime.
+if (localPersistenceEnabled) {
+  const localMockUserId = "00000000-0000-4000-8000-000000000001";
+  const localMockEmail = "local-test-user@local.test";
+  const localMockSub = "mock-6c6f63616c2d746573742d75736572406c6f63616c2e74657374";
+  await identityRepo.createTenant({ id: "local-sandbox", name: "Local Sandbox", slug: "local-sandbox" });
+  await identityRepo.createUser({
+    id: localMockUserId,
+    cognitoSub: localMockSub,
+    email: localMockEmail,
+    displayName: "local-test-user",
+  });
+  await identityRepo.createMembership({
+    tenantId: "local-sandbox",
+    userId: localMockUserId,
+    role: "reviewer",
+  });
+  console.log("DEVELOPMENT: seeded local mock identity local-test-user@local.test in local-sandbox");
+}
+
+// Stage 2 local-only registration: expose the accepted frozen audit through
+// the same lifecycle and governed artifact lookup used by the web application.
+// The registration stores lifecycle identity/state only; the artifact bridge
+// reads the frozen source directory and rejects writes for this audit.
+if (localPersistenceEnabled) {
+  const {
+    registerAuthoritativeAudit,
+    createAuthoritativeArtifactBridge,
+    AUTHORITATIVE_AUDIT_ID,
+    LOCAL_REGISTRATION_TENANT,
+  } = await import("./local/authoritative-audit-registration.js");
+  const authoritativeRoot = resolve(
+    process.env.PRYSM_LOCAL_AUTHORITATIVE_AUDIT_ROOT ||
+      join(localDataDir, "authoritative-audits", AUTHORITATIVE_AUDIT_ID),
+  );
+  const registration = await registerAuthoritativeAudit({
+    lifecycleRepo,
+    datasetRoot: authoritativeRoot,
+    tenantId: LOCAL_REGISTRATION_TENANT,
+    auditId: AUTHORITATIVE_AUDIT_ID,
+  });
+  artifactStore = createAuthoritativeArtifactBridge({
+    baseStore: artifactStore,
+    datasetRoot: authoritativeRoot,
+    tenantId: registration.registeredTenantId,
+    clientId: registration.clientId,
+    auditId: registration.auditId,
+  });
+  console.log(
+    `DEVELOPMENT: authoritative audit ${registration.auditId} registered read-only ` +
+    `from ${authoritativeRoot} (${registration.state}; created=${registration.registered})`,
+  );
 }
 
 // Construct the full governed production runtime
@@ -1102,7 +1203,8 @@ const requestListener = createRequestHandler({
 
 const server = createServer(requestListener);
 if (process.env.VANTAGE_TEST_MODE !== "true") {
-  server.listen(config.port, "0.0.0.0", () => {
+  const bindHost = process.env.VANTAGE_BIND_HOST || "0.0.0.0";
+  server.listen(config.port, bindHost, () => {
     console.log(`Prysm worker listening on :${config.port}`);
   });
 }

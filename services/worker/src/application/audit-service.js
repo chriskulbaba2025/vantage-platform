@@ -189,6 +189,9 @@ export function createAuditApplicationService({
 
     const history = await lifecycleService.history(auditId, tenantId);
     const events = history || [];
+    const metadata = typeof lifecycleRepo.getAuditMetadata === "function"
+      ? await lifecycleRepo.getAuditMetadata(auditId, tenantId)
+      : null;
 
     // Get source statuses from the most recent EVIDENCE_LOCKED event
     const evidenceLockedEvent = [...events].reverse().find(
@@ -198,6 +201,8 @@ export function createAuditApplicationService({
     return {
       auditId,
       tenantId,
+      clientId: state.clientId,
+      slug: slugify(metadata?.business_name || metadata?.businessName || ""),
       state: state.state,
       version: state.version,
       createdAt: events[0]?.timestamp || null,

@@ -397,7 +397,10 @@ test("PRYSM-V2-SECTION-VIEWER-02: viewer remains accessible and keeps navigation
 test("PRYSM-V2-SECTION-VIEWER-02: all governed section content remains in the single artifact", () => {
   const html = renderReportV2(model());
 
-  for (const sectionId of EXPECTED_SECTION_IDS) {
+  // The detail projection is conditional: with no comparable competitor
+  // evidence, the renderer correctly omits competitor-detail while keeping
+  // the primary competitor state visible.
+  for (const sectionId of EXPECTED_SECTION_IDS.filter((id) => id !== "competitor-detail")) {
     assert.ok(
       html.includes(`id="${sectionId}"`),
       `section ${sectionId} remains rendered`,
