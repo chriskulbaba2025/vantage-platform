@@ -14,6 +14,7 @@ import { authorizeReportAccess } from "./identity/report-authorization.js";
 import { createSlidingWindowLimiter } from "./utils/rate-limiter.js";
 import { LOCAL_DETERMINISTIC_ONPAGE_FIXTURES } from "./local/deterministic-audit-fixture.js";
 import { validateStage2StagingPersistence } from "./local/stage2-staging-persistence.js";
+import { createPostgresIdentityRepository } from "./identity/postgres-identity-repository.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -902,6 +903,57 @@ import { createPostgresLifecycleRepository } from "./lifecycle/postgres-reposito
 import { createGovernedArtifactStore, createFsArtifactStore, buildKey as buildArtifactKey } from "./storage/governed-artifact-store.js";
 import { createFileLifecycleRepository } from "./lifecycle/file-repository.js";
 
+/**
+ * Initialize the durable PostgreSQL runtime before any local fallback can be
+ * considered. A configured DATABASE_URL is an explicit persistence choice,
+ * so every required database boundary is startup-fatal when it fails.
+ * Dependencies are injectable for deterministic startup-composition tests.
+ */
+export async function initializeConfiguredPostgres({
+  databaseUrl,
+  importPg = () => import("pg"),
+  createLifecycleRepository = ({ pool }) => createPostgresLifecycleRepository({ pool }),
+  createIdentityRepository = ({ pool }) => createPostgresIdentityRepository({ pool }),
+} = {}) {
+  if (!databaseUrl) return null;
+
+  let pool = null;
+  try {
+    const pg = await importPg();
+    pool = new pg.Pool({
+      connectionString: databaseUrl,
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
+
+    await pool.query("SELECT 1");
+
+    const lifecycleRepo = createLifecycleRepository({ pool });
+    if (!lifecycleRepo || typeof lifecycleRepo.runMigration !== "function") {
+      throw new Error("PostgreSQL lifecycle repository must expose runMigration()");
+    }
+    await lifecycleRepo.runMigration();
+
+    const identityRepo = await createIdentityRepository({ pool });
+    if (!identityRepo || typeof identityRepo.listTenants !== "function") {
+      throw new Error("PostgreSQL identity repository must expose listTenants()");
+    }
+    // Force the identity repository's lazy schema/query initialization before
+    // startup is considered successful. This prevents a mixed runtime where
+    // lifecycle is PostgreSQL-backed but identity initialization is deferred.
+    await identityRepo.listTenants();
+
+    return { pool, lifecycleRepo, identityRepo };
+  } catch (error) {
+    if (pool && typeof pool.end === "function") {
+      try { await pool.end(); } catch (closeError) {
+        console.error("PostgreSQL pool close after startup failure also failed:", closeError.message);
+      }
+    }
+    throw new Error(`PostgreSQL startup initialization failed: ${error.message}`, { cause: error });
+  }
+}
+
 const config = loadConfig();
 const stage2StagingPersistence = validateStage2StagingPersistence({
   env: process.env,
@@ -1035,34 +1087,12 @@ let auditService = null;
 let identityRepo = null;
 let pgPool = null;
 
-if (config.databaseUrl) {
-  try {
-    const pg = await import("pg");
-    pgPool = new pg.Pool({
-      connectionString: config.databaseUrl,
-      max: 10,
-      idleTimeoutMillis: 30000,
-    });
-
-    // Verify connectivity
-    await pgPool.query("SELECT 1");
-    console.log("PostgreSQL connected");
-
-    lifecycleRepo = createPostgresLifecycleRepository({ pool: pgPool });
-
-    // Run migrations to ensure schema exists
-    if (typeof lifecycleRepo.runMigration === "function") {
-      try { await lifecycleRepo.runMigration(); } catch (e) { console.warn("Migration note:", e.message); }
-    }
-
-    // MT-IDENTITY: PostgreSQL identity repository — the authorization
-    // source of truth (users / tenants / tenant_memberships).
-    const { createPostgresIdentityRepository } = await import("./identity/postgres-identity-repository.js");
-    identityRepo = createPostgresIdentityRepository({ pool: pgPool });
-  } catch (e) {
-    console.error("PostgreSQL connection failed:", e.message);
-    console.error("Worker starting without database — history, review, and approval will be unavailable");
-  }
+const configuredPostgres = await initializeConfiguredPostgres({ databaseUrl: config.databaseUrl });
+if (configuredPostgres) {
+  pgPool = configuredPostgres.pool;
+  lifecycleRepo = configuredPostgres.lifecycleRepo;
+  identityRepo = configuredPostgres.identityRepo;
+  console.log("PostgreSQL connected; lifecycle and identity repositories initialized");
 }
 
 // Fallback to memory repo when no DATABASE_URL (development only)
