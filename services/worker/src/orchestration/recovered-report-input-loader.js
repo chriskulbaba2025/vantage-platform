@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const JSON_ARTIFACTS = Object.freeze([
   "canonical/audit-request.json",
@@ -31,13 +31,14 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function safeRelativePath(root, artifactPath) {
-  const normalized = artifactPath.replaceAll("\\", "/");
-  if (!normalized || normalized.startsWith("/") || normalized.includes("..")) {
+export function safeRelativePath(root, artifactPath) {
+  if (!artifactPath || typeof artifactPath !== "string" || isAbsolute(artifactPath)) {
     throw new Error(`Recovered artifact path is not safe: ${artifactPath}`);
   }
-  const full = resolve(root, normalized);
-  if (!full.startsWith(`${resolve(root)}\\`)) {
+  const resolvedRoot = resolve(root);
+  const full = resolve(resolvedRoot, artifactPath);
+  const fromRoot = relative(resolvedRoot, full);
+  if (!fromRoot || fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) {
     throw new Error(`Recovered artifact path escapes dataset root: ${artifactPath}`);
   }
   return full;

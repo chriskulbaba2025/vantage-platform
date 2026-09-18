@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { loadRecoveredReportInputs } from "../orchestration/recovered-report-input-loader.js";
 import { createLifecycleService } from "../lifecycle/lifecycle-service.js";
 import { InvalidInputError } from "../storage/artifact-errors.js";
@@ -39,10 +39,11 @@ function targetKeyParts(key, { tenantId, clientId, auditId }) {
   return { category, artifactName };
 }
 
-async function readFrozenArtifact(rootDir, parts) {
+export async function readFrozenArtifact(rootDir, parts) {
   const root = resolve(rootDir);
   const full = resolve(root, parts.category, parts.artifactName);
-  if (full !== join(root, parts.category, parts.artifactName) || !full.startsWith(`${root}\\`)) {
+  const fromRoot = relative(root, full);
+  if (!fromRoot || fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) {
     throw new Error("Authoritative artifact path escaped frozen dataset root");
   }
   return readFile(full);
