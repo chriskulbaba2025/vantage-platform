@@ -1107,15 +1107,20 @@ if (localPersistenceEnabled) {
     createAuthoritativeArtifactBridge,
     AUTHORITATIVE_AUDIT_ID,
     LOCAL_REGISTRATION_TENANT,
+    resolveAuthoritativeRegistrationTenant,
   } = await import("./local/authoritative-audit-registration.js");
   const authoritativeRoot = resolve(
     process.env.PRYSM_LOCAL_AUTHORITATIVE_AUDIT_ROOT ||
       join(localDataDir, "authoritative-audits", AUTHORITATIVE_AUDIT_ID),
   );
+  const authoritativeRegistrationTenant = resolveAuthoritativeRegistrationTenant({
+    configuredTenantId: config.vantageTenantId,
+    requestedTenantId: process.env.PRYSM_LOCAL_AUTHORITATIVE_TENANT_ID || LOCAL_REGISTRATION_TENANT,
+  });
   const registration = await registerAuthoritativeAudit({
     lifecycleRepo,
     datasetRoot: authoritativeRoot,
-    tenantId: LOCAL_REGISTRATION_TENANT,
+    tenantId: authoritativeRegistrationTenant,
     auditId: AUTHORITATIVE_AUDIT_ID,
   });
   artifactStore = createAuthoritativeArtifactBridge({

@@ -7,6 +7,21 @@ import { InvalidInputError } from "../storage/artifact-errors.js";
 
 export const AUTHORITATIVE_AUDIT_ID = "6dca53ed-ae00-484c-bf77-b59c059eef51";
 export const LOCAL_REGISTRATION_TENANT = "local-sandbox";
+export const STAGING_REGISTRATION_TENANT = "prysm-stage2-staging";
+
+/**
+ * Resolve the tenant used only for local authoritative-audit registration.
+ * Local sandbox remains the default. The isolated staging tenant is allowed
+ * only when it exactly matches the worker's configured tenant identity.
+ */
+export function resolveAuthoritativeRegistrationTenant({ configuredTenantId, requestedTenantId }) {
+  const tenantId = requestedTenantId || LOCAL_REGISTRATION_TENANT;
+  if (tenantId === LOCAL_REGISTRATION_TENANT) return tenantId;
+  if (tenantId === STAGING_REGISTRATION_TENANT && configuredTenantId === STAGING_REGISTRATION_TENANT) {
+    return tenantId;
+  }
+  throw new Error(`Unsupported authoritative registration tenant: ${tenantId}`);
+}
 
 const REGISTRATION_STATES = Object.freeze([
   "validated",
