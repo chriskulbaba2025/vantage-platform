@@ -615,8 +615,10 @@ test(
     const second = renderGovernedNarrativeReportV2(args);
 
     assert.equal(first, second);
-    assert.doesNotMatch(first, /id="narrative-|class="narrative-/);
+    assert.doesNotMatch(first, /id="narrative-/);
+    assert.doesNotMatch(first, /class="narrative-(?:supporting-disclosure|summary-block|actions|funnel|ai-search|eeat|competitors|diagnostic-layer)/);
     assert.doesNotMatch(first, /data-writer-pass|data-judge-score|data-judge-decision/);
+    assert.match(first, /class="narrative-state" data-narrative-state="(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)"/);
     assert.match(first, /data-viewer-version="2\.3\.0"/);
   },
 );
