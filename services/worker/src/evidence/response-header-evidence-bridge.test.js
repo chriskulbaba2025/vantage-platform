@@ -478,47 +478,23 @@ test(
       model.moduleScores
         .risk_reduction
         .score,
-      94,
-      "Risk Reduction consumes the real browser-observed headers",
+      75,
+      "Risk Reduction remains governed by trust-proof terms; browser headers feed Technical Hygiene",
     );
 
-    const headerSubscore =
+    assert.equal(
       model.moduleScores
         .technical_hygiene
         .subScores
-        .find(
-          (item) =>
-            item.key === "headers",
-        );
-
-    assert.equal(
-      headerSubscore.score,
-      8,
-      "three of four governed security headers score from the browser response",
-    );
-
-    const finding =
-      model.findings.find(
-        (item) =>
-          item.ruleId ===
-          "VAN-TECH-003",
-      );
-
-    assert.ok(
-      finding,
-      "the missing CSP is reported from observed evidence",
+        .some((item) => item.key === "headers"),
+      false,
+      "security-header evidence remains outside the client-facing score surface",
     );
 
     assert.equal(
-      finding.evidence[0]
-        .provider,
-      "playwright-conversion-path",
-    );
-
-    assert.equal(
-      finding.evidence[0]
-        .observedValue,
-      "contentSecurityPolicy",
+      model.findings.some((item) => item.ruleId === "VAN-TECH-003"),
+      false,
+      "security-header evidence remains outside the client-facing finding surface",
     );
 
     // No header object returned by the real document response:
@@ -584,8 +560,8 @@ test(
       unknownModel
         .moduleEligibility
         .risk_reduction,
-      false,
-      "uncollected headers cannot make Risk Reduction eligible",
+      true,
+      "Risk Reduction eligibility remains governed by trust proof, not headers",
     );
 
     assert.equal(
@@ -593,7 +569,7 @@ test(
         .moduleScores
         .risk_reduction
         .score,
-      null,
+      75,
     );
 
     assert.equal(
