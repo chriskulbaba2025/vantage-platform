@@ -95,6 +95,11 @@ function statusChip(status) {
   return `<span class="chip ${cls}">${e(label)}</span>${legacyAnchor}`;
 }
 
+function narrativeStateBlock(pageState) {
+  if (!pageState) return "";
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><span class="chip cap-neutral">${e(pageState.state)}</span><p>${e(pageState.message)}</p><p class="small"><strong>Bounded action:</strong> ${e(pageState.boundedAction)}</p>${pageState.limitations?.length ? `<p class="small"><strong>Limit:</strong> ${e(pageState.limitations.join(" "))}</p>` : ""}</div>`;
+}
+
 // ---------------------------------------------------------------------------
 // First Things First — foundational readiness checklist
 // ---------------------------------------------------------------------------
@@ -179,7 +184,7 @@ const EEAT_DIMENSIONS = [
   },
 ];
 
-export function eeatSection(model) {
+export function eeatSection(model, pageState) {
   const site = model?.evidence?.site || {};
   const trustAssessed = capAssessed(model, "trust.proof");
   const trustComplete = capAvailable(model, "trust.proof");
@@ -353,19 +358,7 @@ export function eeatSection(model) {
     model?.scores?.trustEeatDimension ??
     model?.scores?.trust;
 
-  const verdict = !trustAssessed
-    ? "PRYSM could not determine whether the site provides enough visible proof to reduce buyer uncertainty because trust-proof page content was not available."
-    : trustPartial
-      ? `Trust-proof evidence was PARTIAL. PRYSM can report proof signals actually observed in the available assessment, but it does not treat unobserved signals as established whole-site gaps${
-          typeof score === "number"
-            ? ` or interpret the ${score}/100 score as complete coverage`
-            : ""
-        }.`
-      : typeof score === "number"
-        ? score >= 70
-          ? `The site has a useful trust foundation (${score}/100). Observed proof and the assessed trust questions are shown below.`
-          : `Trust and risk reduction are not yet strong enough at ${score}/100. Buyers may reach important decision points without enough proof or reassurance to feel confident taking the next step.`
-        : "Trust evidence was assessed, but no dimension score was available. The observed proof signals below should be read directly.";
+  const verdict = pageState?.message || "Trust evidence is shown below within its assessed scope.";
 
   const breakdown = trustPartial
     ? '<p><span class="chip cap-neutral">PARTIAL</span> Unobserved trust signals are not treated as established gaps because the trust-proof assessment was incomplete.</p>'
@@ -433,13 +426,7 @@ export function eeatSection(model) {
     ["Independent proof", trust.testimonials === true, "Testimonials or client validation were observed."],
     ["Risk reduction", [trust.contact, trust.policies, trust.pricing].some((value) => value === true), "Contact information, policies or terms, and pricing or investment context were observed."],
   ];
-  const primaryVerdict = !trustAssessed
-    ? "Trust-proof page content was not available, so the assessment cannot establish whether enough visible proof is present."
-    : trustPartial
-      ? "The assessed trust foundation is useful, but content coverage is partial. Observed proof is retained; unobserved proof remains unknown."
-      : typeof score === "number" && score >= 70 && !hasMaterialTrustFinding
-        ? `Trust is a relative strength at ${score}/100. No trust issue crossed the Priority Fix threshold.`
-        : "The assessed site has a useful trust foundation. The observed proof and remaining evidence limitations are shown below; no separate trust remedy is inferred here.";
+  const primaryVerdict = pageState?.message || "Trust evidence is shown below within its assessed scope.";
   const confidenceNote = trustPartial
     ? "The available trust-proof assessment is partial, so no conclusion is made about unobserved signals or pages."
     : hasMaterialTrustFinding
@@ -461,6 +448,7 @@ export function eeatSection(model) {
   <section id="eeat" class="card primary-page-card trust-page" data-supporting-section="trust-evidence">
     <p class="muted small">Trust &amp; Credibility</p>
     <h2>Can buyers find enough proof to feel confident taking the next step?</h2>
+    ${narrativeStateBlock(pageState)}
     <p class="trust-verdict">${e(primaryVerdict)}</p>
     <p class="small trust-score-explanation">${e(scoreExplanation)}</p>
     <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>

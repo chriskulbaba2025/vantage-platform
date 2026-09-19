@@ -388,7 +388,7 @@ test("INTERNAL-LINKS-DISCLOSURE-01: orphan count and governed full list are prog
   assert.equal((links.match(/https:\/\/x\.com\/orphan-/g) || []).length, 11);
 });
 
-test("TRUST-WORDING-01: positive trust score explains absence of a Priority Fix", async () => {
+test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather than a score threshold", async () => {
   const evidence = richEvidence();
   evidence.site.trust = {
     testimonials: true,
@@ -400,10 +400,12 @@ test("TRUST-WORDING-01: positive trust score explains absence of a Priority Fix"
     contact: true,
   };
   const model = scoreAudit(INPUT, evidence);
-  model.scores.trustEeatDimension = 75;
+  model.scores.trustEeatDimension = 1;
   const html = await render(model);
-  assert.match(html, /Trust is a relative strength at 75\/100\. No trust issue crossed the Priority Fix threshold\./);
   const trustPage = html.slice(html.indexOf('<section id="eeat"'), html.indexOf('<section id="eeat-detail"'));
+  assert.match(trustPage, /data-narrative-state="STRONG"/);
+  assert.match(trustPage, /Visible proof is established in the reviewed scope/);
+  assert.doesNotMatch(trustPage, /relative strength at|Priority Fix threshold/);
   assert.match(trustPage, /How to use the proof you already have/);
   assert.match(trustPage, /Check whether the right proof appears close enough to the decision it supports/);
   assert.match(trustPage, /PRYSM observed these trust assets, but did not establish their placement across every important conversion page/);

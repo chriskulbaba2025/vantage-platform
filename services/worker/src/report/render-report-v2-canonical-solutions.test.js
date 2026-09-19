@@ -120,13 +120,14 @@ test("Priority Fixes renders canonical detail and stable IDs in governed order",
 test("missing canonical solutions fail closed without legacy remedy fallback", () => {
   const html = renderReportV2({ ...model({ records: [], sequence: [] }), findings: [], decisionHierarchy: { orderedFindingIds: [] } });
   const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  assert.match(priority, /No prioritized action was produced from the available evidence/);
+  assert.match(priority, /data-narrative-state="STRONG"/);
+  assert.match(priority, /No material problem is established for this page/);
   assert.doesNotMatch(priority, /recommendation|businessImpact|how to fix it/i);
 });
 
 test("viewer architecture remains six primary pages plus Supporting Detail", () => {
   assert.deepEqual(REPORT_V2_VIEWER_PAGES.map((page) => page.pageId), [
     "executive-scorecard", "priority-fixes", "conversion-paths", "content-ideas",
-    "competitor-benchmark", "trust-eeat", "supporting-detail",
+    "trust-eeat", "competitor-benchmark", "supporting-detail",
   ]);
 });

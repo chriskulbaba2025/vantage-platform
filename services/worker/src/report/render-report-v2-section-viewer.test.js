@@ -131,7 +131,7 @@ function model() {
 
 const EXPECTED_PRIMARY_PAGES = [
   "Executive Scorecard", "Priority Fixes", "Conversion Journey",
-  "Content Opportunities", "Competitor Comparison", "Trust & Credibility",
+  "Content Opportunities", "Trust & Credibility", "Competitor Comparison",
 ];
 
 const EXPECTED_SUPPORTING_PAGES = [

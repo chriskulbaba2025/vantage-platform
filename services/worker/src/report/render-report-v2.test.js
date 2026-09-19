@@ -190,9 +190,9 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   assert.equal((executive.match(/<strong>What to do:<\/strong>/g) || []).length, 3);
   assert.ok((executive.match(/<h4>/g) || []).length <= 3);
   assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)/);
-  assert.match(executive, /solid foundation for conversion|measured starting point for conversion/i);
-  assert.match(executive, /The biggest opportunities are the three priorities below\./);
-  assert.match(executive, /making the visitor journey clearer and easier/);
+  assert.match(executive, /data-narrative-state="(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)"/);
+  assert.match(executive, /Preserve the evidence boundary|preserve the current foundation|prioritize correction/);
+  assert.match(executive, /Preserve the evidence boundary|fix proven material issues|selective improvements/);
   assert.doesNotMatch(executive, /governed priorities/i);
   assert.ok(!/What Is Already Good|render-blocking|largest contentful paint|meta descriptions|partial assessment|evidence capability|supporting capability|JSON-LD|browser validation|Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/i.test(executive));
   // D — pillars
@@ -210,7 +210,7 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   // CRIT 8a — conversion-path architecture + competitive context are part
   // of the governed section set (rendered from the model, never invented).
   assert.match(html, /Can visitors move from interest to action\?/);
-  assert.match(html, /The main path is clear\.|The path is visible, but some issues may slow visitors before they are ready to act\.|The available evidence does not show enough of the journey to confirm a clear route\./);
+  assert.match(html, /The reviewed journey evidence supports preserving the working route|The reviewed journey is workable but bounded|The reviewed evidence establishes points where buyer movement becomes materially unclear or broken|The audit cannot make a broad journey judgment/);
   assert.match(html, /How does your website compare with the competitors buyers may consider\?/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
@@ -303,7 +303,7 @@ test("P2: no-action PASS states the current evidence-scope criterion", () => {
   m.findings = [];
   m.decisionHierarchy = { ...m.decisionHierarchy, orderedFindingIds: [] };
   const html = renderReportV2(m);
-  assert.match(html, /No prioritized action was produced from the available evidence/);
+  assert.match(html, /No material problem is established for this page/);
 });
 
 test("S03: conversion journey tells a bounded CRO story", () => {
@@ -331,7 +331,7 @@ test("S03: conversion journey tells a bounded CRO story", () => {
     "Where the journey is strong",
     "Where visitors may lose momentum",
     "What this means for conversion",
-    "The basic journey does not need to be rebuilt",
+    "The audit cannot make a broad journey judgment|The reviewed journey is workable but bounded|The reviewed evidence establishes points where buyer movement becomes materially unclear or broken",
     "What we could not determine",
     "completed a form",
   ]) assert.match(html, new RegExp(text));
@@ -406,7 +406,7 @@ test("P10: content opportunities are presented as an actionable client plan", ()
   for (const label of ["What buyers are asking", "Why this matters", "What to create", "What it should cover", "Where it helps", "How to use it", "Confidence in this opportunity"]) {
     assert.match(page4, new RegExp(label));
   }
-  assert.match(page4, /The site already has useful content in several parts of the buyer journey/);
+  assert.match(page4, /data-narrative-state="(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)"/);
   assert.match(page4, /when someone is first trying to understand the service/);
   assert.match(page4, /Some evidence — confirm before creating new content/);
   assert.doesNotMatch(page4, /governed|assessed scope|qualified opportunity|evidence qualification|decision-support context|partial content coverage|canonical|remediation|price|timeline/i);
@@ -425,7 +425,7 @@ test("P11: competitor comparison explains the named set without market claims", 
     opportunities: { gaps: [], limitations: [] },
   };
   const html = renderReportV2(fixture);
-  const page5 = html.slice(html.indexOf('id="competitors"'), html.indexOf('id="eeat"'));
+  const page5 = html.slice(html.indexOf('id="competitors"'), html.indexOf('id="competitor-detail"'));
 
   for (const text of [
     "How does your website compare with the competitors buyers may consider?",
@@ -456,7 +456,7 @@ test("P11: competitor comparison explains the named set without market claims", 
     conversionRelevance: "The competitor explains the next steps more clearly.",
   }];
   const gapHtml = renderReportV2(gapFixture);
-  const gapPage = gapHtml.slice(gapHtml.indexOf('id="competitors"'), gapHtml.indexOf('id="eeat"'));
+  const gapPage = gapHtml.slice(gapHtml.indexOf('id="competitors"'), gapHtml.indexOf('id="competitor-detail"'));
   assert.match(gapPage, /What we saw|What to do with this/);
   assert.match(page5, /stronger visible trust signal|Trust and proof are not the same/);
 });
