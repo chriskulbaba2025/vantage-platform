@@ -257,6 +257,17 @@ function canonicalSolutionContext(model) {
     if (!record) throw new Error(`Canonical solution sequence reference does not resolve: ${solutionId}`);
     return record;
   });
+  const encyclopediaFindingIds = model?.encyclopedia?.status === "AVAILABLE"
+    ? model.encyclopedia.priorityUnits.flatMap((unit) => unit.findingIds || [])
+    : [];
+  const encyclopediaOrder = new Map(encyclopediaFindingIds.map((findingId, index) => [findingId, index]));
+  const projectedOrder = encyclopediaFindingIds.length
+    ? [...ordered].sort((left, right) => {
+      const leftRank = Math.min(...(left.findingRefs || []).map((findingId) => encyclopediaOrder.has(findingId) ? encyclopediaOrder.get(findingId) : Number.POSITIVE_INFINITY));
+      const rightRank = Math.min(...(right.findingRefs || []).map((findingId) => encyclopediaOrder.has(findingId) ? encyclopediaOrder.get(findingId) : Number.POSITIVE_INFINITY));
+      return leftRank - rightRank;
+    })
+    : ordered;
   const findingsById = new Map((model?.findings || []).map((finding) => [finding.findingId, finding]));
   const hierarchyIds = (model?.decisionHierarchy?.orderedFindingIds || [])
     .filter((findingId) => findingsById.get(findingId)?.actionable !== false);
@@ -265,7 +276,7 @@ function canonicalSolutionContext(model) {
       throw new Error(`Canonical solution missing for governed hierarchy finding: ${findingId}`);
     }
   }
-  return { byId, byFindingId, ordered };
+  return { byId, byFindingId, ordered: projectedOrder };
 }
 
 function canonicalReference(record, label = "View canonical detail") {

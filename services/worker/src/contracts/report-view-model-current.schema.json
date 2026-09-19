@@ -31,6 +31,7 @@
     },
     "competitors": { "type": "object" },
     "crossReportInterpretation": { "type": "object", "required": ["version","constructs"], "additionalProperties": true },
+    "encyclopedia": { "type": "object", "required": ["projectionVersion","status","projections","relationships","priorityUnits"], "properties": { "projectionVersion": { "type": "string" }, "status": { "type": "string", "enum": ["AVAILABLE","NOT_AVAILABLE"] }, "projections": { "type": "array" }, "relationships": { "type": "array" }, "priorityUnits": { "type": "array", "maxItems": 5 }, "limitations": { "type": "array" } }, "additionalProperties": true },
     "sourceStatus": { "type": "object" },
     "limitations": { "type": "array" },
     "evidence": { "type": ["object","null"] },

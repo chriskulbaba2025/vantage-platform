@@ -209,6 +209,7 @@ export function buildReportViewModel({
       findings: scoringModel.findings,
       decisionEvidence,
       capabilityEvidence,
+      encyclopediaProjection: scoringModel.encyclopedia,
     })
     : null;
 
@@ -284,6 +285,7 @@ export function buildReportViewModel({
       },
     },
     ...(current ? { crossReportInterpretation: current.crossReportInterpretation } : {}),
+    ...(current ? { encyclopedia: current.encyclopedia } : {}),
     // Source status
     sourceStatus: {
       website: reportPackage.sourceStatus?.website || "NOT_APPLICABLE",

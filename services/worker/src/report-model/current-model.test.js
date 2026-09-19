@@ -19,6 +19,7 @@ test("T2-MODEL-01: current report consumers receive one persisted semantic sourc
   assert.equal(model.rootCauseRuleId, scoreSet.decisionHierarchy.rootCauseRuleId);
   assert.strictEqual(model.decisionHierarchy, scoreSet.decisionHierarchy);
   assert.strictEqual(model.findings[0].findingId, "F-1");
+  assert.equal(model.encyclopedia.status, "AVAILABLE");
 });
 
 test("T2-MODEL-02: missing persisted hierarchy fails closed", () => {

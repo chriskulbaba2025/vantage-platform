@@ -1,10 +1,12 @@
+import { buildEncyclopediaProjection } from "../encyclopedia/index.js";
+
 /**
  * Canonical current report-model hydration boundary.
  *
  * Every current renderer/replay projection must consume this semantic object
  * after the persisted current ScoreSet has been validated.
  */
-export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence, canonicalSolutions }) {
+export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence, capabilityEvidence, canonicalSolutions, encyclopediaProjection }) {
   if (!scoreSet || typeof scoreSet !== "object" || Array.isArray(scoreSet)) {
     throw new Error("Current report model requires a validated ScoreSet");
   }
@@ -39,6 +41,7 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
     capabilityEvidence,
     evidence: decisionEvidence,
     canonicalSolutions,
+    encyclopedia: encyclopediaProjection || buildEncyclopediaProjection(findings),
     conversionPaths: scoreSet.conversionPaths,
     readinessMap: scoreSet.readinessMap,
     contentIdeas: scoreSet.contentIdeas,
