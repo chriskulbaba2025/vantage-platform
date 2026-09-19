@@ -385,6 +385,17 @@ test("WP10-PAGE-01: renderApprovedReport produces correct page structure", async
       website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE",
       backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED",
     },
+    crossReportInterpretation: {
+      version: "1.0.0",
+      constructs: {
+        offerClarity: "Observed service scope",
+        ctaClarity: "Clear",
+        conversionPathClarity: "Clear",
+        trustProof: "Moderate",
+        mobileUsability: "Strong",
+        indexability: "Strong",
+      },
+    },
     limitations: [],
     _gate: {},
   };
@@ -480,6 +491,17 @@ test("WP10-GM-01: rendered pages have required CSS/print/structural rules", asyn
     contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
     competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } },
     sourceStatus: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" },
+    crossReportInterpretation: {
+      version: "1.0.0",
+      constructs: {
+        offerClarity: "Observed service scope",
+        ctaClarity: "Clear",
+        conversionPathClarity: "Clear",
+        trustProof: "Moderate",
+        mobileUsability: "Strong",
+        indexability: "Strong",
+      },
+    },
     limitations: [],
   };
 
