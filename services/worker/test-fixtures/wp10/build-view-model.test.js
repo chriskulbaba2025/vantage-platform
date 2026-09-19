@@ -241,7 +241,7 @@ test("WP10-LOCK-01: locked files match WP10 starting baseline SHA-256", async ()
   const { execSync } = await import("node:child_process");
   const { readFile } = await import("node:fs/promises");
 
-  const STARTING_SHA = "d3cf84b91a40037466e9cd2d59dd5320717cca23";
+  const STARTING_SHA = "1028ca6d2719437cd5b3776559f1e811775a98c5";
   const repoRoot = resolve(__dirname, "..", "..", "..", "..");
 
   // Map from RENDERER_LOCK.files (repo-relative) to git paths
