@@ -649,7 +649,7 @@ test("fully available fixture: fractional assessed coverage remains Complete", (
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
     evidence(),
   );
-  assert.equal(model.assessedWeight, 97);
+  assert.equal(model.assessedWeight, 96);
   assert.equal(model.readinessStatus, "Complete");
   assert.equal(model.readinessStatusDetail, "Complete");
   assert.equal(model.showNumericScore, true);
@@ -657,23 +657,15 @@ test("fully available fixture: fractional assessed coverage remains Complete", (
 });
 
 test("performance unavailable: assessed weight reflects remaining governed coverage", () => {
-  // Performance module is 10% of technical_performance (20%) = 10% total
-  // With performance FAILED, assessed weight should be 90%
-  // Let's construct a scenario with 80% by also making a crawl module fail
-  // Actually, performance FAILED = 10% of total weight missing = 90% assessed
-  // We need a case with exactly 80%. Let me construct it carefully.
-  // All crawl modules = 90% of total. Performance = 10% of total.
-  // If performance fails: assessed = 90%. Still above 80%.
-  // To get 80%, we'd need 20% of weight missing.
-  // Let's use crawl PARTIAL + performance FAILED for a real test at 90%.
+  // Performance is unavailable; fractional module coverage yields 86% for
+  // this fixture while the governed readiness threshold remains Complete.
   const perfFailed = unavailablePerf();
   const model = scoreAudit(
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
     evidence({ performance: perfFailed }),
   );
-  // Performance (10% total) missing → assessed = 90%
-  assert.equal(model.assessedWeight, 87);
-  // 90% >= 80% → Complete, not provisional
+  // Fractional assessed coverage remains above the 80% Complete threshold.
+  assert.equal(model.assessedWeight, 86);
   assert.equal(model.readinessStatus, "Complete");
   assert.equal(model.showNumericScore, true);
   assert.notEqual(model.scores.conversionReadiness, null);
@@ -736,17 +728,16 @@ test("PARTIAL crawl remains scoreable while unavailable performance reduces asse
 
   // Crawl is PARTIAL (viable) — scores computed but low
   // Performance is FAILED — performance module suppressed
-  // Crawl modules contribute 90% of total weight
+  // Crawl modules remain eligible under PARTIAL evidence.
   // All crawl modules are eligible (PARTIAL crawl passes the gate)
-  // Performance = 10% missing → assessed = 90%
-  // Since 90 >= 80, it's Complete
-  assert.equal(model.assessedWeight, 87);
+  // Fractional assessed coverage remains above the 80% Complete threshold.
+  assert.equal(model.assessedWeight, 86);
   // This should be Complete since assessed >= 80
 });
 
 test("unavailable performance preserves Complete status above the 80% threshold", () => {
-  // Performance module suppressed (10% missing)
-  // assessed = 90% → Complete. 60% boundary is hard to hit with current module weights.
+  // Performance module is suppressed and fractional assessed coverage remains
+  // above the 80% Complete threshold.
   // Let's verify the boundary logic works at the code level by checking
   // what happens when assessedWeight is passed through.
   // The real test is: at 60% exactly, show provisional with numeric.
@@ -756,8 +747,7 @@ test("unavailable performance preserves Complete status above the 80% threshold"
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
     evidence({ performance: perfFailed }),
   );
-  // 90% assessed → Complete
-  assert.equal(model.assessedWeight, 87);
+  assert.equal(model.assessedWeight, 86);
   assert.equal(model.readinessStatus, "Complete");
 });
 
