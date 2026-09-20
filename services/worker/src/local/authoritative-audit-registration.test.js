@@ -13,13 +13,15 @@ const AUDIT_ID = "6dca53ed-ae00-484c-bf77-b59c059eef51";
 const TENANT_ID = "local-sandbox";
 const CLIENT_ID = "www.tbkcreative.com-tbkcreative";
 
-test("authoritative bridge reads frozen bytes and rejects target writes", async () => {
+test("authoritative report retrieval renders current bytes without changing frozen source", async () => {
   const root = await mkdtemp(join(tmpdir(), "prysm-authoritative-"));
   const datasetRoot = join(root, "authoritative");
   const storeRoot = join(root, "store");
   await mkdir(join(datasetRoot, "report-v2", "pages"), { recursive: true });
   const frozen = Buffer.from("frozen-authoritative-report", "utf8");
   await writeFile(join(datasetRoot, "report-v2", "pages", "index.html"), frozen);
+  const current = Buffer.from("current-governed-render", "utf8");
+  let renderCalls = 0;
 
   const baseStore = createFsArtifactStore({ baseDir: storeRoot });
   const bridge = createAuthoritativeArtifactBridge({
@@ -28,11 +30,19 @@ test("authoritative bridge reads frozen bytes and rejects target writes", async 
     tenantId: TENANT_ID,
     clientId: CLIENT_ID,
     auditId: AUDIT_ID,
+    renderCurrentReport: async (identity) => {
+      renderCalls += 1;
+      assert.equal(identity.datasetRoot, datasetRoot);
+      assert.equal(identity.auditId, AUDIT_ID);
+      return current;
+    },
   });
   const key = `tenants/${TENANT_ID}/clients/${CLIENT_ID}/audits/${AUDIT_ID}/report-v2/pages/index.html`;
 
   assert.equal(await bridge.exists(key), true);
-  assert.deepEqual(await bridge.get(key), frozen);
+  assert.deepEqual(await bridge.get(key), current);
+  assert.equal(renderCalls, 1);
+  assert.deepEqual(await readFile(join(datasetRoot, "report-v2", "pages", "index.html")), frozen);
   await assert.rejects(
     bridge.put({
       bytes: Buffer.from("mutable substitute"),

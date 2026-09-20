@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { loadRecoveredReportInputs } from "../orchestration/recovered-report-input-loader.js";
+import { buildPersistedV2RenderModel } from "../orchestration/audit-orchestrator.js";
+import { renderReportV2 } from "../report/render-report-v2.js";
 import { createLifecycleService } from "../lifecycle/lifecycle-service.js";
 import { InvalidInputError } from "../storage/artifact-errors.js";
 
@@ -65,11 +67,24 @@ export async function readFrozenArtifact(rootDir, parts) {
 }
 
 /**
+ * Materialize the current governed report from the frozen canonical inputs.
+ * This is an in-memory read projection: it never updates the source dataset.
+ */
+export async function renderCurrentAuthoritativeReport({ datasetRoot, auditId }) {
+  const recovered = await loadRecoveredReportInputs({ rootDir: datasetRoot, auditId });
+  const model = buildPersistedV2RenderModel({
+    ...recovered,
+    recoveredInputs: recovered,
+  });
+  return Buffer.from(renderReportV2(model), "utf8");
+}
+
+/**
  * Wrap the normal local artifact store with an authoritative, read-through
  * target. The target audit is read only; no target bytes are written to the
  * local artifact store and no mutable fallback is accepted.
  */
-export function createAuthoritativeArtifactBridge({ baseStore, datasetRoot, tenantId, clientId, auditId }) {
+export function createAuthoritativeArtifactBridge({ baseStore, datasetRoot, tenantId, clientId, auditId, renderCurrentReport = renderCurrentAuthoritativeReport }) {
   if (!baseStore || !datasetRoot || !tenantId || !clientId || !auditId) {
     throw new InvalidInputError("authoritative artifact bridge requires complete scope");
   }
@@ -77,6 +92,9 @@ export function createAuthoritativeArtifactBridge({ baseStore, datasetRoot, tena
 
   async function get(key) {
     const parts = targetKeyParts(key, scope);
+    if (parts?.category === "report-v2" && parts.artifactName === "pages/index.html") {
+      return renderCurrentReport({ datasetRoot, auditId });
+    }
     if (parts) return readFrozenArtifact(datasetRoot, parts);
     return baseStore.get(key);
   }
@@ -177,4 +195,4 @@ export async function registerAuthoritativeAudit({ lifecycleRepo, datasetRoot, t
   });
 }
 
-export default { createAuthoritativeArtifactBridge, registerAuthoritativeAudit };
+export default { createAuthoritativeArtifactBridge, registerAuthoritativeAudit, renderCurrentAuthoritativeReport };
