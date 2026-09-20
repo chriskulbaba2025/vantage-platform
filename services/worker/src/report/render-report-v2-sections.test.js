@@ -171,13 +171,13 @@ test("V2R-01: content opportunities presents actionable ideas in the client stor
   assert.doesNotMatch(primaryContent, /Connect this to the relevant service page and the next-step action used in the assessed journey\./);
   */
   assert.match(primaryContent, /What buyers are asking|Why this matters|What to create|What it should cover|Where it helps|How to use it|Confidence in this opportunity/);
-  assert.match(primaryContent, /What Is Coaching\?/);
+  assert.match(primaryContent, /Explain what coaching is/);
   assert.match(primaryContent, /What buyers are asking|Why this matters|What to create|What it should cover|Where it helps|How to use it|Confidence in this opportunity/);
   assert.doesNotMatch(primaryContent, /governed|qualified opportunity|evidence qualification|decision-support context|partial content coverage|canonical|remediation/i);
   // Canonical ideas derived from services + topicKeywords ("coaching support").
   // scoreAudit's contentIdeas() titles the leading topic from the first
   // candidate ("Coaching") — assert the exact generated idea text.
-  assert.match(html, /What Is Coaching\?/, "canonical TOFU idea rendered");
+  assert.match(html, /Explain what coaching is/, "question-shaped TOFU input is projected as a client-facing title");
   assert.match(html, /Coaching for decision making/i, "canonical leading query rendered");
 });
 
@@ -327,7 +327,7 @@ test("V2R-05: renderer never invents URLs, ideas, or claims", async () => {
   // Every rendered idea in the rich case must trace to the fixture's
   // services/topicKeywords (canonical strings only).
   const rich = await render(scoreAudit(INPUT, richEvidence()));
-  assert.match(rich, /What Is Coaching\?/, "idea traceable to fixture services");
+  assert.match(rich, /Explain what coaching is/, "idea presentation remains traceable to the fixture service topic");
   assert.ok(!rich.includes("What Is Foot?"), "no untraceable topic appears");
 });
 
@@ -406,9 +406,13 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
   assert.match(trustPage, /data-narrative-state="STRONG"/);
   assert.match(trustPage, /Visible proof is established in the reviewed scope/);
   assert.doesNotMatch(trustPage, /relative strength at|Priority Fix threshold/);
-  assert.match(trustPage, /How to use the proof you already have/);
+  assert.match(trustPage, /How should you use the proof you already have\?/);
   assert.match(trustPage, /Check whether the right proof appears close enough to the decision it supports/);
   assert.match(trustPage, /PRYSM observed these trust assets, but did not establish their placement across every important conversion page/);
+  assert.match(trustPage, /search systems understand the site/);
+  assert.match(trustPage, /AI search readiness/);
+  assert.match(trustPage, /does not establish AI visibility, citation, or inclusion/);
+  assert.doesNotMatch(trustPage, /guarantees? rankings|guarantees? traffic|guarantees? citations|guarantees? conversion/);
   assert.doesNotMatch(trustPage, /Proof already available but underused|Detected proof is listed here as an available asset/);
 });
 

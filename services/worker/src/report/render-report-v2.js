@@ -13,6 +13,7 @@ import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 import { computePillars } from "./v2-pillars.js";
 import { buildFoundationChecklist } from "./foundation-readiness.js";
 import { deriveNarrativeStates } from "../report-model/narrative-state.js";
+import { CANONICAL_PROBLEM_BY_ID } from "../encyclopedia/registry.js";
 import {
   foundationSection,
   eeatSection,
@@ -283,92 +284,6 @@ function canonicalReference(record, label = "View canonical detail") {
   return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)}</a>`;
 }
 
-function clientJourneyReference(record, label) {
-  return `<a class="canonical-solution-reference" href="#priority-fixes"${record ? ` data-solution-id="${e(record.solutionId)}"` : ""}>${e(label)}</a>`;
-}
-
-function clientJourneyStep(pathState, index) {
-  const steps = pathState === "clear"
-    ? [
-        ["Reach the right page", "Visitors can get to the pages that explain the offer."],
-        ["See what to do next", "The pages provide a clear next step."],
-        ["Move toward action", "We did not find a major problem blocking that path."],
-      ]
-    : pathState === "weak"
-      ? [
-          ["Reach the right page", "Visitors can reach the pages reviewed in this audit."],
-          ["See what to do next", "A next step is visible, but the route still needs attention."],
-          ["Move toward action", "The audit found issues that may slow movement toward action."],
-        ]
-      : [
-          ["Reach the right page", "The pages reviewed in this audit show part of the route."],
-          ["See what to do next", "Some next-step evidence is available, but the full route is not known."],
-          ["Move toward action", "The audit cannot confirm the full path from the evidence available."],
-        ];
-  return steps[index];
-}
-
-function clientJourneyIssue(issue, solution) {
-  if (issue === "performance") {
-    return {
-      title: "The page can feel slow when someone first arrives.",
-      meaning: "The route itself is clear, but slow loading can interrupt the experience before a visitor has seen the main content. That may make the site feel harder to use than it really is.",
-      next: "Fix the speed issue listed in Priority Fixes, then test the same page again.",
-      reference: clientJourneyReference(solution, "See Priority Fixes"),
-    };
-  }
-  if (issue === "buyer-questions") {
-    return {
-      title: "Some buyers may still have questions.",
-      meaning: "People may understand what the business offers but still need answers before they are ready to contact someone. Questions about cost, process, timing, or what happens next can make people hesitate.",
-      next: "Add the most useful answers where visitors are making the decision.",
-      reference: `${clientJourneyReference(solution, "See Priority Fixes")} ${clientJourneyReference(solution, "See Content Opportunities")}`,
-    };
-  }
-  return null;
-}
-
-function clientJourneyTakeaway(pathState) {
-  if (pathState === "clear") {
-    return "The basic journey does not need to be rebuilt. The better opportunity is to remove small points of friction so people can move through the site with less hesitation.";
-  }
-  if (pathState === "weak") {
-    return "The journey needs focused improvements before it can move visitors toward action with less friction. Start with the issues called out above and retest the affected pages.";
-  }
-  return "The available evidence does not show enough of the journey to authorize a site-wide architecture decision. Review the missing path evidence before making that decision.";
-}
-
-function clientJourneySupport({ findingIds, trustBand, solutions }) {
-  const cards = [];
-  if (findingIds.has("VAN-CONTENT-002")) {
-    cards.push({
-      title: "Clear answers",
-      meaning: "Clear answers help people feel ready to take the next step.",
-      cta: "See Content Opportunities",
-      target: "#content-ideas",
-      solution: solutions.get("VAN-CONTENT-002"),
-    });
-  }
-  if (trustBand) {
-    cards.push({
-      title: "Trust signals",
-      meaning: "Trust signals help reduce doubt before someone contacts the business.",
-      cta: "See Trust & Credibility",
-      target: "#trust-eeat",
-    });
-  }
-  if (findingIds.has("VAN-PERF-001")) {
-    cards.push({
-      title: "Fast pages",
-      meaning: "Fast pages help keep people moving without interruption.",
-      cta: "See Priority Fixes",
-      target: "#priority-fixes",
-      solution: solutions.get("VAN-PERF-001"),
-    });
-  }
-  return cards;
-}
-
 function executivePriorityKind(record) {
   const key = `${String(record?.ruleId || "")} ${String(record?.failureMode || "")} ${String(record?.problem || "")}`.toUpperCase();
   if (key.includes("VAN-PERF-001") || key.includes("SLOW-LARGEST-CONTENTFUL-PAINT")) return "performance";
@@ -434,6 +349,19 @@ function plainLanguage(value) {
     .replace(/remediation/gi, "fix");
 }
 
+function projectClientStatusText(html) {
+  const protectedBlocks = [];
+  const masked = html.replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>|<!--[\s\S]*?-->/gi, (block) => {
+    const marker = `\uE000${protectedBlocks.length}\uE001`;
+    protectedBlocks.push(block);
+    return marker;
+  });
+  const projected = masked.replace(/>([^<]+)</g, (_match, text) => `>${text
+    .replace(/\bNOT_AVAILABLE\b/g, "not available")
+    .replace(/\bNOT_COLLECTED\b/g, "not collected")}<`);
+  return projected.replace(/\uE000(\d+)\uE001/g, (_match, index) => protectedBlocks[Number(index)]);
+}
+
 function executivePriorityAction(record) {
   switch (executivePriorityKind(record)) {
     case "reassurance":
@@ -478,21 +406,58 @@ function executiveText(value) {
 }
 
 function narrativeBlock(pageState) {
-  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><span class="chip cap-neutral">${e(pageState.state)}</span><p>${e(pageState.message)}</p><p class="small"><strong>Bounded action:</strong> ${e(pageState.boundedAction)}</p>${pageState.limitations.length ? `<p class="small"><strong>Limit:</strong> ${e(pageState.limitations.join(" "))}</p>` : ""}</div>`;
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><span class="chip cap-neutral">${e(pageState.state)}</span><p>${e(clientCopy(pageState.message))}</p><p class="small"><strong>Bounded action:</strong> ${e(clientCopy(pageState.boundedAction))}</p>${pageState.limitations.length ? `<p class="small"><strong>Limit:</strong> ${e(clientCopy(pageState.limitations.join(" ")))}</p>` : ""}</div>`;
 }
 
-function executiveScorecard(model, pillars, canonical, pageState) {
+function clientCopy(value) {
+  return String(value ?? "")
+    .replace(/the explicitly governed change/gi, "the specified change")
+    .replace(/the governed buyer decision or audit judgment/gi, "a buyer decision")
+    .replace(/\bgoverned\b/gi, "reviewed")
+    .replace(/\bcanonical\b/gi, "recorded");
+}
+
+function capabilityStatus(model, key) {
+  const value = model?.capabilityEvidence?.capabilities?.[key]?.status;
+  return typeof value === "string" ? value : "UNKNOWN";
+}
+
+function clientEncyclopediaEffect(value) {
+  const raw = String(value || "No plain-language effect is available for this projection.");
+  const match = raw.match(/^(.+?) may make the governed buyer decision or audit judgment harder, without proving business-outcome causation\.?$/i);
+  return match
+    ? `${match[1]} may make it harder for a buyer to decide what to do next; this does not establish a business outcome.`
+    : clientCopy(raw);
+}
+
+function publicEvidenceAreaLabel(key) {
+  if (/^technical\./.test(key)) return "Technical checks";
+  if (/^performance\./.test(key)) return "Performance evidence";
+  if (/^conversion\./.test(key)) return "Conversion-path evidence";
+  if (/^content\./.test(key)) return "Content evidence";
+  if (/^trust\./.test(key)) return "Trust evidence";
+  if (/^site\./.test(key)) return "Website evidence";
+  return "Evidence area";
+}
+
+function evidenceLimitList(model) {
+  const capabilities = model?.capabilityEvidence?.capabilities || {};
+  const limits = Object.entries(capabilities)
+    .filter(([, value]) => value?.status !== "AVAILABLE")
+    .map(([key, value]) => ({
+      label: publicEvidenceAreaLabel(key),
+      status: typeof value?.status === "string" ? value.status : "UNKNOWN",
+      notes: Array.isArray(value?.limitations) ? value.limitations.filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))) : [],
+    }));
+  if (!limits.length) return "<p>No capability limitation was recorded for the evidence represented in this report model.</p>";
+  return `<ul class="evidence-limit-list">${limits.map(({ label, status, notes }) => `<li><strong>${e(label)} — ${e(status)}.</strong>${notes.length ? ` ${e(notes.join(" "))}` : " The available evidence does not establish a condition beyond this status."}</li>`).join("")}</ul>`;
+}
+
+function executiveScorecard(model, pillars, checklist, canonical, pageState, narrativeStates) {
   const readiness = model.scores.conversionReadiness;
-  const assessedWeight = Number(model.assessedWeight ?? 0);
-  const technicalHealth = (pillars || []).find((pillar) => pillar.id === "technical_health");
-  const technicalCoverageLimited = technicalHealth &&
-    technicalHealth.subWeightTotal > 0 &&
-    technicalHealth.subWeightAssessed < technicalHealth.subWeightTotal;
-  const technicalCoverageText = technicalCoverageLimited
-    ? ` Technical Health is based on ${technicalHealth.subWeightAssessed} of ${technicalHealth.subWeightTotal} technical points assessed.`
-    : "";
   const actions = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed).slice(0, 3);
-  const readinessLine = readiness === null
+  const numericScoreVisible = model.showNumericScore !== false && typeof readiness === "number";
+  const readinessLine = !numericScoreVisible
     ? `<div class="readiness-none">${e(model.readinessStatus || "Overall score unavailable")}</div>`
     : `<div class="readiness">${e(readiness)}<span class="readiness-max">/100</span></div><div class="readiness-band">${bandChip(model.bands.conversionReadiness)}</div>`;
   const priorities = actions.length
@@ -500,31 +465,47 @@ function executiveScorecard(model, pillars, canonical, pageState) {
       return `<li data-solution-id="${e(record.solutionId)}"><h4>${e(executivePriorityTitle(record))}</h4><p>${e(executivePriorityMeaning(record))}</p><p><strong>What to do:</strong> ${e(executivePriorityAction(record))} ${executivePriorityReference(record)}</p></li>`;
     }).join("")}</ol>`
     : `<p>No priority action was generated from the information reviewed.</p>`;
-  const strengths = (pillars || [])
-    .filter((pillar) => typeof pillar.score === "number" && pillar.score >= 60)
+  const siteEvidenceStatus = String(model.evidence?.site?.sourceStatus || model.sourceStatus?.site || "UNKNOWN").toUpperCase();
+  const strengths = (["AVAILABLE", "PARTIAL"].includes(siteEvidenceStatus) ? checklist || [] : [])
+    .filter((item) => item.status === "PASS" && item.assessed === true)
     .slice(0, 5)
-    .map((pillar) => pillar.id === "technical_health" && technicalCoverageLimited
-      ? "Technical checks reviewed were strong, but coverage was limited."
-      : `${pillar.label} provides a solid foundation in the pages and signals reviewed.`);
-  const coverage = `<p><strong>The ${e(readiness ?? "reported")} /100 result is valid for the evidence reviewed, but the assessment is not whole-site complete.</strong> Body-content coverage and browser-path evidence were PARTIAL. Real-user performance data and accessibility/mobile evidence were unavailable, and machine-readability evidence was PARTIAL. These limits qualify the scope of the conclusion; they do not convert missing evidence into a site failure.</p>`;
-  const uncertainty = readiness === null
-    ? "There was not enough information to produce an overall score. The report distinguishes what was reviewed from what remains unknown."
-    : "The reported score is a measured result for the assessed evidence. The limitations above remain important when applying it to pages or visitor conditions that were not fully observed.";
+    .map((item) => item.detail || `${item.label} was confirmed in the assessed scope.`);
+  const scoreDrivers = (pillars || []).map((pillar) => `<li><strong>${e(pillar.label)}:</strong> ${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "NOT ASSESSED"}${pillar.capabilities?.length ? ` <span class="small">Evidence: ${pillar.capabilities.map((item) => `${e(publicEvidenceAreaLabel(item.key))} ${e(item.status)}`).join("; ")}</span>` : ""}</li>`).join("");
+  const holding = pageState.state === "INSUFFICIENT_EVIDENCE"
+    ? "The available evidence is not sufficient to identify a dependable overall constraint. Review the evidence limits below."
+    : actions.length
+      ? `<ul>${actions.map((record) => `<li>${e(executivePriorityTitle(record))} — ${e(executivePriorityMeaning(record))}</li>`).join("")}</ul>`
+      : "No material issue was established for this decision area in the reviewed findings.";
+  const keepItems = strengths.length ? strengths.map((item) => `<li>${e(item)}</li>`).join("") : "<li>No assessed strength was available to state from the current model.</li>";
+  const improveItems = actions.length ? actions.map((record) => `<li>${e(executivePriorityTitle(record))}</li>`).join("") : "<li>No additional fix is established by the available evidence-backed actions.</li>";
+  const checkItems = actions.length ? actions.map((record) => `<li>${e(clientCopy(record.implementationCheck?.passCondition || "Use the verification step recorded for this action."))}</li>`).join("") : "<li>Keep the current evidence boundary and verify only if new evidence becomes available.</li>";
   return `
   <section id="executive" class="card primary-page-card executive-page">
     <h2>How ready is your website to convert visitors?</h2>
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
     ${narrativeBlock(pageState)}
+    <h3>${numericScoreVisible ? `Why is the score ${e(readiness)}?` : "Why is no score shown?"}</h3>
+    <p>The score display below uses the existing assessed dimension outputs. It does not add a new score or treat unavailable dimensions as zero.</p>
+    <ul class="executive-score-drivers">${scoreDrivers}</ul>
+    <h3>What is already working? What is helping the site?</h3>
+    ${strengths.length ? `<ul>${keepItems}</ul>` : "<p>No assessed strength was available to state from the current model.</p>"}
+    <h3>What is holding the site back?</h3>
+    <p>${pageState.state === "STRONG" ? "The supporting evidence does not establish a material condition requiring a corrective lead." : pageState.state === "INSUFFICIENT_EVIDENCE" ? "No broad constraint is inferred from missing or insufficient evidence." : "The following items come from reviewed priority findings; they remain within their assessed scope."}</p>
+    ${holding}
     <h3>What should you improve first?</h3>${priorities}
-    <h3>What is already working?</h3>
-    ${strengths.length ? `<p>The site is not starting from scratch. The areas below already provide a useful foundation. That means the next changes can focus on removing friction while preserving the current foundation.</p><ul>${strengths.map((strength) => `<li>${e(strength)}</li>`).join("")}</ul>` : `<p>No supported positive finding was available in the information reviewed.</p>`}
-    <h3>Where was the evidence limited?</h3><div class="note"><p>${e(uncertainty)}</p>${coverage}<p><strong>Offer clarity and conversion-path clarity are different:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p></div>
-    <h3>Supporting Detail</h3><p>Go to <strong>Priority Fixes</strong> for the ranked actions and supporting evidence. Use <strong>Supporting Detail</strong> for deeper evidence, technical details, and assessment limits.</p>
+    <h3>Keep, improve, check</h3>
+    <div class="executive-keep-improve-check"><section><h4>Keep</h4><ul>${keepItems}</ul></section><section><h4>Improve</h4><ul>${improveItems}</ul></section><section><h4>Check</h4><ul>${checkItems}</ul></section></div>
+    <h3>Next step &amp; limits</h3>
+    <p>${e(pageState.boundedAction)} <a href="#priority-fixes">Review Priority Fixes</a> for evidence-backed actions and <a href="#supporting-detail">Supporting Detail</a> for evidence and scope.</p>
+    <h4>Important</h4>
+    <p>Scores describe the assessed evidence. They do not establish conversion, revenue, or site-wide performance outcomes.</p>
+    <h4>Where was the evidence limited?</h4>
+    <h4>What we could not confirm</h4><p>This assessment is not whole-site complete; it reflects the reviewed pages and available evidence.</p>${evidenceLimitList(model)}
   </section>`;
 }
 
-function pillarSection(pillars) {
+function pillarSection(pillars, model, narrativeStates) {
   const available = (pillars || []).filter((p) => typeof p.score === "number");
   const weak = available.filter((p) => p.score < 60).sort((a, b) => a.score - b.score);
   const strong = available.filter((p) => {
@@ -621,7 +602,9 @@ function pillarSection(pillars) {
       ? `The assessed readiness dimensions are broadly adequate or strong, with no dimension currently below the Adequate band.${performanceLimited ? " Real-user performance data was not available, so the Performance & Experience result is not a complete real-user readiness conclusion." : ""}`
       : "PRYSM could not produce dimension-level readiness scores from the available evidence.";
 
+  const overview = supportingOverviewSectionInner(model, pillars, narrativeStates["supporting-detail"], narrativeStates);
   return `<section id="pillars" data-supporting-section="readiness-overview">
+    ${overview}
     <div id="supporting-detail-orientation" class="supporting-detail-orientation">
       <p class="supporting-detail-kicker">Supporting Detail</p>
       <h2>Evidence &amp; detail behind the report</h2>
@@ -832,17 +815,9 @@ function page2Verify(record) {
 
 function blockersSection(model, canonical, pageState) {
   const primary = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed);
-  if (primary.length === 0) {
-    return `<section id="blockers" class="card">
-      <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">What should you fix first?</p>
-      <p class="muted small">Priority Fixes</p>
-      <h2>What should you fix first?</h2>
-      ${narrativeBlock(pageState)}
-      <p class="small">No prioritized action was produced from the available evidence.</p>
-    </section>`;
-  }
-
-  const cards = primary.slice(0, 5).map((record, index) => {
+  const main = primary.slice(0, 3);
+  const cleanup = primary.slice(3);
+  const cards = main.map((record, index) => {
     const governedRank = record.sequenceInputs?.governedRank ?? index + 1;
     return `<article class="priority-action" data-priority-rank="${e(governedRank)}" data-solution-id="${e(record.solutionId)}">
       <div class="priority-action-heading">
@@ -853,7 +828,7 @@ function blockersSection(model, canonical, pageState) {
         </div>
       </div>
       <dl class="priority-action-fields">
-        <div class="priority-field priority-field-attention"><dt>What we found</dt><dd>${e(page2Found(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>What we know</dt><dd>${e(page2Found(record))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(page2Why(record))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>What to do</dt><dd>${e(page2Action(record))}</dd></div>
         <div class="priority-field"><dt>Where to look</dt><dd>${e(page2Location(record))}</dd></div>
@@ -864,14 +839,42 @@ function blockersSection(model, canonical, pageState) {
       </dl>
     </article>`;
   }).join("");
+  const mainFindingIds = new Set(main.flatMap((record) => record.findingRefs || []));
+  const priorityUnits = model.encyclopedia?.status === "AVAILABLE" ? (model.encyclopedia.priorityUnits || []) : [];
+  const checks = priorityUnits
+    .filter((unit) => (unit.findingIds || []).some((id) => mainFindingIds.has(id)))
+    .flatMap((unit) => {
+      const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
+      return (problem?.firstDiagnosticChecks || []).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)} <span class="small">Diagnostic guidance; this does not assert a cause.</span></li>`);
+    });
+  const cleanupList = cleanup.length
+    ? `<ol>${cleanup.map((record) => `<li data-solution-id="${e(record.solutionId)}"><strong>${e(page2Title(record))}.</strong> ${e(page2Why(record))}</li>`).join("")}</ol>`
+    : "<p>No additional lower-priority canonical actions are available for this report.</p>";
+  const workOrder = primary.length
+    ? `<ol>${primary.map((record) => `<li data-solution-id="${e(record.solutionId)}">${e(page2Title(record))}</li>`).join("")}</ol>`
+    : "<p>No evidence-backed work order is available. Do not add a problem to fill the page.</p>";
+  const evidenceGuardrail = pageState.limitations.length
+    ? `<ul>${pageState.limitations.map((limit) => `<li>${e(limit)}</li>`).join("")}</ul>`
+    : "<p>Each action is limited to the finding evidence and scope shown on its card. A diagnostic check is not a confirmed cause.</p>";
 
   return `
   <section id="blockers" class="card primary-page-card action-page">
     <p class="muted small">Priority Fixes</p>
     <h2>What should you fix first?</h2>
     ${narrativeBlock(pageState)}
-    <p>Start with the first item and work down the list. Each fix below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks.</p>
+    <h3>Start here</h3>
+    <p>${main.length ? `Start with the first item and work down the list. Each fix below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(page2Title(main[0]))}. The report shows only the ${e(main.length)} supported primary action${main.length === 1 ? "" : "s"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
+    <h3>What we know</h3>
+    <p>Each primary item below is linked to an evidence-backed finding, its assessed scope, and a verification step.</p>
     <div class="priority-sequence">${cards}</div>
+    <h3>Check these first</h3>
+    ${checks.length ? `<ul class="priority-diagnostic-checks">${checks.join("")}</ul>` : `<p>${pageState.state === "INSUFFICIENT_EVIDENCE" ? "Not enough evidence is available to prioritize diagnostic checks." : "No Encyclopedia priority unit with first diagnostic checks is linked to these primary actions."}</p>`}
+    <p class="small">Checks help investigate a condition. They are not evidence that a suspected cause is true.</p>
+    <h3>How to know it worked</h3>
+    <p>Use each action card's verification condition. A successful technical check does not by itself establish a conversion or business outcome.</p>
+    <h3>Evidence guardrail</h3>${evidenceGuardrail}
+    <h3>Clean up after the main fixes</h3>${cleanupList}
+    <h3>Work in this order</h3>${workOrder}
     <p class="muted small">Supporting Detail retains the complete evidence, technical checks, and any additional observations.</p>
   </section>`;
 }
@@ -883,72 +886,54 @@ function conversionPathSection(model, pageState) {
   const paths = Array.isArray(model.conversionPaths) ? model.conversionPaths : [];
   const conversionEvidence = model.recoveredAuditData?.conversionValidation;
   const conversionEvidenceNote = conversionEvidence
-    ? `<div class="conversion-journey-evidence"><strong>Browser path evidence:</strong> ${e(conversionEvidence.status)} across ${e(conversionEvidence.pageCount)} assessed page(s). ${e((conversionEvidence.screenshots || []).length)} supporting screenshots are retained with the governed audit evidence.</div>`
+    ? `<div class="conversion-journey-evidence"><strong>Browser path evidence:</strong> ${e(conversionEvidence.status)} across ${e(conversionEvidence.pageCount)} assessed page(s). ${e((conversionEvidence.screenshots || []).length)} supporting screenshots are retained with the audit evidence.</div>`
     : "";
   const trustBand = model.bands?.trust;
   const limitation = "We can see whether the website gives people a clear path toward action. We cannot tell from this audit how many people clicked a button, completed a form, left a page, or stopped partway through the journey. Those questions need website analytics or other behavior data.";
+  const site = model.evidence?.site || {};
+  const journeyStages = [
+    { title: "Reach the right page", status: site.sourceStatus || "UNKNOWN", evidence: Array.isArray(site.pages) && site.pages.length ? `${site.pages.length} page record(s) are present in the reviewed site evidence.` : "Page-level reach evidence is NOT_AVAILABLE in the current report model." },
+    { title: "Understand enough to continue", status: `${capabilityStatus(model, "offer.clarity")} / ${capabilityStatus(model, "content.body")}`, evidence: `${site.services?.length || 0} service label(s) are present. Content opportunities below are planning guidance, not proof of absent content.` },
+    { title: "Take the next step", status: `${capabilityStatus(model, "conversion.cta")} / ${capabilityStatus(model, "conversion.form")} / ${capabilityStatus(model, "conversion.path")}`, evidence: paths.length ? paths.map((path) => `${path.name || "Recorded path"} has recorded status ${path.status || "UNKNOWN"}.`).join(" ") : "No conversion path record is available in this model." },
+  ];
+  const journeyStageCards = journeyStages.map((stage, index) => `<article class="conversion-journey-step" data-journey-stage="${index + 1}"><span class="conversion-journey-step-number">${index + 1}</span><h3>${e(stage.title)}</h3><p><strong>Status:</strong> ${e(stage.status)}</p><p><strong>Evidence seen:</strong> ${e(stage.evidence)}</p></article>`).join("");
+  const encyclopediaUnits = model.encyclopedia?.status === "AVAILABLE" ? (model.encyclopedia.priorityUnits || []).slice(0, 3) : [];
+  const journeyFrictionCards = encyclopediaUnits.map((unit) => {
+    const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
+    const statuses = [...new Set((unit.evidence || []).map((record) => record.sourceStatus || "UNKNOWN"))];
+    return `<article class="conversion-journey-detail-card" data-encyclopedia-problem="${e(unit.canonicalProblemId || "NOT_AVAILABLE")}"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(unit.frictionState || "UNKNOWN")}</p><p><strong>Evidence:</strong> ${e(statuses.join(", ") || "UNKNOWN")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p><strong>Check first:</strong> ${e(problem?.firstDiagnosticChecks?.[0] || "Confirm the recorded condition and scope before deciding what to change.")}</p><p class="small">This is a diagnostic view; it does not establish cause, abandonment, or a business outcome.</p></article>`;
+  }).join("");
+  const frictionBlock = journeyFrictionCards.length
+    ? `<div class="conversion-journey-card-grid">${journeyFrictionCards}</div>`
+    : `<p>${model.encyclopedia?.status === "AVAILABLE" ? "No accepted priority unit is available to support a friction card." : "The Encyclopedia projection is NOT_AVAILABLE; no friction conclusion is added here."}</p>`;
+  const clearPaths = paths.filter((path) => path.status === "Clear");
+  const keepMarkup = clearPaths.length
+    ? `<ul>${clearPaths.map((path) => `<li><strong>${e(path.name || "Reviewed path")}:</strong> a Clear path status was recorded for this item. This describes the reviewed check, not the behavior of every visitor.</li>`).join("")}</ul>`
+    : "<p>No path element is presented as a strength without a retained Clear path record.</p>";
+  const analyticsStatus = model.evidence?.ga4?.sourceStatus || model.evidence?.ga4?.status || "NOT_COLLECTED";
+  const measureMarkup = `<p>Analytics evidence status: <strong>${e(analyticsStatus)}</strong>. ${["AVAILABLE", "PARTIAL"].includes(String(analyticsStatus).toUpperCase()) ? "Only metrics and coverage represented in that evidence can be stated." : "Clicks, form completion, abandonment, and conversion outcomes cannot be confirmed from this audit."}</p>`;
+  const journeyActions = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed).slice(0, 3);
+  const orderedNextSteps = journeyActions.length
+    ? `<ol>${journeyActions.map((record) => `<li>${e(executivePriorityTitle(record))} <a href="#priority-fixes" data-solution-id="${e(record.solutionId)}">Review the recorded action</a></li>`).join("")}</ol>`
+    : "<p>No evidence-backed priority action is available; do not add work to fill the sequence.</p>";
   if (paths.length === 0) {
     return `<section id="paths" class="card">
       <p class="muted small">Conversion Journey</p>
       <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
       <h2>Can visitors move from interest to action?</h2>
       <p class="conversion-journey-verdict">${e(pageState.message)}</p>
-      ${conversionEvidenceNote}<div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
+      ${narrativeBlock(pageState)}
+      <h3>How the journey works</h3><div class="conversion-journey-steps">${journeyStageCards}</div>
+      <h3>Where can visitors lose momentum?</h3>${frictionBlock}
+      <h3>What should you keep?</h3><p>No clear path record is available to identify a journey element to preserve.</p>
+      <h3>What should you measure next?</h3>${measureMarkup}
+      <h3>What cannot yet be measured?</h3><p>${e(limitation)}</p>
+      <h3>Next step</h3><p>${e(pageState.boundedAction)}</p>${orderedNextSteps}
+      ${conversionEvidenceNote}
     </section>`;
   }
 
-  const clearCount = paths.filter((path) => path.status === "Clear").length;
-  const weakCount = paths.filter((path) => path.status === "Weak").length;
-  const pathState = pageState.state === "STRONG" ? "clear" : pageState.state === "WEAK" ? "weak" : "limited";
-  const findingIds = new Set((model.findings || []).map((finding) => finding.ruleId || finding.id));
-  const solutionForRule = (ruleId) => {
-    const finding = (model.findings || []).find((item) => (item.ruleId || item.id) === ruleId);
-    return finding ? canonical.byFindingId.get(finding.findingId) : null;
-  };
   const verdict = pageState.message;
-  const journeySteps = [0, 1, 2].map((index) => clientJourneyStep(pathState, index));
-  const journeyVisual = `<div class="conversion-journey-visual" role="img" aria-label="Three-step conversion journey">
-    <div class="conversion-journey-steps">${journeySteps.map(([title, description], index) => `<div class="conversion-journey-step">
-      <span class="conversion-journey-step-number">${index + 1}</span>
-      <h3>${e(title)}</h3>
-      <p>${e(description)}</p>
-    </div>`).join("")}</div>
-  </div>`;
-
-  const workingCopy = pathState === "clear"
-    ? "Visitors can reach the important pages and find a visible next step. We did not find a major problem blocking that path."
-    : pathState === "weak"
-      ? "The path is visible, but the issues below may make it harder for visitors to keep moving toward action."
-      : "Only part of the journey is shown by the evidence reviewed, so this conclusion is limited.";
-  const momentumCards = [];
-  if (findingIds.has("VAN-PERF-001")) {
-    const issue = clientJourneyIssue("performance", solutionForRule("VAN-PERF-001"));
-    if (issue) momentumCards.push(issue);
-  }
-  if (findingIds.has("VAN-CONTENT-002")) {
-    const issue = clientJourneyIssue("buyer-questions", solutionForRule("VAN-CONTENT-002"));
-    if (issue) momentumCards.push(issue);
-  }
-  const momentumSection = momentumCards.length
-    ? `<h3>Where visitors may lose momentum</h3><div class="conversion-journey-card-grid">${momentumCards.map((card) => `<article class="conversion-journey-detail-card">
-      <h4>${e(card.title)}</h4>
-      <p>${e(card.meaning)}</p>
-      <p><strong>What to do next:</strong> ${e(card.next)}</p>
-      <p>${card.reference}</p>
-    </article>`).join("")}</div>`
-    : "";
-  const solutions = new Map([
-    ["VAN-PERF-001", solutionForRule("VAN-PERF-001")],
-    ["VAN-CONTENT-002", solutionForRule("VAN-CONTENT-002")],
-  ]);
-  const bridgeCards = clientJourneySupport({ findingIds, trustBand, solutions });
-  const journeyBridge = bridgeCards.length
-    ? `<h3>What helps this journey?</h3><div class="conversion-journey-bridge-grid">${bridgeCards.map((card) => `<article class="conversion-journey-bridge-card">
-      <h4>${e(card.title)}</h4>
-      <p>${e(card.meaning)}</p>
-      <a class="conversion-journey-bridge-link" href="${e(card.target)}"${card.solution ? ` data-solution-id="${e(card.solution.solutionId)}"` : ""}>${e(card.cta)}</a>
-    </article>`).join("")}</div>`
-    : "";
 
   return `<section id="paths" class="card primary-page-card journey-page">
     <p class="muted small">Conversion Journey</p>
@@ -957,19 +942,27 @@ function conversionPathSection(model, pageState) {
     <p class="conversion-journey-verdict">${e(verdict)}</p>
     ${narrativeBlock(pageState)}
     <h3>How the journey works</h3>
-    ${journeyVisual}
-    <h3>Where the journey is strong</h3>
-    <div class="conversion-journey-strength"><p>${e(workingCopy)}</p></div>
-    ${momentumSection}
-    <h3>What this means for conversion</h3>
-    <div class="conversion-journey-takeaway"><p>${e(clientJourneyTakeaway(pathState))}</p></div>
-    ${journeyBridge}
-    ${conversionEvidenceNote}<div class="conversion-journey-limitation"><strong>What we could not determine</strong><p>${e(limitation)}</p></div>
+    <div class="conversion-journey-visual" aria-label="Three assessed conversion journey stages"><div class="conversion-journey-steps">${journeyStageCards}</div></div>
+    <h3>Where can visitors lose momentum?</h3>${frictionBlock}
+    <h3>What should you keep?</h3><div class="conversion-journey-strength">${keepMarkup}</div>
+    <h3>What should you measure next?</h3>${measureMarkup}
+    <h3>What cannot yet be measured?</h3><p>${e(limitation)}</p>
+    <h3>Next step</h3><p>${e(pageState.boundedAction)}</p>${orderedNextSteps}
+    ${conversionEvidenceNote}
   </section>`;
 }
 
 
 
+
+function primaryIdeasForCompetitor(model) {
+  const ideas = model.contentIdeas || {};
+  const items = [...(ideas.tofu || []), ...(ideas.mofu || []), ...(ideas.bofu || [])];
+  const first = items[0];
+  return first
+    ? `Use the separately recorded planning opportunity “${e(first.idea || first.topic || "Content idea")}”; this is not a finding created by competitor evidence.`
+    : "No content-planning opportunity is recorded; do not manufacture differentiation guidance from competitor behavior.";
+}
 
 function competitorSectionClient(model, pageState) {
   const comparisons = model.competitors?.comparisons || [];
@@ -1019,9 +1012,6 @@ function competitorSectionClient(model, pageState) {
   const levelRank = { limited: 1, moderate: 2, strong: 3 };
   const clientCompetitorDisplayName = (comparison) => {
     const supplied = String(comparison.name || "").trim();
-    const url = String(comparison.url || "").toLowerCase();
-    if (/redrhino|red-rhino\.com/.test(`${supplied.toLowerCase()} ${url}`)) return "RedRhino";
-    if (/zoo media|zoomedia\.ca/.test(`${supplied.toLowerCase()} ${url}`)) return "ZOO Media Group";
     if (supplied && supplied.length <= 42) return supplied;
     try { return new URL(comparison.url).hostname.replace(/^www\./i, ""); } catch { return supplied || "Named competitor"; }
   };
@@ -1094,12 +1084,25 @@ function competitorSectionClient(model, pageState) {
     ? `<ul>${competitorAdvantages.map(({ label, name, key }) => `<li><strong>${e(name)} — ${e(label)}:</strong> ${key === "trustProof" ? e("The site shows a stronger visible trust signal in the available comparison. Review how quickly a visitor can find proof, examples, or reassurance there, then compare that with your own Trust & Credibility findings.") : e("The available values show a stronger visible signal in this area. Review the buyer need behind the difference before deciding whether it matters here.")} ${linkFor(key)}</li>`).join("")}</ul>`
     : `<p>We did not find a competitor advantage strong enough to justify changing the site simply to match them. ${gaps.length ? "Review the named difference above before deciding whether it deserves action." : "The available comparison does not prove that a competitor creates a better buying experience overall."}</p>`;
   const standApart = "<p>The comparison does not show a clear market-wide gap, and several areas do not have enough client evidence for a fair side-by-side judgment.</p><p>That still leaves a useful strategic question: where can your site be more helpful to a buyer?</p><p>Use the opportunities already identified in this report—clearer buyer answers, stronger proof, better process information, or an easier next step—to make the buying experience more useful instead of simply matching a competitor. <a href=\"#content-ideas\">See Content Opportunities</a>.</p>";
-  const actionItems = gaps.length
-    ? `<ol><li><strong>IMPROVE:</strong> Review the supported competitor difference and decide whether it affects an important buyer question. ${linkFor("pathClarity")}</li><li><strong>PROTECT:</strong> Keep the parts of the current buying path that the audit already supports until stronger evidence says they should change. <a href="#paths">See Conversion Journey</a></li><li><strong>DIFFERENTIATE:</strong> Use the content plan to make the client's explanation, proof, or process more useful instead of copying surface design. <a href="#content-ideas">See Content Opportunities</a></li></ol>`
-    : `<ol><li><strong>PROTECT:</strong> Keep the parts of the current buying path that the audit already supports. <a href="#paths">See Conversion Journey</a></li><li><strong>IMPROVE:</strong> Address the client's own highest-priority issues instead of changing the site to match a competitor. <a href="#priority-fixes">See Priority Fixes</a></li><li><strong>DIFFERENTIATE:</strong> Make buyer questions, proof, process, or next steps more useful where the report already shows an opportunity. <a href="#content-ideas">See Content Opportunities</a></li><li><strong>IGNORE:</strong> Do not chase differences that were not strong enough to establish a clear disadvantage.</li></ol>`;
+  const ownActions = canonicalSolutionContext(model).ordered.filter((record) => record.clientProminence?.displayAllowed);
+  const actionItems = `<ol class="competitor-action-framework">
+    <li><strong>PROTECT:</strong> Keep reviewed strengths that remain supported by the site's own evidence. ${relativeStrengths.length ? relativeStrengths.map((item) => e(item.label)).join(", ") : "No relative strength was established by comparable values; see the site's own evidence in the other report pages."} <a href="#paths">See Conversion Journey</a></li>
+    <li><strong>IMPROVE:</strong> ${ownActions.length ? `Consider only the site's own recorded action${ownActions.length === 1 ? "" : "s"}: ${ownActions.slice(0, 3).map((record) => `<a href="#priority-fixes">${e(executivePriorityTitle(record))}</a>`).join("; ")}.` : "No own-site action is available; competitor differences alone do not create a client fix."}</li>
+    <li><strong>DIFFERENTIATE:</strong> ${primaryIdeasForCompetitor(model)} <a href="#content-ideas">See Content Opportunities</a></li>
+    <li><strong>IGNORE:</strong> Do not pursue differences without a supported client need or evidence-backed decision value.</li>
+  </ol>`;
 
   if (!assessed.length) {
-    return `<section id="competitors" class="card"><p class="muted small">Competitor Comparison</p><h2>How does your website compare with the competitors buyers may consider?</h2>${narrativeBlock(pageState)}<h3>Competitive position</h3><p>${e(unavailableExplanation)}</p><h3>Who was compared</h3><p class="small">No named competitor could be included from the available comparison data.</p><h3>Side-by-side buyer experience benchmark</h3><p>Not enough evidence.</p><h3>Where your website is holding its own</h3><p>We did not find enough evidence to claim a clear advantage.</p><h3>Where competitors create a better buying experience</h3><p>Not enough evidence.</p><h3>Where there may be room to stand apart</h3><p>Not enough evidence.</p><h3>What this comparison cannot tell us</h3><p>This comparison could not be completed from the available named competitor evidence.</p></section>`;
+    return `<section id="competitors" class="card primary-page-card">
+      <p class="muted small">Competitor Comparison</p><h2>How does your website compare with the competitors buyers may consider?</h2>${narrativeBlock(pageState)}
+      <h3>Who was compared?</h3><p>${e(unavailableExplanation)} Named competitor scope is NOT_AVAILABLE.</p>
+      <h3>Where are the meaningful differences?</h3><p>NOT_AVAILABLE — comparable evidence is insufficient.</p>
+      <h3>What is worth learning from?</h3><h4>Where your website is holding its own</h4><p>NOT_AVAILABLE — no relative strength is inferred from missing comparisons.</p><h4>Where competitors create a better buying experience</h4><p>NOT_AVAILABLE — no competitor advantage is inferred from missing comparisons.</p>
+      <h3>What should you do because of this comparison?</h3>${actionItems}
+      <h3>What not to copy</h3><h3>What should you avoid?</h3><p>Do not copy competitor behavior or infer a client defect from missing comparisons.</p>
+      <h3>What this comparison cannot tell us</h3><h3>What can this comparison confirm?</h3><p>The comparison can confirm only its recorded source status and the absence of usable named comparisons. It cannot establish rankings, traffic, market share, revenue, or conversion outcomes.</p>
+      <h3>Next step</h3><p>${e(pageState.boundedAction)}</p>
+    </section>`;
   }
 
   return `<section id="competitors" class="card">
@@ -1110,27 +1113,31 @@ function competitorSectionClient(model, pageState) {
     <p>${e(intro)}</p>
     <p>${e(overall)}</p>
     <p>That does not mean the websites are the same. The useful question is where each site makes the buying experience clearer, easier, or more reassuring.</p>
-    <h3>Who was compared</h3>
+    <h3>Who was compared?</h3>
     <div class="table-wrap"><table><thead><tr><th>Competitor</th><th>URL</th><th>What we could review</th></tr></thead><tbody>${sourceRows}</tbody></table></div>
     <p class="muted small">Only the named competitors reviewed for this audit are shown. This comparison does not support a market-wide conclusion.</p>
     <h3>Side-by-side buyer experience benchmark</h3>
     <div class="table-wrap"><table><thead><tr><th>Area</th><th>Your website</th>${competitorNames.map((name) => `<th>${e(name)}</th>`).join("")}<th>What this means</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="muted small">The table uses descriptions from the available comparison records. It does not assign scores or a market rank.</p>
     <p class="small"><strong>Not enough evidence</strong> does not mean the site performed poorly. It means we do not have enough comparable information to make a fair judgment in that area.</p>
-    <h3>Important differences</h3>
+    <h3>Where are the meaningful differences?</h3>
+    <h4>Important differences</h4>
     ${importantDifferences}
-    <h3>Where your website is holding its own</h3>
-    ${holdingOwn}
-    <h3>Where competitors create a better buying experience</h3>
-    ${betterExperience}
-    <h3>Where there may be room to stand apart</h3>
-    ${standApart}
+    <h3>What is worth learning from?</h3>
+    <h4>Where your website is holding its own</h4>${holdingOwn}
+    <h4>Where competitors create a better buying experience</h4>${betterExperience}
+    <h4>Where there may be room to stand apart</h4>${standApart}
+    <h4>Trust and proof differ across the sites</h4>${differences.some(([key]) => key === "trustProof") ? "A difference in the named comparison is descriptive context. It does not establish a client trust defect." : "NOT_AVAILABLE — the comparison does not establish a trust and proof difference."}
+    <h4>Your conversion path is holding its own</h4>${relativeStrengths.some(({ key }) => key === "pathClarity") ? "The recorded comparable values support this bounded relative strength." : "NOT_AVAILABLE — a relative conversion-path strength is not established by comparable values."}
     <h3>What should you do because of this comparison?</h3>
     ${actionItems}
     <h3>What not to copy</h3>
+    <h3>What should you avoid?</h3>
     <p>Do not change something simply because a competitor does it differently. Competitor presence is context, not proof. Copy useful buyer-experience principles, not surface design, and prioritize changes supported by your own evidence.</p>
     <h3>What this comparison cannot tell us</h3>
+    <h3>What can this comparison confirm?</h3>
     <p>This comparison covers only the named competitors and the observable website evidence available. It does not establish traffic, search rankings, backlinks, market share, revenue, conversion rate, or business performance unless another authoritative source provides that data.</p>
+    <h3>Next step</h3><p>${e(pageState.boundedAction)} <a href="#priority-fixes">See Priority Fixes</a> to review supported work.</p>
     ${limitations.length ? `<p class="small"><strong>Review limit:</strong> ${e(limitations.join(" "))}</p>` : ""}
   </section>
   <section id="competitor-detail" class="card" data-supporting-section="competitive-trust-evidence">
@@ -1143,109 +1150,72 @@ function competitorSectionClient(model, pageState) {
 function meaningfulClientTopic(value) {
   const text = String(value ?? "").trim();
   if (!text || text.length < 3) return false;
-
-  return !/^(?:4\s*0|create|tagged by kindness inc|tbk incubates go fog it)$/i.test(text);
-}
-
-function clientContentOpportunityKind(idea) {
-  const text = String(idea || "").toLowerCase();
-  if (/what is .*custom website|custom website/.test(text) && !/option|fit|result|measurable|process/.test(text)) return "custom-website";
-  if (/signs you may need digital marketing|digital marketing/.test(text)) return "digital-marketing-fit";
-  if (/measurable|result|outcome|will this work/.test(text)) return "website-results";
-  if (/compare|option|fit/.test(text)) return "website-options";
-  if (/process|what happens/.test(text)) return "process";
-  return "general";
+  return !/^\d+$/.test(text);
 }
 
 function clientContentOpportunityTitle(idea) {
-  switch (clientContentOpportunityKind(idea)) {
-    case "custom-website": return "Explain what a custom website is";
-    case "digital-marketing-fit": return "Help people decide whether they need digital marketing";
-    case "website-results": return "Show what kind of results a custom website may support";
-    case "website-options": return "Help buyers compare website options";
-    case "process": return "Explain what happens during the process";
-    default: return String(idea || "Content idea");
-  }
+  const raw = String(idea?.idea || idea?.topic || idea || "Content opportunity").trim();
+  const title = raw.replace(/[?.!]+$/, "");
+  const normalizeTopic = (value) => value.replace(/\bwebsites\b/gi, "website").replace(/\s+/g, " ").toLowerCase();
+  const from = (pattern, build) => {
+    const match = title.match(pattern);
+    return match ? build(match) : null;
+  };
+  const withArticle = (value) => /\bwebsite$/.test(value) ? `a ${value}` : value;
+  return from(/^what is (.+)$/i, (m) => `Explain what ${withArticle(normalizeTopic(m[1]))} is`)
+    || from(/^signs you may need (.+)$/i, (m) => `Help people decide whether they need ${normalizeTopic(m[1])}`)
+    || from(/^can (.+?) produce measurable change$/i, (m) => `Show what kind of results ${withArticle(normalizeTopic(m[1]))} may support`)
+    || from(/^(.+?): options and fit$/i, (m) => `Help buyers compare ${normalizeTopic(m[1])} options`)
+    || from(/^what happens in (.+)$/i, (m) => `Explain what happens during ${normalizeTopic(m[1])}`)
+    || title;
 }
 
-function clientContentBuyerQuestion(idea, question) {
-  if (clientContentOpportunityKind(idea) === "custom-website") return "What is this, and how is it different from a standard template website?";
-  if (clientContentOpportunityKind(idea) === "digital-marketing-fit") return "Does this apply to my business?";
-  if (clientContentOpportunityKind(idea) === "website-results") return "Will this actually help my business?";
-  if (clientContentOpportunityKind(idea) === "website-options") return "Which option is right for me?";
-  if (clientContentOpportunityKind(idea) === "process") return "What happens after I decide to move forward?";
-  return String(question || "What do buyers need to know before they decide?");
+function clientContentBuyerQuestion(idea) {
+  return String(idea?.question || "NOT_AVAILABLE — no buyer question was recorded for this opportunity.");
 }
 
-function clientContentWhy(idea, sourceWhy) {
-  const kind = clientContentOpportunityKind(idea);
-  if (kind === "custom-website") return "People need to understand the service before they can decide whether it is relevant to them. A clear explanation can help visitors understand what “custom” means and whether that level of website work fits their needs.";
-  if (kind === "digital-marketing-fit") return "Some visitors may understand what digital marketing is but still not know whether they need help. Showing common signs or situations can help them recognize whether the service is relevant. It gives them a clearer way to think about their own situation.";
-  if (kind === "website-results") return "Before investing in a website, buyers often want to understand what improvement could look like. They may need proof, examples, or a clearer explanation of how the website supports business goals. Careful wording can build understanding without promising a result.";
-  if (kind === "website-options") return "Buyers may know they need a website but still be unsure what level of service fits their situation. Clear comparison content can help them understand the trade-offs without forcing them to guess. It can also make the next conversation more focused.";
-  if (kind === "process") return "Uncertainty about the process can make a service feel harder to buy. People may want to know what they need to provide, what the main steps are, and what happens after they say yes. A clear explanation can make the next step easier to understand.";
-  const text = String(sourceWhy || "");
-  return /supports the stated goal/i.test(text) || !text.trim()
-    ? "This topic may help a buyer understand the service and decide whether it fits their needs. Before creating it, confirm the questions customers ask most often and the information the business can support."
-    : text;
+function clientContentWhy(idea) {
+  return String(idea?.whyItMatters || "NOT_AVAILABLE — no rationale was recorded for this opportunity.");
 }
 
-function clientContentRecommendation(idea, sourceAsset) {
-  const kind = clientContentOpportunityKind(idea);
-  if (kind === "custom-website") return "Create a simple service explainer or a strong section on the main website service page.";
-  if (kind === "digital-marketing-fit") return "Create a practical guide, page section, or checklist explaining situations where digital marketing support may help.";
-  if (kind === "website-results") return "Create content that explains the kinds of business outcomes a better website may support.";
-  if (kind === "website-options") return "Create comparison or fit guidance. Use the options the business actually offers or competes against.";
-  if (kind === "process") return "Create a clear process section or guide using the real steps the business can confirm.";
-  return sourceAsset
-    ? `Create a ${String(sourceAsset).toLowerCase()} after confirming the questions and information it should cover.`
-    : "Create a short guide or page section after confirming the questions buyers ask most often.";
+function clientContentRecommendation(idea) {
+  return String(idea?.recommendedAsset || idea?.type || "NOT_AVAILABLE — the content format was not specified.");
 }
 
 function clientContentCoverage(idea) {
-  switch (clientContentOpportunityKind(idea)) {
-    case "custom-website":
-      return ["what a custom website means", "how it differs from a basic template site", "who may benefit from one", "what business problem it is meant to solve", "when a simpler option may be enough"];
-    case "digital-marketing-fit":
-      return ["common business problems that may lead someone to seek help", "goals the service can support", "signs that the issue may need attention", "questions a business owner should ask before choosing support", "clear limits so the guide does not create fear or pressure"];
-    case "website-results":
-      return ["the business goals the website is meant to support", "examples or case studies where proof exists", "measurable changes that can be shown clearly", "what a better website may help with and what it cannot guarantee", "a reminder that results depend on the situation and implementation"];
-    case "website-options":
-      return ["the main website options the business actually offers or competes against", "who each option may suit", "the most important differences between them", "trade-offs a buyer should understand", "questions to ask before choosing"];
-    case "process":
-      return ["the main stages of the real process", "what the client needs to provide", "what the business handles", "important decision points", "what the client can expect after each confirmed step"];
-    default:
-      return ["the question buyers are trying to answer", "the information the business can support", "a clear example where one is available", "the next question a buyer may have"];
-  }
+  const question = clientContentBuyerQuestion(idea);
+  const title = clientContentOpportunityTitle(idea);
+  return [
+    `Address the recorded buyer question: ${question}`,
+    `Explain the topic represented by this opportunity: ${title}`,
+    "Use examples or proof only when the business can substantiate them.",
+    "Add a next step only where the existing service and conversion path support it.",
+  ];
 }
 
 function clientBuyerJourneyStage(stage) {
-  const value = String(stage || "").toLowerCase();
-  if (/awareness|tofu/.test(value)) return "Early in the journey, when someone is first trying to understand the service.";
-  if (/consideration|evaluation|mofu/.test(value)) return "When someone understands the service and is deciding whether it fits their needs.";
-  if (/comparison/.test(value)) return "When someone is comparing options or providers.";
-  if (/decision|bofu/.test(value)) return "When someone is close to taking the next step and wants reassurance.";
-  return "At the point in the journey where this question becomes important.";
+  if (!stage) return "NOT_AVAILABLE — no funnel stage was recorded.";
+  const value = String(stage).toLowerCase();
+  if (/awareness|tofu/.test(value)) return "Planning stage: help a reader understand the topic and decide whether it is relevant.";
+  if (/consideration|evaluation|mofu/.test(value)) return "Planning stage: help a reader compare fit and understand available options.";
+  if (/decision|bofu/.test(value)) return "Planning stage: help a reader resolve remaining questions before choosing a next step.";
+  return `Planning stage recorded as ${String(stage)}; confirm its role in the buyer journey.`;
 }
 
-function clientContentPlacement(idea, placement) {
-  const kind = clientContentOpportunityKind(idea);
-  if (kind === "custom-website") return "Place the explanation where visitors first learn about custom website services. Link to deeper information only when they need it.";
-  if (kind === "digital-marketing-fit") return "Connect the content to the appropriate digital marketing service pages.";
-  if (kind === "website-results") return "Connect proof and examples to relevant service pages and trust content.";
-  if (kind === "website-options") return "Place the guidance on the main website service page or create a supporting comparison guide linked from it.";
-  if (kind === "process") return "Place process guidance close to the relevant service and contact or quote path.";
-  return placement
-    ? `Use it in the ${String(placement).toLowerCase()} area and connect it to the related service page.`
-    : "Place it near the related service explanation and link it to the next step when that location is confirmed.";
+function clientContentPlacement(idea) {
+  return idea?.placement
+    ? `Recorded placement guidance: ${String(idea.placement)}. Confirm the destination against the assessed service and page scope.`
+    : "NOT_AVAILABLE — confirm placement after reviewing the related service page.";
 }
 
 function clientOpportunityConfidence(status) {
-  if (String(status || "").toUpperCase() === "AVAILABLE") return "Strong evidence";
-  if (String(status || "").toUpperCase() === "PARTIAL") return "Some evidence — confirm before creating new content";
-  return "Not enough evidence yet";
+  const value = String(status || "UNKNOWN").toUpperCase();
+  if (value === "PARTIAL") return "PARTIAL — Some evidence — confirm before creating new content.";
+  if (value === "UNAVAILABLE") return "UNAVAILABLE — confidence cannot be established from this evidence.";
+  if (value === "UNKNOWN") return "UNKNOWN — confidence was not recorded.";
+  if (value === "NOT_APPLICABLE") return "NOT_APPLICABLE — this evidence does not apply.";
+  return value;
 }
-
 function contentOpportunitiesSection(model, pageState) {
   const ideas = model.contentIdeas || {};
   const tofu = ideas.tofu || [];
@@ -1253,104 +1223,11 @@ function contentOpportunitiesSection(model, pageState) {
   const bofu = ideas.bofu || [];
   const leading = ideas.leading || [];
   const site = model.evidence?.site || {};
-  const coverageState = (count, positive = false) => {
-    if (positive || count >= 3) return "Good foundation";
-    if (count >= 1) return "More information could help";
-    return "Limited information";
-  };
-
-  const buyerNeeds = [
-    [
-      "Understand the problem",
-      tofu.length,
-      false,
-      "People can find information that helps them understand the problem or need.",
-    ],
-    [
-      "Understand the service",
-      (site.services || []).length,
-      (site.services || []).length > 0,
-      "Visitors can see what the business offers and begin to understand the service.",
-    ],
-    [
-      "Evaluate fit",
-      mofu.length,
-      false,
-      "Some content helps visitors think about whether the service fits their situation.",
-    ],
-    [
-      "Build trust",
-      model.scores?.trustEeatDimension ?? model.scores?.trust,
-      (model.scores?.trustEeatDimension ?? model.scores?.trust) >= 60,
-      "Trust signals can help visitors feel more confident before they contact the business.",
-    ],
-    [
-      "Compare options",
-      mofu.filter((i) =>
-        /compar|option|fit/i.test(`${i.idea || ""} ${i.frame || ""}`)
-      ).length,
-      false,
-      "More information could help visitors compare choices and understand which option fits.",
-    ],
-    [
-      "Take action",
-      (site.ctas || []).length,
-      (site.ctas || []).length > 0,
-      "Visitors can find a next step when they are ready to contact the business.",
-    ],
-  ];
-
-  const directAnswer = pageState.message;
-
-  const coverageCards = buyerNeeds
-    .map(([need, count, positive, meaning]) => {
-      const state = coverageState(Number(count) || 0, positive === true);
-      return `<article class="content-coverage-card">
-        <h4>${e(need)}</h4>
-        <p class="content-coverage-state">${e(state)}</p>
-        <p class="small">${e(meaning)}</p>
-      </article>`;
-    })
-    .join("");
-
   const allIdeas = [
-    ...tofu.map((i) => ({ ...i, stage: "Awareness" })),
-    ...mofu.map((i) => ({ ...i, stage: "Evaluation" })),
-    ...bofu.map((i) => ({ ...i, stage: "Decision" })),
+    ...tofu.map((i) => ({ ...i, planningStage: i.funnelStage || i.stage || "TOFU" })),
+    ...mofu.map((i) => ({ ...i, planningStage: i.funnelStage || i.stage || "MOFU" })),
+    ...bofu.map((i) => ({ ...i, planningStage: i.funnelStage || i.stage || "BOFU" })),
   ];
-
-  const legacyClientWhyItMatters = (i) => {
-    const idea = String(i.idea || "");
-    if (/what is|what are/i.test(idea)) {
-      return "Helps an early-stage buyer understand the service before deciding whether it is relevant.";
-    }
-    if (/signs you may need|do i need|need .*service/i.test(idea)) {
-      return "Helps a buyer recognize whether their current situation warrants further investigation.";
-    }
-    if (/measurable|result|outcome|work/i.test(idea)) {
-      return "Addresses uncertainty about whether the service can produce a meaningful result.";
-    }
-    if (/compare|versus|option|fit/i.test(idea)) {
-      return "Helps a buyer compare options and judge which route fits their situation.";
-    }
-    if (/faq|question|answer/i.test(`${idea} ${i.question || ""}`)) {
-      return "Helps answer a buyer question before they decide whether to take the next step.";
-    }
-    if (/awareness|tofu/i.test(`${i.funnelStage || ""} ${i.stage || ""}`)) {
-      return "Helps an early-stage buyer understand whether this topic is relevant before exploring the service.";
-    }
-    if (/decision|bofu/i.test(`${i.funnelStage || ""} ${i.stage || ""}`)) {
-      return "Helps a decision-stage buyer resolve a final question before taking the assessed next step.";
-    }
-    return "Helps a prospective buyer evaluate the service before taking the next step.";
-  };
-
-  const legacyEvidenceLabel = (i) =>
-    i.evidenceStatus === "AVAILABLE"
-      ? "Supported within assessed content"
-      : i.evidenceStatus === "PARTIAL"
-        ? "Qualified opportunity — partial content coverage"
-        : "Qualified opportunity — content evidence unavailable";
 
   const evidenceLabel = (i) => clientOpportunityConfidence(i.evidenceStatus);
 
@@ -1359,9 +1236,9 @@ function contentOpportunitiesSection(model, pageState) {
       .map((i, offset) => {
         const index = startIndex + offset;
         const detail = primary ? "" : ` ${e(i.gap || "")}`;
-        const title = clientContentOpportunityTitle(i.idea);
-        const stage = i.funnelStage || i.stage || "";
-        const coverage = clientContentCoverage(i.idea);
+        const title = clientContentOpportunityTitle(i);
+        const stage = i.planningStage || i.funnelStage || i.stage || "";
+        const coverage = clientContentCoverage(i);
         return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}">
           <div class="content-opportunity-card-header">
             ${primary ? `<span class="content-opportunity-rank">${index + 1}</span>` : ""}
@@ -1369,21 +1246,26 @@ function contentOpportunitiesSection(model, pageState) {
           </div>
           <h4>${e(title)}</h4>
           <dl class="content-opportunity-fields">
-            <div><dt>What buyers are asking</dt><dd>${e(clientContentBuyerQuestion(i.idea, i.question))}</dd></div>
-            <div><dt>Why this matters</dt><dd>${e(clientContentWhy(i.idea, i.whyItMatters))}</dd></div>
-            <div><dt>What to create</dt><dd>${e(clientContentRecommendation(i.idea, i.recommendedAsset || i.type))}</dd></div>
+            <div><dt>What buyers are asking / Buyer question</dt><dd>${e(clientContentBuyerQuestion(i))}</dd></div>
+            <div><dt>Why this matters / Why it may matter</dt><dd>${e(clientContentWhy(i))}</dd></div>
+            <div><dt>What to create</dt><dd>${e(clientContentRecommendation(i))}</dd></div>
             <div class="content-opportunity-coverage"><dt>What it should cover</dt><dd><ul>${coverage.map((point) => `<li>${e(point)}</li>`).join("")}</ul></dd></div>
-            <div><dt>Where it helps</dt><dd><strong>${e(stage || "Buyer journey")}</strong><br>${e(clientBuyerJourneyStage(stage))}</dd></div>
-            <div><dt>How to use it</dt><dd>${e(clientContentPlacement(i.idea, i.placement))}</dd></div>
+            <div><dt>Where it helps</dt><dd>${e(stage || "Buyer journey")} — ${e(clientBuyerJourneyStage(stage))}</dd></div>
+            <div><dt>How to use it / Placement guidance</dt><dd>${e(clientContentPlacement(i))}</dd></div>
             ${primary ? `<div><dt>Confidence in this opportunity</dt><dd>${e(evidenceLabel(i))}</dd></div>` : `<div class="content-opportunity-uncertainty"><dt>Confidence in this opportunity</dt><dd>${e(evidenceLabel(i))}${detail}</dd></div>`}
           </dl>
         </article>`;
       })
       .join("");
 
-  const primaryIdeas = allIdeas.slice(0, 5);
-  const supportingIdeas = allIdeas.slice(5);
-  const opportunityCards = renderOpportunityCards(primaryIdeas, 0, true);
+  const priorityRank = (value) => ({ H: 0, HIGH: 0, M: 1, MEDIUM: 1, L: 2, LOW: 2 }[String(value || "").toUpperCase()] ?? 3);
+  const rankedIdeas = allIdeas.map((idea, sourceOrder) => ({ ...idea, sourceOrder })).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.sourceOrder - b.sourceOrder);
+  const primaryIdeas = rankedIdeas.slice(0, 5);
+  const supportingIdeas = rankedIdeas.slice(5);
+  const strongestIdea = primaryIdeas.slice(0, 1);
+  const additionalIdeas = primaryIdeas.slice(1);
+  const strongestCard = renderOpportunityCards(strongestIdea, 0, true);
+  const additionalCards = renderOpportunityCards(additionalIdeas, 1, true);
   const supportingPreviewCards = renderOpportunityCards(supportingIdeas.slice(0, 2), 5, false);
   const supportingRemainderCards = renderOpportunityCards(supportingIdeas.slice(2), 7, false);
 
@@ -1405,28 +1287,60 @@ function contentOpportunitiesSection(model, pageState) {
       </details>`
     : "";
 
+  const bodyCapability = model.capabilityEvidence?.capabilities?.["content.body"];
+  const coverage = bodyCapability?.coverage || {};
+  const contentStrengths = `<p><strong>Content evidence status:</strong> ${e(bodyCapability?.status || "UNKNOWN")}${coverage.requested !== null && coverage.requested !== undefined ? ` — ${e(coverage.completed ?? "UNKNOWN")} of ${e(coverage.requested)} requested page bodies returned.` : ""}</p>${coveredTopics.length ? `<p>Observed service/topic labels in the reviewed evidence:</p><ul>${coveredTopics.map((topic) => `<li>${e(topic)}</li>`).join("")}</ul>` : `<p>NOT_AVAILABLE — no service or topic labels are available to list from the current model.</p>`}<p class="small">These observations do not establish complete site coverage or prove that unobserved content is absent.</p>`;
+  const funnelPlan = [
+    ["Awareness", tofu],
+    ["Evaluation", mofu],
+    ["Decision", bofu],
+  ].map(([label, items]) => `<li><strong>${e(label)}:</strong> ${items.length ? items.map((idea) => e(clientContentOpportunityTitle(idea))).join("; ") : "NOT_AVAILABLE — no opportunity is recorded for this stage."}</li>`).join("");
+  const hubTitle = strongestIdea[0] ? clientContentOpportunityTitle(strongestIdea[0]) : null;
+  const hubSpokePlan = hubTitle
+    ? `<p><strong>Possible hub, based on the highest-ranked recorded opportunity:</strong> ${e(hubTitle)}.</p><p><strong>Possible supporting spokes:</strong> ${additionalIdeas.length ? additionalIdeas.map((idea) => e(clientContentOpportunityTitle(idea))).join("; ") : "NOT_AVAILABLE — no additional recorded opportunity."}</p><p class="small">This is a planning relationship only; it does not describe the site's current information architecture.</p>`
+    : "<p>NOT_AVAILABLE — the model contains no content opportunity from which to outline a hub-and-spoke plan.</p>";
+  const additionalOpportunityMarkup = additionalCards
+    ? `<div class="content-opportunity-list">${additionalCards}</div>`
+    : "<p>No additional ranked content opportunity is available.</p>";
+
   return `
   <section id="content-ideas" class="card primary-page-card content-page">
     <p class="muted small">Content Opportunities</p>
     <h2>What content would help buyers move forward?</h2>
     ${narrativeBlock(pageState)}
 
-    <p class="content-opportunities-verdict">${e(directAnswer)}</p>
-    <p>The ideas below are tied to the retained buyer questions, topics, and reviewed URLs. Because body-content coverage is PARTIAL, each item is a review target to confirm, not proof that the topic is missing across the site.</p>
+    <p class="content-opportunities-verdict">${e(pageState.message)}</p>
+    <p>Content opportunities are qualified planning inputs. They do not prove that a topic or answer is missing from the site.</p>
 
-    <h3>What is already helping buyers</h3>
-    <div class="content-coverage-grid">${coverageCards}</div>
+    <h3>Where is content already helping? <span class="muted small">What is already helping buyers?</span></h3>
+    <div class="content-coverage-grid">${contentStrengths}</div>
 
     <h3>Where more content may help</h3>
-    <p class="content-opportunities-gap">The retained evidence supports these questions as review targets. Confirm what is already answered on the relevant page, then add or revise content only where the page-level check shows a real gap.</p>
+    <p class="muted small">Content that could help buyers move forward is shown as a ranked planning opportunity; it is not proof of missing site content.</p>
+    <h3>Start with the strongest opportunity</h3>
+    ${strongestCard ? `<div class="content-opportunity-list">${strongestCard}</div>` : `<p>NOT_AVAILABLE — no content opportunity is available to rank.</p>`}
 
-    <h3>Content that could help buyers move forward</h3>
-    ${opportunityCards
-      ? `<div class="content-opportunity-list">${opportunityCards}</div>`
-      : `<p>No content idea was generated from the information reviewed.</p>`}
+    <h3>Other useful opportunities</h3>
+    ${additionalOpportunityMarkup}
+
+    <h3>How should these ideas work together?</h3>
+    <h4>Build one clear hub</h4>${hubSpokePlan}
+    <h4>Connect supporting spokes</h4><p>Use links between a central topic and related guides only after the relationship and destination are confirmed for the site's actual services.</p>
+    <h3>Turn one useful idea into a larger content system</h3>
+    <ul class="content-funnel-architecture">${funnelPlan}</ul>
+    <p class="small">Funnel architecture is planning guidance based on the recorded opportunity stages, not observed site structure.</p>
+
+    <h3>What does good content planning look like?</h3>
+    <h4>Every piece should have a job.</h4>
+    <p>Plan → Create → Adapt → Distribute → Measure. Keep each step tied to a recorded buyer question, supported information, an appropriate destination, and a measurement source that is actually available.</p>
+    <h3>Before you create anything</h3>
+    <p>Confirm the existing page coverage and business-approved facts first. An unavailable or partial content response is not proof that the information is missing.</p>
 
     <h3>Evidence limitations</h3>
-    <p class="small">These ideas come from the retained business signals, buyer questions, and assessed URLs. Body-content evidence is PARTIAL, so confirm the exact page gap and existing coverage before creating anything. Search or competitor signals can help prioritize a confirmed gap, but do not establish that a new asset is required.</p>
+    <p class="small"><strong>Content evidence status:</strong> ${e(bodyCapability?.status || "UNKNOWN")}. Search demand and competitor content may inform planning, but cannot establish a client content failure.</p>
+    <h3>Optional support</h3>
+    <div class="optional-support"><strong>Omnipressence support is optional and separate from the audit findings.</strong><p>Support may include funnel planning, hub-and-spoke content development, distribution planning, and analytics review when those services are separately requested. This does not change the evidence or conclusions in this report.</p></div>
+    <h3>Next step</h3><p>${e(pageState.boundedAction)}</p>
   </section>
 
   <section id="content-opportunities-detail" class="card" data-supporting-section="conversion-content-evidence">
@@ -1680,6 +1594,39 @@ function clientFindingEvidenceSummary(confidence) {
   return "The finding is based on the evidence reviewed.";
 }
 
+function clientNarrativePageLabel(pageId) {
+  return ({
+    "executive-scorecard": "Executive Scorecard",
+    "priority-fixes": "Priority Fixes",
+    "conversion-journey": "Conversion Journey",
+    "content-opportunities": "Content Opportunities",
+    "trust-credibility": "Trust & Credibility",
+    "competitor-comparison": "Competitor Comparison",
+    "supporting-detail": "Supporting Detail",
+  })[pageId] || "Report page";
+}
+
+function clientNarrativeScope(record) {
+  return clientCopy(record.reviewedScope)
+    .replace(/the reviewed findings and recorded action scope/gi, "Priority findings and related actions")
+    .replace(/capabilityEvidence\.capabilities/gi, "Assessed capability evidence");
+}
+
+function clientNarrativeEvidenceReferences(references) {
+  const publicLabels = [...new Set((references || []).map((reference) => {
+    const value = String(reference || "");
+    if (/capabilityEvidence|^capabilities/i.test(value)) return "Assessed capability evidence";
+    if (/decisionHierarchy|^findings/i.test(value)) return "Priority finding evidence";
+    if (/conversionPath/i.test(value)) return "Conversion-path evidence";
+    if (/buyerQuestion|contentIdeas/i.test(value)) return "Content planning evidence";
+    if (/trustProof/i.test(value)) return "Trust evidence";
+    if (/competitors/i.test(value)) return "Named competitor context";
+    if (/evidenceScope|sourceStatus/i.test(value)) return "Evidence coverage";
+    return "Supporting evidence";
+  }))];
+  return publicLabels.join(", ") || "Supporting evidence";
+}
+
 function clientLimitationText(value) {
   return String(value || "")
     .replace(/dataforseo_onpage/gi, "the page review")
@@ -1697,8 +1644,8 @@ function recoveredAuditDataSection(model) {
   return `<h3>Assessment records</h3>
     <p class="small">PRYSM used ${e(data.artifactCount)} verified audit records in this assessment. Supporting technical records remain available for verification.</p>
     <details class="supporting-detail-disclosure"><summary>Show technical traceability</summary>
-      <div class="table-wrap"><table><thead><tr><th>Recovered input</th><th>Status</th><th>Disposition</th><th>Governed reason</th></tr></thead><tbody>
-        <tr><td>Conversion-path validation</td><td>${e(data.conversionValidation?.status || "UNKNOWN")}</td><td>PROJECTED</td><td>${e(`${data.conversionValidation?.pageCount || 0} assessed page(s); ${screenshots.length} governed screenshot(s) retained as supporting evidence.`)}</td></tr>
+      <div class="table-wrap"><table><thead><tr><th>Recovered input</th><th>Status</th><th>Disposition</th><th>Assessment note</th></tr></thead><tbody>
+        <tr><td>Conversion-path validation</td><td>${e(data.conversionValidation?.status || "UNKNOWN")}</td><td>PROJECTED</td><td>${e(`${data.conversionValidation?.pageCount || 0} assessed page(s); ${screenshots.length} reviewed screenshot(s) retained as supporting evidence.`)}</td></tr>
         <tr><td>Canonical evidence envelope</td><td>VERIFIED</td><td>PROJECTED</td><td>${e(`${data.evidenceEnvelope?.sourceCount || 0} source group(s) and ${data.evidenceEnvelope?.artifactReferenceCount || 0} artifact reference(s) retained in the report model.`)}</td></tr>
         <tr><td>Saved report record</td><td>VERIFIED</td><td>Supporting record</td><td>Retained to verify the saved report identity and versions.</td></tr>
         <tr><td>Report version record</td><td>VERIFIED</td><td>Supporting record</td><td>Retained to verify which report version and status were rendered.</td></tr>
@@ -1768,6 +1715,33 @@ function deepEvidenceLayer(model, pageState) {
     ${recoveredData}
     ${deferredBlock}
   </section>`;
+}
+
+function supportingOverviewSectionInner(model, pillars, pageState, narrativeStates) {
+  const capabilities = model.capabilityEvidence?.capabilities || {};
+  const completenessRows = Object.entries(capabilities).map(([key, item]) => `<tr><th scope="row">${e(publicEvidenceAreaLabel(key))}</th><td>${e(item.status || "UNKNOWN")}</td><td>${e(item.coverage?.completed ?? "NOT_AVAILABLE")}${item.coverage?.requested !== null && item.coverage?.requested !== undefined ? ` / ${e(item.coverage.requested)}` : ""}</td><td>${e((item.limitations || []).filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))).join(" ") || "No further client-facing limitation is available for this evidence area.")}</td></tr>`).join("");
+  const readinessRows = (pillars || []).map((pillar) => `<tr><th scope="row">${e(pillar.label)}</th><td>${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "NOT ASSESSED"}</td><td>${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))}: ${e(item.status)}`).join("; ")}</td></tr>`).join("");
+  const findings = (model.findings || []).filter((finding) => finding.scoreBearing === true || finding.actionable === true);
+  const findingMarkup = findings.length
+    ? `<ul>${findings.map((finding) => `<li><strong>${e(finding.title || finding.ruleId || "Governed finding")}.</strong> ${e(finding.severity || "UNKNOWN")} · ${e(finding.confidence || "UNKNOWN")} · evidence ${e([...(new Set((finding.evidence || []).map((item) => item.sourceStatus || "UNKNOWN")))].join(", ") || "UNKNOWN")}; scope ${e((finding.affectedUrls || []).join(", ") || "NOT_AVAILABLE")}.</li>`).join("")}</ul>`
+    : "<p>No material finding is available from the current report model.</p>";
+  const performanceMarkup = `<p>Lab evidence: <strong>${e(capabilityStatus(model, "performance.lab"))}</strong>. Field evidence: <strong>${e(capabilityStatus(model, "performance.field"))}</strong>.</p><p>Lab measurements describe the tested conditions. They are not real-user field performance.</p>`;
+  const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"].map((key) => `<li><strong>${e(clientSourceLabel(key))}:</strong> ${e(model.evidence?.[key]?.sourceStatus || model.evidence?.[key]?.status || "NOT_COLLECTED")}</li>`).join("");
+  const trace = Object.values(narrativeStates || {}).map((record) => `<tr data-narrative-page="${e(record.pageId)}"><th scope="row">${e(clientNarrativePageLabel(record.pageId))}</th><td>${e(record.state)}</td><td>${e(record.evidenceSufficiency)}</td><td>${e(clientNarrativeScope(record))}</td><td>${e(clientNarrativeEvidenceReferences(record.evidenceRefs))}</td><td>${e(clientCopy(record.limitations.join(" ") || "No additional limitation recorded."))}</td></tr>`).join("");
+  const available = Object.values(capabilities).filter((item) => item.status === "AVAILABLE").length;
+  const total = Object.keys(capabilities).length;
+  return `<div class="supporting-detail-summary" data-supporting-section="evidence-limitations">
+    <p class="supporting-detail-kicker">Supporting Detail</p><h2>What evidence sits behind the report?</h2>
+    ${narrativeBlock(pageState)}
+    <h3>How complete was the evidence?</h3><p>${e(available)} of ${e(total)} recorded capability areas are AVAILABLE. The table preserves each original status and coverage; it does not treat missing evidence as a site failure.</p><div class="table-wrap"><table><thead><tr><th>Evidence area</th><th>Status</th><th>Coverage</th><th>Limit</th></tr></thead><tbody>${completenessRows}</tbody></table></div>
+    <h3>What drove the readiness score?</h3><div class="table-wrap"><table><thead><tr><th>Dimension</th><th>Existing score output</th><th>Evidence status</th></tr></thead><tbody>${readinessRows}</tbody></table></div>
+    <h3>What material findings were established?</h3>${findingMarkup}
+    <h3>What did the performance evidence show?</h3>${performanceMarkup}
+    <h3>Where was evidence limited?</h3>${evidenceLimitList(model)}
+    <h3>What source evidence was available?</h3><ul>${sources}</ul>
+    <h3>How does this evidence support the report?</h3><div class="table-wrap"><table><thead><tr><th>Conclusion</th><th>State</th><th>Sufficiency</th><th>Reviewed scope</th><th>Evidence references</th><th>Coverage limit</th></tr></thead><tbody>${trace}</tbody></table></div>
+    <h3>Next step</h3><p>${e(pageState.boundedAction)}</p>
+  </div>`;
 }
 
 
@@ -3064,8 +3038,7 @@ a {
   }
 }
 
-/* Step 4 finishing pass: keep the client answer prominent and supporting
-   evidence quiet without changing the report's governed content. */
+/* Keep the client answer prominent and supporting evidence quiet. */
 .primary-page-card {
   padding:36px;
 }
@@ -3596,8 +3569,8 @@ footer {
     </div>
 
     <main id="reportContent" tabindex="-1">
-      ${executiveScorecard(model, pillars, canonical, narrativeStates["executive-scorecard"])}
-      ${pillarSection(pillars)}
+      ${executiveScorecard(model, pillars, checklist, canonical, narrativeStates["executive-scorecard"], narrativeStates)}
+      ${pillarSection(pillars, model, narrativeStates)}
       ${blockersSection(model, canonical, narrativeStates["priority-fixes"])}
       ${foundationSection(checklist)}
       ${conversionPathSection(model, narrativeStates["conversion-journey"])}
@@ -3788,14 +3761,14 @@ export function renderReportV2(model, options = {}) {
   const pillars = computePillars(renderModel);
   const checklist = buildFoundationChecklist(renderModel);
   const narrativeStates = deriveNarrativeStates(renderModel);
-  return pageShell(
+  return projectClientStatusText(pageShell(
     renderModel,
     date,
     pillars,
     checklist,
     canonical,
     narrativeStates,
-  );
+  ));
 }
 
 export { computePillars };

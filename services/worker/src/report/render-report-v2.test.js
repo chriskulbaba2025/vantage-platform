@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { scoreAudit } from "../scoring/vantage-score.js";
-import { renderReportV2 as renderReportV2Base, computePillars } from "./render-report-v2.js";
+import { renderReportV2 as renderReportV2Base, computePillars, REPORT_V2_VIEWER_PAGES } from "./render-report-v2.js";
+import { deriveNarrativeStates, NARRATIVE_PAGE_IDS } from "../report-model/narrative-state.js";
 import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 import { REPORT_DESIGN_V1, REPORT_DESIGN_V2, DEFAULT_REPORT_DESIGN } from "./report-design.js";
 import { renderReport } from "./render-report.js";
@@ -172,11 +173,11 @@ test("WP-G-02: suppressed modules yield null pillar scores, never imputed", () =
 // WP-G-03 — executive report structure and content
 // ---------------------------------------------------------------------------
 
-test("WP-G-03: v2 report answers A–E with required sections", () => {
+test("WP-G-03: Executive Scorecard uses the frozen hierarchy and existing assessed outputs", () => {
   const html = renderReportV2(model());
   // A/B/C — executive scorecard
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const headings = ["How ready is your website to convert visitors?", "What should you improve first?", "What is already working?", "Where was the evidence limited?", "Supporting Detail"];
+  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Why is the score", "What is already working?", "What is holding the site back?", "What should you improve first?", "Keep, improve, check", "Next step &amp; limits", "Where was the evidence limited?"];
   let previous = -1;
   for (const heading of headings) {
     const next = executive.indexOf(heading);
@@ -184,16 +185,18 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
     previous = next;
   }
   assert.match(executive, /Conversion Readiness/);
-  assert.match(executive, /coverage/i);
+  assert.match(executive, /assessed dimension outputs/);
   assert.match(executive, /Supporting Detail/);
   assert.equal((executive.match(/What is already working\?/g) || []).length, 1);
   assert.equal((executive.match(/<strong>What to do:<\/strong>/g) || []).length, 3);
-  assert.ok((executive.match(/<h4>/g) || []).length <= 3);
+  assert.match(executive, /What we could not confirm/);
   assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)/);
   assert.match(executive, /data-narrative-state="(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)"/);
   assert.match(executive, /Preserve the evidence boundary|preserve the current foundation|prioritize correction/);
   assert.match(executive, /Preserve the evidence boundary|fix proven material issues|selective improvements/);
   assert.doesNotMatch(executive, /governed priorities/i);
+  const supportingOverview = html.slice(html.indexOf('id="pillars"'), html.indexOf('id="blockers"'));
+  assert.doesNotMatch(supportingOverview, /capabilityEvidence\.capabilities|crossReportInterpretation\.truth|meta_description|trust\.pricing|technical\.headers/i);
   assert.ok(!/What Is Already Good|render-blocking|largest contentful paint|meta descriptions|partial assessment|evidence capability|supporting capability|JSON-LD|browser validation|Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/i.test(executive));
   // D — pillars
   assert.match(html, /Where are the problems\?/);
@@ -215,10 +218,27 @@ test("WP-G-03: v2 report answers A–E with required sections", () => {
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
   assert.ok(html.includes("Scoring version 4.1.2"));
+  assertFrozenViewerHierarchy();
+  assertFourNarrativeStatesAcrossFrozenPages();
 });
 
 test("S02: Priority Fixes is one ranked client sequence with bounded fields", () => {
   const html = renderReportV2(priorityModel());
+  const statusFixture = priorityModel();
+  statusFixture.evidence = {
+    ...statusFixture.evidence,
+    site: { ...statusFixture.evidence.site, pages: [] },
+    ga4: { sourceStatus: "NOT_COLLECTED", status: "NOT_COLLECTED" },
+  };
+  const statusHtml = renderReportV2(statusFixture);
+  const visibleStatusText = statusHtml
+    .replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>|<!--[\s\S]*?-->/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+  assert.match(visibleStatusText, /not available/i, "internal absence token is projected into client language");
+  assert.match(visibleStatusText, /not collected/i, "internal collection token is projected into client language");
+  assert.doesNotMatch(visibleStatusText, /\bNOT_AVAILABLE\b|\bNOT_COLLECTED\b/, "internal enum tokens never reach visible client copy");
+  assert.match(visibleStatusText, /\bAVAILABLE\b/, "approved evidence-state vocabulary remains intact");
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
   assert.match(blockers, /Start with the first item and work down the list\. Each fix below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
@@ -227,7 +247,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
   for (const label of [
     "Why it matters",
-    "What we found",
+    "What we know",
     "Where to look",
     "Confidence in this finding",
     "Who may need to help",
@@ -245,12 +265,12 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(cards[0][3], /Some visitors may need more pricing or reassurance before they act\./);
   assert.match(cards[0][3], /Some evidence — confirm before making the change/);
   assert.match(cards[0][3], /Add only pricing or reassurance details the business can support/);
-  assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|assessed scope|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
+  assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, /businessImpact|legacy recommendation|affectedUrls|verificationMethod/i);
-  assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|assessed scope|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
+  assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, />(?:LOW|MEDIUM|HIGH|SUPPORTED|PARTIAL|CONDITIONAL|UNKNOWN|UNAVAILABLE|FIX_NOW|FIX_LATER|HOLD)</);
   assert.doesNotMatch(blockers, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
-  const orderedLabels = ["What we found", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
+  const orderedLabels = ["What we know", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
   let lastLabel = -1;
   for (const label of orderedLabels) {
     const nextLabel = blockers.indexOf(`<dt>${label}</dt>`);
@@ -272,7 +292,7 @@ test("P9: conversion journey visual presents three complete client stages", () =
   const html = renderReportV2(fixture);
   assert.match(html, /class="conversion-journey-visual"/);
   assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 3);
-  for (const label of ["Reach the right page", "See what to do next", "Move toward action"]) assert.match(html, new RegExp(label));
+  for (const label of ["Reach the right page", "Understand enough to continue", "Take the next step"]) assert.match(html, new RegExp(label));
   assert.doesNotMatch(html, /Internal stage one|Internal stage two|Internal stage three/);
 });
 
@@ -306,7 +326,7 @@ test("P2: no-action PASS states the current evidence-scope criterion", () => {
   assert.match(html, /No material problem is established for this page/);
 });
 
-test("S03: conversion journey tells a bounded CRO story", () => {
+test("S03: Conversion Journey maps supported Encyclopedia friction without asserting cause or outcomes", () => {
   const fixture = model();
   fixture.conversionPaths = [{
     name: "Primary conversion path",
@@ -318,38 +338,118 @@ test("S03: conversion journey tells a bounded CRO story", () => {
     ],
     blockers: [],
   }];
-  fixture.findings = [
-    ...(fixture.findings || []),
-    { ruleId: "VAN-PERF-001" },
-    { ruleId: "VAN-CONTENT-002" },
-  ];
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: ["A01", "A02", "A03"].map((id) => ({
+      canonicalProblemId: id,
+      title: `Reviewed friction ${id}`,
+      findingIds: [],
+      frictionState: "FRICTION",
+      evidence: [{ sourceStatus: "AVAILABLE", evidenceRef: `fixture:${id}` }],
+    })),
+  };
   const html = renderReportV2(fixture);
   for (const text of [
     "Reach the right page",
-    "See what to do next",
-    "Move toward action",
-    "Where the journey is strong",
-    "Where visitors may lose momentum",
-    "What this means for conversion",
-    "The audit cannot make a broad journey judgment|The reviewed journey is workable but bounded|The reviewed evidence establishes points where buyer movement becomes materially unclear or broken",
-    "What we could not determine",
-    "completed a form",
+    "Understand enough to continue",
+    "Take the next step",
+    "Where can visitors lose momentum?",
+    "What should you keep?",
+    "What should you measure next?",
+    "What cannot yet be measured?",
+    "Next step",
+    "Check first:",
   ]) assert.match(html, new RegExp(text));
-  assert.match(html, /The page can feel slow when someone first arrives\.|Some buyers may still have questions\./);
-  assert.equal((html.match(/class="conversion-journey-bridge-card"/g) || []).length, 3);
-  assert.match(html, /What helps this journey\?/);
-  assert.match(html, /Clear answers/);
-  assert.match(html, /href="#content-ideas"/);
-  assert.match(html, /Trust signals/);
-  assert.match(html, /href="#trust-eeat"/);
-  assert.match(html, /Fast pages/);
-  assert.match(html, /href="#priority-fixes"/);
+  assert.equal((html.match(/class="conversion-journey-detail-card"/g) || []).length, 3);
+  assert.match(html, /data-encyclopedia-problem="A01"/);
+  assert.match(html, /analytics evidence status/i);
+  assert.match(html, /abandonment.*cannot be confirmed/i);
+  assert.doesNotMatch(html, /proves the cause|causes abandonment|guarantees conversion/);
   const page3 = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
   const page3Text = page3.replace(/<[^>]+>/g, " ");
   assert.doesNotMatch(page3Text, /SOL-[A-Z0-9-]+|View canonical detail|governed|canonical|client remediation|material route blocker|assessed scope/i);
   assert.match(page3, /data-solution-id="[^"]+"/);
+  assert.doesNotMatch(html, /governed buyer decision or audit judgment|governed action/i);
   assert.doesNotMatch(page3, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
 });
+
+function assertFrozenViewerHierarchy() {
+  const expected = [
+    ["executive-scorecard", "Executive Scorecard", "executive"],
+    ["priority-fixes", "Priority Fixes", "blockers"],
+    ["conversion-paths", "Conversion Journey", "paths"],
+    ["content-ideas", "Content Opportunities", "content-ideas"],
+    ["trust-eeat", "Trust & Credibility", "eeat"],
+    ["competitor-benchmark", "Competitor Comparison", "competitors"],
+    ["supporting-detail", "Supporting Detail", "pillars"],
+  ];
+  assert.deepEqual(REPORT_V2_VIEWER_PAGES.map(({ pageId, title, sectionIds }) => [pageId, title, sectionIds[0]]), expected);
+  const html = renderReportV2(model());
+  assert.equal((html.match(/class="viewer-nav-link viewer-nav-primary"/g) || []).length, 6);
+  assert.equal((html.match(/class="viewer-nav-link viewer-nav-supporting"/g) || []).length, 1);
+  for (const [pageId, title] of expected) {
+    assert.match(html, new RegExp(`data-viewer-page="${pageId}"[^>]*>[\\s\\S]*?${title.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}`));
+  }
+  const pages = {
+    "executive-scorecard": html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"')),
+    "priority-fixes": html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"')),
+    "conversion-paths": html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"')),
+    "content-ideas": html.slice(html.indexOf('id="content-ideas"'), html.indexOf('id="action-plan"')),
+    "trust-eeat": html.slice(html.indexOf('id="eeat"'), html.indexOf('id="competitors"')),
+    "competitor-benchmark": html.slice(html.indexOf('id="competitors"'), html.indexOf('id="competitor-detail"')),
+    "supporting-detail": html.slice(html.indexOf('id="pillars"'), html.indexOf('id="blockers"')),
+  };
+  const required = {
+    "executive-scorecard": ["Conversion Readiness", "Why is the score", "What is helping the site", "What is holding the site back", "What should you improve first", "Keep, improve, check", "Next step &amp; limits", "What we could not confirm"],
+    "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence guardrail", "Clean up after the main fixes", "Work in this order"],
+    "conversion-paths": ["Reach the right page", "Understand enough to continue", "Take the next step", "Evidence seen:", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Next step"],
+    "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
+    "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "How should you use the proof you already have", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Next step"],
+    "competitor-benchmark": ["Who was compared", "Where are the meaningful differences", "What is worth learning from", "PROTECT", "IMPROVE", "DIFFERENTIATE", "IGNORE", "What not to copy", "What this comparison cannot tell us", "What can this comparison confirm", "Next step"],
+    "supporting-detail": ["What evidence sits behind the report", "How complete was the evidence", "What drove the readiness score", "What material findings were established", "What did the performance evidence show", "Lab evidence", "Field evidence", "Where was evidence limited", "What source evidence was available", "How does this evidence support the report", "Conclusion", "Next step"],
+  };
+  for (const [pageId, headings] of Object.entries(required)) {
+    assert.ok(pages[pageId].length > 0, `${pageId} page section exists`);
+    for (const heading of headings) assert.ok(pages[pageId].includes(heading), `${pageId} includes ${heading}`);
+  }
+  assert.match(html, /onclick="window\.print\(\)"/);
+  assert.match(html, /body\.viewer-ready main > section\.viewer-active \{ display:block !important; \}/);
+}
+
+function assertFourNarrativeStatesAcrossFrozenPages() {
+  const sectionRange = {
+    "executive-scorecard": ['id="executive"', 'id="pillars"'],
+    "priority-fixes": ['id="blockers"', 'id="foundations"'],
+    "conversion-paths": ['id="paths"', 'id="content-ideas"'],
+    "content-ideas": ['id="content-ideas"', 'id="action-plan"'],
+    "trust-eeat": ['id="eeat"', 'id="competitors"'],
+    "competitor-benchmark": ['id="competitors"', 'id="competitor-detail"'],
+    "supporting-detail": ['id="pillars"', 'id="blockers"'],
+  };
+  for (const expectedState of ["STRONG", "MIDDLE", "WEAK", "INSUFFICIENT_EVIDENCE"]) {
+    const fixture = structuredClone(model());
+    fixture.crossReportInterpretation.truth = Object.fromEntries(
+      Object.entries(fixture.crossReportInterpretation.truth).map(([key, record]) => [key, { ...record, state: "assessed" }]),
+    );
+    fixture.competitors = { comparisons: [{ name: "Example competitor", url: "https://example.test", status: "AVAILABLE" }], opportunities: { gaps: [], limitations: [] } };
+    fixture.sourceStatus = { ...(fixture.sourceStatus || {}), competitors: "AVAILABLE" };
+    if (expectedState === "MIDDLE") fixture.crossReportInterpretation.truth.trustProof.state = "partial";
+    if (expectedState === "WEAK") fixture.crossReportInterpretation.truth.conversionPathClarity.state = "finding";
+    if (expectedState === "INSUFFICIENT_EVIDENCE") fixture.crossReportInterpretation.truth.evidenceScope.state = "not assessed";
+    const narrative = deriveNarrativeStates(fixture);
+    const html = renderReportV2(fixture);
+    assert.ok(Object.values(narrative).some((record) => record.state === expectedState), `${expectedState} is derived from the fixture evidence`);
+    for (const pageId of NARRATIVE_PAGE_IDS) {
+      const mapped = pageId === "conversion-journey" ? "conversion-paths" : pageId === "content-opportunities" ? "content-ideas" : pageId === "trust-credibility" ? "trust-eeat" : pageId === "competitor-comparison" ? "competitor-benchmark" : pageId;
+      const [start, end] = sectionRange[mapped];
+      const page = html.slice(html.indexOf(start), html.indexOf(end, html.indexOf(start)));
+      assert.ok(page.includes(`data-narrative-state="${narrative[pageId].state}"`), `${pageId} renders its derived ${narrative[pageId].state} state for ${expectedState} case`);
+      assert.ok(["SUFFICIENT", "BOUNDED_PARTIAL", "INSUFFICIENT", "NOT_APPLICABLE"].includes(narrative[pageId].evidenceSufficiency));
+      assert.equal(narrative[pageId].rebuildAuthorization.allowed, false);
+    }
+    assert.doesNotMatch(html, /automatically rebuild|must be rebuilt/i);
+  }
+}
 
 test("TECH-CLIENT-01: security headers stay out of client-facing report surfaces", () => {
   const html = renderReportV2(priorityModel());
@@ -394,7 +494,7 @@ test("P10: content opportunities are presented as an actionable client plan", ()
     "Explain what a custom website is",
     "Help people decide whether they need digital marketing",
     "Show what kind of results a custom website may support",
-    "Help buyers compare website options",
+    "Help buyers compare custom website options",
     "Explain what happens during the process",
   ];
   let previous = -1;
@@ -407,7 +507,7 @@ test("P10: content opportunities are presented as an actionable client plan", ()
     assert.match(page4, new RegExp(label));
   }
   assert.match(page4, /data-narrative-state="(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)"/);
-  assert.match(page4, /when someone is first trying to understand the service/);
+  assert.match(page4, /Planning stage: help a reader understand the topic and decide whether it is relevant/);
   assert.match(page4, /Some evidence — confirm before creating new content/);
   assert.doesNotMatch(page4, /governed|assessed scope|qualified opportunity|evidence qualification|decision-support context|partial content coverage|canonical|remediation|price|timeline/i);
   assert.ok((page4.match(/<li>/g) || []).length >= 20, "five opportunities retain actionable coverage points");

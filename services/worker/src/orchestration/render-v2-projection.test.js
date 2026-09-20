@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildPersistedV2RenderModel } from "./audit-orchestrator.js";
 import { renderReportV2 } from "../report/render-report-v2.js";
 import { SOLUTION_RULE_VERSION } from "../solution/solution-authority-provider.js";
+import { buildCrossReportInterpretation } from "../report-model/cross-report-interpretation.js";
 
 const rules = [
   "VAN-CONTENT-001",
@@ -88,9 +89,20 @@ const decisionEvidence = {
 };
 
 test("TBK Stage 2: persisted v2 projections preserve evidence and five-action order", () => {
+  const persistedScoreSet = {
+    ...scoreSet,
+    crossReportInterpretation: buildCrossReportInterpretation({
+      site: decisionEvidence.site,
+      performance: decisionEvidence.performance,
+      scores: scoreSet.scores,
+      bands: scoreSet.bands,
+      conversionPaths: scoreSet.conversionPaths,
+      capabilities: {},
+    }),
+  };
   const model = buildPersistedV2RenderModel({
     auditRequest: { businessName: "TBK", targetUrl: "https://tbk.example/" },
-    scoreSet,
+    scoreSet: persistedScoreSet,
     findings,
     decisionEvidence,
     capabilityEvidence: {},

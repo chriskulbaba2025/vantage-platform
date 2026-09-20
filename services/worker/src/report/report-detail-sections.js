@@ -441,60 +441,51 @@ export function eeatSection(model, pageState) {
       ? "Trust-proof content coverage was incomplete. Observed proof is retained, but unobserved proof is not treated as established absence."
       : "Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.";
   const proofAction = trustAssessed && foundSignals.length
-    ? `<h3>How to use the proof you already have</h3><p>The site already has useful types of trust proof. The next action is not automatically to create more proof. Check whether the right proof appears close enough to the decision it supports.</p><ul class="small"><li>Check relevant case studies or outcomes near service decisions.</li><li>Check testimonials or client validation near commitment points.</li><li>Check credentials where expertise matters.</li><li>Check pricing or investment context before a buyer has to ask.</li><li>Check policies, terms, or other reassurance near higher-risk actions.</li></ul><p class="small">PRYSM observed these trust assets, but did not establish their placement across every important conversion page. After any change, review the important decision pages again and confirm that the related proof is easy to find and understand.</p>`
-    : `<h3>How to use the proof you already have</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. Check which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Review the relevant pages again before deciding what to add or change.</p>`;
+    ? `<h3>How should you use the proof you already have?</h3><p>The site already has useful types of trust proof. The next action is not automatically to create more proof. Check whether the right proof appears close enough to the decision it supports.</p><ul class="small"><li>Check relevant case studies or outcomes near service decisions.</li><li>Check testimonials or client validation near commitment points.</li><li>Check credentials where expertise matters.</li><li>Check pricing or investment context before a buyer has to ask.</li><li>Check policies, terms, or other reassurance near higher-risk actions.</li></ul><p class="small">PRYSM observed these trust assets, but did not establish their placement across every important conversion page. After any change, review the important decision pages again and confirm that the related proof is easy to find and understand.</p>`
+    : `<h3>How should you use the proof you already have?</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. Check which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Review the relevant pages again before deciding what to add or change.</p>`;
 
   const rendered = `
   <section id="eeat" class="card primary-page-card trust-page" data-supporting-section="trust-evidence">
     <p class="muted small">Trust &amp; Credibility</p>
-    <h2>Can buyers find enough proof to feel confident taking the next step?</h2>
+    <h2>Can buyers find enough proof to feel confident?</h2>
     ${narrativeStateBlock(pageState)}
     <p class="trust-verdict">${e(primaryVerdict)}</p>
     <p class="small trust-score-explanation">${e(scoreExplanation)}</p>
     <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>
 
-    <h3>What already builds confidence</h3>
+    <h3>What already builds confidence?</h3>
     <div class="pillar-grid">${proofGroups.map(([title, present, copy]) => `<div class="pillar"><h4>${e(title)}</h4><p class="small">${e(present ? copy : "This proof signal was not established in the assessed content.")}</p></div>`).join("")}</div>
 
-    <h3>Buyer trust questions</h3>
+    <h3>What trust questions can the site already answer?</h3>
     <div class="table-wrap"><table>
       <thead><tr><th>Buyer question</th><th>Status</th><th>What the evidence shows</th></tr></thead>
       <tbody>${questionRows}</tbody>
     </table></div>
 
-    <h3>How confidence should build</h3>
-    <div style="overflow-x:auto;margin:16px 0">
-      <svg viewBox="0 0 760 120" role="img" aria-label="Claim to proof to reassurance to action trust pathway" style="width:100%;min-width:620px">
-        <defs>
-          <marker id="trustArrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L7,3 z" fill="currentColor"/>
-          </marker>
-        </defs>
-        <rect x="20" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="210" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="400" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
-        <rect x="590" y="28" width="150" height="56" rx="10" fill="none" stroke="currentColor" opacity=".45"/>
-        <line x1="170" y1="56" x2="204" y2="56" stroke="currentColor" marker-end="url(#trustArrow)"/>
-        <line x1="360" y1="56" x2="394" y2="56" stroke="currentColor" marker-end="url(#trustArrow)"/>
-        <line x1="550" y1="56" x2="584" y2="56" stroke="currentColor" marker-end="url(#trustArrow)"/>
-        <text x="95" y="61" text-anchor="middle" font-size="14">Claim</text>
-        <text x="285" y="61" text-anchor="middle" font-size="14">Proof</text>
-        <text x="475" y="61" text-anchor="middle" font-size="14">Reassurance</text>
-        <text x="665" y="61" text-anchor="middle" font-size="14">Action</text>
-      </svg>
-    </div>
-
-    <h3>Where confidence breaks down</h3>
+    <h3>Where can confidence still break down?</h3>
+    <p>${e(confidenceNote)}</p>
+    <h4>Proof may be too far from the decision</h4>
+    <p>Proof placement and timing status: <strong>${trustPartial ? "PARTIAL" : "NOT_AVAILABLE"}</strong>. The current model does not provide a complete proof-to-decision placement map. Check placement on the pages where buyers make the related decision.</p>
+    <h4>Different decisions need different proof</h4>
+    <p>Use the recorded proof type that answers the relevant buyer question. Do not treat a signal in one area as evidence for every decision.</p>
     ${breakdown}
 
-    <h3>Proof already available but underused</h3>
-    ${proof}
-    <p class="muted small">Detected proof is listed here as an available asset. PRYSM does not claim it is well placed on every important conversion page unless page-level evidence proves that.</p>
+    ${proofAction}
+
+    <h3>Why do these signals matter for growth?</h3>
+    <div class="trust-relevance-grid">
+      <section><h4>Buying confidence</h4><p>Relevant proof may help a buyer assess confidence in the business. A trust signal does not guarantee a buyer outcome.</p></section>
+      <section><h4>Search visibility</h4><p>Clear business information and credible content may help search systems understand the site and its pages. This audit does not establish rankings or traffic.</p></section>
+      <section><h4>AI search readiness</h4><p>Clear first-hand information, expert attribution, and well-structured content can give AI systems context to interpret. This audit does not establish AI visibility, citation, or inclusion.</p></section>
+    </div>
+
+    <h3>What should you avoid?</h3>
+    <p>Do not add unsupported claims or promise rankings, traffic, citations, AI visibility, leads, or sales. The presence of a trust signal does not guarantee a buyer outcome.</p>
 
     <h3>Material trust findings</h3>
     ${findingBlock}
 
-    <h3>Assessment limitations</h3>
+    <h3>What can this audit confirm?</h3>
     ${
       trustComplete
         ? '<p class="small">This assessment uses observable on-page trust evidence from the crawl. It does not measure offline reputation, private customer outcomes, or uncollected third-party review sources.</p>'
@@ -504,12 +495,11 @@ export function eeatSection(model, pageState) {
               UNAVAILABLE,
             )}</span> Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.</p>`
     }
+    <h3>Next step</h3>
+    <ol><li>Review the proof signals and buyer-question statuses above within their assessed scope.</li><li>Check whether existing proof appears near the decision it supports; placement remains ${trustPartial ? "PARTIAL" : "NOT_AVAILABLE"} in this report model.</li><li>${e(pageState?.boundedAction || "Collect the missing evidence before making a broader trust conclusion.")}</li></ol>
   </section>`;
   return rendered
     .replace(/<p class="muted small">Trust, E-E-A-T[\s\S]*?<\/p>/, "")
-    .replace(/<h3>How confidence should build<\/h3>[\s\S]*?<h3>Where confidence breaks down<\/h3>/, "<h3>Where confidence may still need strengthening</h3><p>No material trust gap was established. The remaining question is whether the observed proof appears close enough to important decision points, which was not established across every page.</p>")
-    .replace(/<p>No checked trust-proof signal was absent from the assessed content\.<\/p>/, "")
-    .replace(/<h3>Proof already available but underused<\/h3>[\s\S]*?<h3>Material trust findings<\/h3>/, `${proofAction}<h3>Material trust findings</h3>`)
     + `<section id="eeat-detail" class="card" data-supporting-section="trust-evidence"><p class="muted small">Supporting Detail</p><h2>E-E-A-T Trust Readiness Detail</h2><details class="supporting-detail-disclosure"><summary>Show detailed trust dimensions</summary><h3>Trust dimensions</h3><div class="pillar-grid">${dimensionCards}</div><h3>Detailed trust interpretation</h3><p>${e(verdict)}</p>${findingBlock}</details></section>`;
 }
 
