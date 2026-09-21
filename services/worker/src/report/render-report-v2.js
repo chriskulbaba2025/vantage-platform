@@ -298,15 +298,76 @@ function acceptedPriorityFindingIds(model) {
   );
 }
 
-function acceptedPriorityRecords(model, canonical) {
-  const acceptedIds = acceptedPriorityFindingIds(model);
+function acceptedPriorityGroups(model, canonical) {
   const visible = (canonical?.ordered || []).filter(
     (record) => record.clientProminence?.displayAllowed,
   );
-  if (acceptedIds === null) return visible;
-  return visible.filter((record) =>
-    (record.findingRefs || []).some((findingId) => acceptedIds.has(findingId)),
-  );
+  if (model?.encyclopedia?.status !== "AVAILABLE") {
+    return visible.map((record) => ({
+      unit: null,
+      records: [record],
+      primary: record,
+    }));
+  }
+
+  const byFindingId = new Map();
+  for (const record of visible) {
+    for (const findingId of record.findingRefs || []) {
+      if (!byFindingId.has(findingId)) byFindingId.set(findingId, []);
+      byFindingId.get(findingId).push(record);
+    }
+  }
+
+  return (model.encyclopedia.priorityUnits || [])
+    .map((unit) => {
+      const records = [...new Set(
+        (unit.findingIds || []).flatMap((findingId) => byFindingId.get(findingId) || []),
+      )].sort((a, b) =>
+        (a.sequenceInputs?.governedRank ?? Number.MAX_SAFE_INTEGER) -
+        (b.sequenceInputs?.governedRank ?? Number.MAX_SAFE_INTEGER),
+      );
+      return { unit, records, primary: records[0] || null };
+    })
+    .filter((group) => group.primary);
+}
+
+function acceptedPriorityRecords(model, canonical) {
+  return acceptedPriorityGroups(model, canonical).flatMap((group) => group.records);
+}
+
+function clientPriorityReason(group) {
+  const primary = group?.primary;
+  const unit = group?.unit;
+  const location = primary ? page2Location(primary) : "the reviewed scope";
+  if (unit?.type === "confirmed critical blocker") {
+    return `This is first because the reviewed evidence shows a current blocker at ${location}.`;
+  }
+  if (unit?.type === "accepted friction cluster" && group.records.length > 1) {
+    return `These ${group.records.length} related issues are grouped because they affect the same buyer decision or action in the reviewed evidence.`;
+  }
+  return `This is a priority because the reviewed evidence shows an important issue at ${location}.`;
+}
+
+function priorityGroupTitle(group) {
+  if (!group?.primary) return "A reviewed priority needs attention.";
+  if (group?.unit?.type === "accepted friction cluster" && group.records.length > 1) {
+    return "Several related issues are affecting the same buyer step.";
+  }
+  return page2Title(group.primary);
+}
+
+function priorityGroupMeaning(group) {
+  if (!group?.primary) return "The reviewed evidence supports addressing this priority.";
+  if (group?.unit?.type === "accepted friction cluster" && group.records.length > 1) {
+    return `The review linked ${group.records.length} evidence-backed issues at the same buyer decision or action. Treat them as one priority, not separate reasons to inflate the problem count.`;
+  }
+  return page2Why(group.primary);
+}
+
+function priorityGroupAction(group) {
+  if (!group?.records?.length) return "Address the reviewed priority and repeat the same check.";
+  if (group.records.length === 1) return page2Action(group.primary);
+  return "Work through the related fixes together, then repeat each recorded verification check before treating the priority as resolved.";
 }
 
 function clientFrictionStateLabel(state) {
@@ -522,14 +583,17 @@ function evidenceLimitList(model) {
 
 function executiveScorecard(model, pillars, checklist, canonical, pageState, narrativeStates) {
   const readiness = model.scores.conversionReadiness;
-  const actions = acceptedPriorityRecords(model, canonical).slice(0, 3);
+  const priorityGroups = acceptedPriorityGroups(model, canonical).slice(0, 3);
+  const actions = priorityGroups.map((group) => group.primary);
   const numericScoreVisible = model.showNumericScore !== false && typeof readiness === "number";
   const readinessLine = !numericScoreVisible
     ? `<div class="readiness-none">${e(model.readinessStatus || "Overall score unavailable")}</div>`
     : `<div class="readiness">${e(readiness)}<span class="readiness-max">/100</span></div><div class="readiness-band">${bandChip(model.bands.conversionReadiness)}</div>`;
-  const priorities = actions.length
-    ? `<ol class="executive-priorities">${actions.map((record) => {
-      return `<li data-solution-id="${e(record.solutionId)}"><h4>${e(executivePriorityTitle(record))}</h4><p>${e(executivePriorityMeaning(record))}</p><p><strong>What to do:</strong> ${e(executivePriorityAction(record))} ${executivePriorityReference(record)}</p></li>`;
+  const priorities = priorityGroups.length
+    ? `<ol class="executive-priorities">${priorityGroups.map((group) => {
+      const record = group.primary;
+      const supporting = group.records.slice(1);
+      return `<li data-solution-id="${e(record.solutionId)}" data-priority-unit-type="${e(group.unit?.type || "legacy")}"><h4>${e(priorityGroupTitle(group))}</h4><p>${e(priorityGroupMeaning(group))}</p>${supporting.length ? `<p><strong>Related issues:</strong> ${e(supporting.map((item) => page2Title(item)).join("; "))}</p>` : ""}<p><strong>Why this is a priority:</strong> ${e(clientPriorityReason(group))}</p><p><strong>What to do:</strong> ${e(priorityGroupAction(group))} ${executivePriorityReference(record)}</p></li>`;
     }).join("")}</ol>`
     : `<p>No priority action was generated from the information reviewed.</p>`;
   const siteEvidenceStatus = String(model.evidence?.site?.sourceStatus || model.sourceStatus?.site || "UNKNOWN").toUpperCase();
@@ -541,11 +605,11 @@ function executiveScorecard(model, pillars, checklist, canonical, pageState, nar
   const holding = pageState.state === "INSUFFICIENT_EVIDENCE"
     ? "The available evidence is not sufficient to identify a dependable overall constraint. Review the evidence limits below."
     : actions.length
-      ? `<ul>${actions.map((record) => `<li>${e(executivePriorityTitle(record))} — ${e(executivePriorityMeaning(record))}</li>`).join("")}</ul>`
+      ? `<ul>${priorityGroups.map((group) => `<li>${e(priorityGroupTitle(group))} — ${e(priorityGroupMeaning(group))}</li>`).join("")}</ul>`
       : "No material issue was established for this decision area in the reviewed findings.";
   const keepItems = strengths.length ? strengths.map((item) => `<li>${e(item)}</li>`).join("") : "<li>No assessed strength was available to state from the current model.</li>";
-  const improveItems = actions.length ? actions.map((record) => `<li>${e(executivePriorityTitle(record))}</li>`).join("") : "<li>No additional fix is established by the available evidence-backed actions.</li>";
-  const checkItems = actions.length ? actions.map((record) => `<li>${e(clientCopy(record.implementationCheck?.passCondition || "Use the verification step recorded for this action."))}</li>`).join("") : "<li>Keep the current evidence boundary and verify only if new evidence becomes available.</li>";
+  const improveItems = priorityGroups.length ? priorityGroups.map((group) => `<li>${e(priorityGroupTitle(group))}</li>`).join("") : "<li>No additional fix is established by the available evidence-backed actions.</li>";
+  const checkItems = priorityGroups.length ? priorityGroups.map((group) => `<li>${e(clientCopy(group.primary?.implementationCheck?.passCondition || "Use the verification step recorded for this priority."))}</li>`).join("") : "<li>Keep the current evidence boundary and verify only if new evidence becomes available.</li>";
   return `
   <section id="executive" class="card primary-page-card executive-page">
     <h2>How ready is your website to convert visitors?</h2>
@@ -881,44 +945,47 @@ function page2Verify(record) {
 }
 
 function blockersSection(model, canonical, pageState) {
-  const primary = acceptedPriorityRecords(model, canonical);
-  const main = primary.slice(0, 3);
-  const cleanup = primary.slice(3);
-  const cards = main.map((record, index) => {
+  const groups = acceptedPriorityGroups(model, canonical);
+  const mainGroups = groups.slice(0, 3);
+  const cleanupGroups = groups.slice(3);
+  const cards = mainGroups.map((group, index) => {
+    const record = group.primary;
     const governedRank = record.sequenceInputs?.governedRank ?? index + 1;
-    return `<article class="priority-action" data-priority-rank="${e(governedRank)}" data-solution-id="${e(record.solutionId)}">
+    const supporting = group.records.slice(1);
+    return `<article class="priority-action" data-priority-rank="${e(governedRank)}" data-solution-id="${e(record.solutionId)}" data-priority-unit-type="${e(group.unit?.type || "legacy")}">
       <div class="priority-action-heading">
         <span class="priority-rank" aria-label="Priority ${e(governedRank)}">${e(governedRank)}</span>
         <div>
           ${index === 0 ? '<span class="priority-start">Start here</span>' : ''}
-          <h3>${e(page2Title(record))}</h3>
+          <h3>${e(priorityGroupTitle(group))}</h3>
         </div>
       </div>
       <dl class="priority-action-fields">
-        <div class="priority-field priority-field-attention"><dt>What we know</dt><dd>${e(page2Found(record))}</dd></div>
-        <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(page2Why(record))}</dd></div>
-        <div class="priority-field priority-field-attention"><dt>What to do</dt><dd>${e(page2Action(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>What we know</dt><dd>${e(group.records.length > 1 ? `The review linked ${group.records.length} separate evidence-backed issues at the same buyer decision or action.` : page2Found(record))}${supporting.length ? `<ul>${supporting.slice(0, 3).map((item) => `<li>${e(page2Title(item))}</li>`).join("")}</ul>` : ""}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>Why this is a priority</dt><dd>${e(clientPriorityReason(group))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(priorityGroupMeaning(group))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>What to do</dt><dd>${e(priorityGroupAction(group))}${supporting.length ? `<ol>${group.records.slice(0, 3).map((item) => `<li>${e(page2Action(item))}</li>`).join("")}</ol>` : ""}</dd></div>
         <div class="priority-field"><dt>Where to look</dt><dd>${e(page2Location(record))}</dd></div>
-        <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(page2Verify(record))}</dd></div>
-        <div class="priority-field"><dt>Who may need to help</dt><dd>${e(page2Roles(record))}</dd></div>
-        <div class="priority-field"><dt>Confidence in this finding</dt><dd>${e(page2Confidence(record))}</dd></div>
-        <div class="priority-field"><dt>Effort</dt><dd>${e(page2Effort(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(group.records.length > 1 ? "Repeat each related verification check and confirm every included issue has improved." : page2Verify(record))}</dd></div>
+        <div class="priority-field"><dt>Who may need to help</dt><dd>${e([...new Set(group.records.map((item) => page2Roles(item)))].join(" and "))}</dd></div>
+        <div class="priority-field"><dt>Confidence in this finding</dt><dd>${e(group.records.every((item) => page2Confidence(item) === "Strong evidence") ? "Strong evidence" : "Some evidence — confirm before making the change")}</dd></div>
+        <div class="priority-field"><dt>Effort</dt><dd>${e([...new Set(group.records.map((item) => page2Effort(item)))].join(" / "))}</dd></div>
       </dl>
     </article>`;
   }).join("");
-  const mainFindingIds = new Set(main.flatMap((record) => record.findingRefs || []));
+  const mainFindingIds = new Set(mainGroups.flatMap((group) => group.records).flatMap((record) => record.findingRefs || []));
   const priorityUnits = model.encyclopedia?.status === "AVAILABLE" ? (model.encyclopedia.priorityUnits || []) : [];
   const checks = priorityUnits
     .filter((unit) => (unit.findingIds || []).some((id) => mainFindingIds.has(id)))
     .flatMap((unit) => {
       const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
-      return (problem?.firstDiagnosticChecks || []).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)} <span class="small">Diagnostic guidance; this does not assert a cause.</span></li>`);
+      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)} <span class="small">Diagnostic guidance; this does not assert a cause.</span></li>`);
     });
-  const cleanupList = cleanup.length
-    ? `<ol>${cleanup.map((record) => `<li data-solution-id="${e(record.solutionId)}"><strong>${e(page2Title(record))}.</strong> ${e(page2Why(record))}</li>`).join("")}</ol>`
-    : "<p>No additional lower-priority canonical actions are available for this report.</p>";
-  const workOrder = primary.length
-    ? `<ol>${primary.map((record) => `<li data-solution-id="${e(record.solutionId)}">${e(page2Title(record))}</li>`).join("")}</ol>`
+  const cleanupList = cleanupGroups.length
+    ? `<ol>${cleanupGroups.map((group) => `<li data-solution-id="${e(group.primary.solutionId)}"><strong>${e(priorityGroupTitle(group))}.</strong> ${e(priorityGroupMeaning(group))}</li>`).join("")}</ol>`
+    : "<p>No additional lower-priority accepted priorities are available for this report.</p>";
+  const workOrder = groups.length
+    ? `<ol>${groups.map((group) => `<li data-solution-id="${e(group.primary.solutionId)}">${e(priorityGroupTitle(group))}</li>`).join("")}</ol>`
     : "<p>No evidence-backed work order is available. Do not add a problem to fill the page.</p>";
   const evidenceGuardrail = pageState.limitations.length
     ? `<ul>${pageState.limitations.map((limit) => `<li>${e(limit)}</li>`).join("")}</ul>`
@@ -930,7 +997,7 @@ function blockersSection(model, canonical, pageState) {
     <h2>What should you fix first?</h2>
     ${narrativeBlock(pageState)}
     <h3>Start here</h3>
-    <p>${main.length ? `Start with the first item and work down the list. Each fix below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(page2Title(main[0]))}. The report shows only the ${e(main.length)} supported primary action${main.length === 1 ? "" : "s"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
+    <p>${mainGroups.length ? `Start with the first item and work down the list. Each priority below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(priorityGroupTitle(mainGroups[0]))}. The report shows only the ${e(mainGroups.length)} accepted primary priorit${mainGroups.length === 1 ? "y" : "ies"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
     <h3>What we know</h3>
     <p>Each primary item below is linked to an evidence-backed finding, its assessed scope, and a verification step.</p>
     <div class="priority-sequence">${cards}</div>
