@@ -104,11 +104,13 @@ export function buildPriorityUnits(projections, { relationships = buildRelations
   const primary = projections.filter((projection) => projection.primary);
   const byId = new Map(primary.map((projection) => [projection.findingId, projection]));
   const blockers = primary.filter((projection) => currentBlocker({ ...projection, ...context }));
+  const blockerIds = new Set(blockers.map((projection) => projection.findingId));
   const clusters = [];
-  const used = new Set();
+  const used = new Set(blockerIds);
   for (const relationship of relationships) {
     if (!relationship.eligible || ["Duplicate symptom", "Repeats", "Depends on"].includes(relationship.type)) continue;
     const members = relationship.findingIds.map((id) => byId.get(id)).filter(Boolean);
+    if (members.some((member) => used.has(member.findingId))) continue;
     const candidate = { clusterName: "Accepted friction cluster", cluster: members, canonicalProblemId: members[0]?.canonicalProblemId, frictionState: FRICTION_STATES.FRICTION, scope: members[0]?.scope, evidence: members.flatMap((member) => member.evidence), evidenceIndependence: { independentFamilyCount: new Set(members.flatMap((member) => member.evidenceIndependence?.keys || [])).size, keys: [...new Set(members.flatMap((member) => member.evidenceIndependence?.keys || []))] }, confidence: "supported", repairRisk: "medium" };
     const challenged = challengePriorityUnit(candidate, { relationships });
     if (challenged.valid) {
