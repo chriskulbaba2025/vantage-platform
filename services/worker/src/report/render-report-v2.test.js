@@ -291,6 +291,8 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(cards[0][3], /Some evidence — confirm before making the change/);
   assert.match(cards[0][3], /Common remediation options are not yet available for this finding/);
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
+  const clientVisiblePriorityText = blockers.replace(/<[^>]*>/g, " ");
+  assert.doesNotMatch(clientVisiblePriorityText, /\b(?:I01|J04|A03)\b/, "canonical Encyclopedia identifiers stay out of client-visible diagnostic wording");
   assert.doesNotMatch(blockers, /businessImpact|legacy recommendation|affectedUrls|verificationMethod/i);
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, />(?:LOW|MEDIUM|HIGH|SUPPORTED|PARTIAL|CONDITIONAL|UNKNOWN|UNAVAILABLE|FIX_NOW|FIX_LATER|HOLD)</);
@@ -459,7 +461,7 @@ function assertFrozenViewerHierarchy() {
   };
   const required = {
     "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "Accepted priorities", "Next step &amp; limits", "What we could not confirm"],
-    "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence guardrail"],
+    "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence limits"],
     "conversion-paths": ["Reach the right page", "Understand enough to continue", "Take the next step", "Evidence seen:", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Evidence and limits"],
     "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
     "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "Optional trust-proof review", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Evidence and limits"],
@@ -1048,7 +1050,7 @@ test("MVP-CLIENT-05: print contract protects report tables and headings", () => 
   assert.match(html, /overflow-wrap:anywhere/);
   assert.match(html, /break-after:avoid-page/);
   assert.match(html, /\.action-page \.priority-sequence\s*\{\s*display:block;/);
-  assert.match(html, /\.action-page \.priority-action\s*\{[\s\S]*?break-inside:avoid;/);
+  assert.match(html, /\.action-page \.priority-action\s*\{[\s\S]*?break-inside:auto;/);
 });
 
 test("MVP-CLIENT-06: competitor source status falls back to canonical report source status", () => {

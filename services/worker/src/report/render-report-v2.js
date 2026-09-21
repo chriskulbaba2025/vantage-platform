@@ -943,7 +943,7 @@ function blockersSection(model, decisionProjection, pageState) {
     .filter((unit) => (unit.findingIds || []).some((id) => mainFindingIds.has(id)))
     .flatMap((unit) => {
       const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
-      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)} <span class="small">Diagnostic guidance; this does not assert a cause.</span></li>`);
+      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)}</li>`);
     });
   const evidenceGuardrail = pageState.limitations.length
     ? `<ul>${pageState.limitations.map((limit) => `<li>${e(limit)}</li>`).join("")}</ul>`
@@ -956,16 +956,11 @@ function blockersSection(model, decisionProjection, pageState) {
     ${narrativeBlock(pageState)}
     <h3>Start here</h3>
     <p>${mainGroups.length ? `Start with the first item and work down the list. Each priority below explains what we found, why it matters, common options a team may consider, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(priorityGroupTitle(mainGroups[0]))}. The report shows only the ${e(mainGroups.length)} accepted primary priorit${mainGroups.length === 1 ? "y" : "ies"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
-    <h3>What we know</h3>
-    <p>Each primary item below is linked to an evidence-backed finding, its assessed scope, and a verification step.</p>
     <div class="priority-sequence">${cards}</div>
     <h3>Check these first</h3>
+    <p class="small">These checks help investigate a condition; they do not establish its cause.</p>
     ${checks.length ? `<ul class="priority-diagnostic-checks">${checks.join("")}</ul>` : `<p>${pageState.state === "INSUFFICIENT_EVIDENCE" ? "Not enough evidence is available to prioritize diagnostic checks." : "No Encyclopedia priority unit with first diagnostic checks is linked to these primary actions."}</p>`}
-    <p class="small">Checks help investigate a condition. They are not evidence that a suspected cause is true.</p>
-    <h3>How to know it worked</h3>
-    <p>Use each action card's verification condition. A successful technical check does not by itself establish a conversion or business outcome.</p>
-    <h3>Evidence guardrail</h3>${evidenceGuardrail}
-    <p class="muted small">Supporting Detail retains the complete evidence, technical checks, and any additional observations.</p>
+    <div class="small"><strong>Evidence limits:</strong>${evidenceGuardrail}</div>
   </section>`;
 }
 
@@ -3422,14 +3417,14 @@ details[open] > summary {
   .action-page .priority-action {
     margin:0 0 8px;
     padding:10px;
-    page-break-inside:avoid;
-    break-inside:avoid;
+    page-break-inside:auto;
+    break-inside:auto;
   }
   .action-page .priority-action-heading { gap:8px; margin-bottom:8px; }
   .action-page .priority-rank { flex-basis:28px; height:28px; width:28px; }
   .action-page .priority-action h3 { font-size:17px; }
   .action-page .priority-action-fields { gap:6px 8px; }
-  .action-page .priority-field { padding:7px 9px; }
+  .action-page .priority-field { padding:7px 9px; page-break-inside:avoid; break-inside:avoid; }
   .action-page .priority-field dt { font-size:10px; margin-bottom:2px; }
   .action-page .priority-field dd { font-size:12px; line-height:1.28; }
   .action-page .remediation-disclaimer { font-size:11px; margin-bottom:5px; }
@@ -3438,6 +3433,15 @@ details[open] > summary {
   .action-page .common-remediation-option h4 { font-size:12px; margin-bottom:2px; }
   .action-page .common-remediation-option p,
   .action-page .remediation-unavailable { font-size:12px; line-height:1.28; }
+  .action-page .priority-diagnostic-checks {
+    columns:2;
+    column-gap:18px;
+    font-size:10px;
+    line-height:1.25;
+    padding-left:18px;
+  }
+  .action-page .priority-diagnostic-checks li { break-inside:avoid; margin-bottom:3px; }
+  .action-page .priority-diagnostic-checks .small { font-size:9px; }
 }
 
 .pillar-score,
