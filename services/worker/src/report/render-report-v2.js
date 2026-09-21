@@ -579,7 +579,7 @@ function executiveScorecard(model, pillars, checklist, decisionProjection, pageS
     <h3>What is already working? What is helping the site?</h3>
     ${strengths.length ? `<ul>${keepItems}</ul>` : "<p>No assessed strength was available to state from the current model.</p>"}
     <h3>What is holding the site back?</h3>
-    <p>${pageState.state === "STRONG" ? "The supporting evidence does not establish a material condition requiring a corrective lead." : pageState.state === "INSUFFICIENT_EVIDENCE" ? "No broad constraint is inferred from missing or insufficient evidence." : "The following items come from reviewed priority findings; they remain within their assessed scope."}</p>
+    <p>${pageState.state === "STRONG" ? "The supporting evidence does not establish a material condition requiring a corrective lead." : pageState.state === "INSUFFICIENT_EVIDENCE" ? "The available evidence does not establish one broad site-wide constraint. Any accepted item-level priorities are listed separately in Priority Fixes." : "The following items come from reviewed priority findings; they remain within their assessed scope."}</p>
     ${holding}
     <h3>Accepted priorities</h3>${priorities}
     <h3>Next step &amp; limits</h3>

@@ -833,6 +833,7 @@ test("MVP-DECISION-AUTHORITY-01: one accepted sequence governs all pages while s
   const detail = html.slice(html.indexOf('id="evidence"'), html.indexOf('<footer>'));
   assert.equal((priority.match(/<article class="priority-action"/g) || []).length, 2);
   assert.match(executive, /2 accepted client priorities/);
+  assert.match(executive, /does not establish one broad site-wide constraint\. Any accepted item-level priorities are listed separately in Priority Fixes/);
   assert.doesNotMatch(executive, /What should you improve first\?|first accepted priority|Main content/i);
   assert.doesNotMatch(executive, /<ol|data-solution-id=/);
   assert.match(supporting, /Accepted current priorities/);
