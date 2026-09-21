@@ -481,6 +481,24 @@ function publicEvidenceAreaLabel(key) {
   return "Evidence area";
 }
 
+function executiveClientSummary(model, pageState) {
+  const score = model?.scores?.conversionReadiness;
+  const band = String(model?.bands?.conversionReadiness || "").toLowerCase();
+  let summary;
+  if (typeof score !== "number") {
+    summary = "The available evidence is not sufficient for a dependable overall readiness score.";
+  } else if (score >= 80) {
+    summary = "Overall readiness is strong in the areas reviewed. Keep the working foundation and address only the evidence-backed priorities shown below.";
+  } else if (score >= 60) {
+    summary = "Overall readiness is moderate in the areas reviewed. The site has a workable foundation, with a small number of evidence-backed issues to address first.";
+  } else if (score >= 40) {
+    summary = "Overall readiness needs attention in the areas reviewed. Focus on the evidence-backed priorities before adding lower-value work.";
+  } else {
+    summary = "The reviewed evidence shows material readiness gaps. Address the accepted priorities first and verify each change.";
+  }
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(summary)}</p><p class="small"><strong>Next step:</strong> ${e(clientCopy(pageState.boundedAction))}</p></div>`;
+}
+
 function evidenceLimitList(model) {
   const capabilities = model?.capabilityEvidence?.capabilities || {};
   const limits = Object.entries(capabilities)
@@ -525,7 +543,7 @@ function executiveScorecard(model, pillars, checklist, canonical, pageState, nar
     <h2>How ready is your website to convert visitors?</h2>
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
-    ${narrativeBlock(pageState)}
+    ${executiveClientSummary(model, pageState)}
     <h3>${numericScoreVisible ? `Why is the score ${e(readiness)}?` : "Why is no score shown?"}</h3>
     <p>The score display below uses the existing assessed dimension outputs. It does not add a new score or treat unavailable dimensions as zero.</p>
     <ul class="executive-score-drivers">${scoreDrivers}</ul>
@@ -615,7 +633,7 @@ function pillarSection(pillars, model, narrativeStates) {
       .map((m) => `<li>${e(clientModuleLabel(m.moduleId))}: ${m.score === null ? "Not assessed" : e(m.score)} (weight ${e(m.weight)})</li>`)
       .join("");
     const caps = p.capabilities
-      .map((c) => `<span class="chip ${capabilityStatusClass(c.status)}">${e(clientCapabilityLabel(c.key))}: ${e(c.status)}</span>`)
+      .map((c) => `<span class="chip ${capabilityStatusClass(c.status)}">${e(clientCapabilityLabel(c.key))}: ${e(clientEvidenceStatus(c.status))}</span>`)
       .join(" ");
     const coverageNote =
       p.id === "technical_health" &&
@@ -962,8 +980,7 @@ function conversionPathSection(model, pageState) {
       <p class="muted small">Conversion Journey</p>
       <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
       <h2>Can visitors move from interest to action?</h2>
-      <p class="conversion-journey-verdict">${e(pageState.message)}</p>
-      ${narrativeBlock(pageState)}
+      <p class="conversion-journey-verdict">${e(clientCopy(pageState.message))}</p>
       <h3>How the journey works</h3><div class="conversion-journey-steps">${journeyStageCards}</div>
       <h3>Where can visitors lose momentum?</h3>${frictionBlock}
       <h3>What should you keep?</h3><p>No clear path record is available to identify a journey element to preserve.</p>
@@ -980,8 +997,7 @@ function conversionPathSection(model, pageState) {
     <p class="muted small">Conversion Journey</p>
     <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
     <h2>Can visitors move from interest to action?</h2>
-    <p class="conversion-journey-verdict">${e(verdict)}</p>
-    ${narrativeBlock(pageState)}
+    <p class="conversion-journey-verdict">${e(clientCopy(verdict))}</p>
     <h3>How the journey works</h3>
     <div class="conversion-journey-visual" aria-label="Three assessed conversion journey stages"><div class="conversion-journey-steps">${journeyStageCards}</div></div>
     <h3>Where can visitors lose momentum?</h3>${frictionBlock}
@@ -1139,7 +1155,7 @@ function competitorSectionClient(model, pageState) {
       <p class="muted small">Competitor Comparison</p><h2>How does your website compare with the competitors buyers may consider?</h2>${narrativeBlock(pageState)}
       <h3>Who was compared?</h3><p>${e(unavailableExplanation)} Named competitor scope is NOT_AVAILABLE.</p>
       <h3>Where are the meaningful differences?</h3><p>NOT_AVAILABLE — comparable evidence is insufficient.</p>
-      <h3>What is worth learning from?</h3><h4>Where your website is holding its own</h4><p>NOT_AVAILABLE — no relative strength is inferred from missing comparisons.</p><h4>Where competitors create a better buying experience</h4><p>NOT_AVAILABLE — no competitor advantage is inferred from missing comparisons.</p>
+      <h3>What is worth learning from?</h3><h4>Where your website is holding its own</h4><p>NOT_AVAILABLE — no relative strength is inferred from missing comparisons.</p><h4>Where competitors show stronger signals</h4><p>NOT_AVAILABLE — no competitor advantage is inferred from missing comparisons.</p>
       <h3>What should you do because of this comparison?</h3>${actionItems}
       <h3>What not to copy</h3><h3>What should you avoid?</h3><p>Do not copy competitor behavior or infer a client defect from missing comparisons.</p>
       <h3>What this comparison cannot tell us</h3><h3>What can this comparison confirm?</h3><p>The comparison can confirm only its recorded source status and the absence of usable named comparisons. It cannot establish rankings, traffic, market share, revenue, or conversion outcomes.</p>
@@ -1167,10 +1183,10 @@ function competitorSectionClient(model, pageState) {
     ${importantDifferences}
     <h3>What is worth learning from?</h3>
     <h4>Where your website is holding its own</h4>${holdingOwn}
-    <h4>Where competitors create a better buying experience</h4>${betterExperience}
+    <h4>Where competitors show stronger signals</h4>${betterExperience}
     <h4>Where there may be room to stand apart</h4>${standApart}
     <h4>Trust and proof differ across the sites</h4>${differences.some(([key]) => key === "trustProof") ? "A difference in the named comparison is descriptive context. It does not establish a client trust defect." : "NOT_AVAILABLE — the comparison does not establish a trust and proof difference."}
-    <h4>Your conversion path is holding its own</h4>${relativeStrengths.some(({ key }) => key === "pathClarity") ? "The recorded comparable values support this bounded relative strength." : "NOT_AVAILABLE — a relative conversion-path strength is not established by comparable values."}
+    <h4>Conversion-path comparison</h4>${relativeStrengths.some(({ key }) => key === "pathClarity") ? "The recorded comparable values support this bounded relative strength." : "NOT_AVAILABLE — a relative conversion-path strength is not established by comparable values."}
     <h3>What should you do because of this comparison?</h3>
     ${actionItems}
     <h3>What not to copy</h3>
@@ -1192,7 +1208,10 @@ function competitorSectionClient(model, pageState) {
 function meaningfulClientTopic(value) {
   const text = String(value ?? "").trim();
   if (!text || text.length < 3) return false;
-  return !/^\d+$/.test(text);
+  if (/^[\d\s._-]+$/.test(text)) return false;
+  if (/^(home|menu|search|login|logout|create|apply|contact)$/i.test(text)) return false;
+  if (/^tagged by\b/i.test(text) || /^apply to work at\b/i.test(text)) return false;
+  return true;
 }
 
 function clientContentOpportunityTitle(idea) {
@@ -1246,17 +1265,17 @@ function clientBuyerJourneyStage(stage) {
 
 function clientContentPlacement(idea) {
   return idea?.placement
-    ? `Recorded placement guidance: ${String(idea.placement)}. Confirm the destination against the assessed service and page scope.`
+    ? `Suggested placement: ${String(idea.placement)}. Confirm the destination against the reviewed service and page scope.`
     : "NOT_AVAILABLE — confirm placement after reviewing the related service page.";
 }
 
 function clientOpportunityConfidence(status) {
   const value = String(status || "UNKNOWN").toUpperCase();
-  if (value === "PARTIAL") return "PARTIAL — Some evidence — confirm before creating new content.";
-  if (value === "UNAVAILABLE") return "UNAVAILABLE — confidence cannot be established from this evidence.";
-  if (value === "UNKNOWN") return "UNKNOWN — confidence was not recorded.";
-  if (value === "NOT_APPLICABLE") return "NOT_APPLICABLE — this evidence does not apply.";
-  return value;
+  if (value === "PARTIAL") return "Some evidence — confirm before creating new content.";
+  if (value === "UNAVAILABLE") return "Not enough evidence to establish confidence.";
+  if (value === "UNKNOWN") return "Confidence was not recorded.";
+  if (value === "NOT_APPLICABLE") return "This evidence does not apply.";
+  return clientStatusLabel(value);
 }
 function contentOpportunitiesSection(model, pageState) {
   const ideas = model.contentIdeas || {};
@@ -1314,7 +1333,6 @@ function contentOpportunitiesSection(model, pageState) {
   const coveredTopics = [
     ...new Set([
       ...(site.services || []),
-      ...(site.topicKeywords || []),
     ]),
   ].filter(meaningfulClientTopic).slice(0, 12);
 
@@ -1349,9 +1367,7 @@ function contentOpportunitiesSection(model, pageState) {
   <section id="content-ideas" class="card primary-page-card content-page">
     <p class="muted small">Content Opportunities</p>
     <h2>What content would help buyers move forward?</h2>
-    ${narrativeBlock(pageState)}
-
-    <p class="content-opportunities-verdict">${e(pageState.message)}</p>
+    <p class="content-opportunities-verdict">${e(clientCopy(pageState.message))}</p>
     <p>Content opportunities are qualified planning inputs. They do not prove that a topic or answer is missing from the site.</p>
 
     <h3>Where is content already helping? <span class="muted small">What is already helping buyers?</span></h3>
@@ -1574,11 +1590,7 @@ function clientEvidenceValue(value) {
 
 function clientEvidenceStatus(status) {
   const value = String(status || "UNKNOWN").toUpperCase();
-  if (value === "AVAILABLE") return "Available";
-  if (value === "PARTIAL") return "PARTIAL";
-  if (value === "UNAVAILABLE") return "UNAVAILABLE";
-  if (value === "NOT_APPLICABLE") return "NOT APPLICABLE";
-  return "UNKNOWN";
+  return clientStatusLabel(value);
 }
 
 function clientCapabilityLabel(key) {
@@ -1761,21 +1773,21 @@ function deepEvidenceLayer(model, pageState) {
 
 function supportingOverviewSectionInner(model, pillars, pageState, narrativeStates) {
   const capabilities = model.capabilityEvidence?.capabilities || {};
-  const completenessRows = Object.entries(capabilities).map(([key, item]) => `<tr><th scope="row">${e(publicEvidenceAreaLabel(key))}</th><td>${e(item.status || "UNKNOWN")}</td><td>${e(item.coverage?.completed ?? "NOT_AVAILABLE")}${item.coverage?.requested !== null && item.coverage?.requested !== undefined ? ` / ${e(item.coverage.requested)}` : ""}</td><td>${e((item.limitations || []).filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))).join(" ") || "No further client-facing limitation is available for this evidence area.")}</td></tr>`).join("");
+  const completenessRows = Object.entries(capabilities).map(([key, item]) => `<tr><th scope="row">${e(publicEvidenceAreaLabel(key))}</th><td>${e(clientEvidenceStatus(item.status))}</td><td>${e(item.coverage?.completed ?? "NOT_AVAILABLE")}${item.coverage?.requested !== null && item.coverage?.requested !== undefined ? ` / ${e(item.coverage.requested)}` : ""}</td><td>${e((item.limitations || []).filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))).join(" ") || "No further client-facing limitation is available for this evidence area.")}</td></tr>`).join("");
   const readinessRows = (pillars || []).map((pillar) => `<tr><th scope="row">${e(pillar.label)}</th><td>${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "NOT ASSESSED"}</td><td>${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))}: ${e(item.status)}`).join("; ")}</td></tr>`).join("");
   const findings = (model.findings || []).filter((finding) => finding.scoreBearing === true || finding.actionable === true);
   const findingMarkup = findings.length
     ? `<ul>${findings.map((finding) => `<li><strong>${e(finding.title || finding.ruleId || "Governed finding")}.</strong> ${e(finding.severity || "UNKNOWN")} · ${e(finding.confidence || "UNKNOWN")} · evidence ${e([...(new Set((finding.evidence || []).map((item) => item.sourceStatus || "UNKNOWN")))].join(", ") || "UNKNOWN")}; scope ${e((finding.affectedUrls || []).join(", ") || "NOT_AVAILABLE")}.</li>`).join("")}</ul>`
     : "<p>No material finding is available from the current report model.</p>";
   const performanceMarkup = `<p>Lab evidence: <strong>${e(capabilityStatus(model, "performance.lab"))}</strong>. Field evidence: <strong>${e(capabilityStatus(model, "performance.field"))}</strong>.</p><p>Lab measurements describe the tested conditions. They are not real-user field performance.</p>`;
-  const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"].map((key) => `<li><strong>${e(clientSourceLabel(key))}:</strong> ${e(model.evidence?.[key]?.sourceStatus || model.evidence?.[key]?.status || "NOT_COLLECTED")}</li>`).join("");
-  const trace = Object.values(narrativeStates || {}).map((record) => `<tr data-narrative-page="${e(record.pageId)}"><th scope="row">${e(clientNarrativePageLabel(record.pageId))}</th><td>${e(record.state)}</td><td>${e(record.evidenceSufficiency)}</td><td>${e(clientNarrativeScope(record))}</td><td>${e(clientNarrativeEvidenceReferences(record.evidenceRefs))}</td><td>${e(clientCopy(record.limitations.join(" ") || "No additional limitation recorded."))}</td></tr>`).join("");
+  const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"].map((key) => `<li><strong>${e(clientSourceLabel(key))}:</strong> ${e(clientEvidenceStatus(model.evidence?.[key]?.sourceStatus || model.evidence?.[key]?.status || "NOT_COLLECTED"))}</li>`).join("");
+  const trace = Object.values(narrativeStates || {}).map((record) => `<tr data-narrative-page="${e(record.pageId)}"><th scope="row">${e(clientNarrativePageLabel(record.pageId))}</th><td>${e(record.state === "STRONG" ? "Supported" : record.state === "MIDDLE" ? "Mixed / bounded" : record.state === "WEAK" ? "Needs attention" : "Not enough evidence")}</td><td>${e(clientEvidenceStatus(record.evidenceSufficiency))}</td><td>${e(clientNarrativeScope(record))}</td><td>${e(clientNarrativeEvidenceReferences(record.evidenceRefs))}</td><td>${e(clientCopy(record.limitations.join(" ") || "No additional limitation recorded."))}</td></tr>`).join("");
   const available = Object.values(capabilities).filter((item) => item.status === "AVAILABLE").length;
   const total = Object.keys(capabilities).length;
   return `<div class="supporting-detail-summary" data-supporting-section="evidence-limitations">
     <p class="supporting-detail-kicker">Supporting Detail</p><h2>What evidence sits behind the report?</h2>
     ${narrativeBlock(pageState)}
-    <h3>How complete was the evidence?</h3><p>${e(available)} of ${e(total)} recorded capability areas are AVAILABLE. The table preserves each original status and coverage; it does not treat missing evidence as a site failure.</p><div class="table-wrap"><table><thead><tr><th>Evidence area</th><th>Status</th><th>Coverage</th><th>Limit</th></tr></thead><tbody>${completenessRows}</tbody></table></div>
+    <h3>How complete was the evidence?</h3><p>${e(available)} of ${e(total)} recorded evidence areas were fully reviewed. The table preserves each original status and coverage; it does not treat missing evidence as a site failure.</p><div class="table-wrap"><table><thead><tr><th>Evidence area</th><th>Status</th><th>Coverage</th><th>Limit</th></tr></thead><tbody>${completenessRows}</tbody></table></div>
     <h3>What drove the readiness score?</h3><div class="table-wrap"><table><thead><tr><th>Dimension</th><th>Existing score output</th><th>Evidence status</th></tr></thead><tbody>${readinessRows}</tbody></table></div>
     <h3>What material findings were established?</h3>${findingMarkup}
     <h3>What did the performance evidence show?</h3>${performanceMarkup}
@@ -3580,6 +3592,40 @@ footer {
   main > section:not(.card),
   .pillar {
     box-shadow:none;
+  }
+
+  .table-wrap {
+    overflow:visible !important;
+    max-width:100% !important;
+  }
+
+  table {
+    width:100% !important;
+    table-layout:fixed;
+    font-size:10px;
+  }
+
+  th, td {
+    overflow-wrap:anywhere;
+    word-break:break-word;
+    padding:8px 6px;
+  }
+
+  .content-opportunity-card,
+  .priority-action,
+  .competitor-interpretation {
+    break-inside:auto;
+    page-break-inside:auto;
+  }
+
+  h2, h3, h4, h5 {
+    break-after:avoid-page;
+    page-break-after:avoid;
+  }
+
+  .content-opportunity-fields,
+  .priority-action-fields {
+    grid-template-columns:1fr 1fr;
   }
 }
 </style>
