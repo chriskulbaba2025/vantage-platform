@@ -83,7 +83,14 @@ function renderReportV2(model, options) {
       return { records: [], sequence: [] };
     }
   })();
-  return renderReportV2Base({ ...model, canonicalSolutions }, options);
+  const encyclopedia = model.encyclopedia || {
+    status: "AVAILABLE",
+    priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
+      const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
+      return { type: "standalone material finding", canonicalProblemId: "A06", frictionState: "FRICTION", findingIds: record?.findingRefs || [], evidence: [{ sourceStatus: "AVAILABLE" }] };
+    }),
+  };
+  return renderReportV2Base({ ...model, canonicalSolutions, encyclopedia }, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -1757,34 +1764,34 @@ const RENDER_GOLDEN = {
 };
 
 const canonicalRenderGolden = {
-  "assessed": "d1fc559dbf91881099e3fd9cce8d6dd46daa1d313a5127182df193a09fd44fc6",
-  "unassessed": "74b0d63fb24adba3f167922c2907b59453beb365967776fa803188f892077adc",
-  "provider-failed": "80e3259a356df5de791e24fbba01c6bb9deb6198be40038670c91008e6ecf7fa",
-  "crawl-blocked": "30aea6ca20b9b200e5f2b0a858d48601ee690fe9f41d238814f5184715c68339",
-  "target-outage": "714cf907628a127cd41af3027599e9a5b0c037765ffcb258476f6a22ed664873",
-  "outage-with-limitations": "830fd6d94fecd167c59e9c3bb327e4e4a8d3c020c7e4c4c149507e252ac346d1",
-  "http-and-noindex": "1267bd4cc4efffe01f46a62cf7c05be3b1959268f06520e64af187ce2675f693",
-  "robots-retrieved": "fe175dd859451855cf99c70514175713b5bb25426a34336ce135ee97c6498166",
-  "canonical-missing": "ba910cb88caed69db8a40e26b982e6ccc01a333e0df0867bba166a10db32f26f",
-  "no-conversion-mechanism": "8d8b2c31fe9190242b2b75ce4d4e3d1996cf3eaf4117ea333adcc1209c13ef3a",
-  "no-contact": "417f3bdb53c48991377775c30285b58cb81f05c2c3e62c6ab92110a7eba6e808",
-  "headers-all-present": "d1fc559dbf91881099e3fd9cce8d6dd46daa1d313a5127182df193a09fd44fc6",
-  "ga4-ready": "bba3e12ff8c5b57051d9e7544cf1b8c7d6fcf7cf3974e7c61c548480878d632b",
-  "ga4-issues": "777221fd3a34500887d8ae19138ccb68a39c8623c51711576a7e67f2303db739",
-  "ga4-not-applicable": "4731bad62f8518135c3d5690a2cb950e7e12fdbc7a1e96f9d147cdadf152516b",
-  "slow-mobile": "bce8d3e371d7ed7e066bcb094ab8bee231ab4dbb2aa1dfc7f3c1e2277b7edcbc",
-  "no-performance": "16804287345f1a69b1034780b6219dca71bdb5387e4a4e9677aaa8518b0d37c7",
-  "path-validated-blocker": "aca3ab3ab3a51b40fb208c3bacd4abee0410271e4f4b91f10727274dce343c31",
-  "competitor-present": "c30c39999be909313682e67a8ef2e78eee16729b699a85194fa3385d9acf91b2",
-  "proprietary-platform": "85b2bd67e8faef71da7ab8a686df2c826b6ed57e517db36eea198abb5b3e4256",
-  "untraced-broken-links": "9d7f3505a9fe3061c5c9a77c89b0988c53c81bf0c3df5c79a55263aea50c25b0",
-  "schema-confirmed-absent": "f186cbafc158d16027c109420995928f7b10c44848d7ca9896837118dbd133cf",
-  "headings-absent-h1": "1ee4771d7a2a3106168cd1d34619f336dfa04b41c76efedec5a1d133ee8383e5",
-  "headings-multiple-h1": "c1b2f671172d9c4c751ed60e3555bdb4cd5af490e2651fd4a2d1f03c97c1e94a",
-  "perf-field-and-multipage": "e0535f0d82859ea866259b933efcccfc8ef30e32851d1102939731679e46244d",
-  "competitor-with-limitations": "1082d1471c2aa382d77da01b66f9af172c885d7d25d06a554be23c5e4c878c11",
-  "device-profile-failed": "b2ae50643a99cae014ed842780f409919c9010db288351a8b03d842913e67678"
-};
+  "assessed": "d3698aa6bd128ea68bec6175768002637f54d3231e71d21993ae9deb615275fd",
+  "unassessed": "a65cfb0e696dac320a152d7545f4eae4a53cf0b1f8c51fc2fd19930031914a08",
+  "provider-failed": "6c99df7cd5c38636f63758db02a0d9d7db8c0409147181cdd314c8a9fc41e3e6",
+  "crawl-blocked": "9e2d5e9e9d29a1bee58995dd3e97f7386a81203796445935f2775f2a738b7ebb",
+  "target-outage": "29616ac1fd8aca8b86225760278785da58e81d3f17484f91610dd6d416d46e66",
+  "outage-with-limitations": "0908634e185d13da007e0f9fb2bafd0df030fff8e4afd79289178836d2ee7d40",
+  "http-and-noindex": "64b60a2067a5ec7d1c4a31c2467768b31c2fa8e46c503abd795bc3d307e3261a",
+  "robots-retrieved": "308a17bd7ae674d65e9fe7654f3552845e707ec42fcbc2ed68d8c535a6a6c225",
+  "canonical-missing": "b4d1cca4c80cab5922f506573c1b40c71ea77fd548d324319603523657a4860b",
+  "no-conversion-mechanism": "20578481de08513ac4a27a772c3469873fbc25eac2b735282271bf50f04cf561",
+  "no-contact": "6a9c8ea040c6a4a4d37c72752a2d17774c00a6cb0e99deb7ba50d100005d611e",
+  "headers-all-present": "d3698aa6bd128ea68bec6175768002637f54d3231e71d21993ae9deb615275fd",
+  "ga4-ready": "9337e915f167349d78be234f8faea7764f535bfd221548dcf16970957af26136",
+  "ga4-issues": "bae6c7094753eba4229b0d6377fd12de361c88e303a6bd5414be36e076e4eddd",
+  "ga4-not-applicable": "aca1d1848ad4d35b8162e00dff9c4eeddfc8e5ae4b041db962f1d141e09a5a1c",
+  "slow-mobile": "c9f1bc57e21a1c908fa6c3dad240d40ff223e58e0a99369c3f3c092a8e14c257",
+  "no-performance": "ec8e90deafe0457753dfd1681777dded8c80177e6a921e5df1eb9c4e8f7253de",
+  "path-validated-blocker": "f35ca033f11c988d6e40e035a10e8133ed7377214e3b638d3fe340588ed4cfaf",
+  "competitor-present": "618199c5fc0b21671c5607f34a5e7a6cf73bd2b94d187e34eebd8e5ff6ecd69e",
+  "proprietary-platform": "d99944d15e5255e34d3f58e8d662201308b1b297699248747616b0e895963b0a",
+  "untraced-broken-links": "45cf63fa8bf8bc508387c8775edf9b54fc3dc4023a1ee4a66b59ff8003b4c6c7",
+  "schema-confirmed-absent": "46fd42400e6e78fc81c01266a9c628ebb6873f41798dc4137eff3d399e3dc9a4",
+  "headings-absent-h1": "0f9e5456f6a8de370e68569a0b4ac44d11b3c7378860ef0e35118c2ade99bd37",
+  "headings-multiple-h1": "a3c2bf9e348c59d0d35b63411c4483637620e146c655da8d62bbd1df8065a9f4",
+  "perf-field-and-multipage": "331cc3e780e478e75fb13b27eb4151f8578e7ca83e299c53638d29b4a17cf16c",
+  "competitor-with-limitations": "ffffd0338b290b0e1d8dcaa6dc8169d19d85b0a80bed79af8d67af473c9ffe78",
+  "device-profile-failed": "4b86872f33dd3713a187bde361e2c3f7ba57f8c4fab790b065d4ae0fe288e9e9"
+};;;
 
 test("CR-43: the full rendered report is frozen for every branch", () => {
   const actual = {};
@@ -2077,9 +2084,9 @@ test("CR-21: Do Now / Do Next / Later grouping is deterministic", () => {
 
   const html = renderReportV2(model);
 
-  assert.match(html, /DO NOW/i);
-  assert.match(html, /DO NEXT/i);
-  assert.match(html, /LATER/i);
+  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
+  assert.match(supporting, /Priority Fixes is the only client action sequence/);
+  assert.doesNotMatch(supporting, /DO NOW|DO NEXT|LATER/i);
 });
 test("CR-22: the governed verification method carries through to the plan", () => {
   const model = scoreWith(
@@ -2106,13 +2113,10 @@ test("CR-22: the governed verification method carries through to the plan", () =
   const html = renderReportV2(model);
   const blocker = findingByRule(model, "VAN-PATH-001");
 
-  assert.match(html, /Review the relevant pages|Review the related pages/, "canonical implementation check rendered in the report");
-
-  assert.match(
-    html,
-    /MEASURE/i,
-    "action plan exposes a Measure step",
-  );
+  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
+  assert.match(supporting, /Accepted current priorities/);
+  assert.match(supporting, /Supporting observations and non-priority findings/);
+  assert.doesNotMatch(supporting, /MEASURE|DO NOW|DO NEXT/i);
 });
 
 test("CR-23: the action plan invents no business result or ROI claim", () => {
@@ -2125,17 +2129,14 @@ test("CR-23: the action plan invents no business result or ROI claim", () => {
     ),
   );
 
-  const idx = html.indexOf("Client Action Plan");
+  const idx = html.indexOf("Priority and Supporting Evidence");
 
   assert.ok(
     idx > -1,
     "action plan section must exist",
   );
 
-  const plan = html.slice(
-    idx,
-    idx + 6000,
-  );
+  const plan = html.slice(idx, html.indexOf('id="eeat"', idx));
 
   for (const forbidden of [
     /\d+\s*%\s*(more|increase|uplift|lift|improvement in (leads|sales|revenue|conversions))/i,

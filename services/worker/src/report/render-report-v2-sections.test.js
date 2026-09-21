@@ -368,12 +368,13 @@ test("SUPPORTING-DETAIL-EVIDENCE-01: detail keeps visuals, deterministic samples
   assert.match(supporting, /1 identified .* showing 1 examples/);
 });
 
-test("SUPPORTING-DETAIL-VERIFICATION-01: verification remains consolidated in MEASURE", async () => {
+test("SUPPORTING-DETAIL-VERIFICATION-01: Supporting Detail classifies priorities without an action sequence", async () => {
   const html = await render(scoreAudit(INPUT, richEvidence()));
-  const plan = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="competitors"'));
+  const plan = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
   assert.doesNotMatch(plan, /How we verify it/);
-  assert.match(plan, /MEASURE/);
-  assert.match(plan, /Evidence to compare in the next audit/);
+  assert.match(plan, /Accepted current priorities/);
+  assert.match(plan, /Supporting observations and non-priority findings/);
+  assert.doesNotMatch(plan, /MEASURE|DO NOW|DO NEXT|<ol/i);
 });
 
 test("INTERNAL-LINKS-DISCLOSURE-01: orphan count and governed full list are progressive", async () => {
@@ -419,7 +420,7 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
 });
 
 test("TRUST-WORDING-02: a Trust verdict remains when no shared narrative message is supplied", () => {
-  const rendered = eeatSection(scoreAudit(INPUT, richEvidence()), null);
+  const rendered = eeatSection(scoreAudit(INPUT, richEvidence()), { acceptedFindingIds: new Set() }, null);
   assert.match(rendered, /class="trust-verdict">Trust evidence is shown below within its assessed scope\.<\/p>/);
 });
 

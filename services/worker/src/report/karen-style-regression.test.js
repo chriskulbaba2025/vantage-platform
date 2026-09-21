@@ -145,7 +145,14 @@ function renderReportV2(modelInput, options) {
       canonicalSolutions = buildCanonicalSolutionSet({ findings, scoreSet: modelInput, decisionEvidence: modelInput.evidence });
     } catch {}
   }
-  return renderReportV2Base({ ...modelInput, canonicalSolutions }, options);
+  const encyclopedia = modelInput.encyclopedia || {
+    status: "AVAILABLE",
+    priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
+      const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
+      return { canonicalProblemId: "A06", findingIds: record?.findingRefs || [], frictionState: "FRICTION" };
+    }),
+  };
+  return renderReportV2Base({ ...modelInput, canonicalSolutions, encyclopedia }, options);
 }
 
 function writerInput() {
@@ -361,7 +368,7 @@ test("KAREN-REG-03: diagnostic depth beyond the Karen navigation remains availab
     "Internal-Link Opportunities",
     "Machine Readability",
     "What is already working?",
-    "Client Action Plan",
+    "Priority and Supporting Evidence",
     "Deferred &amp; unavailable analysis",
   ]) {
     assert.ok(deterministic.includes(marker), `diagnostic depth preserved: ${marker}`);

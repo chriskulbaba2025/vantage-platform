@@ -67,6 +67,14 @@ function model(canonicalSolutions) {
       performance: { sourceStatus: "UNAVAILABLE" },
     },
     canonicalSolutions,
+    encyclopedia: {
+      status: "AVAILABLE",
+      priorityUnits: canonicalSolutions.records.map((record) => ({
+        canonicalProblemId: "A06",
+        findingIds: record.findingRefs,
+        frictionState: "FRICTION",
+      })),
+    },
     conversionPaths: [],
     readinessMap: [],
     contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },

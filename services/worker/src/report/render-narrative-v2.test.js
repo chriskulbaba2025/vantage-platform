@@ -411,13 +411,21 @@ function deterministicModel() {
       evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
     } : finding;
   });
+  const canonicalSolutions = buildCanonicalSolutionSet({
+    findings,
+    scoreSet: scored,
+    decisionEvidence: scored.evidence,
+  });
   return {
     ...scored,
-    canonicalSolutions: buildCanonicalSolutionSet({
-      findings,
-      scoreSet: scored,
-      decisionEvidence: scored.evidence,
-    }),
+    canonicalSolutions,
+    encyclopedia: {
+      status: "AVAILABLE",
+      priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
+        const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
+        return { canonicalProblemId: "A06", findingIds: record?.findingRefs || [], frictionState: "FRICTION" };
+      }),
+    },
   };
 }
 
