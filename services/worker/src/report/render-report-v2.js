@@ -3660,6 +3660,12 @@ footer {
     break-inside:auto !important;
   }
 
+  /* Footer metadata repeats the report header and can become a standalone
+     final sheet after a long selected view. Keep it in the screen viewer. */
+  body.viewer-ready > footer {
+    display:none !important;
+  }
+
   .card,
   main > section:not(.card),
   .pillar {

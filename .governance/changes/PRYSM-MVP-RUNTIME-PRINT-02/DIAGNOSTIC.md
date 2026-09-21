@@ -12,6 +12,8 @@ An exact-runtime diagnostic injected only `body.viewer-ready main > section.view
 
 The permanent 27-case CR-43 renderer matrix changed only by this CSS rule after normalizing whitespace. A reviewed comparison found zero unexplained HTML/content or semantic differences.
 
+The final PDF still had a footer-only physical page (page 46). Source places the footer after the selected report layout, outside the active view. An exact authenticated Chromium diagnostic that hid only `body.viewer-ready > footer` reduced Supporting Detail from 18 sheets to 17; every remaining page carried report content (minimum 547 extracted characters), and all assessment sections remained present. Footer version metadata is already in the visible report header; the on-screen footer remains unchanged.
+
 ## Classification
 
-`VERIFIED_ROOT_CAUSE`. This is an application print-layout defect, not a report-content or browser-harness defect. The staging identity path is the real Cognito reviewer flow and the exact Vercel → Railway staging report route; the print override was diagnostic only.
+`VERIFIED_ROOT_CAUSE`. This is an application print-layout defect, not a report-content or browser-harness defect. The staging identity path is the real Cognito reviewer flow and the exact Vercel → Railway staging report route; the print overrides were diagnostic only.
