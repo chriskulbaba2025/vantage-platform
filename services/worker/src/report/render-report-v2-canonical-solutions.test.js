@@ -89,8 +89,12 @@ function model(canonicalSolutions) {
 
 test("canonical solutions are carried by the current report model", () => {
   const canonicalSolutions = { records: [solution("SOL-ONE", 1)], sequence: ["SOL-ONE"] };
+  const noPriorityModel = model(canonicalSolutions);
+  noPriorityModel.rootCauseRuleId = null;
+  noPriorityModel.rootCause = "No accepted priority is represented in this fixture.";
+  noPriorityModel.decisionHierarchy = { hierarchyVersion: "1.0.0", rootCauseRuleId: null, orderedFindingIds: [], actions: [] };
   const hydrated = hydrateCurrentReportModel({
-    scoreSet: { ...model(canonicalSolutions), decisionHierarchy: { orderedFindingIds: [] } },
+    scoreSet: noPriorityModel,
     findings: [],
     decisionEvidence: {},
     capabilityEvidence: {},

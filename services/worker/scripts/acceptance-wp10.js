@@ -34,6 +34,9 @@ addFormats(ajv);
 ["report-view-model.schema.json","report-content.schema.json","narrative-response.schema.json","finding.schema.json","score.schema.json","report-manifest.schema.json","artifact-record.schema.json","audit-request.schema.json","source-result.schema.json","canonical-evidence.schema.json","capability-evidence.schema.json","conversion-path-validation.schema.json","decision-evidence.schema.json","lifecycle-event.schema.json","lifecycle-state.schema.json"].forEach(f => {
   ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f),"utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
 });
+for (const f of ["score-current.schema.json", "report-view-model-current.schema.json"]) {
+  ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")));
+}
 function validate(sid, obj) { const v = ajv.getSchema(sid); return v ? { valid: v(obj), errors: v.errors || [] } : { valid: false, errors: [{ message: `Schema not found: ${sid}` }] }; }
 
 // --- Imports ---
@@ -49,6 +52,8 @@ const { createAuditOrchestrator } = await import("../src/orchestration/audit-orc
 const { LIFECYCLE_STATE } = await import("../src/lifecycle/state-enum.js");
 const { createLocalReportStore } = await import("../src/storage/report-store.js");
 const { createRequestHandler } = await import("../src/server.js");
+const { buildCapabilityEvidence, persistCapabilityEvidence } = await import("../src/evidence/capability-evidence.js");
+const { scoreFromCanonicalEvidence } = await import("../src/scoring/scoring-service.js");
 const T = LIFECYCLE_STATE;
 
 // --- Fixtures ---
@@ -111,6 +116,7 @@ process.on("exit", cleanup);
 // --- Setup helper ---
 async function setupToNarrativeReady(auditId) {
   const tenantId = "t1", clientId = "c1", executionId = randomUUID();
+  const scoringEvidence = JSON.parse(readFileSync(resolve(__dirname, "..", "test-fixtures", "scoring", "deterministic-evidence-fixture.json"), "utf-8"));
   await lifecycle.create({ auditId, tenantId, clientId, idempotencyKey: randomUUID() });
   for (const state of [T.VALIDATED, T.COLLECTING, T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY]) {
     await lifecycle.transition({ auditId, tenantId, toState: state, transitionIdempotencyKey: `${auditId}:${state}:${executionId}` });
@@ -119,12 +125,6 @@ async function setupToNarrativeReady(auditId) {
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(pkg), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "report", artifactName: "report-content.json" } });
   const narr = loadFixture("valid-narrative.json"); narr.auditId = auditId;
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(narr), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "report", artifactName: "narrative.json" } });
-  const sm = loadFixture("valid-scoring-model.json");
-  const scoresJson = JSON.stringify({ contractVersion: "1.0.0", scoringVersion: sm.scoringVersion || "3.0.0", generatedAt: "2026-08-09T12:00:00.000Z", scores: sm.scores || {}, bands: sm.bands || {}, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: sm.rootCause || "", findingCount: (sm.findings || []).length, findingIds: (sm.findings || []).map(f => f.findingId), findingsArtifact: null, scoresArtifact: null });
-  const scoresKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" });
-  await artifactStore.put({ bytes: Buffer.from(scoresJson, "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
-  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(sm.findings || []), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
-
   // PRYSM-CLOSE-06/07: governed rendering requires decision evidence —
   // seed it through the real production builder.
   {
@@ -135,11 +135,7 @@ async function setupToNarrativeReady(auditId) {
       startedAt: "2026-08-09T12:00:00.000Z", completedAt: "2026-08-09T12:00:01.000Z", retryCount: 0,
       coverage: { requested: 1, completed: 1, failed: 0 }, limitations: [],
       evidence: {
-        sourceStatus: "AVAILABLE", domain: "testbusiness.com", targetUrl: "https://testbusiness.com",
-        pageCount: 1, pages: [], services: [], trust: {}, platform: "WordPress",
-        schemaTypes: [], statusCounts: {}, ctas: [], forms: [], externalCtas: [],
-        socialLinks: [], internalLinkCount: 0, brokenInternalLinks: [],
-        securityHeaders: {}, _contentEvidenceAvailable: true, _responseHeadersAvailable: false,
+        ...scoringEvidence.site, domain: "testbusiness.com", targetUrl: "https://testbusiness.com",
         collectedAt: "2026-08-09T12:00:01.000Z",
       },
     };
@@ -150,8 +146,7 @@ async function setupToNarrativeReady(auditId) {
       coverage: { requested: 2, completed: 2, failed: 0 }, limitations: [],
       evidence: {
         sourceStatus: "AVAILABLE", fallbackUsed: false, testedUrls: ["https://testbusiness.com"],
-        mobile: { status: "AVAILABLE", scores: { performance: 73 }, metrics: { fcpMs: 1200, lcpMs: 1800 } },
-        desktop: { status: "AVAILABLE", scores: { performance: 88 }, metrics: { fcpMs: 600, lcpMs: 900 } },
+        ...scoringEvidence.performance,
         collectedAt: "2026-08-09T12:00:02.000Z",
       },
     };
@@ -167,6 +162,17 @@ async function setupToNarrativeReady(auditId) {
       bytes: Buffer.from(JSON.stringify(decisionResult.evidence), "utf-8"),
       contentType: "application/json",
       scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" },
+    });
+    const scope = { tenantId, clientId, auditId };
+    const capabilityEvidence = buildCapabilityEvidence({ decisionEvidence: decisionResult.evidence, auditId, generatedAt: "2026-08-09T12:00:02.000Z" });
+    await persistCapabilityEvidence({ store: artifactStore, scope, evidence: capabilityEvidence, validateContract: validate });
+    await scoreFromCanonicalEvidence({
+      store: artifactStore,
+      scope,
+      canonicalEvidence: decisionResult.evidence,
+      auditInput: { auditId, targetUrl: "https://testbusiness.com", businessName: "Test Business Inc.", competitors: [] },
+      scoredAt: "2026-08-09T12:00:02.000Z",
+      validateContract: validate,
     });
   }
 
@@ -578,7 +584,7 @@ console.log("\n--- Phase 7: LOCK-01 baseline SHA ---");
   const { execSync } = await import("node:child_process");
   const repoRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
   const reportDir = resolve(repoRoot, "services", "worker", "src", "report");
-  const STARTING = "d3cf84b91a40037466e9cd2d59dd5320717cca23";
+  const STARTING = "7202aa3ae2d140d2326dfb527ba619fe111f5d92";
   const files = ["karen-leslie-template.html","render-report.js","render-approved-report.js","html-helpers.js","sections-conversion.js","sections-trust.js","sections-seo.js","sections-performance.js","sections-internal-links.js","verify-template.js"];
   let m = 0;
   for (const f of files) {
@@ -597,8 +603,17 @@ console.log("\n--- Phase 8: GM-01 ---");
 
 {
   const { renderApprovedReport, APPROVED_PAGES } = await import("../src/report/render-approved-report.js");
+  const { buildCrossReportInterpretation } = await import("../src/report-model/cross-report-interpretation.js");
   const siteData = { domain: "testbusiness.com", targetUrl: "https://testbusiness.com", pages: [{ title: "Test Business Inc.", headings: { h1: ["Welcome"], h2: ["Services"], h3: [], h4: [] } }], services: ["Web Design"], topicKeywords: ["website optimization"], ctas: [{ text: "Contact Us", url: "https://testbusiness.com/contact" }], forms: [], trust: { testimonials: false, credentials: false, pricing: false, policies: false }, pageCount: 42, missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0, totalWords: 3000, averageWords: 300, imagesMissingAlt: 0, h1Missing: 0, h1Multiple: 0, schemaTypes: ["Organization"], internalLinkCount: 100, brokenInternalLinks: [], externalCtas: [], securityHeaders: { xFrameOptions: false, xContentTypeOptions: false, referrerPolicy: false }, socialLinks: [], sourceStatus: "AVAILABLE" };
   const model = { generatedAt: "2026-08-09T12:00:00.000Z", scoringVersion: "3.0.0", reportVersion: "3.0.0", input: { businessName: "Test Business Inc.", targetUrl: "https://testbusiness.com" }, evidence: { site: siteData, performance: { sourceStatus: "AVAILABLE", mobile: { scores: { performance: 65 }, metrics: { lcpMs: 2500, fcpMs: 1200 } }, desktop: { scores: { performance: 80 }, metrics: { lcpMs: 1200, fcpMs: 600 } } }, backlinks: { sourceStatus: "AVAILABLE" }, ga4: { sourceStatus: "NOT_CONNECTED" }, gsc: { sourceStatus: "NOT_CONNECTED" }, competitors: [], competitorOpportunities: {} }, scores: { trust: 65, contentDepth: 58, conversionPathways: 72, technical: 55, performance: 48, conversionReadiness: 59, awareness: 60, consideration: 55, decision: 50, aiReadiness: 40 }, bands: { conversionReadiness: "Moderate", trust: "Moderate", evidenceConfidence: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "Missing trust credentials.", findings: [], conversionPaths: [], readinessMap: [], contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] }, competitors: { comparisons: [], opportunities: { topics: [], qualifiedCandidates: [], excludedCandidates: [], gaps: [], allGaps: [], sources: {}, limitations: [] } }, sourceStatus: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "AVAILABLE", backlinks: "AVAILABLE", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, limitations: [], _gate: {} };
+  model.crossReportInterpretation = buildCrossReportInterpretation({
+    site: model.evidence.site,
+    performance: model.evidence.performance,
+    scores: model.scores,
+    bands: model.bands,
+    conversionPaths: model.conversionPaths,
+    capabilities: {},
+  });
   const result = renderApprovedReport(model);
   check(`GM: ${result.filenames.length} pages`, result.filenames.length === 16);
   for (const pd of APPROVED_PAGES) {

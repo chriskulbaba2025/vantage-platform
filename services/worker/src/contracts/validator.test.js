@@ -27,6 +27,7 @@ import {
   createValidator,
   REQUIRED_SCHEMAS,
   CONTRACTS_DIR,
+  expectedContractVersion,
 } from "./validator.js";
 
 // ---------------------------------------------------------------------------
@@ -58,11 +59,14 @@ test("every schema declares a valid $id", () => {
 test("every schema declares its governed version", () => {
   const schemas = loadAllSchemas();
   for (const [filename, schema] of schemas) {
+    const match = schema.$id.match(/\/v([1-9]\d*)\//);
+    const expected = match ? `${match[1]}.0.0` : null;
     assert.equal(
       schema.version,
-      ["score-current.schema.json", "report-view-model-current.schema.json"].includes(filename) ? "2.0.0" : "1.0.0",
+      expected,
       `${filename}: unexpected version ${schema.version}`,
     );
+    assert.equal(expectedContractVersion(schema.$id), expected, `${filename}: $id major does not resolve to its contract version`);
   }
 });
 
@@ -71,10 +75,16 @@ test("every schema declares its governed contractVersion", () => {
   for (const [filename, schema] of schemas) {
     assert.equal(
       schema.contractVersion,
-      ["score-current.schema.json", "report-view-model-current.schema.json"].includes(filename) ? "2.0.0" : "1.0.0",
+      expectedContractVersion(schema.$id),
       `${filename}: unexpected contractVersion ${schema.contractVersion}`,
     );
   }
+});
+
+test("contract version expectation follows the major version in the schema id", () => {
+  assert.equal(expectedContractVersion("https://example.test/contracts/v1/example.schema.json"), "1.0.0");
+  assert.equal(expectedContractVersion("https://example.test/contracts/v2/example.schema.json"), "2.0.0");
+  assert.equal(expectedContractVersion("https://example.test/contracts/example.schema.json"), null);
 });
 
 // ---------------------------------------------------------------------------

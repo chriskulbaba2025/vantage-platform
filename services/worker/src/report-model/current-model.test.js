@@ -26,6 +26,27 @@ test("T2-MODEL-02: missing persisted hierarchy fails closed", () => {
   assert.throws(() => hydrateCurrentReportModel({ scoreSet: { ...scoreSet, decisionHierarchy: null }, findings: [] }), /decision hierarchy/);
 });
 
+test("T2-MODEL-03: no accepted priorities hydrate with an explicit disposition", () => {
+  const noPriorityScoreSet = {
+    ...scoreSet,
+    rootCauseRuleId: null,
+    rootCause: "No priority unit passed the governed materiality and challenge checks.",
+    decisionHierarchy: { ...scoreSet.decisionHierarchy, rootCauseRuleId: null, orderedFindingIds: [], actions: [] },
+  };
+  const model = hydrateCurrentReportModel({ scoreSet: noPriorityScoreSet, findings: [], decisionEvidence: {}, capabilityEvidence: {} });
+  assert.equal(model.rootCauseRuleId, null);
+  assert.match(model.rootCause, /No priority unit passed/);
+  assert.deepEqual(model.decisionHierarchy.actions, []);
+});
+
+test("T2-MODEL-04: empty hierarchy cannot retain an accepted root-cause identity", () => {
+  const contradictoryScoreSet = {
+    ...scoreSet,
+    decisionHierarchy: { ...scoreSet.decisionHierarchy, rootCauseRuleId: null, orderedFindingIds: [], actions: [] },
+  };
+  assert.throws(() => hydrateCurrentReportModel({ scoreSet: contradictoryScoreSet, findings: [] }), /root-cause identity/);
+});
+
 test("P1-CROSS-03: missing persisted interpretation fails closed at hydration", () => {
   const { crossReportInterpretation, ...missingProjection } = scoreSet;
   assert.throws(() => hydrateCurrentReportModel({ scoreSet: missingProjection, findings: [] }), /persisted cross-report interpretation/);

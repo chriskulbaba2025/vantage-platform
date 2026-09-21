@@ -3,10 +3,20 @@ import assert from "node:assert/strict";
 import { buildV2Model } from "./replay-report.js";
 
 const decisionHierarchy = {
-  version: "1.0.0",
+  hierarchyVersion: "1.0.0",
+  provenance: "scoreAudit/action-priority",
   rootCauseRuleId: "VAN-CONV-001",
   orderedFindingIds: ["F-1", "F-2"],
-  actions: [],
+  actions: ["F-1", "F-2"].map((findingId, index) => ({
+    findingId,
+    ruleId: "VAN-CONV-001",
+    rank: index + 1,
+    priority: 1 - index / 10,
+    effort: "S",
+    actionClass: "CLARITY",
+    conversionInfluence: "DIRECT",
+    conversionInfluenceRank: 1,
+  })),
 };
 
 const scoreSet = {

@@ -53,6 +53,11 @@ const REQUIRED_SCHEMAS = [
   "report-manifest-v2.schema.json",
 ];
 
+export function expectedContractVersion(schemaId) {
+  const match = String(schemaId || "").match(/\/v([1-9]\d*)\//);
+  return match ? `${match[1]}.0.0` : null;
+}
+
 // ---------------------------------------------------------------------------
 // AJV factory
 // ---------------------------------------------------------------------------
@@ -312,10 +317,11 @@ export function runAcceptance(opts = {}) {
   // ── 3. All schemas have version ─────────────────────────────────────
   if (verbose) console.log("\n─ Schema version ─");
   for (const [filename, schema] of schemas) {
-    if (schema.version && schema.version === "1.0.0") {
-      pass(`Version correct: ${filename} → ${schema.version}`);
+    const expectedVersion = expectedContractVersion(schema.$id);
+    if (expectedVersion && schema.version === expectedVersion && schema.contractVersion === expectedVersion) {
+      pass(`Version correct: ${filename} → ${schema.version} (version and contractVersion)`);
     } else {
-      fail(`Version correct: ${filename}`, `Expected 1.0.0, got ${schema.version}`);
+      fail(`Version correct: ${filename}`, `Expected ${expectedVersion || "a versioned $id"}, got version ${schema.version} and contractVersion ${schema.contractVersion}`);
     }
   }
 

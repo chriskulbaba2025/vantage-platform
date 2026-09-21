@@ -10,7 +10,7 @@
  */
 
 import { randomUUID, createHash } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,6 +30,9 @@ const { createMemoryLifecycleRepository } = await import("../src/lifecycle/memor
 const { createLifecycleService } = await import("../src/lifecycle/lifecycle-service.js");
 const { createLocalReportStore, REQUIRED_APPROVED_PAGE_FILENAMES } = await import("../src/storage/report-store.js");
 const { LIFECYCLE_STATE } = await import("../src/lifecycle/state-enum.js");
+const { buildCapabilityEvidence, persistCapabilityEvidence } = await import("../src/evidence/capability-evidence.js");
+const { scoreFromCanonicalEvidence } = await import("../src/scoring/scoring-service.js");
+const { createBaseMockAdapters } = await import("../test-fixtures/orchestration/mock-adapters.js");
 const T = LIFECYCLE_STATE;
 
 // --- Test infrastructure ---
@@ -42,6 +45,16 @@ const reportStore = createLocalReportStore({ baseDir: testBaseDir });
 const memoryStore = createMemoryArtifactStore();
 const artifactStore = createGovernedArtifactStore({ store: memoryStore });
 const lifecycleRepo = createMemoryLifecycleRepository();
+const scoringEvidenceFixture = JSON.parse(readFileSync(resolve(__dirname, "..", "test-fixtures", "scoring", "deterministic-evidence-fixture.json"), "utf-8"));
+
+async function persistCurrentScoreSet({ auditId, tenantId, clientId, targetUrl, businessName, decisionEvidence }) {
+  const scope = { auditId, tenantId, clientId };
+  const generatedAt = decisionEvidence.site?.collectedAt || new Date().toISOString();
+  const capabilityEvidence = buildCapabilityEvidence({ decisionEvidence, auditId, generatedAt });
+  const validateContract = () => ({ valid: true, errors: [] });
+  await persistCapabilityEvidence({ store: artifactStore, scope, evidence: capabilityEvidence, validateContract });
+  return scoreFromCanonicalEvidence({ store: artifactStore, scope, canonicalEvidence: decisionEvidence, auditInput: { auditId, targetUrl, businessName, competitors: [] }, scoredAt: generatedAt, validateContract });
+}
 
 // --- Mock adapters (controlled, zero live calls) ---
 let adapterCallCount = 0;
@@ -188,15 +201,16 @@ async function seedToScored(targetUrl, businessName, tenantId) {
     gsc: { sourceStatus: "NOT_CONNECTED" },
     competitorOpportunities: {},
   };
+  Object.assign(decisionEvidence, scoringEvidenceFixture);
+  decisionEvidence.contractVersion = "1.0.0";
+  decisionEvidence.decisionEvidenceVersion = "1.0.0";
+  decisionEvidence.site = { ...decisionEvidence.site, targetUrl, domain: new URL(targetUrl).hostname };
   await artifactStore.put({
     bytes: Buffer.from(JSON.stringify(decisionEvidence), "utf-8"),
     contentType: "application/json",
     scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" },
   });
-
-  const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
-  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
-  await artifactStore.put({ bytes: Buffer.from(JSON.stringify([]), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
+  await persistCurrentScoreSet({ auditId, tenantId, clientId, targetUrl, businessName, decisionEvidence });
 
   // WP8 report-content.json is NOT pre-seeded — the orchestrator must build it
   // from canonical evidence + findings + scores during the SCORED→NARRATIVE_PENDING
@@ -273,13 +287,14 @@ async function seedToDraftRendered(targetUrl, businessName, tenantId) {
     gsc: { sourceStatus: "NOT_CONNECTED" },
     competitorOpportunities: {},
   };
+  Object.assign(deForRender, scoringEvidenceFixture);
+  deForRender.contractVersion = "1.0.0";
+  deForRender.decisionEvidenceVersion = "1.0.0";
+  deForRender.site = { ...deForRender.site, targetUrl, domain: new URL(targetUrl).hostname };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(deForRender), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json" } });
+  const scoreResult = await persistCurrentScoreSet({ auditId, tenantId, clientId, targetUrl, businessName, decisionEvidence: deForRender });
 
-  const scores = { contractVersion: "1.0.0", scoringVersion: "3.0.0", generatedAt: new Date().toISOString(), scores: { trust: 50, contentDepth: 50, conversionPathways: 50, technical: 50, performance: 50, conversionReadiness: 50 }, bands: { conversionReadiness: "Moderate" }, assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", findings: [], dimensionEligibility: {}, moduleEligibility: {}, suppressedModules: [], evidence: {} };
-  await artifactStore.put({ bytes: Buffer.from(JSON.stringify(scores), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "scores.json" } });
-  await artifactStore.put({ bytes: Buffer.from(JSON.stringify([]), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "canonical", artifactName: "findings.json" } });
-
-  const pkg = { contractVersion: "1.0.0", auditId, business: { name: businessName, domain: (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })(), platform: "Unknown" }, siteMetrics: { services: [] }, sourceStatus: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "NOT_APPLICABLE", backlinks: "NOT_CONNECTED", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, limitations: [], competitors: [], assessedWeight: 75, readinessStatus: "Provisional", showNumericScore: true, evidenceConfidenceScore: 70, rootCause: "", scoringVersion: "3.0.0" };
+  const pkg = { contractVersion: "1.0.0", auditId, business: { name: businessName, domain: (() => { try { return new URL(targetUrl).hostname; } catch { return targetUrl; } })(), platform: "Unknown" }, siteMetrics: { services: [] }, sourceStatus: { website: "AVAILABLE", performance: "AVAILABLE", competitors: "NOT_APPLICABLE", backlinks: "NOT_CONNECTED", ga4: "NOT_CONNECTED", gsc: "NOT_CONNECTED" }, limitations: [], competitors: [], assessedWeight: scoreResult.scoreSet.assessedWeight, readinessStatus: scoreResult.scoreSet.readinessStatus, showNumericScore: scoreResult.scoreSet.showNumericScore, evidenceConfidenceScore: scoreResult.scoreSet.evidenceConfidenceScore, rootCause: scoreResult.scoreSet.rootCause, scoringVersion: scoreResult.scoreSet.scoringVersion, scores: scoreResult.scoreSet.scores, bands: scoreResult.scoreSet.bands, crossReportInterpretation: scoreResult.scoreSet.crossReportInterpretation };
   await artifactStore.put({ bytes: Buffer.from(JSON.stringify(pkg), "utf-8"), contentType: "application/json", scope: { tenantId, clientId, auditId, category: "report", artifactName: "report-content.json" } });
 
   const narrative = { contractVersion: "1.0.0", schemaVersion: "1.0.0", auditId, modelId: "mock", narrativeVersion: "1.0.0", generatedAt: new Date().toISOString(), executiveSummary: "Test.", priorityFixesNarrative: "Test.", conversionPathNarrative: "Test.", readinessMapNarrative: "Test.", contentIdeasNarrative: "Test.", competitorBenchmarkNarrative: "Test.", trustEeatNarrative: "Test.", cmsConstraintsNarrative: "Test.", technicalSeoNarrative: "Test.", headingsNarrative: "Test.", schemaNarrative: "Test.", performanceNarrative: "Test.", internalLinksNarrative: "Test.", evidenceAppendixNarrative: "Test.", deferredAnalysisNarrative: "Test.", limitations: [] };
@@ -426,6 +441,7 @@ console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
   const callCounts = {};
   function recordCall(source) { callOrder.push(source); callCounts[source] = (callCounts[source] || 0) + 1; }
 
+  const baseAdapters = createBaseMockAdapters();
   const hangAdapters = {};
   ["dataforseo-onpage","pagespeed","dataforseo-serp","backlinks","ga4","gsc"].forEach((name) => {
     if (name === "pagespeed") {
@@ -437,19 +453,9 @@ console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
     } else {
       hangAdapters[name] = {
         adapterVersion: "1.0.0",
-        execute: async () => {
+        execute: async (options) => {
           recordCall(name);
-          return {
-            rawBytes: Buffer.from(JSON.stringify({ mock: true, source: name }), "utf-8"),
-            contentType: "application/json",
-            sourceResult: {
-              contractVersion: "1.0.0", schemaVersion: "1.0.0", source: name,
-              provider: "mock", adapterVersion: "1.0.0", status: "AVAILABLE",
-              startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-              retryCount: 0, coverage: { requested: 1, completed: 1, failed: 0 },
-              limitations: [], evidence: {},
-            },
-          };
+          return baseAdapters[name].execute(options);
         },
       };
     }

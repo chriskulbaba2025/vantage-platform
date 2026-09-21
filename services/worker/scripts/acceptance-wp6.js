@@ -170,8 +170,8 @@ console.log("\n─ C. Orchestrator integration (WP6-ADP-17) ─");
   });
   const req = baReq();
   const summary = await orch.execute(req);
-  assertEq(summary.finalState, T.SCORED, // WP7
-    "ADP-17: full orchestration reaches SCORED (WP7)");
+  assertEq(summary.finalState, T.EVIDENCE_LOCKED,
+    "ADP-17: adapter integration completes at evidence_locked (WP6)");
   assertEq(summary.sourceCounts.total, 4,
     "ADP-17: 4 sources executed (base adapters)");
   assertEq(summary.sourceCounts.available, 4,
@@ -215,8 +215,8 @@ console.log("\n─ D. Independent adapter failure (WP6-ADP-17) ─");
     `ADP-17: remaining sources still AVAILABLE (got ${summary.sourceCounts.available})`);
   assert(callCount > 0,
     `ADP-17: failing adapter was called (${callCount} times)`);
-  assertEq(summary.finalState, T.SCORED, // WP7
-    "ADP-17: orchestration completes to SCORED (WP7) despite one FAILED source");
+  assertEq(summary.finalState, T.EVIDENCE_LOCKED,
+    "ADP-17: collection completes to evidence_locked despite one FAILED source");
 }
 
 // ── E. NOT_CONNECTED for optional sources ──
@@ -359,8 +359,8 @@ console.log("\n─ J. Full orchestration end-to-end ─");
   const req = baReq({ ga4: { propertyId: "123" }, gsc: { siteUrl: "https://example.com" } });
   const summary = await orch.execute(req);
 
-  assertEq(summary.finalState, T.SCORED, // WP7
-    "E2E: reaches SCORED (WP7)");
+  assertEq(summary.finalState, T.EVIDENCE_LOCKED,
+    "E2E: adapter collection reaches evidence_locked (WP6)");
   assertEq(summary.sourceCounts.total, 6,
     "E2E: 6 sources executed");
   assertEq(summary.sourceCounts.available, 2,

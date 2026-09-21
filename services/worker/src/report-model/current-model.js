@@ -10,8 +10,27 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
   if (!scoreSet || typeof scoreSet !== "object" || Array.isArray(scoreSet)) {
     throw new Error("Current report model requires a validated ScoreSet");
   }
-  if (!scoreSet.decisionHierarchy || !scoreSet.rootCauseRuleId) {
-    throw new Error("Current report model requires persisted decision hierarchy and root-cause identity");
+  const hierarchy = scoreSet.decisionHierarchy;
+  if (!hierarchy || !Array.isArray(hierarchy.actions) || !Array.isArray(hierarchy.orderedFindingIds)) {
+    throw new Error("Current report model requires persisted decision hierarchy");
+  }
+  if (hierarchy.rootCauseRuleId !== scoreSet.rootCauseRuleId) {
+    throw new Error("Current report model root-cause identity must match persisted hierarchy");
+  }
+  if (hierarchy.orderedFindingIds.length !== hierarchy.actions.length || hierarchy.actions.some((action, index) => action?.findingId !== hierarchy.orderedFindingIds[index])) {
+    throw new Error("Current report model priority actions must match the persisted decision order");
+  }
+  if (hierarchy.actions.length > 0 && !scoreSet.rootCauseRuleId) {
+    throw new Error("Current report model requires root-cause identity when accepted priorities exist");
+  }
+  if (hierarchy.actions.length > 0 && hierarchy.actions[0]?.ruleId !== scoreSet.rootCauseRuleId) {
+    throw new Error("Current report model root cause must bind to the first accepted priority");
+  }
+  if (hierarchy.actions.length === 0 && scoreSet.rootCauseRuleId !== null) {
+    throw new Error("Current report model cannot claim a root cause without accepted priorities");
+  }
+  if (typeof scoreSet.rootCause !== "string" || scoreSet.rootCause.trim().length === 0) {
+    throw new Error("Current report model requires an explicit root-cause or no-priority disposition");
   }
   if (!scoreSet.crossReportInterpretation) {
     throw new Error("Current report model requires persisted cross-report interpretation");

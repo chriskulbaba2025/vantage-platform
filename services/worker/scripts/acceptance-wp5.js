@@ -50,6 +50,7 @@ addFormats(_ajv);
 ["audit-request.schema.json", "source-result.schema.json", "canonical-evidence.schema.json", "capability-evidence.schema.json", "conversion-path-validation.schema.json", "decision-evidence.schema.json", "finding.schema.json", "score.schema.json", "report-content.schema.json", "narrative-response.schema.json", "report-view-model.schema.json", "report-manifest.schema.json", "artifact-record.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json"].forEach(f => {
   _ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")), `https://vantage-platform.io/prysm/contracts/v1/${f}`);
 });
+_ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, "score-current.schema.json"), "utf-8")));
 function vc(sid, obj) { const v = _ajv.getSchema(sid); if (!v) return { valid: false, errors: [{ message: `Schema not loaded: ${sid}` }] }; return { valid: v(obj), errors: v.errors || [] }; }
 
 function makeAvailResult(source) {
