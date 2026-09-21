@@ -19,7 +19,7 @@ const INPUT = {
   primaryGoal: "Book consultations",
 };
 
-function canonicalSolutionsForFixture(model) {
+function canonicalSolutionsForFixture(model, { throwOnError = false } = {}) {
   return model.canonicalSolutions || (() => {
     try {
       const findings = model.findings.filter((finding) => finding.findingId).map((finding) => {
@@ -35,7 +35,8 @@ function canonicalSolutionsForFixture(model) {
         scoreSet: model,
         decisionEvidence: model.evidence,
       });
-    } catch {
+    } catch (error) {
+      if (throwOnError) throw error;
       return { records: [], sequence: [] };
     }
   })();
@@ -265,7 +266,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(visibleStatusText, /\bReviewed\b/, "available evidence is described in client language");
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
-  assert.match(blockers, /Start with the first item and work down the list\. Each priority below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
+  assert.match(blockers, /Start with the first item and work down the list\. Each priority below explains what we found, why it matters, common options a team may consider, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
   assert.doesNotMatch(blockers, /These actions follow the governed priority order\./);
   assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
@@ -288,13 +289,13 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Start here/);
   assert.match(cards[0][3], /Some visitors may need more pricing or reassurance before they act\./);
   assert.match(cards[0][3], /Some evidence — confirm before making the change/);
-  assert.match(cards[0][3], /Add only pricing or reassurance details the business can support/);
+  assert.match(cards[0][3], /Common remediation options are not yet available for this finding/);
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, /businessImpact|legacy recommendation|affectedUrls|verificationMethod/i);
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, />(?:LOW|MEDIUM|HIGH|SUPPORTED|PARTIAL|CONDITIONAL|UNKNOWN|UNAVAILABLE|FIX_NOW|FIX_LATER|HOLD)</);
   assert.doesNotMatch(blockers, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
-  const orderedLabels = ["What we know", "Why this is a priority", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
+  const orderedLabels = ["What we know", "Why this is a priority", "Why it matters", "Three common fixes to consider", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
   let lastLabel = -1;
   for (const label of orderedLabels) {
     const nextLabel = blockers.indexOf(`<dt>${label}</dt>`);
@@ -755,7 +756,7 @@ test("AUTH-CLOSURE-02: final report has no independent remedy structures", () =>
     assert.doesNotMatch(html, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), forbidden);
   }
   assert.match(html, /data-solution-id=/);
-  assert.match(html, /What to do/);
+  assert.match(html, /Three common fixes to consider/);
   assert.match(html, /Accepted current priorities/);
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
   const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
@@ -792,6 +793,92 @@ test("MVP-CLIENT-01: current Encyclopedia accepted priority units are the only p
   assert.doesNotMatch(blockers, /<ol/i);
   assert.doesNotMatch(blockers, /No Encyclopedia priority unit with first diagnostic checks is linked/);
   assert.match(blockers, /Check 1:/);
+});
+
+function remediationFixture() {
+  const fixture = priorityModel();
+  const specs = [
+    { familyId: "I01", ruleId: "VAN-PERF-001", title: "Slow primary content display" },
+    { familyId: "J04", ruleId: "VAN-SCHEMA-001", title: "Structured data was not detected" },
+    { familyId: "A03", ruleId: "VAN-TECH-001", title: "Meta descriptions are missing" },
+  ];
+  const synthetic = specs.map((spec, index) => {
+    const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((item) => item.ruleId === spec.ruleId);
+    assert.ok(authority, `governed canonical solution exists for ${spec.ruleId}`);
+    return {
+      findingId: `remediation-fixture-${index + 1}`,
+      id: `remediation-fixture-${index + 1}`,
+      ruleId: spec.ruleId,
+      ruleVersion: authority.ruleVersion,
+      title: spec.title,
+      actionable: true,
+      scoreBearing: true,
+      severity: "High",
+      confidence: "deterministic",
+      evidence: [{ field: authority.evidenceFields[0], artifactRef: `evidence:${index + 1}`, sourceStatus: "AVAILABLE" }],
+      affectedUrls: ["https://example.test/"],
+      finalPriority: -(index + 1),
+      implementationEffort: "M",
+    };
+  });
+  fixture.findings = synthetic;
+  fixture.decisionHierarchy = {
+    provenance: "deterministic report projection fixture",
+    orderedFindingIds: synthetic.map((finding) => finding.findingId),
+    actions: synthetic.map((finding, rank) => ({ findingId: finding.findingId, rank: rank + 1 })),
+  };
+  const canonical = canonicalSolutionsForFixture(fixture, { throwOnError: true });
+  assert.ok(canonical.records.some((record) => record.findingRefs.includes(synthetic[0].findingId)), "canonical records preserve the governed finding identity");
+  fixture.canonicalSolutions = canonical;
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: synthetic.map((finding, index) => ({ type: "accepted material finding", canonicalProblemId: specs[index].familyId, findingIds: [finding.findingId], frictionState: "FRICTION", evidence: [{ sourceStatus: "AVAILABLE" }] })),
+  };
+  return { fixture, specs };
+}
+
+test("REMEDIATION-RENDER-01: accepted finding families receive exactly three governed options", () => {
+  const { fixture } = remediationFixture();
+  const html = renderReportV2(fixture);
+  if (process.env.PRYSM_ACTIONABILITY_PROOF_DIR) {
+    writeFileSync(`${process.env.PRYSM_ACTIONABILITY_PROOF_DIR}/representative-report.html`, html, "utf8");
+  }
+  const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  const cards = [...priority.matchAll(/<article class="priority-action"[\s\S]*?<\/article>/g)].map((match) => match[0]);
+  assert.equal(cards.length, 3);
+  const expected = ["above-the-fold asset", "supported structured data", "page-specific descriptions"];
+  for (const [index, card] of cards.entries()) {
+    assert.equal((card.match(/class="common-remediation-option"/g) || []).length, 3);
+    assert.equal((card.match(/class="remediation-disclaimer"/g) || []).length, 1);
+    assert.match(card, new RegExp(expected[index], "i"));
+    assert.match(card, /PRYSM confirmed the finding, but has not established which fix is right/);
+    assert.doesNotMatch(card, /caused by|the cause is|this caused/i);
+  }
+  assert.equal((priority.match(/class="priority-action"/g) || []).length, 3);
+});
+
+test("REMEDIATION-RENDER-02: only accepted units receive options; unsupported mappings fail closed", () => {
+  const { fixture, specs } = remediationFixture();
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: specs.slice(0, 2).map((spec, index) => ({ type: "accepted material finding", canonicalProblemId: spec.familyId, findingIds: [`remediation-fixture-${index + 1}`], frictionState: "FRICTION" })),
+  };
+  const twoPriorityHtml = renderReportV2(fixture);
+  const twoPrioritySection = twoPriorityHtml.slice(twoPriorityHtml.indexOf('id="blockers"'), twoPriorityHtml.indexOf('id="foundations"'));
+  assert.equal((twoPrioritySection.match(/class="priority-action"/g) || []).length, 2, "unaccepted third record does not receive a priority card");
+  assert.equal((twoPrioritySection.match(/class="common-remediation-option"/g) || []).length, 6);
+  assert.doesNotMatch(twoPrioritySection, /Write useful page-specific descriptions/);
+
+  fixture.encyclopedia.priorityUnits = [
+    { type: "accepted material finding", canonicalProblemId: "A01", findingIds: ["remediation-fixture-1"], frictionState: "FRICTION" },
+  ];
+  const unsupportedHtml = renderReportV2(fixture);
+  const unsupportedSection = unsupportedHtml.slice(unsupportedHtml.indexOf('id="blockers"'), unsupportedHtml.indexOf('id="foundations"'));
+  const card = unsupportedSection.match(/<article class="priority-action"[\s\S]*?<\/article>/)?.[0] || "";
+  assert.ok(card);
+  assert.match(card, /Common remediation options are not yet available for this finding/);
+  assert.doesNotMatch(card, /class="common-remediation-option"/);
+  assert.doesNotMatch(card, /Canonical change|Canonical fix/);
 });
 
 test("MVP-DECISION-AUTHORITY-01: one accepted sequence governs all pages while supporting evidence stays visible", () => {
@@ -960,6 +1047,8 @@ test("MVP-CLIENT-05: print contract protects report tables and headings", () => 
   assert.match(html, /table-layout:fixed/);
   assert.match(html, /overflow-wrap:anywhere/);
   assert.match(html, /break-after:avoid-page/);
+  assert.match(html, /\.action-page \.priority-sequence\s*\{\s*display:block;/);
+  assert.match(html, /\.action-page \.priority-action\s*\{[\s\S]*?break-inside:avoid;/);
 });
 
 test("MVP-CLIENT-06: competitor source status falls back to canonical report source status", () => {

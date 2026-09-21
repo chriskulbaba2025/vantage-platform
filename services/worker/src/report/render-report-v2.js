@@ -14,6 +14,7 @@ import { computePillars } from "./v2-pillars.js";
 import { buildFoundationChecklist } from "./foundation-readiness.js";
 import { deriveNarrativeStates } from "../report-model/narrative-state.js";
 import { CANONICAL_PROBLEM_BY_ID } from "../encyclopedia/registry.js";
+import { projectPriorityRemediation } from "./remediation-taxonomy.js";
 import {
   foundationSection,
   eeatSection,
@@ -319,7 +320,10 @@ function acceptedPriorityGroups(model, canonical) {
 }
 
 function clientDecisionProjection(model, canonical) {
-  const groups = acceptedPriorityGroups(model, canonical);
+  const groups = acceptedPriorityGroups(model, canonical).map((group) => ({
+    ...group,
+    remediation: projectPriorityRemediation(group.unit),
+  }));
   const acceptedRecords = groups.flatMap((group) => group.records);
   const acceptedIds = new Set(acceptedRecords.map((record) => record.solutionId));
   return {
@@ -363,10 +367,16 @@ function priorityGroupMeaning(group) {
   return page2Why(group.primary);
 }
 
-function priorityGroupAction(group) {
-  if (!group?.records?.length) return "Address the reviewed priority and repeat the same check.";
-  if (group.records.length === 1) return page2Action(group.primary);
-  return "Work through the related fixes together, then repeat each recorded verification check before treating the priority as resolved.";
+function priorityRemediationMarkup(remediation) {
+  if (remediation?.status !== "SUPPORTED") {
+    return `<p class="remediation-unavailable">${e(remediation?.message || "Common remediation options are not yet available for this finding. Review the supporting evidence before deciding how to correct it.")}</p>`;
+  }
+  const options = remediation.options.map((option) => `
+    <div class="common-remediation-option">
+      <h4>${e(option.title)}</h4>
+      <p>${e(option.detail)}</p>
+    </div>`).join("");
+  return `<p class="remediation-disclaimer">${e(remediation.disclaimer)}</p><div class="common-remediation-options">${options}</div>`;
 }
 
 function clientFrictionStateLabel(state) {
@@ -861,10 +871,6 @@ function page2Why(record) {
   return ({ performance: "People often decide quickly whether to stay on a page. If the main content takes too long to appear, the site may feel less responsive.", "buyer-decision": "They may want to know how the process works, how long it takes, what it costs, or what happens next. If they cannot find those answers, they may leave and keep looking.", "structured-data": "Structured data helps search engines and other systems understand what the business does and what a page is about. It does not improve conversions by itself.", "meta-description": "A meta description can help explain a page in search results. Without one, the search engine may choose its own text.", "heading-structure": "Clear headings help people scan a page and understand how the information is organized. They can also help search engines understand the page structure.", reassurance: "If visitors cannot find the information they need before contacting the business, they may keep comparing instead of moving forward.", accessibility: "Without a text description, some visitors may miss part of the message in an image." }[page2Kind(record)] || plainLanguage(record.whyItMatters || "This may make it harder for visitors to decide what to do next."));
 }
 
-function page2Action(record) {
-  return ({ performance: "Start with the largest item near the top of the page. Reduce its file size or loading work if needed. Then check whether scripts, fonts, or other resources are slowing it down. Run the same speed test again after the change.", "buyer-decision": "Write down the questions customers ask most often. Add clear answers to the pages where people are most likely to need them. Keep each answer short and specific to the service.", "structured-data": "Add only structured data that matches the real business and page content. Start with the organization, services, or page types that are clearly supported. Check that the final structured data is valid after it is published.", "meta-description": "Write a short description for each affected page. Explain what the page is about and why someone may want to visit it. Keep it specific to that page and check that it appears in the page metadata.", "heading-structure": "Use one clear main heading for the page. Then organize the sections underneath it in a simple order. Check the final page to make sure the headings make sense from top to bottom.", reassurance: "Add only pricing or reassurance details the business can support. Put them where visitors are making the decision, explain any limits clearly, and check that the final page says exactly what the business intends.", accessibility: "Add short, accurate descriptions to meaningful images. Leave decorative images without a description, then check the affected pages to make sure the text is in place." }[page2Kind(record)] || [record.whatToChange, record.howToFix].filter(Boolean).map(plainLanguage).join(" "));
-}
-
 function page2Location(record) {
   const type = String(record.siteAnchor?.type || "").toUpperCase();
   const locator = String(record.siteAnchor?.locator || "");
@@ -922,7 +928,7 @@ function blockersSection(model, decisionProjection, pageState) {
         <div class="priority-field priority-field-attention"><dt>What we know</dt><dd>${e(group.records.length > 1 ? `The review linked ${group.records.length} separate evidence-backed issues at the same buyer decision or action.` : page2Found(record))}${supporting.length ? `<ul>${supporting.slice(0, 3).map((item) => `<li>${e(page2Title(item))}</li>`).join("")}</ul>` : ""}</dd></div>
         <div class="priority-field priority-field-attention"><dt>Why this is a priority</dt><dd>${e(clientPriorityReason(group))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(priorityGroupMeaning(group))}</dd></div>
-        <div class="priority-field priority-field-attention"><dt>What to do</dt><dd>${e(priorityGroupAction(group))}${supporting.length ? `<ul>${group.records.slice(0, 3).map((item) => `<li>${e(page2Action(item))}</li>`).join("")}</ul>` : ""}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>Three common fixes to consider</dt><dd>${priorityRemediationMarkup(group.remediation)}</dd></div>
         <div class="priority-field"><dt>Where to look</dt><dd>${e(page2Location(record))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(group.records.length > 1 ? "Repeat each related verification check and confirm every included issue has improved." : page2Verify(record))}</dd></div>
         <div class="priority-field"><dt>Who may need to help</dt><dd>${e([...new Set(group.records.map((item) => page2Roles(item)))].join(" and "))}</dd></div>
@@ -949,7 +955,7 @@ function blockersSection(model, decisionProjection, pageState) {
     <h2>What should you fix first?</h2>
     ${narrativeBlock(pageState)}
     <h3>Start here</h3>
-    <p>${mainGroups.length ? `Start with the first item and work down the list. Each priority below explains what we found, why it matters, what to do next, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(priorityGroupTitle(mainGroups[0]))}. The report shows only the ${e(mainGroups.length)} accepted primary priorit${mainGroups.length === 1 ? "y" : "ies"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
+    <p>${mainGroups.length ? `Start with the first item and work down the list. Each priority below explains what we found, why it matters, common options a team may consider, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(priorityGroupTitle(mainGroups[0]))}. The report shows only the ${e(mainGroups.length)} accepted primary priorit${mainGroups.length === 1 ? "y" : "ies"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
     <h3>What we know</h3>
     <p>Each primary item below is linked to an evidence-backed finding, its assessed scope, and a verification step.</p>
     <div class="priority-sequence">${cards}</div>
@@ -2390,6 +2396,8 @@ footer {
 
   body.viewer-ready main > section.viewer-active { display:block !important; }
 
+  .priority-sequence { display:block; }
+
   .card:not(.primary-page-card),
   .pillar,
   .priority-action,
@@ -2694,6 +2702,39 @@ a {
   color:var(--prysm-ink);
   font-size:16px;
   line-height:1.5;
+  margin:0;
+}
+
+.remediation-disclaimer {
+  color:var(--prysm-muted);
+  font-size:14px;
+  margin:0 0 10px;
+}
+
+.common-remediation-options {
+  display:grid;
+  gap:8px;
+}
+
+.common-remediation-option {
+  background:rgba(255,255,255,.72);
+  border:1px solid var(--prysm-line);
+  border-radius:8px;
+  padding:10px 12px;
+}
+
+.common-remediation-option h4 {
+  color:var(--prysm-dark);
+  font-size:15px;
+  line-height:1.35;
+  margin:0 0 3px;
+}
+
+.common-remediation-option p,
+.remediation-unavailable {
+  color:var(--prysm-ink);
+  font-size:15px;
+  line-height:1.45;
   margin:0;
 }
 
@@ -3374,6 +3415,29 @@ details[open] > summary {
     page-break-inside:avoid;
     break-inside:avoid;
   }
+}
+
+@media print {
+  .action-page .priority-sequence { display:block; }
+  .action-page .priority-action {
+    margin:0 0 8px;
+    padding:10px;
+    page-break-inside:avoid;
+    break-inside:avoid;
+  }
+  .action-page .priority-action-heading { gap:8px; margin-bottom:8px; }
+  .action-page .priority-rank { flex-basis:28px; height:28px; width:28px; }
+  .action-page .priority-action h3 { font-size:17px; }
+  .action-page .priority-action-fields { gap:6px 8px; }
+  .action-page .priority-field { padding:7px 9px; }
+  .action-page .priority-field dt { font-size:10px; margin-bottom:2px; }
+  .action-page .priority-field dd { font-size:12px; line-height:1.28; }
+  .action-page .remediation-disclaimer { font-size:11px; margin-bottom:5px; }
+  .action-page .common-remediation-options { gap:4px; }
+  .action-page .common-remediation-option { padding:6px 8px; }
+  .action-page .common-remediation-option h4 { font-size:12px; margin-bottom:2px; }
+  .action-page .common-remediation-option p,
+  .action-page .remediation-unavailable { font-size:12px; line-height:1.28; }
 }
 
 .pillar-score,
