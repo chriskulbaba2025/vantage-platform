@@ -348,6 +348,18 @@ function fieldMatches(field, configuredField) {
     : field === configuredField;
 }
 
+function deriveEvidenceGrade(finding, configuredFields) {
+  const relevant = (finding?.evidence || []).filter((record) =>
+    configuredFields.some((field) => fieldMatches(record?.field, field)),
+  );
+  if (!relevant.length) return "UNKNOWN";
+  const statuses = relevant.map((record) => String(record?.sourceStatus || "UNKNOWN").toUpperCase());
+  const confidence = String(finding?.confidence || "insufficient").toLowerCase();
+  const fullyAvailable = statuses.every((status) => status === "AVAILABLE");
+  const strongConfidence = ["deterministic", "strongly_supported"].includes(confidence);
+  return fullyAvailable && strongConfidence ? "CONFIRMED" : "PARTIAL";
+}
+
 function resolveEvidenceRefs(finding, configuredFields, ruleId) {
   const refs = [];
   for (const record of finding?.evidence || []) {
@@ -383,7 +395,7 @@ function buildAuthorityRecord(entryDefinition, finding, decisionEvidence, pageRe
     failureMode: entryDefinition.failureMode,
     findingRefs: [finding.findingId],
     evidenceRefs,
-    evidenceGrade: entryDefinition.evidenceGrade,
+    evidenceGrade: deriveEvidenceGrade(finding, entryDefinition.evidenceFields),
     prescriptionMode: entryDefinition.prescriptionMode,
     problem: entryDefinition.problem,
     whyItMatters: entryDefinition.whyItMatters,
