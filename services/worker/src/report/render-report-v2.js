@@ -976,7 +976,7 @@ function conversionPathSection(model, pageState) {
     ? `<ol>${journeyActions.map((record) => `<li>${e(executivePriorityTitle(record))} <a href="#priority-fixes" data-solution-id="${e(record.solutionId)}">Review the recorded action</a></li>`).join("")}</ol>`
     : "<p>No evidence-backed priority action is available; do not add work to fill the sequence.</p>";
   if (paths.length === 0) {
-    return `<section id="paths" class="card">
+    return `<section id="paths" class="card" data-narrative-state="${e(pageState.state)}">
       <p class="muted small">Conversion Journey</p>
       <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
       <h2>Can visitors move from interest to action?</h2>
@@ -993,7 +993,7 @@ function conversionPathSection(model, pageState) {
 
   const verdict = pageState.message;
 
-  return `<section id="paths" class="card primary-page-card journey-page">
+  return `<section id="paths" class="card primary-page-card journey-page" data-narrative-state="${e(pageState.state)}">
     <p class="muted small">Conversion Journey</p>
     <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
     <h2>Can visitors move from interest to action?</h2>
@@ -1364,7 +1364,7 @@ function contentOpportunitiesSection(model, pageState) {
     : "<p>No additional ranked content opportunity is available.</p>";
 
   return `
-  <section id="content-ideas" class="card primary-page-card content-page">
+  <section id="content-ideas" class="card primary-page-card content-page" data-narrative-state="${e(pageState.state)}">
     <p class="muted small">Content Opportunities</p>
     <h2>What content would help buyers move forward?</h2>
     <p class="content-opportunities-verdict">${e(clientCopy(pageState.message))}</p>
