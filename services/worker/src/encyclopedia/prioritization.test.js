@@ -88,3 +88,26 @@ test("ENC-T4-04: clear, watch and opportunity outcomes remain distinct", () => {
   assert.equal(watch.frictionState, FRICTION_STATES.WATCH);
   assert.equal(challengePriorityUnit({ ...opportunity, canonicalProblemId: "E01", scope: { urls: ["https://example.test"] }, frictionState: FRICTION_STATES.CLEAR, opportunity: true }).valid, false);
 });
+
+
+test("ENC-T3-STANDALONE-ID: standalone priority units retain their source finding IDs for downstream report linkage", () => {
+  const projections = [{
+    findingId: "F-PERF",
+    canonicalProblemId: "I01",
+    primary: true,
+    title: "Slow primary content display",
+    frictionState: FRICTION_STATES.FRICTION,
+    scope: { level: "page", urls: ["https://example.test/"] },
+    evidence: [{ sourceStatus: "AVAILABLE" }],
+    evidenceLineage: { keys: ["artifact:perf#lcp_ms"], primaryKey: "artifact:perf#lcp_ms" },
+    evidenceIndependence: { keys: ["artifact:perf#lcp_ms"], independentFamilyCount: 1 },
+    confidence: "deterministic",
+    severity: "High",
+    scoreBearing: true,
+    deviceContext: ["mobile"],
+    freshness: { status: "CURRENT" },
+  }];
+  const units = buildPriorityUnits(projections, { relationships: [] });
+  assert.equal(units.length, 1);
+  assert.deepEqual(units[0].findingIds, ["F-PERF"]);
+});
