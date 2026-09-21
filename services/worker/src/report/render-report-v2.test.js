@@ -537,7 +537,7 @@ test("P11: competitor comparison explains the named set without market claims", 
     "Competitive position",
     "Important differences",
     "Where your website is holding its own",
-    "Where competitors create a better buying experience",
+    "Where competitors show stronger signals",
     "Where there may be room to stand apart",
     "What should you do because of this comparison?",
     "What not to copy",
@@ -696,4 +696,87 @@ test("AUTH-CLOSURE-02: final report has no independent remedy structures", () =>
   assert.match(html, /data-solution-id=/);
   assert.match(html, /What to do/);
   assert.match(html, /canonical-solution-reference/);
+});
+
+
+test("MVP-CLIENT-01: current Encyclopedia accepted priority units are the only primary client actions", () => {
+  const fixture = priorityModel();
+  const canonicalHtml = renderReportV2(fixture);
+  const canonicalIds = [...canonicalHtml.matchAll(/data-solution-id="([^"]+)"/g)].map((match) => match[1]);
+  assert.ok(canonicalIds.length > 0);
+
+  const candidateFindingIds = (fixture.decisionHierarchy?.orderedFindingIds || []).filter(Boolean);
+  assert.ok(candidateFindingIds.length >= 2, "fixture exposes multiple hierarchy findings");
+  const acceptedFindingId = candidateFindingIds[0];
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: [{
+      type: "reviewed standalone material finding",
+      findingId: acceptedFindingId,
+      findingIds: [acceptedFindingId],
+      canonicalProblemId: "I01",
+      title: "Accepted client priority",
+      frictionState: "FRICTION",
+      evidence: [{ sourceStatus: "AVAILABLE" }],
+    }],
+  };
+
+  const html = renderReportV2(fixture);
+  const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 1);
+  assert.doesNotMatch(blockers, /No Encyclopedia priority unit with first diagnostic checks is linked/);
+  assert.match(blockers, /Check 1:/);
+});
+
+test("MVP-CLIENT-02: primary client pages do not expose internal narrative-state labels or bounded-action jargon", () => {
+  const html = renderReportV2(priorityModel());
+  const primaryEnd = html.indexOf('id="pillars"');
+  const primary = html.slice(0, primaryEnd > 0 ? primaryEnd : html.length);
+  const visible = primary.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  assert.doesNotMatch(visible, /\bBounded action\b/);
+  assert.doesNotMatch(visible, /\b(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)\b/);
+});
+
+test("MVP-CLIENT-03: competitor benchmark does not compare page-count coverage with qualitative competitor signals", () => {
+  const fixture = model();
+  fixture.input = { ...fixture.input, businessName: "Example Business" };
+  fixture.sourceStatus = { ...fixture.sourceStatus, competitors: "AVAILABLE" };
+  fixture.competitors = {
+    comparisons: [
+      { name: "Red Example", url: "https://red.example", status: "AVAILABLE", contentDepth: "Strong" },
+      { name: "Blue Example", url: "https://blue.example", status: "AVAILABLE", contentDepth: "Moderate" },
+    ],
+    opportunities: { gaps: [], limitations: [] },
+  };
+  const html = renderReportV2(fixture);
+  const page = html.slice(html.indexOf('id="competitors"'), html.indexOf('id="competitor-detail"'));
+  assert.match(page, /Service depth/);
+  assert.doesNotMatch(page, /page\(s\) reviewed/);
+});
+
+test("MVP-CLIENT-04: obvious crawl taxonomy noise is excluded from primary content strengths", () => {
+  const fixture = model();
+  fixture.evidence.site.services = ["Web design"];
+  fixture.evidence.site.topicKeywords = ["tagged by kindness inc", "apply to work at tbk", "4 0", "create", "Useful buyer topic"];
+  const html = renderReportV2(fixture);
+  const page = html.slice(html.indexOf('id="content-ideas"'), html.indexOf('id="content-opportunities-detail"'));
+  assert.match(page, /Web design/);
+  assert.doesNotMatch(page, /tagged by kindness inc|apply to work at tbk|>4 0<|>create</i);
+});
+
+test("MVP-CLIENT-05: print contract protects report tables and headings", () => {
+  const html = renderReportV2(model());
+  assert.match(html, /table-layout:fixed/);
+  assert.match(html, /overflow-wrap:anywhere/);
+  assert.match(html, /break-after:avoid-page/);
+});
+
+test("MVP-CLIENT-06: competitor source status falls back to canonical report source status", () => {
+  const fixture = model();
+  fixture.sourceStatus = { ...fixture.sourceStatus, competitors: "AVAILABLE" };
+  fixture.evidence.competitors = null;
+  const html = renderReportV2(fixture);
+  const visible = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  assert.match(visible, /Competitor review:\s*Reviewed/);
+  assert.doesNotMatch(visible, /Competitor review:\s*Not collected/);
 });
