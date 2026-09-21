@@ -241,7 +241,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(visibleStatusText, /\bAVAILABLE\b/, "approved evidence-state vocabulary remains intact");
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
-  assert.match(blockers, /Start with the first item and work down the list\. Each fix below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
+  assert.match(blockers, /Start with the first item and work down the list\. Each priority below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
   assert.doesNotMatch(blockers, /These actions follow the governed priority order\./);
   assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
@@ -256,7 +256,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
     assert.match(blockers, new RegExp(label), `required client field: ${label}`);
   }
   assert.doesNotMatch(blockers, /<dt>What needs attention<\/dt>/);
-  const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)" data-solution-id="([^"]+)">([\s\S]*?)<\/article>/g)];
+  const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)" data-solution-id="([^"]+)" data-priority-unit-type="[^"]+">([\s\S]*?)<\/article>/g)];
   assert.equal(cards.length, 3, "exactly the governed canonical priority cards are rendered");
   const ranks = cards.map((match) => Number(match[1]));
   assert.deepEqual(ranks, [1, 2, 3], "canonical sequence is rendered once in governed order");
@@ -270,7 +270,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, />(?:LOW|MEDIUM|HIGH|SUPPORTED|PARTIAL|CONDITIONAL|UNKNOWN|UNAVAILABLE|FIX_NOW|FIX_LATER|HOLD)</);
   assert.doesNotMatch(blockers, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
-  const orderedLabels = ["What we know", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
+  const orderedLabels = ["What we know", "Why this is a priority", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
   let lastLabel = -1;
   for (const label of orderedLabels) {
     const nextLabel = blockers.indexOf(`<dt>${label}</dt>`);
