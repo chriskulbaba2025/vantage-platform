@@ -362,7 +362,7 @@ test("S03: Conversion Journey maps supported Encyclopedia friction without asser
   ]) assert.match(html, new RegExp(text));
   assert.equal((html.match(/class="conversion-journey-detail-card"/g) || []).length, 3);
   assert.match(html, /data-encyclopedia-problem="A01"/);
-  assert.match(html, /analytics evidence status/i);
+  assert.match(html, /analytics evidence:/i);
   assert.match(html, /abandonment.*cannot be confirmed/i);
   assert.doesNotMatch(html, /proves the cause|causes abandonment|guarantees conversion/);
   const page3 = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
