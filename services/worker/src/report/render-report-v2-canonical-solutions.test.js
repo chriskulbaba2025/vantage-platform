@@ -125,6 +125,32 @@ test("missing canonical solutions fail closed without legacy remedy fallback", (
   assert.doesNotMatch(priority, /recommendation|businessImpact|how to fix it/i);
 });
 
+test("intentionally hidden security solution does not invalidate its governed hierarchy row", () => {
+  const canonicalSolutions = {
+    records: [solution("SOL-ONE", 1), solution("SOL-TWO", 2), solution("SOL-SECURITY", 3)],
+    sequence: ["SOL-ONE", "SOL-TWO", "SOL-SECURITY"],
+  };
+  const candidate = model(canonicalSolutions);
+  candidate.findings.push({ findingId: "finding-3", actionable: true, ruleId: "VAN-TECH-003", scoreBearing: true });
+  candidate.decisionHierarchy.orderedFindingIds.push("finding-3");
+
+  const html = renderReportV2(candidate);
+
+  assert.doesNotMatch(html, /data-solution-id="SOL-SECURITY"/);
+  assert.match(html, /data-viewer-version=/);
+});
+
+test("actionable non-security hierarchy rows still require canonical solutions", () => {
+  const candidate = model({
+    records: [solution("SOL-ONE", 1), solution("SOL-TWO", 2)],
+    sequence: ["SOL-ONE", "SOL-TWO"],
+  });
+  candidate.findings.push({ findingId: "finding-3", actionable: true, ruleId: "VAN-CONTENT-001", scoreBearing: true });
+  candidate.decisionHierarchy.orderedFindingIds.push("finding-3");
+
+  assert.throws(() => renderReportV2(candidate), /Canonical solution missing for governed hierarchy finding: finding-3/);
+});
+
 test("viewer architecture remains six primary pages plus Supporting Detail", () => {
   assert.deepEqual(REPORT_V2_VIEWER_PAGES.map((page) => page.pageId), [
     "executive-scorecard", "priority-fixes", "conversion-paths", "content-ideas",

@@ -182,6 +182,15 @@ function clientFacingReportModel(model) {
   return {
     ...model,
     findings,
+    decisionHierarchy: model?.decisionHierarchy
+      ? {
+          ...model.decisionHierarchy,
+          orderedFindingIds: (model.decisionHierarchy.orderedFindingIds || [])
+            .filter((findingId) => !securityFindingIds.has(findingId)),
+          actions: (model.decisionHierarchy.actions || [])
+            .filter((action) => !securityFindingIds.has(action.findingId)),
+        }
+      : model?.decisionHierarchy,
     suppressedFindingReasons,
     canonicalSolutions: canonicalSolutions
       ? {

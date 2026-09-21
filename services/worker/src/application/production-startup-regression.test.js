@@ -52,6 +52,17 @@ function n8nCalls() {
   return capturedCalls.filter((c) => c.url.includes("n8n"));
 }
 
+async function importServerWithoutBindingTestPort() {
+  const priorTestMode = process.env.VANTAGE_TEST_MODE;
+  process.env.VANTAGE_TEST_MODE = "true";
+  try {
+    return await import("../server.js");
+  } finally {
+    if (priorTestMode === undefined) delete process.env.VANTAGE_TEST_MODE;
+    else process.env.VANTAGE_TEST_MODE = priorTestMode;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // BL-10: Every import path in the server.js startup graph is inert
 // ---------------------------------------------------------------------------
@@ -156,7 +167,7 @@ describe("BL-10: Startup import graph — zero provider calls", () => {
 describe("BL-11: Health path is inert", () => {
 
   it("createRequestHandler with health route makes 0 calls", async () => {
-    const { createRequestHandler } = await import("../server.js");
+    const { createRequestHandler } = await importServerWithoutBindingTestPort();
 
     const before = capturedCalls.length;
     const handler = createRequestHandler({
@@ -212,7 +223,7 @@ describe("BL-11: Health path is inert", () => {
   });
 
   it("POST /api/v1/audits without auth returns 401 (0 calls)", async () => {
-    const { createRequestHandler } = await import("../server.js");
+    const { createRequestHandler } = await importServerWithoutBindingTestPort();
 
     const before = capturedCalls.length;
     const handler = createRequestHandler({

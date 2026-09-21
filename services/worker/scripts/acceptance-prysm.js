@@ -485,7 +485,10 @@ for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
     if (html.includes(SENTINELS.platform)) htmlContainsPlatform = true;
     if (html.includes(SENTINELS.backlinkDomain)) htmlContainsBacklink = true;
     if (html.includes(SENTINELS.competitorDomain)) htmlContainsCompetitor = true;
-    if (html.includes("No directly comparable named competitor evidence was available for this audit.")) {
+    if (
+      html.toLowerCase().includes("named competitor scope is not available.") &&
+      html.toLowerCase().includes("not available \u2014 comparable evidence is insufficient.")
+    ) {
       htmlContainsNoComparableCompetitorState = true;
     }
   }

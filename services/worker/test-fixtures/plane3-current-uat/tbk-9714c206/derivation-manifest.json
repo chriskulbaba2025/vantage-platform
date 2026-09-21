@@ -4,7 +4,7 @@
   "auditId": "9714c206-8ed3-4686-8fe2-ceeca0ca0f82",
   "semanticCandidateSha": "d7ce3cfe69d5ada8f6d4541c8a9603f17e932a97",
   "derivedFromApplicationHeadSha": "5f2c1a27cbb6eaf022fb9d61dc9a2d6c37a9c3eb",
-  "scoringVersion": "4.1.1",
+  "scoringVersion": "4.1.2",
   "scoreSetVersion": "2.0.0",
   "writerInputVersion": "1.2.0",
   "rootCauseRuleId": "VAN-CONTENT-002",
@@ -17,9 +17,9 @@
     "manifests/canonical-evidence-record.json": "ee82141281ceff92259c04b6438476f985d277580795cfc46fab75af78cfa5de"
   },
   "derivativeHashes": {
-    "scores.json": "e92711f22e076a757caf7ac724b84b8b14d0ea39b66f696f5daa5dbf97e4195b",
-    "findings.json": "ad84a761e6c7eda385ead7cd2b9b2f37c42f704ff5664407747b1942ccaf3827",
-    "writer-input.json": "d95dc2922f8cef3813812a7f3704aef10fc78e5dc2e43e4dd04ddf8fdfa3d6da"
+    "scores.json": "2de1a829edf83c1e072fe055b6c8d66412d6a4e4b17fcc805c8384d6bed957d4",
+    "findings.json": "314df233b36d818051d8121dba19929879342a0cfa6a987544d55568781a87e7",
+    "writer-input.json": "11c2717e73e44c82658c154cd6ad5aafef8524d423960231c0b8dd8f998f18b3"
   },
   "materialEquivalence": "NOT_REQUIRED_CURRENT_SCORING_AUTHORITATIVE",
   "decisionHierarchy": {
@@ -30,5 +30,14 @@
   "modelCalls": 0,
   "historicalMutation": 0,
   "ga4CommercialOutcomeAuthority": "PAUSED",
-  "derivedAt": "2026-09-10T00:00:00.000Z"
+  "derivedAt": "2026-09-10T00:00:00.000Z",
+  "authorityReconciliation": {
+    "fromRuleVersion": "4.1.1",
+    "toRuleVersion": "4.1.2",
+    "authorityCommit": "0e4a97e68f19b974e7ef3dfdd1480cbc390d090b",
+    "authorityPath": "services/worker/src/solution/solution-authority-provider.js",
+    "authoritySymbol": "SOLUTION_RULE_VERSION",
+    "authorityValue": "4.1.2",
+    "originalDerivedFromApplicationHeadSha": "5f2c1a27cbb6eaf022fb9d61dc9a2d6c37a9c3eb"
+  }
 }

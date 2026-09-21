@@ -1234,12 +1234,12 @@ test("DQV-005: canonical FAILED competitor status reaches Viewer v2 and the pers
   );
 
   const start = html.indexOf(
-    "Competitive context",
+    '<section id="competitors"',
   );
 
   assert.ok(
     start > -1,
-    "Viewer v2 competitor section must render",
+    "Viewer v2 primary competitor page must render",
   );
 
   const competitorSection = html.slice(
@@ -1249,19 +1249,13 @@ test("DQV-005: canonical FAILED competitor status reaches Viewer v2 and the pers
 
   assert.match(
     competitorSection,
-    /attempted but failed/i,
-    "Viewer v2 must receive and explain the canonical FAILED status",
-  );
-
-  assert.match(
-    competitorSection,
-    /chip cap-missing/,
-    "FAILED competitor evidence must use the failure presentation state",
+    /The competitor review could not be completed, so no clear difference can be concluded\./i,
+    "Viewer v2 must present the bounded FAILED-state explanation",
   );
 
   assert.doesNotMatch(
     competitorSection,
-    /Competitor analysis was not applicable/i,
+    /A competitor review was not part of this audit/i,
     "FAILED must never degrade to NOT_APPLICABLE",
   );
 });

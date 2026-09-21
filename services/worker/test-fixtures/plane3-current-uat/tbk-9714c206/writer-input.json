@@ -54,7 +54,7 @@
     {
       "findingId": "13b9521f-8e1b-4d31-bfd6-f3337c54b141",
       "ruleId": "VAN-TECH-001",
-      "ruleVersion": "4.1.1",
+      "ruleVersion": "4.1.2",
       "dimension": "technical_performance",
       "module": "technical_hygiene",
       "title": "Meta descriptions were not detected on some assessed pages",
@@ -106,7 +106,7 @@
     {
       "findingId": "509d1795-9dcb-400e-8242-41f58647b40a",
       "ruleId": "VAN-TECH-002",
-      "ruleVersion": "4.1.1",
+      "ruleVersion": "4.1.2",
       "dimension": "technical_performance",
       "module": "technical_hygiene",
       "title": "Heading structure is inconsistent",
@@ -156,7 +156,7 @@
     {
       "findingId": "6e693ba3-22c3-4ec4-9aa9-fdf6ed884e40",
       "ruleId": "VAN-TECH-003",
-      "ruleVersion": "4.1.1",
+      "ruleVersion": "4.1.2",
       "dimension": "technical_performance",
       "module": "technical_hygiene",
       "title": "Security headers are incomplete",
@@ -199,7 +199,7 @@
     {
       "findingId": "b2fca59f-8982-43b9-bab0-a8da4080bc45",
       "ruleId": "VAN-CONTENT-002",
-      "ruleVersion": "4.1.1",
+      "ruleVersion": "4.1.2",
       "dimension": "content_funnel",
       "module": "funnel_coverage",
       "title": "Explicit FAQ content was not detected in the available partial assessment",
@@ -497,7 +497,7 @@
     }
   },
   "scoreGovernance": {
-    "scoringVersion": "4.1.1",
+    "scoringVersion": "4.1.2",
     "dimensionEligibility": {
       "conversion_pathways": true,
       "trust_eeat": true,

@@ -27,6 +27,8 @@ import { createMemoryArtifactStore } from "../../src/storage/memory-artifact-sto
 import { createGovernedArtifactStore, buildArtifactKey } from "../../src/storage/governed-artifact-store.js";
 import { createAuditOrchestrator } from "../../src/orchestration/audit-orchestrator.js";
 import { LIFECYCLE_STATE } from "../../src/lifecycle/state-enum.js";
+import { buildCrossReportInterpretation } from "../../src/report-model/cross-report-interpretation.js";
+import { buildCapabilityEvidence } from "../../src/evidence/capability-evidence.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,6 +42,7 @@ addFormats(_ajv);
   "artifact-record.schema.json",
   "audit-request.schema.json",
   "canonical-evidence.schema.json",
+  "capability-evidence.schema.json",
   "decision-evidence.schema.json",
   "finding.schema.json",
   "lifecycle-event.schema.json",
@@ -48,6 +51,8 @@ addFormats(_ajv);
   "report-content.schema.json",
   "report-manifest.schema.json",
   "report-view-model.schema.json",
+  "report-view-model-current.schema.json",
+  "score-current.schema.json",
   "score.schema.json",
   "source-result.schema.json",
 ].forEach((f) => {
@@ -142,6 +147,7 @@ function makeDecisionEvidence(performanceScores = {}) {
       limitations: [],
     },
     competitors: [],
+    suppliedCompetitors: [],
     backlinks: { sourceStatus: "AVAILABLE", collectedAt: clock.now(), provider: "controlled", adapterVersion: "1.0.0", limitations: [] },
     ga4: { sourceStatus: "AVAILABLE", collectedAt: clock.now(), provider: "controlled", adapterVersion: "1.0.0", limitations: [] },
     gsc: { sourceStatus: "AVAILABLE", collectedAt: clock.now(), provider: "controlled", adapterVersion: "1.0.0", limitations: [] },
@@ -171,6 +177,18 @@ async function setupOrchestrator() {
 async function seedToNarrativeReady({ artifactStore, lifecycleService }, { auditId, tenantId, clientId, scores, decisionEvidence, findings }) {
   const scope = { tenantId, clientId, auditId };
   const executionId = randomUUID();
+  const scoreArtifact = scores.contractVersion === "2.0.0"
+    ? {
+      ...scores,
+      rootCauseRuleId: findings[0]?.ruleId || scores.rootCauseRuleId,
+      decisionHierarchy: {
+        provenance: "scoreAudit/action-priority",
+        rootCauseRuleId: findings[0]?.ruleId || scores.rootCauseRuleId,
+        orderedFindingIds: findings.map((finding) => finding.findingId),
+        actions: findings.map((finding, index) => ({ findingId: finding.findingId, rank: index + 1 })),
+      },
+    }
+    : scores;
 
   // Governed lifecycle transitions (production transition boundary)
   await lifecycleService.create({ auditId, tenantId, clientId, idempotencyKey: randomUUID() });
@@ -211,7 +229,7 @@ async function seedToNarrativeReady({ artifactStore, lifecycleService }, { audit
 
   // Persist scores (scoring artifact)
   await artifactStore.put({
-    bytes: Buffer.from(JSON.stringify(scores), "utf-8"),
+    bytes: Buffer.from(JSON.stringify(scoreArtifact), "utf-8"),
     contentType: "application/json",
     scope: { ...scope, category: "canonical", artifactName: "scores.json" },
   });
@@ -230,12 +248,51 @@ async function seedToNarrativeReady({ artifactStore, lifecycleService }, { audit
     scope: { ...scope, category: "canonical", artifactName: "decision-evidence.json" },
   });
 
+  if (scoreArtifact.contractVersion === "2.0.0") {
+    const capabilityEvidence = buildCapabilityEvidence({
+      decisionEvidence,
+      auditId,
+      generatedAt: clock.now(),
+    });
+    await artifactStore.put({
+      bytes: Buffer.from(JSON.stringify(capabilityEvidence), "utf-8"),
+      contentType: "application/json",
+      scope: { ...scope, category: "canonical", artifactName: "capability-evidence.json" },
+    });
+  }
+
   return { tenantId, clientId, auditId, executionId };
 }
 
 function makeScores(overrides = {}) {
   const s = loadFixture("valid-scoring-model.json");
-  return { ...s, ...overrides };
+  const evidence = makeDecisionEvidence();
+  return {
+    ...s,
+    // Exercise the current persisted ScoreSet hydration contract used by the
+    // current page consumers below.
+    contractVersion: "2.0.0",
+    // These tests do not exercise content ideas; keep the fixture valid under
+    // the current contract without carrying legacy unsupported entries.
+    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
+    // These finalization tests request no competitors. Keep the model aligned
+    // with that empty authoritative scope; competitor allowlist behavior has
+    // dedicated positive and negative coverage elsewhere.
+    competitors: { ...(s.competitors || {}), comparisons: [] },
+    // The legacy WP10 scoring fixture predates the current persisted Client
+    // Truth projection. Use its deterministic production builder from the
+    // same fixture evidence so this test reaches finalization/rendering with
+    // a valid current model instead of hand-authoring client truth.
+    crossReportInterpretation: buildCrossReportInterpretation({
+      site: evidence.site,
+      performance: evidence.performance,
+      scores: s.scores || {},
+      bands: s.bands || {},
+      conversionPaths: [],
+      capabilities: {},
+    }),
+    ...overrides,
+  };
 }
 
 function makeFindings() {
@@ -478,7 +535,9 @@ test("PRYSM-CLOSE-07: renderer receives exactly the validated frozen model", asy
   // Re-validate the received model against the production schema to prove
   // the renderer input is schema-valid (not just internally consistent).
   const revalidated = validateContract(
-    "https://vantage-platform.io/prysm/contracts/v1/report-view-model.schema.json",
+    receivedModel.contractVersion === "2.0.0"
+      ? "https://vantage-platform.io/prysm/contracts/v2/report-view-model.schema.json"
+      : "https://vantage-platform.io/prysm/contracts/v1/report-view-model.schema.json",
     receivedModel,
   );
   assert.equal(revalidated.valid, true, `renderer input revalidates: ${JSON.stringify(revalidated.errors?.slice(0, 3))}`);

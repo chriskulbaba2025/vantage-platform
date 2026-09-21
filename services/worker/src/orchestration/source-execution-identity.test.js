@@ -52,7 +52,7 @@ test("changing page limits changes the source execution key", () => {
   assert.notEqual(base.sourceExecutionKey, changed.sourceExecutionKey);
 });
 
-test("EVIDENCE-02: omitted Content Parsing limit is identity-equivalent to explicit 20", () => {
+test("EVIDENCE-02: omitted Content Parsing limit is identity-equivalent to explicit 50", () => {
   const omitted = buildSourceExecutionIdentity({
     auditRequest: BASE_REQUEST,
     source: "dataforseo-onpage",
@@ -63,7 +63,7 @@ test("EVIDENCE-02: omitted Content Parsing limit is identity-equivalent to expli
     auditRequest: {
       ...BASE_REQUEST,
       crawl: {
-        contentParsingPageLimit: 20,
+        contentParsingPageLimit: 50,
       },
     },
     source: "dataforseo-onpage",
@@ -86,7 +86,7 @@ test("EVIDENCE-02: omitted Content Parsing limit is identity-equivalent to expli
   );
 });
 
-test("EVIDENCE-02: explicit Content Parsing limit 30 differs from default 20", () => {
+test("EVIDENCE-02: explicit Content Parsing limit 30 differs from default 50", () => {
   const base = buildSourceExecutionIdentity({
     auditRequest: BASE_REQUEST,
     source: "dataforseo-onpage",
