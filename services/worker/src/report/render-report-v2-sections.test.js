@@ -17,6 +17,7 @@ import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReportV2 as renderReportV2Base } from "./render-report-v2.js";
 import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
 import { renderReport } from "./render-report.js";
+import { eeatSection } from "./report-detail-sections.js";
 
 const FIXED_TS = "2026-01-15T12:00:00.000Z";
 
@@ -405,6 +406,7 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
   const trustPage = html.slice(html.indexOf('<section id="eeat"'), html.indexOf('<section id="eeat-detail"'));
   assert.match(trustPage, /data-narrative-state="STRONG"/);
   assert.match(trustPage, /Visible proof is established in the reviewed scope/);
+  assert.equal((trustPage.match(/Visible proof is established in the reviewed scope/g) || []).length, 1, "the Trust state message and verdict are not repeated");
   assert.doesNotMatch(trustPage, /relative strength at|Priority Fix threshold/);
   assert.match(trustPage, /How should you use the proof you already have\?/);
   assert.match(trustPage, /Check whether the right proof appears close enough to the decision it supports/);
@@ -414,6 +416,11 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
   assert.match(trustPage, /does not establish AI visibility, citation, or inclusion/);
   assert.doesNotMatch(trustPage, /guarantees? rankings|guarantees? traffic|guarantees? citations|guarantees? conversion/);
   assert.doesNotMatch(trustPage, /Proof already available but underused|Detected proof is listed here as an available asset/);
+});
+
+test("TRUST-WORDING-02: a Trust verdict remains when no shared narrative message is supplied", () => {
+  const rendered = eeatSection(scoreAudit(INPUT, richEvidence()), null);
+  assert.match(rendered, /class="trust-verdict">Trust evidence is shown below within its assessed scope\.<\/p>/);
 });
 
 test("SUPPORTING-DETAIL-PERFORMANCE-02: raw performance diagnostics stay behind disclosure", async () => {

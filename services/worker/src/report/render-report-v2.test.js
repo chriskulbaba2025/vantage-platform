@@ -289,6 +289,34 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 3, "no second action sequence is introduced");
 });
 
+test("S02B: accepted priority display ranks remain contiguous when governed source ranks have gaps", () => {
+  const fixture = priorityModel();
+  const canonical = buildCanonicalSolutionSet({
+    findings: fixture.findings.filter((finding) => finding.findingId).map((finding) => {
+      const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
+      return authority ? {
+        ...finding,
+        ruleVersion: authority.ruleVersion,
+        evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
+      } : finding;
+    }),
+    scoreSet: fixture,
+    decisionEvidence: fixture.evidence,
+  });
+  const sparseCanonical = {
+    ...canonical,
+    records: canonical.records.map((record, index) => ({
+      ...record,
+      sequenceInputs: { ...record.sequenceInputs, governedRank: index === 0 ? 1 : index + 2 },
+    })),
+  };
+  const html = renderReportV2Base({ ...fixture, canonicalSolutions: sparseCanonical });
+  const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)"/g)];
+  assert.ok(cards.length > 1, "the fixture has multiple accepted priorities");
+  assert.deepEqual(cards.map((card) => Number(card[1])), cards.map((_card, index) => index + 1), "visible numbering is the filtered display order");
+});
+
 test("P9: conversion journey visual presents three complete client stages", () => {
   const fixture = model();
   fixture.conversionPaths = [{

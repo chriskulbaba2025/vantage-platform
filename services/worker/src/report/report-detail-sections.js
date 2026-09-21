@@ -95,13 +95,16 @@ function statusChip(status) {
   return `<span class="chip ${cls}">${e(label)}</span>${legacyAnchor}`;
 }
 
-function narrativeStateBlock(pageState) {
-  if (!pageState) return "";
-  const clientCopy = (value) => String(value ?? "")
+function clientNarrativeCopy(value) {
+  return String(value ?? "")
     .replace(/\bgoverned\b/gi, "reviewed")
     .replace(/\bbounded\b/gi, "limited")
     .replace(/\bcanonical\b/gi, "recorded");
-  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(clientCopy(pageState.message))}</p><p class="small"><strong>Next step:</strong> ${e(clientCopy(pageState.boundedAction))}</p>${pageState.limitations?.length ? `<p class="small"><strong>Limit:</strong> ${e(clientCopy(pageState.limitations.join(" ")))}</p>` : ""}</div>`;
+}
+
+function narrativeStateBlock(pageState) {
+  if (!pageState) return "";
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(clientNarrativeCopy(pageState.message))}</p><p class="small"><strong>Next step:</strong> ${e(clientNarrativeCopy(pageState.boundedAction))}</p>${pageState.limitations?.length ? `<p class="small"><strong>Limit:</strong> ${e(clientNarrativeCopy(pageState.limitations.join(" ")))}</p>` : ""}</div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +434,8 @@ export function eeatSection(model, pageState) {
     ["Risk reduction", [trust.contact, trust.policies, trust.pricing].some((value) => value === true), "Contact information, policies or terms, and pricing or investment context were observed."],
   ];
   const primaryVerdict = pageState?.message || "Trust evidence is shown below within its assessed scope.";
+  const normalizeVerdict = (value) => clientNarrativeCopy(value).trim().replace(/\s+/g, " ").toLowerCase();
+  const showPrimaryVerdict = normalizeVerdict(primaryVerdict) !== normalizeVerdict(pageState?.message);
   const confidenceNote = trustPartial
     ? "The available trust-proof assessment is partial, so no conclusion is made about unobserved signals or pages."
     : hasMaterialTrustFinding
@@ -453,7 +458,7 @@ export function eeatSection(model, pageState) {
     <p class="muted small">Trust &amp; Credibility</p>
     <h2>Can buyers find enough proof to feel confident?</h2>
     ${narrativeStateBlock(pageState)}
-    <p class="trust-verdict">${e(primaryVerdict)}</p>
+    ${showPrimaryVerdict ? `<p class="trust-verdict">${e(primaryVerdict)}</p>` : ""}
     <p class="small trust-score-explanation">${e(scoreExplanation)}</p>
     <p class="muted small">Trust, E-E-A-T &amp; Risk Reduction · E-E-A-T — Trust Readiness Detail</p>
 

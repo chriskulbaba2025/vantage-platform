@@ -936,11 +936,14 @@ function blockersSection(model, canonical, pageState) {
   const cleanupGroups = groups.slice(3);
   const cards = mainGroups.map((group, index) => {
     const record = group.primary;
-    const governedRank = record.sequenceInputs?.governedRank ?? index + 1;
+    // Visible ranks describe this filtered client list, not pre-filter source
+    // positions. Gaps can remain in the governed source sequence after
+    // lower-visibility records are intentionally omitted.
+    const displayRank = index + 1;
     const supporting = group.records.slice(1);
-    return `<article class="priority-action" data-priority-rank="${e(governedRank)}" data-solution-id="${e(record.solutionId)}" data-priority-unit-type="${e(group.unit?.type || "legacy")}">
+    return `<article class="priority-action" data-priority-rank="${e(displayRank)}" data-solution-id="${e(record.solutionId)}" data-priority-unit-type="${e(group.unit?.type || "legacy")}">
       <div class="priority-action-heading">
-        <span class="priority-rank" aria-label="Priority ${e(governedRank)}">${e(governedRank)}</span>
+        <span class="priority-rank" aria-label="Priority ${e(displayRank)}">${e(displayRank)}</span>
         <div>
           ${index === 0 ? '<span class="priority-start">Start here</span>' : ''}
           <h3>${e(priorityGroupTitle(group))}</h3>
