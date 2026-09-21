@@ -116,7 +116,7 @@ test("ENC-T3-STANDALONE-ID: standalone priority units retain their source findin
 test("ENC-T3-09: a current critical blocker is emitted once and is not duplicated as standalone", () => {
   const projection = {
     findingId: "F-BLOCK",
-    canonicalProblemId: "F02",
+    canonicalProblemId: "F04",
     primary: true,
     title: "Primary lead form is broken",
     frictionState: FRICTION_STATES.FRICTION,
