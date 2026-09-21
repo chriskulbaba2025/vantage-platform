@@ -324,7 +324,7 @@ test("KAREN-REG-01: the frozen Karen template still defines all 13 benchmark are
 test("KAREN-REG-02: the governed v2 report semantically covers every Karen benchmark area", () => {
   const { combined } = reportSurfaces();
   const benchmark = [
-    ["Scorecard", [/How ready is your website to convert visitors\?/, /What should you improve first\?/, /assessment is not whole-site complete/]],
+    ["Scorecard", [/How ready is your website to convert visitors\?/, /Accepted priorities/, /assessment is not whole-site complete/]],
     ["Priority Fixes", [/What should you fix first\?/]],
     ["Conversion Journey", [/Can visitors move from interest to action\?/]],
     ["Readiness Map", [/D\. Where are the problems\?/, /First Things First — Foundational Readiness/]],

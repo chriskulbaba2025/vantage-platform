@@ -201,7 +201,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   const html = renderReportV2(fixture);
   // A/B/C — executive scorecard
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Why is the score", "What is already working?", "What is holding the site back?", "What should you improve first?", "Current accepted priorities", "Next step &amp; limits", "Where was the evidence limited?"];
+  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Why is the score", "What is already working?", "What is holding the site back?", "Accepted priorities", "Next step &amp; limits", "Where was the evidence limited?"];
   let previous = -1;
   for (const heading of headings) {
     const next = executive.indexOf(heading);
@@ -457,11 +457,11 @@ function assertFrozenViewerHierarchy() {
     "supporting-detail": html.slice(html.indexOf('id="pillars"'), html.indexOf('id="blockers"')),
   };
   const required = {
-    "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "What should you improve first", "Current accepted priorities", "Next step &amp; limits", "What we could not confirm"],
+    "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "Accepted priorities", "Next step &amp; limits", "What we could not confirm"],
     "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence guardrail"],
     "conversion-paths": ["Reach the right page", "Understand enough to continue", "Take the next step", "Evidence seen:", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Evidence and limits"],
     "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
-    "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "How should you use the proof you already have", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Evidence and limits"],
+    "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "Optional trust-proof review", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Evidence and limits"],
     "competitor-benchmark": ["Who was compared", "Where are the meaningful differences", "What is worth learning from", "Competitor differences are context only", "What not to copy", "What this comparison cannot tell us", "What can this comparison confirm", "Next step"],
     "supporting-detail": ["What evidence sits behind the report", "How complete was the evidence", "What drove the readiness score", "What material findings were established", "What did the performance evidence show", "Page speed check evidence", "Real-user field data", "Where was evidence limited", "What source evidence was available", "How does this evidence support the report", "Conclusion", "Next step"],
   };
@@ -673,7 +673,7 @@ test("WP-G-03a: Executive summary references the single accepted action authorit
   const m = priorityModel();
   const html = renderReportV2(m);
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  assert.match(executive, /Current accepted priorities/);
+  assert.match(executive, /Accepted priorities/);
   assert.match(executive, /Priority Fixes/);
   assert.match(executive, /href="#priority-fixes">Priority Fixes<\/a>/);
   assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);

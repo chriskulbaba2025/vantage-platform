@@ -341,7 +341,7 @@ test("V2R-06: existing executive sections remain intact", async () => {
   const html = await render(m);
   for (const golden of [
     "How ready is your website to convert visitors?",
-    "What should you improve first?",
+    "Accepted priorities",
     "What is already working?",
     "Where was the evidence limited?",
     "Supporting Detail",
@@ -409,9 +409,9 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
   assert.match(trustPage, /Visible proof is established in the reviewed scope/);
   assert.equal((trustPage.match(/Visible proof is established in the reviewed scope/g) || []).length, 1, "the Trust state message and verdict are not repeated");
   assert.doesNotMatch(trustPage, /relative strength at|Priority Fix threshold/);
-  assert.match(trustPage, /How should you use the proof you already have\?/);
-  assert.match(trustPage, /Check whether the right proof appears close enough to the decision it supports/);
-  assert.match(trustPage, /PRYSM observed these trust assets, but did not establish their placement across every important conversion page/);
+  assert.match(trustPage, /Optional trust-proof review/);
+  assert.match(trustPage, /If you review placement, check whether the relevant proof appears close to the decision it supports/);
+  assert.match(trustPage, /These checks are supporting context; use Priority Fixes for accepted corrective priorities/);
   assert.match(trustPage, /search systems understand the site/);
   assert.match(trustPage, /AI search readiness/);
   assert.match(trustPage, /does not establish AI visibility, citation, or inclusion/);

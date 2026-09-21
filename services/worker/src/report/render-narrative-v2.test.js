@@ -522,7 +522,7 @@ test(
 
     for (const required of [
       "How ready is your website to convert visitors?",
-      "What should you improve first?",
+      "Accepted priorities",
       "What is already working?",
       "Where are the problems?",
       "What should you fix first?",
