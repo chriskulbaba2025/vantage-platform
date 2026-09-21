@@ -1,8 +1,8 @@
 # Project Adapter — PRYSM MVP Closure
 
-**Protocol:** Governed Coding Upgrade v2.4.0.  
-**Repository:** `chriskulbaba2025/vantage-platform`.  
-**Authoritative checkout:** `C:\Users\kulba\Desktop\vantage-platform-mvp-closure`.  
+**Protocol:** Governed Coding Upgrade v2.4.0.
+**Repository:** `chriskulbaba2025/vantage-platform`.
+**Authoritative checkout:** `C:\Users\kulba\Desktop\vantage-platform-mvp-closure`.
 **Branch:** `repair/prysm-mvp-client-readiness-2026-09-21`.
 
 ## Components and proof

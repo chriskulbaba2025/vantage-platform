@@ -1,7 +1,7 @@
 # PRYSM Next.js Security Upgrade — Intake
 
-**Change ID:** PRYSM-SECURITY-NEXT-UPGRADE-01  
-**Starting candidate:** `45cb20d40b4d3d382503aef1ca179b3cd4b24e64`  
+**Change ID:** PRYSM-SECURITY-NEXT-UPGRADE-01
+**Starting candidate:** `45cb20d40b4d3d382503aef1ca179b3cd4b24e64`
 **Tier:** T2 security/runtime and dependency change; staging confirmation is separately governed.
 
 ## Requested outcome
