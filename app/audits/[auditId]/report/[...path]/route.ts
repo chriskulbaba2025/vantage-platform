@@ -82,7 +82,7 @@ export async function GET(
       REVIEWER_ONLY_STATES.has(state) && filename === "index.html"
         ? result.body.toString("utf8").replace(
             /<body([^>]*)>/i,
-            `<body$1><div style="max-width:1200px;margin:16px auto 0;padding:0 24px;"><a href="/" style="display:inline-block;text-decoration:none;font-weight:600;">← Back to Dashboard</a></div>`,
+            `<body$1><div style="max-width:1200px;margin:16px auto 0;padding:0 24px;"><a href="/" class="no-print" style="display:inline-block;text-decoration:none;font-weight:600;">← Back to Dashboard</a></div>`,
           )
         : result.body;
 

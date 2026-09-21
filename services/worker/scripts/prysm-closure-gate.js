@@ -22,6 +22,8 @@ for (const path of required) {
 }
 
 const commands = [
+  [["--test", "scripts/report-route-print-nav.test.js"], "report route print-navigation contract"],
+
   [["--test", "src/evidence/*.test.js", "src/scoring/*.test.js", "src/report/*.test.js", "src/audit/*.test.js", "src/storage/*.test.js", "src/adapters/**/*.test.js", "src/auth/*.test.js", "src/n8n/*.test.js", "src/utils/*.test.js"], "worker regression families"],
   // production-bootstrap.test.js temporarily instruments globalThis.fetch;
   // serialize this family so sibling production-path files cannot race that
