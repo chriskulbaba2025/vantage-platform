@@ -325,6 +325,7 @@ function clientDecisionProjection(model, canonical) {
   return {
     groups,
     acceptedRecords,
+    acceptedUnits: groups.map((group) => group.unit).filter(Boolean),
     acceptedIds,
     acceptedFindingIds: new Set(groups.flatMap((group) => group.unit?.findingIds || []).filter(Boolean)),
     supportingRecords: (canonical?.ordered || []).filter(
@@ -979,7 +980,7 @@ function conversionPathSection(model, decisionProjection, pageState) {
     { title: "Take the next step", status: `${clientStatusLabel(capabilityStatus(model, "conversion.cta"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.form"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.path"))}`, evidence: paths.length ? paths.map((path) => `${path.name || "Recorded path"}: ${path.status || "Unknown"}.`).join(" ") : "No reviewed conversion-path record is available." },
   ];
   const journeyStageCards = journeyStages.map((stage, index) => `<article class="conversion-journey-step" data-journey-stage="${index + 1}"><span class="conversion-journey-step-number">${index + 1}</span><h3>${e(stage.title)}</h3><p><strong>Status:</strong> ${e(stage.status)}</p><p><strong>Evidence seen:</strong> ${e(stage.evidence)}</p></article>`).join("");
-  const encyclopediaUnits = model.encyclopedia?.status === "AVAILABLE" ? (model.encyclopedia.priorityUnits || []) : [];
+  const encyclopediaUnits = decisionProjection.acceptedUnits;
   const journeyFrictionCards = encyclopediaUnits.filter((unit) => {
     const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
     if (unit.frictionState !== "FRICTION" || !problem ||
@@ -995,6 +996,12 @@ function conversionPathSection(model, decisionProjection, pageState) {
   const frictionBlock = journeyFrictionCards.length
     ? `<div class="conversion-journey-card-grid">${journeyFrictionCards}</div>`
     : `<p>${model.encyclopedia?.status === "AVAILABLE" ? "No accepted priority has a supported relationship to visitor-path friction in the reviewed evidence." : "The Encyclopedia projection is NOT_AVAILABLE; no friction conclusion is added here."}</p>`;
+  const journeyVerdict = journeyFrictionCards.length
+    ? "Accepted priority evidence includes a supported relationship to visitor-path friction. Priority Fixes contains the corrective action and order."
+    : "The reviewed path records may include weak checks, but they are not independently accepted as visitor-friction priorities. This section presents evidence and limits only; use Priority Fixes for corrective work.";
+  const journeyLimitations = pageState.limitations.length
+    ? `<ul>${pageState.limitations.map((item) => `<li>${e(item)}</li>`).join("")}</ul>`
+    : "<p>No additional journey limitation was recorded in the report model.</p>";
   const clearPaths = paths.filter((path) => path.status === "Clear");
   const keepMarkup = clearPaths.length
     ? `<ul>${clearPaths.map((path) => `<li><strong>${e(path.name || "Reviewed path")}:</strong> a Clear path status was recorded for this item. This describes the reviewed check, not the behavior of every visitor.</li>`).join("")}</ul>`
@@ -1009,18 +1016,18 @@ function conversionPathSection(model, decisionProjection, pageState) {
       <p class="muted small">Conversion Journey</p>
       <p class="conversion-definition"><strong>Two different questions:</strong> offer clarity asks, “Do I understand what you sell and why I should care?” Conversion-path clarity asks, “Once I want to act, can I see how to proceed?”</p>
       <h2>Can visitors move from interest to action?</h2>
-      <p class="conversion-journey-verdict">${e(clientCopy(pageState.message))}</p>
+      <p class="conversion-journey-verdict">${e(journeyVerdict)}</p>
       <h3>How the journey works</h3><div class="conversion-journey-steps">${journeyStageCards}</div>
       <h3>Where can visitors lose momentum?</h3>${frictionBlock}
       <h3>What should you keep?</h3><p>No clear path record is available to identify a journey element to preserve.</p>
       <h3>What should you measure next?</h3>${measureMarkup}
       <h3>What cannot yet be measured?</h3><p>${e(limitation)}</p>
-      <h3>Evidence and limits</h3><p>${e(pageState.boundedAction)}</p>${priorityReference}
+      <h3>Evidence and limits</h3>${journeyLimitations}${priorityReference}
       ${conversionEvidenceNote}
     </section>`;
   }
 
-  const verdict = pageState.message;
+  const verdict = journeyVerdict;
 
   return `<section id="paths" class="card primary-page-card journey-page" data-narrative-state="${e(pageState.state)}">
     <p class="muted small">Conversion Journey</p>
@@ -1033,7 +1040,7 @@ function conversionPathSection(model, decisionProjection, pageState) {
     <h3>What should you keep?</h3><div class="conversion-journey-strength">${keepMarkup}</div>
     <h3>What should you measure next?</h3>${measureMarkup}
     <h3>What cannot yet be measured?</h3><p>${e(limitation)}</p>
-    <h3>Evidence and limits</h3><p>${e(pageState.boundedAction)}</p>${priorityReference}
+    <h3>Evidence and limits</h3>${journeyLimitations}${priorityReference}
     ${conversionEvidenceNote}
   </section>`;
 }

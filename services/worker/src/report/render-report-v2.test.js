@@ -237,7 +237,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   // CRIT 8a — conversion-path architecture + competitive context are part
   // of the governed section set (rendered from the model, never invented).
   assert.match(html, /Can visitors move from interest to action\?/);
-  assert.match(html, /The reviewed journey evidence supports preserving the working route|The reviewed journey is workable but bounded|The reviewed evidence establishes points where buyer movement becomes materially unclear or broken|The audit cannot make a broad journey judgment/);
+  assert.match(html, /Accepted priority evidence includes a supported relationship to visitor-path friction\. Priority Fixes contains the corrective action and order\.|The reviewed path records may include weak checks, but they are not independently accepted as visitor-friction priorities/);
   assert.match(html, /How does your website compare with the competitors buyers may consider\?/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
@@ -840,6 +840,9 @@ test("MVP-DECISION-AUTHORITY-01: one accepted sequence governs all pages while s
   assert.match(supporting, /Supporting observations and non-priority findings/);
   assert.doesNotMatch(supporting, /DO NOW|DO NEXT|LATER|<ol/i);
   assert.equal((journey.match(/conversion-journey-detail-card/g) || []).length, 0, "Acquisition classification alone does not establish journey friction");
+  assert.match(journey, /Primary Path: Book: Weak/, "weak recorded-path status remains visible as supporting evidence");
+  assert.match(journey, /No accepted priority has a supported relationship to visitor-path friction/);
+  assert.doesNotMatch(journey, /correct those points first|correct.*first|fix these points first/i, "journey narrative cannot independently direct corrective work");
   assert.match(content, /planning opportunity|opportunities/i);
   assert.doesNotMatch(content, /Priority Fixes is the only client action sequence/);
   assert.match(detail, /Future audit supporting observation 1/);
