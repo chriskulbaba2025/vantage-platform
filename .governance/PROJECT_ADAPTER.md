@@ -8,7 +8,7 @@
 ## Components and proof
 
 - Web: Next.js App Router / TypeScript at repository root; install with npm; production build `NODE_ENV=production npm run build`.
-- Worker: Node ESM under `services/worker`; full governed proof `npm run verify:prysm-closure` there; includes worker regression, app production-path, and Whole-App branch matrix P-B01–P-B16.
+- Worker: Node ESM under `services/worker`; full governed proof `npm run verify:prysm-closure` there; includes worker regression, app production-path, and Whole-App branch matrix P-B01–P-B17.
 - Hosted web: Vercel project `prysm`, team `chriskulbabas-projects`, Preview scope only for this repair branch.
 - Hosted worker: Railway `GENSEN process` project staging service `vantage-platform-staging`.
 - Auth: staging Cognito reviewer; principal is carried by signed session and forwarded to worker; tenant membership is enforced server-side before artifact retrieval.

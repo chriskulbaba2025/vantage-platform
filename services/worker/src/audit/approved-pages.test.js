@@ -43,7 +43,7 @@ function scoredModel() {
   return scoreAudit({ targetUrl: "https://example.com/", businessName: "Example Business", location: "Toronto, Ontario", language: "en-CA", competitors: [] }, evidence);
 }
 
-async function createApprovedAudit() {
+async function createApprovedAudit(model = scoredModel()) {
   const dir = await mkdtemp(join(tmpdir(), "vantage-multipage-"));
   const store = createLocalReportStore({ baseDir: dir });
   const result = await runAudit(
@@ -57,11 +57,11 @@ async function createApprovedAudit() {
         onpageBrowserRendering: false, onpagePollTimeoutMs: 600000, onpagePollIntervalMs: 10000,
         onpageIncludePatterns: [], onpageExcludePatterns: [],
       },
-      crawlSite: async () => scoredModel().evidence.site,
+      crawlSite: async () => model.evidence.site,
       crawlCompetitors: async () => [],
-      collectPerformance: async () => scoredModel().evidence.performance,
-      collectBacklinks: async () => scoredModel().evidence.backlinks,
-      collectGa4: async () => scoredModel().evidence.ga4,
+      collectPerformance: async () => model.evidence.performance,
+      collectBacklinks: async () => model.evidence.backlinks,
+      collectGa4: async () => model.evidence.ga4,
       store,
     },
   );
@@ -76,7 +76,7 @@ async function createApprovedAudit() {
 
   // Approve with model
   const approval = await approveAudit(store, result.slug, result.runId, "approver@example.com", {
-    model: scoredModel(),
+    model,
   });
 
   return { result, store, dir, approval };
@@ -386,6 +386,24 @@ test("18b. deferred roadmap preserves source status and does not fabricate avail
   const availableDeferred = renderApprovedReport(available).pages.get("deferred.html");
   assert.doesNotMatch(availableDeferred, /Google Analytics 4/);
   assert.doesNotMatch(availableDeferred, /Backlink Analysis/);
+});
+
+test("P-B17 assembled approval/reload preserves unavailable and partial roadmap status without fabricating available rows", async () => {
+  const model = scoredModel();
+  model.evidence.site.sourceStatus = SOURCE_STATUS.PARTIAL;
+  model.evidence.ga4.sourceStatus = SOURCE_STATUS.PARTIAL;
+  model.evidence.backlinks.sourceStatus = SOURCE_STATUS.NOT_CONNECTED;
+  const { result, store } = await createApprovedAudit(model);
+
+  const deferred = await readFile(join(result.storage.directory, "deferred.html"), "utf8");
+  const appendix = await readFile(join(result.storage.directory, "evidence-appendix.html"), "utf8");
+  assert.match(deferred, /Google Analytics 4[\s\S]*?PARTIAL/);
+  assert.match(deferred, /Backlink Analysis[\s\S]*?NOT_CONNECTED/);
+  assert.match(appendix, /Unavailable &amp; Partial Evidence Roadmap/);
+  assert.match(appendix, /PARTIAL/);
+  assert.match(appendix, /NOT_CONNECTED/);
+  assert.doesNotMatch(deferred, /all sources were available/i);
+  assert.equal((await store.getStatus(result.slug, result.runId)).status, "approved");
 });
 
 test("19. internal-links page identifies broken links from evidence", async () => {
