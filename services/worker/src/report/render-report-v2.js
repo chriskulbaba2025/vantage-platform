@@ -3660,6 +3660,15 @@ footer {
     break-inside:auto !important;
   }
 
+/* Keep the final bounded next-step note with the Content Opportunities page. */
+  .content-page > h3 {
+    margin-top:12px !important;
+  }
+
+  .content-page > p {
+    margin-block:0.55em !important;
+  }
+
   /* Footer metadata repeats the report header and can become a standalone
      final sheet after a long selected view. Keep it in the screen viewer. */
   body.viewer-ready > footer {

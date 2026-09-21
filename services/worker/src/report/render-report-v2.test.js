@@ -620,6 +620,8 @@ test("WP-G-03: print rules hide navigation; responsive viewport meta present", (
   assert.match(html, /\.nav-jump, \.no-print \{\s*display:none !important/);
   assert.match(html, /body\.viewer-ready main > section\.viewer-active \{\s*page-break-inside:auto !important;\s*break-inside:auto !important;/);
   assert.match(html, /body\.viewer-ready > footer \{\s*display:none !important;/);
+  assert.match(html, /\.content-page > h3 \{\s*margin-top:12px !important;/);
+  assert.match(html, /\.content-page > p \{\s*margin-block:0\.55em !important;/);
   assert.match(html, /name="viewport"/);
   assert.match(html, /@media \(max-width:\s*900px\)/);
 });
