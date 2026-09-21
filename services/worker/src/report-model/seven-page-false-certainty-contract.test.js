@@ -99,7 +99,7 @@ test("CASE 10 — Search demand alone cannot create a content recommendation", (
   assert.equal(states["content-opportunities"].state, NARRATIVE_STATE.STRONG);
   assert.equal(states["content-opportunities"].state, baseline.states["content-opportunities"].state);
   const text = html.replace(/<style\b[\s\S]*?<\/style>|<script\b[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  assert.match(text, /planning guidance, not proof of absent content/i);
+  assert.match(text, /Content opportunities are qualified planning inputs\. They do not prove that a topic or answer is missing from the site\./i);
   assert.doesNotMatch(states["content-opportunities"].conditionFacts.join(" "), /fixture high demand/);
 });
 

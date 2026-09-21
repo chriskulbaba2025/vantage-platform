@@ -550,22 +550,8 @@ function publicEvidenceAreaLabel(key) {
   return "Evidence area";
 }
 
-function executiveClientSummary(model, pageState) {
-  const score = model?.scores?.conversionReadiness;
-  const band = String(model?.bands?.conversionReadiness || "").toLowerCase();
-  let summary;
-  if (typeof score !== "number") {
-    summary = "The available evidence is not sufficient for a dependable overall readiness score.";
-  } else if (score >= 80) {
-    summary = "Overall readiness is strong in the areas reviewed. Keep the working foundation and address only the evidence-backed priorities shown below.";
-  } else if (score >= 60) {
-    summary = "Overall readiness is moderate in the areas reviewed. The site has a workable foundation, with a small number of evidence-backed issues to address first.";
-  } else if (score >= 40) {
-    summary = "Overall readiness needs attention in the areas reviewed. Focus on the evidence-backed priorities before adding lower-value work.";
-  } else {
-    summary = "The reviewed evidence shows material readiness gaps. Address the accepted priorities first and verify each change.";
-  }
-  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(summary)}</p><p class="small"><strong>Next step:</strong> ${e(clientCopy(pageState.boundedAction))}</p></div>`;
+function executiveClientSummary(pageState) {
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(clientCopy(pageState.message))}</p><p class="small"><strong>Next step:</strong> ${e(clientCopy(pageState.boundedAction))}</p></div>`;
 }
 
 function evidenceLimitList(model) {
@@ -585,9 +571,9 @@ function executiveScorecard(model, pillars, checklist, canonical, pageState, nar
   const readiness = model.scores.conversionReadiness;
   const priorityGroups = acceptedPriorityGroups(model, canonical).slice(0, 3);
   const actions = priorityGroups.map((group) => group.primary);
-  const numericScoreVisible = model.showNumericScore !== false && typeof readiness === "number";
+  const numericScoreVisible = pageState.state !== "INSUFFICIENT_EVIDENCE" && model.showNumericScore !== false && typeof readiness === "number";
   const readinessLine = !numericScoreVisible
-    ? `<div class="readiness-none">${e(model.readinessStatus || "Overall score unavailable")}</div>`
+    ? `<div class="readiness-none">${e(pageState.state === "INSUFFICIENT_EVIDENCE" ? "Insufficient Evidence for Overall Score" : model.readinessStatus || "Overall score unavailable")}</div>`
     : `<div class="readiness">${e(readiness)}<span class="readiness-max">/100</span></div><div class="readiness-band">${bandChip(model.bands.conversionReadiness)}</div>`;
   const priorities = priorityGroups.length
     ? `<ol class="executive-priorities">${priorityGroups.map((group) => {
@@ -615,7 +601,7 @@ function executiveScorecard(model, pillars, checklist, canonical, pageState, nar
     <h2>How ready is your website to convert visitors?</h2>
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
-    ${executiveClientSummary(model, pageState)}
+    ${executiveClientSummary(pageState)}
     <h3>${numericScoreVisible ? `Why is the score ${e(readiness)}?` : "Why is no score shown?"}</h3>
     <p>The score display below uses the existing assessed dimension outputs. It does not add a new score or treat unavailable dimensions as zero.</p>
     <ul class="executive-score-drivers">${scoreDrivers}</ul>

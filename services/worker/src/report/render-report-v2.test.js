@@ -174,7 +174,15 @@ test("WP-G-02: suppressed modules yield null pillar scores, never imputed", () =
 // ---------------------------------------------------------------------------
 
 test("WP-G-03: Executive Scorecard uses the frozen hierarchy and existing assessed outputs", () => {
-  const html = renderReportV2(model());
+  const fixture = structuredClone(model());
+  fixture.crossReportInterpretation.truth = Object.fromEntries(
+    Object.entries(fixture.crossReportInterpretation.truth).map(([key, record]) => [key, { ...record, state: "assessed" }]),
+  );
+  fixture.competitors = { comparisons: [{ name: "Example competitor", url: "https://example.test", status: "AVAILABLE" }], opportunities: { gaps: [], limitations: [] } };
+  fixture.sourceStatus = { ...(fixture.sourceStatus || {}), competitors: "AVAILABLE" };
+  fixture.scores.conversionReadiness = 85;
+  fixture.bands.conversionReadiness = "Strong";
+  const html = renderReportV2(fixture);
   // A/B/C — executive scorecard
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
   const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Why is the score", "What is already working?", "What is holding the site back?", "What should you improve first?", "Keep, improve, check", "Next step &amp; limits", "Where was the evidence limited?"];
@@ -401,7 +409,7 @@ function assertFrozenViewerHierarchy() {
     "supporting-detail": html.slice(html.indexOf('id="pillars"'), html.indexOf('id="blockers"')),
   };
   const required = {
-    "executive-scorecard": ["Conversion Readiness", "Why is the score", "What is helping the site", "What is holding the site back", "What should you improve first", "Keep, improve, check", "Next step &amp; limits", "What we could not confirm"],
+    "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "What should you improve first", "Keep, improve, check", "Next step &amp; limits", "What we could not confirm"],
     "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence guardrail", "Clean up after the main fixes", "Work in this order"],
     "conversion-paths": ["Reach the right page", "Understand enough to continue", "Take the next step", "Evidence seen:", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Next step"],
     "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
@@ -736,6 +744,24 @@ test("MVP-CLIENT-02: primary client pages do not expose internal narrative-state
   const visible = primary.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
   assert.doesNotMatch(visible, /\bBounded action\b/);
   assert.doesNotMatch(visible, /\b(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)\b/);
+});
+
+test("MVP-CLIENT-09: insufficient executive evidence withholds an otherwise available overall score", () => {
+  const fixture = structuredClone(model());
+  fixture.scores.conversionReadiness = 55;
+  fixture.bands.conversionReadiness = "Limited";
+  fixture.showNumericScore = true;
+  fixture.crossReportInterpretation.truth.evidenceScope.state = "not assessed";
+
+  const html = renderReportV2(fixture);
+  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
+
+  assert.match(executive, /data-narrative-state="INSUFFICIENT_EVIDENCE"/);
+  assert.match(executive, /Insufficient Evidence for Overall Score/);
+  assert.match(executive, /cannot make a dependable overall readiness conclusion/);
+  assert.doesNotMatch(executive, /class="readiness">55/);
+  assert.doesNotMatch(executive, /class="readiness-band"/);
+  assert.doesNotMatch(executive, /Overall readiness needs attention|Overall readiness is strong|Overall readiness is moderate/);
 });
 
 test("MVP-CLIENT-03: competitor benchmark does not compare page-count coverage with qualitative competitor signals", () => {
