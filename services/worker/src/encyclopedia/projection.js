@@ -35,7 +35,7 @@ function evidenceStatus(record) {
 }
 
 function evidenceLineage(record, finding) {
-  return nonEmpty(record?.lineageKey, nonEmpty(record?.artifactRef, `${record?.provider || record?.source || "unknown"}:${record?.field || "unknown"}`));
+  return nonEmpty(record?.lineageKey, record?.artifactRef ? `${record.artifactRef}#${record?.field || "unknown"}` : `${record?.provider || record?.source || "unknown"}:${record?.field || "unknown"}`);
 }
 
 function evidenceIndependence(record, finding) {
