@@ -3652,6 +3652,14 @@ footer {
     color:#111;
   }
 
+  /* The selected report page may span several printed sheets. Let the active
+     view fragment across sheets instead of moving its heading to an orphaned
+     page under the general card keep-together rule above. */
+  body.viewer-ready main > section.viewer-active {
+    page-break-inside:auto !important;
+    break-inside:auto !important;
+  }
+
   .card,
   main > section:not(.card),
   .pillar {
