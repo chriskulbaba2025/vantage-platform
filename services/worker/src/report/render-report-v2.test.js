@@ -617,7 +617,7 @@ test("WP-G-03a: executive priorities use CRO narratives while preserving canonic
   assert.match(executive, /<strong>What to do:<\/strong>/);
   assert.match(executive, /href="#priority-fixes">Priority Fixes<\/a>/);
   assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
-  const priorities = [...executive.matchAll(/<li data-solution-id="([^"]+)">/g)].map((match) => match[1]);
+  const priorities = [...executive.matchAll(/<li data-solution-id="([^"]+)" data-priority-unit-type="[^"]+">/g)].map((match) => match[1]);
   assert.equal(priorities.length, 3);
   assert.deepEqual(priorities, [...priorities], "priority order is deterministic");
   assert.equal(new Set(priorities).size, priorities.length, "each priority retains distinct internal linkage");
@@ -802,4 +802,36 @@ test("MVP-CLIENT-07: Conversion Journey translates Encyclopedia state and eviden
   assert.match(visible, /Status:\s*Needs attention/);
   assert.match(visible, /Evidence:\s*Reviewed/);
   assert.doesNotMatch(visible, /\bFRICTION\b|\bAVAILABLE\b/);
+});
+
+
+test("MVP-CLIENT-08: an accepted friction cluster renders as one client priority unit, not multiple inflated fixes", () => {
+  const fixture = priorityModel();
+  const canonicalHtml = renderReportV2(fixture);
+  const findingIds = fixture.decisionHierarchy.orderedFindingIds.slice(0, 2);
+  assert.equal(findingIds.length, 2);
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: [{
+      type: "accepted friction cluster",
+      canonicalProblemId: "D01",
+      canonicalProblemIds: ["D01", "E01"],
+      title: "Accepted friction cluster",
+      findingIds,
+      frictionState: "FRICTION",
+      evidence: [
+        { sourceStatus: "AVAILABLE", independenceKey: "family:a" },
+        { sourceStatus: "AVAILABLE", independenceKey: "family:b" },
+      ],
+    }],
+  };
+  const html = renderReportV2(fixture);
+  const page = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  assert.equal((page.match(/<article class="priority-action"/g) || []).length, 1);
+  assert.match(page, /Several related issues are affecting the same buyer step/);
+  assert.match(page, /Why this is a priority/);
+  assert.match(page, /Related|linked 2 separate evidence-backed issues/i);
+  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
+  assert.equal((executive.match(/data-priority-unit-type="accepted friction cluster"/g) || []).length, 1);
+  assert.doesNotMatch(executive, /<li data-solution-id="[^"]+" data-priority-unit-type="accepted friction cluster"[\s\S]*<li data-solution-id="[^"]+" data-priority-unit-type="accepted friction cluster"/);
 });
