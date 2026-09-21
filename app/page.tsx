@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const principal = currentPrincipal();
+  const principal = await currentPrincipal();
   if (!principal) redirect("/login");
 
   let audits: unknown[] = [];

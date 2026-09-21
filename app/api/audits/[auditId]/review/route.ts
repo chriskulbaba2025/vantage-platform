@@ -5,8 +5,9 @@ import { SESSION_COOKIE } from "@/lib/identity/session";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { auditId: string } },
+  { params }: { params: Promise<{ auditId: string }> },
 ) {
+  const { auditId } = await params;
   const principal = principalFromCookies(request.cookies.get(SESSION_COOKIE)?.value);
   if (!principal) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,7 +24,7 @@ export async function POST(
     }
 
     const client = workerClient.as(principal);
-    const result = await client.submitReview(params.auditId, slug, reviewer, checklist);
+    const result = await client.submitReview(auditId, slug, reviewer, checklist);
     return NextResponse.json(result, { status: 200 });
   } catch (e) {
     if (e instanceof WorkerApiError) {

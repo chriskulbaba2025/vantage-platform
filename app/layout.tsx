@@ -9,8 +9,8 @@ export const metadata: Metadata = {
   description: "Evidence-grounded website decision system",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const authenticated = Boolean(cookies().get(SESSION_COOKIE)?.value);
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const authenticated = Boolean((await cookies()).get(SESSION_COOKIE)?.value);
   return (
     <html lang="en">
       <body>

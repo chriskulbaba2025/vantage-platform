@@ -26,8 +26,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { auditId: string } },
+  { params }: { params: Promise<{ auditId: string }> },
 ) {
+  const { auditId } = await params;
   // MT-IDENTITY: bind the authenticated principal — the WORKER enforces
   // tenant membership server-side.  Without a portal session, only the
   // governed reviewer session (minted by a webhook-secret holder) may pass
@@ -40,7 +41,7 @@ export async function GET(
   }
   const client = principal ? workerClient.as(principal) : workerClient;
 
-  const status = await client.getAuditStatus(params.auditId);
+  const status = await client.getAuditStatus(auditId);
   if (!status) {
     notFound();
   }
@@ -49,7 +50,7 @@ export async function GET(
 
   if (PUBLIC_STATES.has(state)) {
     return NextResponse.redirect(
-      new URL(`/audits/${params.auditId}/report/index.html`, request.nextUrl.origin),
+      new URL(`/audits/${auditId}/report/index.html`, request.nextUrl.origin),
     );
   }
 
@@ -58,7 +59,7 @@ export async function GET(
       notFound();
     }
     return NextResponse.redirect(
-      new URL(`/audits/${params.auditId}/report/index.html`, request.nextUrl.origin),
+      new URL(`/audits/${auditId}/report/index.html`, request.nextUrl.origin),
     );
   }
 

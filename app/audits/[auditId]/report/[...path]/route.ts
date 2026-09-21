@@ -20,9 +20,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { auditId: string; path: string[] } },
+  { params }: { params: Promise<{ auditId: string; path: string[] }> },
 ) {
-  const { auditId, path } = params;
+  const { auditId, path } = await params;
   const filename = path.join("/");
 
   if (filename.includes("..") || filename.includes("//") || filename.includes("\\")) {

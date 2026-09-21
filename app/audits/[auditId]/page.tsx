@@ -8,12 +8,13 @@ import { formatAuditTimestamp, formatAuditTime } from "@/lib/format-time";
 
 export const dynamic = "force-dynamic";
 
-export default async function AuditDetailPage({ params }: { params: { auditId: string } }) {
-  const { auditId } = params;
+export default async function AuditDetailPage({ params }: { params: Promise<{ auditId: string }> }) {
+  const { auditId } = await params;
 
   // MT-IDENTITY: authenticated portal access — the worker enforces the
   // tenant boundary server-side; the session carries only the principal.
-  const principal = currentPrincipal();
+  const principal = await currentPrincipal();
+  const reviewerCookie = await cookies();
   if (!principal) redirect("/login");
 
   let status;
@@ -115,7 +116,7 @@ export default async function AuditDetailPage({ params }: { params: { auditId: s
               WORKER still enforces the tenant/role gate server-side before
               any report bytes are served.  The legacy reviewer-session
               cookie remains supported for internal reviewer compatibility. */}
-          {principal || isValidReviewerToken(cookies().get(REVIEWER_COOKIE)?.value) ? (
+          {principal || isValidReviewerToken(reviewerCookie.get(REVIEWER_COOKIE)?.value) ? (
             <>
               <p>The governed draft report is ready. Access is enforced by your account role.</p>
               <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Draft Report</a>

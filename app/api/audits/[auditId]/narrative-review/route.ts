@@ -18,8 +18,9 @@ function resolvePrincipal(request: NextRequest) {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { auditId: string } },
+  { params }: { params: Promise<{ auditId: string }> },
 ) {
+  const { auditId } = await params;
   const principal = resolvePrincipal(request);
 
   if (!principal) {
@@ -31,7 +32,7 @@ export async function GET(
 
   try {
     const client = workerClient.as(principal);
-    const result = await client.getNarrativeV2HumanReview(params.auditId);
+    const result = await client.getNarrativeV2HumanReview(auditId);
 
     return NextResponse.json(result, { status: 200 });
   } catch (e) {
@@ -63,8 +64,9 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { auditId: string } },
+  { params }: { params: Promise<{ auditId: string }> },
 ) {
+  const { auditId } = await params;
   const principal = resolvePrincipal(request);
 
   if (!principal) {
@@ -88,12 +90,12 @@ export async function POST(
     }
 
     const authorizationId =
-      `narrative-final-pass:${params.auditId}:${randomUUID()}`;
+      `narrative-final-pass:${auditId}:${randomUUID()}`;
 
     const client = workerClient.as(principal);
 
     const result = await client.continueNarrativeV2FinalPass(
-      params.auditId,
+      auditId,
       authorizationId,
     );
 

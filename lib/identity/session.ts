@@ -70,7 +70,7 @@ export function verifySession(token: string | undefined, nowSec = Math.floor(Dat
 
 /** Read the current authenticated principal from the request cookies
  * (server components / route handlers). */
-export function currentPrincipal(): SessionPrincipal | null {
-  const token = cookies().get(SESSION_COOKIE)?.value;
+export async function currentPrincipal(): Promise<SessionPrincipal | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   return verifySession(token);
 }
