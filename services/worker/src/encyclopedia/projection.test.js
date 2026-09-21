@@ -35,14 +35,23 @@ test("ENC-T2-03: missing, partial and conflicting evidence fail closed to bounde
   assert.equal(projectFinding(finding({ conflictingEvidence: true })).frictionState, FRICTION_STATES.WATCH);
 });
 
-test("ENC-T2-04: same lineage/scope/device cannot create duplicate corroboration", () => {
+test("ENC-T2-04: same raw observation lineage/scope/device cannot create duplicate corroboration", () => {
   const first = finding({ findingId: "F-1" });
-  const second = finding({ findingId: "F-2", evidence: [{ field: "other-rule", observedValue: 1, provider: "second-provider", sourceStatus: "AVAILABLE", artifactRef: "artifact:1" }] });
+  const second = finding({ findingId: "F-2", evidence: [{ field: "trust.testimonials", observedValue: false, provider: "second-provider", sourceStatus: "AVAILABLE", artifactRef: "artifact:1" }] });
   const [a, b] = projectFindings([first, second]);
   assert.equal(a.primary, true);
   assert.equal(b.primary, false);
   assert.equal(b.duplicateOfFindingId, "F-1");
   assert.equal(b.historicalCompatibility, "DUPLICATE_PRIMARY_SUPPRESSED");
+});
+
+test("ENC-T2-04B: different observations in one crawl artifact remain distinct findings", () => {
+  const first = finding({ findingId: "F-1", ruleId: "VAN-PERF-001", evidence: [{ field: "lcp_ms", observedValue: 5400, provider: "pagespeed-insights", sourceStatus: "AVAILABLE", artifactRef: "artifact:1" }] });
+  const second = finding({ findingId: "F-2", ruleId: "VAN-SCHEMA-001", evidence: [{ field: "schema_types", observedValue: [], provider: "dataforseo_onpage", sourceStatus: "AVAILABLE", artifactRef: "artifact:1" }] });
+  const [a, b] = projectFindings([first, second]);
+  assert.equal(a.primary, true);
+  assert.equal(b.primary, true);
+  assert.notEqual(a.evidenceLineage.primaryKey, b.evidenceLineage.primaryKey);
 });
 
 test("ENC-T2-05: independent lineage families are retained without fake count inflation", () => {
