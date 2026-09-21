@@ -851,7 +851,7 @@ function page2Location(record) {
 
 function page2Confidence(record) {
   const grade = String(record.evidenceGrade || "").toUpperCase();
-  return grade === "SUPPORTED" || grade === "STRONG" ? "Strong evidence" : grade === "PARTIAL" || grade === "CONDITIONAL" ? "Some evidence — confirm before making the change" : "Not enough evidence yet";
+  return ["CONFIRMED", "SUPPORTED", "STRONG"].includes(grade) ? "Strong evidence" : grade === "PARTIAL" || grade === "CONDITIONAL" ? "Some evidence — confirm before making the change" : "Not enough evidence yet";
 }
 
 function page2Roles(record) {
@@ -1728,8 +1728,8 @@ function deepEvidenceLayer(model, pageState) {
   const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"]
     .map((key) => {
       const ev = model.evidence?.[key];
-      if (!ev) return `<li>${e(clientSourceLabel(key))}: Not collected</li>`;
-      return `<li>${e(clientSourceLabel(key))}: ${e(clientEvidenceStatus(ev.sourceStatus))}${ev.collectedAt ? ` (${e(ev.collectedAt)})` : ""}</li>`;
+      const status = ev?.sourceStatus || model.sourceStatus?.[key] || "NOT_COLLECTED";
+      return `<li>${e(clientSourceLabel(key))}: ${e(clientEvidenceStatus(status))}${ev?.collectedAt ? ` (${e(ev.collectedAt)})` : ""}</li>`;
     })
     .join("");
 
@@ -1780,7 +1780,7 @@ function supportingOverviewSectionInner(model, pillars, pageState, narrativeStat
     ? `<ul>${findings.map((finding) => `<li><strong>${e(finding.title || finding.ruleId || "Governed finding")}.</strong> ${e(finding.severity || "UNKNOWN")} · ${e(finding.confidence || "UNKNOWN")} · evidence ${e([...(new Set((finding.evidence || []).map((item) => item.sourceStatus || "UNKNOWN")))].join(", ") || "UNKNOWN")}; scope ${e((finding.affectedUrls || []).join(", ") || "NOT_AVAILABLE")}.</li>`).join("")}</ul>`
     : "<p>No material finding is available from the current report model.</p>";
   const performanceMarkup = `<p>Lab evidence: <strong>${e(capabilityStatus(model, "performance.lab"))}</strong>. Field evidence: <strong>${e(capabilityStatus(model, "performance.field"))}</strong>.</p><p>Lab measurements describe the tested conditions. They are not real-user field performance.</p>`;
-  const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"].map((key) => `<li><strong>${e(clientSourceLabel(key))}:</strong> ${e(clientEvidenceStatus(model.evidence?.[key]?.sourceStatus || model.evidence?.[key]?.status || "NOT_COLLECTED"))}</li>`).join("");
+  const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"].map((key) => `<li><strong>${e(clientSourceLabel(key))}:</strong> ${e(clientEvidenceStatus(model.evidence?.[key]?.sourceStatus || model.evidence?.[key]?.status || model.sourceStatus?.[key] || "NOT_COLLECTED"))}</li>`).join("");
   const trace = Object.values(narrativeStates || {}).map((record) => `<tr data-narrative-page="${e(record.pageId)}"><th scope="row">${e(clientNarrativePageLabel(record.pageId))}</th><td>${e(record.state === "STRONG" ? "Supported" : record.state === "MIDDLE" ? "Mixed / bounded" : record.state === "WEAK" ? "Needs attention" : "Not enough evidence")}</td><td>${e(clientEvidenceStatus(record.evidenceSufficiency))}</td><td>${e(clientNarrativeScope(record))}</td><td>${e(clientNarrativeEvidenceReferences(record.evidenceRefs))}</td><td>${e(clientCopy(record.limitations.join(" ") || "No additional limitation recorded."))}</td></tr>`).join("");
   const available = Object.values(capabilities).filter((item) => item.status === "AVAILABLE").length;
   const total = Object.keys(capabilities).length;
