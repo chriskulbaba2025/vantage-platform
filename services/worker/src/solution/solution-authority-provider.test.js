@@ -196,3 +196,30 @@ test("controlled capabilities and evidence/prescription policy remain bounded", 
     assert.equal(record.evidenceGrade, "PARTIAL");
   }
 });
+
+
+test("current deterministic AVAILABLE evidence is CONFIRMED while partial or supported evidence remains bounded", () => {
+  const confirmed = buildSolutionAuthorityRecords(input({
+    findings: [finding("VAN-PERF-001", 1, {
+      confidence: "deterministic",
+      evidence: [{ field: "lcp_ms", observedValue: 5484, artifactRef: "E-confirmed", sourceStatus: "AVAILABLE" }],
+    })],
+  }));
+  assert.equal(confirmed["F-1"].evidenceGrade, "CONFIRMED");
+
+  const partial = buildSolutionAuthorityRecords(input({
+    findings: [finding("VAN-TECH-001", 1, {
+      confidence: "deterministic",
+      evidence: [{ field: "meta_description", observedValue: null, artifactRef: "E-partial", sourceStatus: "PARTIAL" }],
+    })],
+  }));
+  assert.equal(partial["F-1"].evidenceGrade, "PARTIAL");
+
+  const supported = buildSolutionAuthorityRecords(input({
+    findings: [finding("VAN-CONTENT-002", 1, {
+      confidence: "supported",
+      evidence: [{ field: "trust.faq", observedValue: false, artifactRef: "E-supported", sourceStatus: "AVAILABLE" }],
+    })],
+  }));
+  assert.equal(supported["F-1"].evidenceGrade, "PARTIAL");
+});
