@@ -309,6 +309,14 @@ function acceptedPriorityRecords(model, canonical) {
   );
 }
 
+function clientFrictionStateLabel(state) {
+  const value = String(state || "NOT_ENOUGH_EVIDENCE").toUpperCase();
+  if (value === "FRICTION") return "Needs attention";
+  if (value === "WATCH") return "Worth checking";
+  if (value === "CLEAR") return "No material friction found";
+  return "Not enough evidence";
+}
+
 function clientStatusLabel(status) {
   const value = String(status || "UNKNOWN").toUpperCase();
   if (value === "AVAILABLE") return "Reviewed";
@@ -960,7 +968,7 @@ function conversionPathSection(model, pageState) {
   const journeyFrictionCards = encyclopediaUnits.map((unit) => {
     const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
     const statuses = [...new Set((unit.evidence || []).map((record) => record.sourceStatus || "UNKNOWN"))];
-    return `<article class="conversion-journey-detail-card" data-encyclopedia-problem="${e(unit.canonicalProblemId || "NOT_AVAILABLE")}"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(unit.frictionState || "UNKNOWN")}</p><p><strong>Evidence:</strong> ${e(statuses.join(", ") || "UNKNOWN")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p><strong>Check first:</strong> ${e(problem?.firstDiagnosticChecks?.[0] || "Confirm the recorded condition and scope before deciding what to change.")}</p><p class="small">This is a diagnostic view; it does not establish cause, abandonment, or a business outcome.</p></article>`;
+    return `<article class="conversion-journey-detail-card" data-encyclopedia-problem="${e(unit.canonicalProblemId || "NOT_AVAILABLE")}"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(clientFrictionStateLabel(unit.frictionState))}</p><p><strong>Evidence:</strong> ${e(statuses.map(clientStatusLabel).join(", ") || "Unknown")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p><strong>Check first:</strong> ${e(problem?.firstDiagnosticChecks?.[0] || "Confirm the recorded condition and scope before deciding what to change.")}</p><p class="small">This is a diagnostic view; it does not establish cause, abandonment, or a business outcome.</p></article>`;
   }).join("");
   const frictionBlock = journeyFrictionCards.length
     ? `<div class="conversion-journey-card-grid">${journeyFrictionCards}</div>`
