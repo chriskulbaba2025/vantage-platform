@@ -26,7 +26,7 @@ test("ENC-T3-01: same journey stage alone is not a relationship boundary", () =>
 });
 
 test("ENC-T3-02: duplicate symptoms collapse and do not become corroboration", () => {
-  const result = pair({ evidence: [{ field: "a", observedValue: true, sourceStatus: "AVAILABLE", artifactRef: "same" }] }, { evidence: [{ field: "b", observedValue: true, sourceStatus: "AVAILABLE", artifactRef: "same" }] });
+  const result = pair({ evidence: [{ field: "same-condition", observedValue: true, sourceStatus: "AVAILABLE", artifactRef: "same" }] }, { evidence: [{ field: "same-condition", observedValue: true, sourceStatus: "AVAILABLE", artifactRef: "same" }] });
   assert.equal(result.type, "Duplicate symptom");
   assert.equal(validateRelationship(result).valid, true);
 });
