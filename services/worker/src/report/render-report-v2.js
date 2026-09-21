@@ -289,6 +289,38 @@ function canonicalSolutionContext(model) {
   return { byId, byFindingId, ordered: projectedOrder };
 }
 
+function acceptedPriorityFindingIds(model) {
+  if (model?.encyclopedia?.status !== "AVAILABLE") return null;
+  return new Set(
+    (model.encyclopedia.priorityUnits || [])
+      .flatMap((unit) => unit.findingIds || [])
+      .filter(Boolean),
+  );
+}
+
+function acceptedPriorityRecords(model, canonical) {
+  const acceptedIds = acceptedPriorityFindingIds(model);
+  const visible = (canonical?.ordered || []).filter(
+    (record) => record.clientProminence?.displayAllowed,
+  );
+  if (acceptedIds === null) return visible;
+  return visible.filter((record) =>
+    (record.findingRefs || []).some((findingId) => acceptedIds.has(findingId)),
+  );
+}
+
+function clientStatusLabel(status) {
+  const value = String(status || "UNKNOWN").toUpperCase();
+  if (value === "AVAILABLE") return "Reviewed";
+  if (value === "PARTIAL") return "Partly reviewed";
+  if (value === "UNAVAILABLE") return "Not available";
+  if (value === "NOT_COLLECTED") return "Not collected";
+  if (value === "NOT_CONNECTED") return "Not connected";
+  if (value === "NOT_APPLICABLE") return "Not applicable";
+  if (value === "FAILED" || value === "BLOCKED") return "Could not be reviewed";
+  return "Unknown";
+}
+
 function canonicalReference(record, label = "View canonical detail") {
   return `<a class="canonical-solution-reference" href="#priority-fixes" data-solution-id="${e(record.solutionId)}">${e(label)}</a>`;
 }
@@ -415,7 +447,7 @@ function executiveText(value) {
 }
 
 function narrativeBlock(pageState) {
-  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><span class="chip cap-neutral">${e(pageState.state)}</span><p>${e(clientCopy(pageState.message))}</p><p class="small"><strong>Bounded action:</strong> ${e(clientCopy(pageState.boundedAction))}</p>${pageState.limitations.length ? `<p class="small"><strong>Limit:</strong> ${e(clientCopy(pageState.limitations.join(" ")))}</p>` : ""}</div>`;
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(clientCopy(pageState.message))}</p><p class="small"><strong>Next step:</strong> ${e(clientCopy(pageState.boundedAction))}</p>${pageState.limitations.length ? `<p class="small"><strong>What this does not establish:</strong> ${e(clientCopy(pageState.limitations.join(" ")))}</p>` : ""}</div>`;
 }
 
 function clientCopy(value) {
@@ -464,7 +496,7 @@ function evidenceLimitList(model) {
 
 function executiveScorecard(model, pillars, checklist, canonical, pageState, narrativeStates) {
   const readiness = model.scores.conversionReadiness;
-  const actions = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed).slice(0, 3);
+  const actions = acceptedPriorityRecords(model, canonical).slice(0, 3);
   const numericScoreVisible = model.showNumericScore !== false && typeof readiness === "number";
   const readinessLine = !numericScoreVisible
     ? `<div class="readiness-none">${e(model.readinessStatus || "Overall score unavailable")}</div>`
@@ -823,7 +855,7 @@ function page2Verify(record) {
 }
 
 function blockersSection(model, canonical, pageState) {
-  const primary = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed);
+  const primary = acceptedPriorityRecords(model, canonical);
   const main = primary.slice(0, 3);
   const cleanup = primary.slice(3);
   const cards = main.map((record, index) => {
@@ -901,9 +933,9 @@ function conversionPathSection(model, pageState) {
   const limitation = "We can see whether the website gives people a clear path toward action. We cannot tell from this audit how many people clicked a button, completed a form, left a page, or stopped partway through the journey. Those questions need website analytics or other behavior data.";
   const site = model.evidence?.site || {};
   const journeyStages = [
-    { title: "Reach the right page", status: site.sourceStatus || "UNKNOWN", evidence: Array.isArray(site.pages) && site.pages.length ? `${site.pages.length} page record(s) are present in the reviewed site evidence.` : "Page-level reach evidence is NOT_AVAILABLE in the current report model." },
-    { title: "Understand enough to continue", status: `${capabilityStatus(model, "offer.clarity")} / ${capabilityStatus(model, "content.body")}`, evidence: `${site.services?.length || 0} service label(s) are present. Content opportunities below are planning guidance, not proof of absent content.` },
-    { title: "Take the next step", status: `${capabilityStatus(model, "conversion.cta")} / ${capabilityStatus(model, "conversion.form")} / ${capabilityStatus(model, "conversion.path")}`, evidence: paths.length ? paths.map((path) => `${path.name || "Recorded path"} has recorded status ${path.status || "UNKNOWN"}.`).join(" ") : "No conversion path record is available in this model." },
+    { title: "Reach the right page", status: clientStatusLabel(site.sourceStatus), evidence: Array.isArray(site.pages) && site.pages.length ? `${site.pages.length} reviewed page record(s) support the site-entry context.` : "No page-level entry evidence is available in the current report model." },
+    { title: "Understand enough to continue", status: `${clientStatusLabel(capabilityStatus(model, "offer.clarity"))} / ${clientStatusLabel(capabilityStatus(model, "content.body"))}`, evidence: "Offer and page-content evidence are shown here only to describe what was reviewed. They do not prove that every buyer has enough information." },
+    { title: "Take the next step", status: `${clientStatusLabel(capabilityStatus(model, "conversion.cta"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.form"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.path"))}`, evidence: paths.length ? paths.map((path) => `${path.name || "Recorded path"}: ${path.status || "Unknown"}.`).join(" ") : "No reviewed conversion-path record is available." },
   ];
   const journeyStageCards = journeyStages.map((stage, index) => `<article class="conversion-journey-step" data-journey-stage="${index + 1}"><span class="conversion-journey-step-number">${index + 1}</span><h3>${e(stage.title)}</h3><p><strong>Status:</strong> ${e(stage.status)}</p><p><strong>Evidence seen:</strong> ${e(stage.evidence)}</p></article>`).join("");
   const encyclopediaUnits = model.encyclopedia?.status === "AVAILABLE" ? (model.encyclopedia.priorityUnits || []).slice(0, 3) : [];
@@ -920,8 +952,8 @@ function conversionPathSection(model, pageState) {
     ? `<ul>${clearPaths.map((path) => `<li><strong>${e(path.name || "Reviewed path")}:</strong> a Clear path status was recorded for this item. This describes the reviewed check, not the behavior of every visitor.</li>`).join("")}</ul>`
     : "<p>No path element is presented as a strength without a retained Clear path record.</p>";
   const analyticsStatus = model.evidence?.ga4?.sourceStatus || model.evidence?.ga4?.status || "NOT_COLLECTED";
-  const measureMarkup = `<p>Analytics evidence status: <strong>${e(analyticsStatus)}</strong>. ${["AVAILABLE", "PARTIAL"].includes(String(analyticsStatus).toUpperCase()) ? "Only metrics and coverage represented in that evidence can be stated." : "Clicks, form completion, abandonment, and conversion outcomes cannot be confirmed from this audit."}</p>`;
-  const journeyActions = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed).slice(0, 3);
+  const measureMarkup = `<p>Analytics evidence: <strong>${e(clientStatusLabel(analyticsStatus))}</strong>. ${["AVAILABLE", "PARTIAL"].includes(String(analyticsStatus).toUpperCase()) ? "Only metrics and coverage represented in that evidence can be stated." : "Clicks, form completion, abandonment, and conversion outcomes cannot be confirmed from this audit."}</p>`;
+  const journeyActions = acceptedPriorityRecords(model, canonical).slice(0, 3);
   const orderedNextSteps = journeyActions.length
     ? `<ol>${journeyActions.map((record) => `<li>${e(executivePriorityTitle(record))} <a href="#priority-fixes" data-solution-id="${e(record.solutionId)}">Review the recorded action</a></li>`).join("")}</ol>`
     : "<p>No evidence-backed priority action is available; do not add work to fill the sequence.</p>";
@@ -1004,7 +1036,7 @@ function competitorSectionClient(model, pageState) {
   const ownValues = {
     offerClarity: interpretation.constructs?.offerClarity,
     trustProof: interpretation.constructs?.trustProof,
-    contentDepth: site.pageCount ? `${site.pageCount} page(s) reviewed` : undefined,
+    contentDepth: interpretation.constructs?.contentDepth,
     ctaClarity: interpretation.constructs?.ctaClarity,
     pathClarity: interpretation.constructs?.conversionPathClarity,
   };
@@ -1093,7 +1125,8 @@ function competitorSectionClient(model, pageState) {
     ? `<ul>${competitorAdvantages.map(({ label, name, key }) => `<li><strong>${e(name)} — ${e(label)}:</strong> ${key === "trustProof" ? e("The site shows a stronger visible trust signal in the available comparison. Review how quickly a visitor can find proof, examples, or reassurance there, then compare that with your own Trust & Credibility findings.") : e("The available values show a stronger visible signal in this area. Review the buyer need behind the difference before deciding whether it matters here.")} ${linkFor(key)}</li>`).join("")}</ul>`
     : `<p>We did not find a competitor advantage strong enough to justify changing the site simply to match them. ${gaps.length ? "Review the named difference above before deciding whether it deserves action." : "The available comparison does not prove that a competitor creates a better buying experience overall."}</p>`;
   const standApart = "<p>The comparison does not show a clear market-wide gap, and several areas do not have enough client evidence for a fair side-by-side judgment.</p><p>That still leaves a useful strategic question: where can your site be more helpful to a buyer?</p><p>Use the opportunities already identified in this report—clearer buyer answers, stronger proof, better process information, or an easier next step—to make the buying experience more useful instead of simply matching a competitor. <a href=\"#content-ideas\">See Content Opportunities</a>.</p>";
-  const ownActions = canonicalSolutionContext(model).ordered.filter((record) => record.clientProminence?.displayAllowed);
+  const ownCanonical = canonicalSolutionContext(model);
+  const ownActions = acceptedPriorityRecords(model, ownCanonical);
   const actionItems = `<ol class="competitor-action-framework">
     <li><strong>PROTECT:</strong> Keep reviewed strengths that remain supported by the site's own evidence. ${relativeStrengths.length ? relativeStrengths.map((item) => e(item.label)).join(", ") : "No relative strength was established by comparable values; see the site's own evidence in the other report pages."} <a href="#paths">See Conversion Journey</a></li>
     <li><strong>IMPROVE:</strong> ${ownActions.length ? `Consider only the site's own recorded action${ownActions.length === 1 ? "" : "s"}: ${ownActions.slice(0, 3).map((record) => `<a href="#priority-fixes">${e(executivePriorityTitle(record))}</a>`).join("; ")}.` : "No own-site action is available; competitor differences alone do not create a client fix."}</li>
