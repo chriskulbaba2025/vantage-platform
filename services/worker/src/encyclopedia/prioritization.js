@@ -94,7 +94,8 @@ export function challengePriorityUnit(unit, { allUnits = [], relationships = [] 
 }
 
 function unitFromProjection(projection, type = PRIORITY_UNIT_TYPES.STANDALONE) {
-  const unit = { ...projection, type, cluster: null };
+  const findingIds = [projection?.findingId].filter(Boolean);
+  const unit = { ...projection, type, cluster: null, findingIds };
   return { ...unit, priorityExplanation: explanation(unit, type) };
 }
 
