@@ -64,6 +64,9 @@ export function relationshipCandidate(left, right) {
   const shared = boundary(left, right);
   const type = relationshipFor(left, right, shared);
   if (!type || !RELATIONSHIP_TYPES.includes(type)) return { eligible: false, reason: "no-governed-relationship" };
+  if (type === "Compounds" && !shared.sharedAction && !shared.sharedQuestion) {
+    return { eligible: false, reason: "compounding-needs-shared-decision-or-action" };
+  }
   if (type !== "Duplicate symptom" && (UNKNOWN_STATES.has(left.frictionState) || UNKNOWN_STATES.has(right.frictionState))) {
     return { eligible: false, reason: "unknown-evidence-cannot-strengthen-relationship" };
   }
