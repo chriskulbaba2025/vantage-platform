@@ -68,3 +68,22 @@ test("ENC-T3-07: candidate builder never performs an all-pairs semantic promotio
   const candidates = buildRelationshipCandidates(projections);
   assert.ok(candidates.every((candidate) => candidate.eligible === true));
 });
+
+
+test("ENC-T3-08: unrelated friction on the same URL does not become a compounding cluster without a shared buyer decision or action", () => {
+  const left = projectFinding(finding("a", {
+    ruleId: "VAN-PERF-001",
+    conversionAction: null,
+    buyerDecisionQuestion: null,
+    evidence: [{ field: "lcp_ms", observedValue: 5400, sourceStatus: "AVAILABLE", artifactRef: "artifact:1" }],
+  }));
+  const right = projectFinding(finding("b", {
+    ruleId: "VAN-SCHEMA-001",
+    conversionAction: null,
+    buyerDecisionQuestion: null,
+    evidence: [{ field: "schema_types", observedValue: [], sourceStatus: "AVAILABLE", artifactRef: "artifact:1" }],
+  }));
+  const result = relationshipCandidate(left, right);
+  assert.equal(result.eligible, false);
+  assert.equal(result.reason, "compounding-needs-shared-decision-or-action");
+});
