@@ -13,3 +13,7 @@ This file is committed with the candidate to freeze the proof plan. Final exact-
 ## Corrected candidate proof
 
 Pending exact candidate SHA. Record every test suite, exit state, counts, duration, Whole-App P-B01–P-B16, Vercel and Railway deployment identities, report artifact hash, browser/PDF results, identity/path equivalence, and independent challenge in the numbered closure proof artifacts.
+
+## CR-43 golden review
+
+The prior exact candidate was rendered from the same 27 CR-43 matrix inputs. A content-level old/new comparison found 27 changed outputs; after normalizing only the governed priority-rank attributes/labels and removing the identical Trust verdict paragraph, all 27 files were byte-identical. No source evidence, score, recommendation, status, or limitation changed. CR-43 hashes were regenerated from those reviewed outputs and remain mandatory in the worker suite.
