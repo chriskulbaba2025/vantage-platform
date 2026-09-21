@@ -111,3 +111,60 @@ test("ENC-T3-STANDALONE-ID: standalone priority units retain their source findin
   assert.equal(units.length, 1);
   assert.deepEqual(units[0].findingIds, ["F-PERF"]);
 });
+
+
+test("ENC-T3-09: a current critical blocker is emitted once and is not duplicated as standalone", () => {
+  const projection = {
+    findingId: "F-BLOCK",
+    canonicalProblemId: "F02",
+    primary: true,
+    title: "Primary lead form is broken",
+    frictionState: FRICTION_STATES.FRICTION,
+    scope: { level: "page", urls: ["https://example.test/contact"] },
+    conversionAction: "contact",
+    evidence: [{ sourceStatus: "AVAILABLE" }],
+    evidenceLineage: { keys: ["browser:contact#submit"], primaryKey: "browser:contact#submit" },
+    evidenceIndependence: { keys: ["browser:contact#submit"], independentFamilyCount: 1 },
+    confidence: "deterministic",
+    severity: "High",
+    scoreBearing: true,
+    deviceContext: ["unspecified"],
+    freshness: { status: "CURRENT" },
+  };
+  const units = buildPriorityUnits([projection], { relationships: [], context: { currentlyReproducible: true } });
+  assert.equal(units.length, 1);
+  assert.equal(units[0].type, PRIORITY_UNIT_TYPES.BLOCKER);
+  assert.deepEqual(units[0].findingIds, ["F-BLOCK"]);
+});
+
+test("ENC-T3-10: accepted clusters cannot overlap by reusing the same finding", () => {
+  const make = (findingId, canonicalProblemId, action, family) => ({
+    findingId,
+    canonicalProblemId,
+    primary: true,
+    title: findingId,
+    frictionState: FRICTION_STATES.FRICTION,
+    scope: { level: "page", urls: ["https://example.test/service"] },
+    conversionAction: action,
+    evidence: [{ sourceStatus: "AVAILABLE" }],
+    evidenceLineage: { keys: [family], primaryKey: family },
+    evidenceIndependence: { keys: [family], independentFamilyCount: 1 },
+    confidence: "deterministic",
+    severity: "High",
+    scoreBearing: true,
+    deviceContext: ["unspecified"],
+    freshness: { status: "CURRENT" },
+  });
+  const projections = [
+    make("F-1", "F01", "contact", "family:1"),
+    make("F-2", "F03", "contact", "family:2"),
+    make("F-3", "E01", "contact", "family:3"),
+  ];
+  const relationships = [
+    { eligible: true, type: "Same journey point", findingIds: ["F-1", "F-2"] },
+    { eligible: true, type: "Same journey point", findingIds: ["F-2", "F-3"] },
+  ];
+  const units = buildPriorityUnits(projections, { relationships });
+  const ids = units.flatMap((unit) => unit.findingIds || []);
+  assert.equal(new Set(ids).size, ids.length);
+});
