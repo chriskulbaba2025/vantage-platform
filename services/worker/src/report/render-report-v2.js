@@ -27,7 +27,7 @@ import {
   phase2Section,
 } from "./report-detail-sections.js";
 
-export const REPORT_V2_VIEWER_VERSION = "2.3.0";
+export const REPORT_V2_VIEWER_VERSION = "2.3.1";
 
 export const REPORT_V2_VIEWER_PAGES = Object.freeze([
   Object.freeze({ pageId: "executive-scorecard", title: "Executive Scorecard", tier: "PRIMARY", sectionIds: Object.freeze(["executive"]) }),
@@ -468,7 +468,13 @@ function projectClientStatusText(html) {
   });
   const projected = masked.replace(/>([^<]+)</g, (_match, text) => `>${text
     .replace(/\bNOT_AVAILABLE\b/g, "not available")
-    .replace(/\bNOT_COLLECTED\b/g, "not collected")}<`);
+    .replace(/\bNOT_COLLECTED\b/g, "not collected")
+    .replace(/\bNOT_CONNECTED\b/g, "not connected")
+    .replace(/\bNOT_APPLICABLE\b/g, "not applicable")
+    .replace(/\bUNAVAILABLE\b/g, "Not available")
+    .replace(/\bAVAILABLE\b/g, "Reviewed")
+    .replace(/\bPARTIAL\b/g, "Partly reviewed")
+    .replace(/\bNOT ASSESSED\b/g, "Not assessed")}<`);
   return projected.replace(/\uE000(\d+)\uE001/g, (_match, index) => protectedBlocks[Number(index)]);
 }
 
@@ -541,13 +547,7 @@ function clientEncyclopediaEffect(value) {
 }
 
 function publicEvidenceAreaLabel(key) {
-  if (/^technical\./.test(key)) return "Technical checks";
-  if (/^performance\./.test(key)) return "Performance evidence";
-  if (/^conversion\./.test(key)) return "Conversion-path evidence";
-  if (/^content\./.test(key)) return "Content evidence";
-  if (/^trust\./.test(key)) return "Trust evidence";
-  if (/^site\./.test(key)) return "Website evidence";
-  return "Evidence area";
+  return clientCapabilityLabel(key);
 }
 
 function executiveClientSummary(pageState) {
@@ -560,7 +560,7 @@ function evidenceLimitList(model) {
     .filter(([, value]) => value?.status !== "AVAILABLE")
     .map(([key, value]) => ({
       label: publicEvidenceAreaLabel(key),
-      status: typeof value?.status === "string" ? value.status : "UNKNOWN",
+      status: clientEvidenceStatus(value?.status),
       notes: Array.isArray(value?.limitations) ? value.limitations.filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))) : [],
     }));
   if (!limits.length) return "<p>No capability limitation was recorded for the evidence represented in this report model.</p>";
@@ -587,7 +587,7 @@ function executiveScorecard(model, pillars, checklist, canonical, pageState, nar
     .filter((item) => item.status === "PASS" && item.assessed === true)
     .slice(0, 5)
     .map((item) => item.detail || `${item.label} was confirmed in the assessed scope.`);
-  const scoreDrivers = (pillars || []).map((pillar) => `<li><strong>${e(pillar.label)}:</strong> ${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "NOT ASSESSED"}${pillar.capabilities?.length ? ` <span class="small">Evidence: ${pillar.capabilities.map((item) => `${e(publicEvidenceAreaLabel(item.key))} ${e(item.status)}`).join("; ")}</span>` : ""}</li>`).join("");
+  const scoreDrivers = (pillars || []).map((pillar) => `<li><strong>${e(pillar.label)}:</strong> ${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "Not assessed"}${pillar.capabilities?.length ? ` <span class="small">Evidence: ${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))} ${e(clientEvidenceStatus(item.status))}`).join("; ")}</span>` : ""}</li>`).join("");
   const holding = pageState.state === "INSUFFICIENT_EVIDENCE"
     ? "The available evidence is not sufficient to identify a dependable overall constraint. Review the evidence limits below."
     : actions.length
@@ -1410,7 +1410,7 @@ function contentOpportunitiesSection(model, pageState) {
 
   const bodyCapability = model.capabilityEvidence?.capabilities?.["content.body"];
   const coverage = bodyCapability?.coverage || {};
-  const contentStrengths = `<p><strong>Content evidence status:</strong> ${e(bodyCapability?.status || "UNKNOWN")}${coverage.requested !== null && coverage.requested !== undefined ? ` — ${e(coverage.completed ?? "UNKNOWN")} of ${e(coverage.requested)} requested page bodies returned.` : ""}</p>${coveredTopics.length ? `<p>Observed service/topic labels in the reviewed evidence:</p><ul>${coveredTopics.map((topic) => `<li>${e(topic)}</li>`).join("")}</ul>` : `<p>NOT_AVAILABLE — no service or topic labels are available to list from the current model.</p>`}<p class="small">These observations do not establish complete site coverage or prove that unobserved content is absent.</p>`;
+  const contentStrengths = `<p><strong>Content evidence status:</strong> ${e(clientEvidenceStatus(bodyCapability?.status))}${coverage.requested !== null && coverage.requested !== undefined ? ` — ${e(coverage.completed ?? "UNKNOWN")} of ${e(coverage.requested)} requested page bodies returned.` : ""}</p>${coveredTopics.length ? `<p>Observed service/topic labels in the reviewed evidence:</p><ul>${coveredTopics.map((topic) => `<li>${e(topic)}</li>`).join("")}</ul>` : `<p>NOT_AVAILABLE — no service or topic labels are available to list from the current model.</p>`}<p class="small">These observations do not establish complete site coverage or prove that unobserved content is absent.</p>`;
   const funnelPlan = [
     ["Awareness", tofu],
     ["Evaluation", mofu],
@@ -1456,7 +1456,7 @@ function contentOpportunitiesSection(model, pageState) {
     <p>Confirm the existing page coverage and business-approved facts first. An unavailable or partial content response is not proof that the information is missing.</p>
 
     <h3>Evidence limitations</h3>
-    <p class="small"><strong>Content evidence status:</strong> ${e(bodyCapability?.status || "UNKNOWN")}. Search demand and competitor content may inform planning, but cannot establish a client content failure.</p>
+    <p class="small"><strong>Content evidence status:</strong> ${e(clientEvidenceStatus(bodyCapability?.status))}. Search demand and competitor content may inform planning, but cannot establish a client content failure.</p>
     <h3>Optional support</h3>
     <div class="optional-support"><strong>Omnipressence support is optional and separate from the audit findings.</strong><p>Support may include funnel planning, hub-and-spoke content development, distribution planning, and analytics review when those services are separately requested. This does not change the evidence or conclusions in this report.</p></div>
     <h3>Next step</h3><p>${e(pageState.boundedAction)}</p>
@@ -1753,18 +1753,18 @@ function recoveredAuditDataSection(model) {
   const data = model.recoveredAuditData;
   if (!data) return "";
   const normalizedRows = (data.normalizedSources || [])
-    .map((source) => `<tr><td>${e(source.source)}</td><td>${e(source.status)}</td><td>${e(source.coverage?.completed ?? "—")}/${e(source.coverage?.requested ?? "—")}</td><td>${e((source.limitations || []).join("; ") || "No additional limitation recorded")}</td></tr>`)
+    .map((source) => `<tr><td>${e(clientSourceLabel(source.source))}</td><td>${e(clientEvidenceStatus(source.status))}</td><td>${e(source.coverage?.completed ?? "—")}/${e(source.coverage?.requested ?? "—")}</td><td>${e((source.limitations || []).join("; ") || "No additional limitation recorded")}</td></tr>`)
     .join("");
   const screenshots = data.conversionValidation?.screenshots || [];
   return `<h3>Assessment records</h3>
     <p class="small">PRYSM used ${e(data.artifactCount)} verified audit records in this assessment. Supporting technical records remain available for verification.</p>
     <details class="supporting-detail-disclosure"><summary>Show technical traceability</summary>
       <div class="table-wrap"><table><thead><tr><th>Recovered input</th><th>Status</th><th>Disposition</th><th>Assessment note</th></tr></thead><tbody>
-        <tr><td>Conversion-path validation</td><td>${e(data.conversionValidation?.status || "UNKNOWN")}</td><td>PROJECTED</td><td>${e(`${data.conversionValidation?.pageCount || 0} assessed page(s); ${screenshots.length} reviewed screenshot(s) retained as supporting evidence.`)}</td></tr>
-        <tr><td>Canonical evidence envelope</td><td>VERIFIED</td><td>PROJECTED</td><td>${e(`${data.evidenceEnvelope?.sourceCount || 0} source group(s) and ${data.evidenceEnvelope?.artifactReferenceCount || 0} artifact reference(s) retained in the report model.`)}</td></tr>
-        <tr><td>Saved report record</td><td>VERIFIED</td><td>Supporting record</td><td>Retained to verify the saved report identity and versions.</td></tr>
-        <tr><td>Report version record</td><td>VERIFIED</td><td>Supporting record</td><td>Retained to verify which report version and status were rendered.</td></tr>
-        <tr><td>Narrative review</td><td>${e(data.narrativeGate?.finalJudgeDecision || "UNKNOWN")}</td><td>Supporting review</td><td>Retained to verify that the accepted narrative review completed; deterministic audit facts remain the source for scores and findings.</td></tr>
+        <tr><td>Conversion-path validation</td><td>${e(clientEvidenceStatus(data.conversionValidation?.status))}</td><td>Included in report</td><td>${e(`${data.conversionValidation?.pageCount || 0} assessed page(s); ${screenshots.length} reviewed screenshot(s) retained as supporting evidence.`)}</td></tr>
+        <tr><td>Evidence envelope</td><td>Recorded</td><td>Included in report</td><td>${e(`${data.evidenceEnvelope?.sourceCount || 0} source group(s) and ${data.evidenceEnvelope?.artifactReferenceCount || 0} artifact reference(s) retained in the report model.`)}</td></tr>
+        <tr><td>Saved report record</td><td>Recorded</td><td>Supporting record</td><td>Retained to verify the saved report identity and versions.</td></tr>
+        <tr><td>Report version record</td><td>Recorded</td><td>Supporting record</td><td>Retained to verify which report version and status were rendered.</td></tr>
+        <tr><td>Narrative review</td><td>${e(clientEvidenceStatus(data.narrativeGate?.finalJudgeDecision))}</td><td>Supporting review</td><td>Retained to verify that the accepted narrative review completed; deterministic audit facts remain the source for scores and findings.</td></tr>
       </tbody></table></div>
       <h4>Normalized source coverage</h4>
       <div class="table-wrap"><table><thead><tr><th>Source</th><th>Status</th><th>Coverage</th><th>Limits</th></tr></thead><tbody>${normalizedRows}</tbody></table></div>
@@ -1798,7 +1798,7 @@ function deepEvidenceLayer(model, pageState) {
   const capRows = Object.entries(caps)
     .filter(([key]) => key !== "technical.headers")
     .map(([key, c]) =>
-      `<tr><td>${e(clientCapabilityLabel(key))}</td><td><span class="chip ${capabilityStatusClass(c.status)}">${e(c.status)}</span></td><td class="small">${e(clientLimitationText((c.limitations || []).join("; ")))}</td><td class="small">${c.validated ? "Direct check" : "Based on the available evidence"}</td></tr>`,
+      `<tr><td>${e(clientCapabilityLabel(key))}</td><td><span class="chip ${capabilityStatusClass(c.status)}">${e(clientEvidenceStatus(c.status))}</span></td><td class="small">${e(clientLimitationText((c.limitations || []).join("; ")))}</td><td class="small">${c.validated ? "Direct check" : "Based on the available evidence"}</td></tr>`,
     )
     .join("");
 
@@ -1835,12 +1835,12 @@ function deepEvidenceLayer(model, pageState) {
 function supportingOverviewSectionInner(model, pillars, pageState, narrativeStates) {
   const capabilities = model.capabilityEvidence?.capabilities || {};
   const completenessRows = Object.entries(capabilities).map(([key, item]) => `<tr><th scope="row">${e(publicEvidenceAreaLabel(key))}</th><td>${e(clientEvidenceStatus(item.status))}</td><td>${e(item.coverage?.completed ?? "NOT_AVAILABLE")}${item.coverage?.requested !== null && item.coverage?.requested !== undefined ? ` / ${e(item.coverage.requested)}` : ""}</td><td>${e((item.limitations || []).filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))).join(" ") || "No further client-facing limitation is available for this evidence area.")}</td></tr>`).join("");
-  const readinessRows = (pillars || []).map((pillar) => `<tr><th scope="row">${e(pillar.label)}</th><td>${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "NOT ASSESSED"}</td><td>${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))}: ${e(item.status)}`).join("; ")}</td></tr>`).join("");
+  const readinessRows = (pillars || []).map((pillar) => `<tr><th scope="row">${e(pillar.label)}</th><td>${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "Not assessed"}</td><td>${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))}: ${e(clientEvidenceStatus(item.status))}`).join("; ")}</td></tr>`).join("");
   const findings = (model.findings || []).filter((finding) => finding.scoreBearing === true || finding.actionable === true);
   const findingMarkup = findings.length
-    ? `<ul>${findings.map((finding) => `<li><strong>${e(finding.title || finding.ruleId || "Governed finding")}.</strong> ${e(finding.severity || "UNKNOWN")} · ${e(finding.confidence || "UNKNOWN")} · evidence ${e([...(new Set((finding.evidence || []).map((item) => item.sourceStatus || "UNKNOWN")))].join(", ") || "UNKNOWN")}; scope ${e((finding.affectedUrls || []).join(", ") || "NOT_AVAILABLE")}.</li>`).join("")}</ul>`
+    ? `<ul>${findings.map((finding) => `<li><strong>${e(finding.title || finding.ruleId || "Reviewed finding")}.</strong> ${e(finding.severity || "Unknown")} · ${e(clientFindingEvidenceSummary(finding.confidence))} · evidence ${e([...(new Set((finding.evidence || []).map((item) => clientEvidenceStatus(item.sourceStatus))))].join(", ") || "Unknown")}; scope ${e((finding.affectedUrls || []).join(", ") || "No recorded page scope")}.</li>`).join("")}</ul>`
     : "<p>No material finding is available from the current report model.</p>";
-  const performanceMarkup = `<p>Lab evidence: <strong>${e(capabilityStatus(model, "performance.lab"))}</strong>. Field evidence: <strong>${e(capabilityStatus(model, "performance.field"))}</strong>.</p><p>Lab measurements describe the tested conditions. They are not real-user field performance.</p>`;
+  const performanceMarkup = `<p>Page speed check evidence: <strong>${e(clientEvidenceStatus(capabilityStatus(model, "performance.lab")))}</strong>. Real-user field data: <strong>${e(clientEvidenceStatus(capabilityStatus(model, "performance.field")))}</strong>.</p><p>Lab measurements describe the tested conditions. They are not real-user field performance.</p>`;
   const sources = ["site", "performance", "competitors", "backlinks", "ga4", "gsc"].map((key) => `<li><strong>${e(clientSourceLabel(key))}:</strong> ${e(clientEvidenceStatus(model.evidence?.[key]?.sourceStatus || model.evidence?.[key]?.status || model.sourceStatus?.[key] || "NOT_COLLECTED"))}</li>`).join("");
   const trace = Object.values(narrativeStates || {}).map((record) => `<tr data-narrative-page="${e(record.pageId)}"><th scope="row">${e(clientNarrativePageLabel(record.pageId))}</th><td>${e(record.state === "STRONG" ? "Supported" : record.state === "MIDDLE" ? "Mixed / bounded" : record.state === "WEAK" ? "Needs attention" : "Not enough evidence")}</td><td>${e(clientEvidenceStatus(record.evidenceSufficiency))}</td><td>${e(clientNarrativeScope(record))}</td><td>${e(clientNarrativeEvidenceReferences(record.evidenceRefs))}</td><td>${e(clientCopy(record.limitations.join(" ") || "No additional limitation recorded."))}</td></tr>`).join("");
   const available = Object.values(capabilities).filter((item) => item.status === "AVAILABLE").length;

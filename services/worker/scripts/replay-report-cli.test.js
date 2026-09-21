@@ -149,7 +149,7 @@ test("T4-REPLAY-CLI-05: historical current-2.0.0 contentIdeas are deterministica
   );
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /Replay result: 1\/1 PASS/);
-  assert.match(result.stdout, /viewer 2\.3\.0/);
+  assert.match(result.stdout, /viewer 2\.3\.1/);
   assert.deepEqual(
     JSON.parse(await readFile(scorePath, "utf8")).contentIdeas,
     legacy,
@@ -267,7 +267,7 @@ test("T4-REPLAY-CLI-03: default CLI validates and renders a production-composed 
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /Replay result: 1\/1 PASS/);
-  assert.match(result.stdout, /viewer 2\.3\.0/);
+  assert.match(result.stdout, /viewer 2\.3\.1/);
   assert.doesNotMatch(result.stdout, /LEGACY_COMPATIBILITY_ONLY/);
 });
 

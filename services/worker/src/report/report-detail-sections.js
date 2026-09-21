@@ -97,7 +97,11 @@ function statusChip(status) {
 
 function narrativeStateBlock(pageState) {
   if (!pageState) return "";
-  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><span class="chip cap-neutral">${e(pageState.state)}</span><p>${e(pageState.message)}</p><p class="small"><strong>Bounded action:</strong> ${e(pageState.boundedAction)}</p>${pageState.limitations?.length ? `<p class="small"><strong>Limit:</strong> ${e(pageState.limitations.join(" "))}</p>` : ""}</div>`;
+  const clientCopy = (value) => String(value ?? "")
+    .replace(/\bgoverned\b/gi, "reviewed")
+    .replace(/\bbounded\b/gi, "limited")
+    .replace(/\bcanonical\b/gi, "recorded");
+  return `<div class="narrative-state" data-narrative-state="${e(pageState.state)}"><p>${e(clientCopy(pageState.message))}</p><p class="small"><strong>Next step:</strong> ${e(clientCopy(pageState.boundedAction))}</p>${pageState.limitations?.length ? `<p class="small"><strong>Limit:</strong> ${e(clientCopy(pageState.limitations.join(" ")))}</p>` : ""}</div>`;
 }
 
 // ---------------------------------------------------------------------------

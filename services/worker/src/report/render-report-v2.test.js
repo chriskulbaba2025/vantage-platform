@@ -246,7 +246,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(visibleStatusText, /not available/i, "internal absence token is projected into client language");
   assert.match(visibleStatusText, /not collected/i, "internal collection token is projected into client language");
   assert.doesNotMatch(visibleStatusText, /\bNOT_AVAILABLE\b|\bNOT_COLLECTED\b/, "internal enum tokens never reach visible client copy");
-  assert.match(visibleStatusText, /\bAVAILABLE\b/, "approved evidence-state vocabulary remains intact");
+  assert.match(visibleStatusText, /\bReviewed\b/, "available evidence is described in client language");
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
   assert.match(blockers, /Start with the first item and work down the list\. Each priority below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
@@ -415,7 +415,7 @@ function assertFrozenViewerHierarchy() {
     "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
     "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "How should you use the proof you already have", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Next step"],
     "competitor-benchmark": ["Who was compared", "Where are the meaningful differences", "What is worth learning from", "PROTECT", "IMPROVE", "DIFFERENTIATE", "IGNORE", "What not to copy", "What this comparison cannot tell us", "What can this comparison confirm", "Next step"],
-    "supporting-detail": ["What evidence sits behind the report", "How complete was the evidence", "What drove the readiness score", "What material findings were established", "What did the performance evidence show", "Lab evidence", "Field evidence", "Where was evidence limited", "What source evidence was available", "How does this evidence support the report", "Conclusion", "Next step"],
+    "supporting-detail": ["What evidence sits behind the report", "How complete was the evidence", "What drove the readiness score", "What material findings were established", "What did the performance evidence show", "Page speed check evidence", "Real-user field data", "Where was evidence limited", "What source evidence was available", "How does this evidence support the report", "Conclusion", "Next step"],
   };
   for (const [pageId, headings] of Object.entries(required)) {
     assert.ok(pages[pageId].length > 0, `${pageId} page section exists`);
@@ -737,13 +737,36 @@ test("MVP-CLIENT-01: current Encyclopedia accepted priority units are the only p
   assert.match(blockers, /Check 1:/);
 });
 
-test("MVP-CLIENT-02: primary client pages do not expose internal narrative-state labels or bounded-action jargon", () => {
+test("MVP-CLIENT-02: all seven client pages do not expose internal state or source-status enums", () => {
   const html = renderReportV2(priorityModel());
-  const primaryEnd = html.indexOf('id="pillars"');
-  const primary = html.slice(0, primaryEnd > 0 ? primaryEnd : html.length);
-  const visible = primary.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
-  assert.doesNotMatch(visible, /\bBounded action\b/);
+  const pageIds = REPORT_V2_VIEWER_PAGES.flatMap((page) => page.sectionIds);
+  assert.equal(pageIds.length, 22);
+  const visible = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&(?:amp|nbsp|lt|gt);/g, " ");
+  assert.doesNotMatch(visible, /\bBounded action\b/i);
   assert.doesNotMatch(visible, /\b(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)\b/);
+  assert.doesNotMatch(visible, /\b(?:AVAILABLE|PARTIAL|UNAVAILABLE|NOT_COLLECTED|NOT_CONNECTED|NOT_APPLICABLE)\b/);
+  const trustStart = html.indexOf('<section id="eeat"');
+  const trustEnd = html.indexOf('<section id="competitors"', trustStart);
+  const trustPageText = html.slice(trustStart, trustEnd).replace(/<[^>]+>/g, " ");
+  assert.match(trustPageText, /Next step:/);
+  assert.doesNotMatch(trustPageText, /Bounded action|\b(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)\b/);
+});
+
+test("MVP-CLIENT-10: performance score drivers name separate lab and field evidence and preserve their distinct statuses", () => {
+  const fixture = priorityModel();
+  fixture.capabilityEvidence.capabilities["performance.lab"].status = "AVAILABLE";
+  fixture.capabilityEvidence.capabilities["performance.field"].status = "UNAVAILABLE";
+
+  const html = renderReportV2(fixture);
+  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
+  assert.match(executive, /Page speed checks Reviewed/);
+  assert.match(executive, /Real-user performance data Not available/);
+  assert.doesNotMatch(executive, /Performance evidence AVAILABLE[^<]*Performance evidence UNAVAILABLE/);
 });
 
 test("MVP-CLIENT-09: insufficient executive evidence withholds an otherwise available overall score", () => {

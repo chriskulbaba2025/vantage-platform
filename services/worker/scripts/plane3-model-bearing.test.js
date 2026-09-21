@@ -158,7 +158,7 @@ test("PLANE34-PATH: controlled Writer/Judge run uses production orchestration, v
   assert.equal(result.record.judgeCalls, 1);
   assert.equal(result.record.finalization.passed, true);
   assert.equal(result.record.render.passed, true);
-  assert.equal(result.record.render.viewerVersion, "2.3.0");
+  assert.equal(result.record.render.viewerVersion, "2.3.1");
   assert.ok((await readFile(result.manifest.path, "utf8")).includes("inputArtifactHashes"));
 });
 

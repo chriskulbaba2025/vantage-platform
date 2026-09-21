@@ -164,7 +164,7 @@ const EXPECTED_SECTION_IDS = [
 ];
 
 test("PRYSM-V2-SECTION-VIEWER-03: viewer keeps six peer destinations and one supporting destination", () => {
-  assert.equal(REPORT_V2_VIEWER_VERSION, "2.3.0");
+  assert.equal(REPORT_V2_VIEWER_VERSION, "2.3.1");
   assert.equal(REPORT_V2_VIEWER_PAGES.length, 7);
   assert.deepEqual(
     REPORT_V2_VIEWER_PAGES.filter((page) => page.tier === "PRIMARY").map((page) => page.title),
@@ -414,7 +414,7 @@ test("PRYSM-V2-SECTION-VIEWER-02: all governed section content remains in the si
 
   assert.match(
     html,
-    /data-viewer-version="2\.3\.0"/,
+    /data-viewer-version="2\.3\.1"/,
   );
 });
 
