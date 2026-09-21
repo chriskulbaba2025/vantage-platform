@@ -338,12 +338,13 @@ test("S03: Conversion Journey maps supported Encyclopedia friction without asser
     ],
     blockers: [],
   }];
+  const acceptedFindingIds = fixture.decisionHierarchy.orderedFindingIds.slice(0, 3);
   fixture.encyclopedia = {
     status: "AVAILABLE",
-    priorityUnits: ["A01", "A02", "A03"].map((id) => ({
+    priorityUnits: ["A01", "A02", "A03"].map((id, index) => ({
       canonicalProblemId: id,
       title: `Reviewed friction ${id}`,
-      findingIds: [],
+      findingIds: [acceptedFindingIds[index]],
       frictionState: "FRICTION",
       evidence: [{ sourceStatus: "AVAILABLE", evidenceRef: `fixture:${id}` }],
     })),
@@ -779,4 +780,26 @@ test("MVP-CLIENT-06: competitor source status falls back to canonical report sou
   const visible = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
   assert.match(visible, /Competitor review:\s*Reviewed/);
   assert.doesNotMatch(visible, /Competitor review:\s*Not collected/);
+});
+
+
+test("MVP-CLIENT-07: Conversion Journey translates Encyclopedia state and evidence labels", () => {
+  const fixture = model();
+  const acceptedFindingId = fixture.decisionHierarchy.orderedFindingIds[0];
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: [{
+      canonicalProblemId: "I01",
+      title: "Reviewed friction",
+      findingIds: [acceptedFindingId],
+      frictionState: "FRICTION",
+      evidence: [{ sourceStatus: "AVAILABLE" }],
+    }],
+  };
+  const html = renderReportV2(fixture);
+  const page = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
+  const visible = page.replace(/<[^>]+>/g, " ");
+  assert.match(visible, /Status:\s*Needs attention/);
+  assert.match(visible, /Evidence:\s*Reviewed/);
+  assert.doesNotMatch(visible, /\bFRICTION\b|\bAVAILABLE\b/);
 });
