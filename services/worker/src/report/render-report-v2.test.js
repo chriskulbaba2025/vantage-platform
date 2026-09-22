@@ -834,7 +834,7 @@ function remediationFixture() {
   fixture.canonicalSolutions = canonical;
   fixture.encyclopedia = {
     status: "AVAILABLE",
-    priorityUnits: synthetic.map((finding, index) => ({ type: "accepted material finding", canonicalProblemId: specs[index].familyId, findingIds: [finding.findingId], frictionState: "FRICTION", evidence: [{ sourceStatus: "AVAILABLE" }] })),
+    priorityUnits: synthetic.slice(0, 2).map((finding, index) => ({ type: "accepted material finding", canonicalProblemId: specs[index].familyId, findingIds: [finding.findingId], frictionState: "FRICTION", evidence: [{ sourceStatus: "AVAILABLE" }] })),
   };
   return { fixture, specs };
 }
@@ -847,16 +847,30 @@ test("REMEDIATION-RENDER-01: accepted finding families receive exactly three gov
   }
   const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   const cards = [...priority.matchAll(/<article class="priority-action"[\s\S]*?<\/article>/g)].map((match) => match[0]);
-  assert.equal(cards.length, 3);
-  const expected = ["above-the-fold asset", "supported structured data", "page-specific descriptions"];
+  assert.equal(cards.length, 2);
+  const expected = ["above-the-fold asset", "supported structured data"];
   for (const [index, card] of cards.entries()) {
     assert.equal((card.match(/class="common-remediation-option"/g) || []).length, 3);
+    assert.equal((card.match(/class="remediation-sequence-label"/g) || []).length, 3);
     assert.equal((card.match(/class="remediation-disclaimer"/g) || []).length, 1);
     assert.match(card, new RegExp(expected[index], "i"));
-    assert.match(card, /PRYSM confirmed the finding, but has not established which fix is right/);
+    assert.match(card, /PRYSM confirmed the finding, but the evidence does not identify the technical cause or which fix is required/);
+    for (const label of ["DO FIRST", "NEXT 7 DAYS", "BY 30 DAYS"]) assert.match(card, new RegExp(label));
     assert.doesNotMatch(card, /caused by|the cause is|this caused/i);
+    assert.match(card, /not a task-duration estimate or completion promise/);
   }
-  assert.equal((priority.match(/class="priority-action"/g) || []).length, 3);
+  assert.equal((priority.match(/Quick action plan/g) || []).length, 2);
+  assert.equal((priority.match(/class="priority-action"/g) || []).length, 2);
+  assert.doesNotMatch(priority, /Write useful page-specific descriptions/, "the A03 supporting observation is not promoted by taxonomy coverage alone");
+});
+
+test("REMEDIATION-SEQUENCE-RENDER-01: only Priority Fix cards display governed action windows", () => {
+  const { fixture } = remediationFixture();
+  const html = renderReportV2(fixture);
+  const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
+  assert.equal((priority.match(/class="remediation-sequence-label"/g) || []).length, 6);
+  const otherPages = html.replace(priority, "");
+  assert.doesNotMatch(otherPages, /DO FIRST|NEXT 7 DAYS|BY 30 DAYS|Quick action plan/);
 });
 
 test("REMEDIATION-RENDER-02: only accepted units receive options; unsupported mappings fail closed", () => {

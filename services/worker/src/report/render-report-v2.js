@@ -371,12 +371,19 @@ function priorityRemediationMarkup(remediation) {
   if (remediation?.status !== "SUPPORTED") {
     return `<p class="remediation-unavailable">${e(remediation?.message || "Common remediation options are not yet available for this finding. Review the supporting evidence before deciding how to correct it.")}</p>`;
   }
+  const sequenced = remediation.sequenceStatus === "SUPPORTED";
   const options = remediation.options.map((option) => `
     <div class="common-remediation-option">
+      ${sequenced ? `<p class="remediation-sequence-label">${e(option.sequenceLabel)}</p>` : ""}
       <h4>${e(option.title)}</h4>
       <p>${e(option.detail)}</p>
     </div>`).join("");
-  return `<p class="remediation-disclaimer">${e(remediation.disclaimer)}</p><div class="common-remediation-options">${options}</div>`;
+  const sequenceNote = sequenced
+    ? `<p class="remediation-disclaimer">${e(remediation.sequenceDisclaimer)}</p>`
+    : remediation.sequenceStatus === "SEQUENCE_NOT_SUPPORTED"
+      ? `<p class="remediation-disclaimer">${e(remediation.disclaimer)}</p><p class="remediation-sequence-note">${e(remediation.sequenceMessage)}</p>`
+      : `<p class="remediation-disclaimer">${e(remediation.disclaimer)}</p>`;
+  return `${sequenceNote}<div class="common-remediation-options${sequenced ? " common-remediation-options-sequenced" : ""}">${options}</div>`;
 }
 
 function clientFrictionStateLabel(state) {
@@ -928,7 +935,7 @@ function blockersSection(model, decisionProjection, pageState) {
         <div class="priority-field priority-field-attention"><dt>What we know</dt><dd>${e(group.records.length > 1 ? `The review linked ${group.records.length} separate evidence-backed issues at the same buyer decision or action.` : page2Found(record))}${supporting.length ? `<ul>${supporting.slice(0, 3).map((item) => `<li>${e(page2Title(item))}</li>`).join("")}</ul>` : ""}</dd></div>
         <div class="priority-field priority-field-attention"><dt>Why this is a priority</dt><dd>${e(clientPriorityReason(group))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(priorityGroupMeaning(group))}</dd></div>
-        <div class="priority-field priority-field-attention"><dt>Three common fixes to consider</dt><dd>${priorityRemediationMarkup(group.remediation)}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>${group.remediation?.sequenceStatus === "SUPPORTED" ? "Quick action plan" : "Three common fixes to consider"}</dt><dd>${priorityRemediationMarkup(group.remediation)}</dd></div>
         <div class="priority-field"><dt>Where to look</dt><dd>${e(page2Location(record))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(group.records.length > 1 ? "Repeat each related verification check and confirm every included issue has improved." : page2Verify(record))}</dd></div>
         <div class="priority-field"><dt>Who may need to help</dt><dd>${e([...new Set(group.records.map((item) => page2Roles(item)))].join(" and "))}</dd></div>
@@ -957,10 +964,12 @@ function blockersSection(model, decisionProjection, pageState) {
     <h3>Start here</h3>
     <p>${mainGroups.length ? `Start with the first item and work down the list. Each priority below explains what we found, why it matters, common options a team may consider, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(priorityGroupTitle(mainGroups[0]))}. The report shows only the ${e(mainGroups.length)} accepted primary priorit${mainGroups.length === 1 ? "y" : "ies"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
     <div class="priority-sequence">${cards}</div>
-    <h3>Check these first</h3>
-    <p class="small">These checks help investigate a condition; they do not establish its cause.</p>
-    ${checks.length ? `<ul class="priority-diagnostic-checks">${checks.join("")}</ul>` : `<p>${pageState.state === "INSUFFICIENT_EVIDENCE" ? "Not enough evidence is available to prioritize diagnostic checks." : "No Encyclopedia priority unit with first diagnostic checks is linked to these primary actions."}</p>`}
-    <div class="small"><strong>Evidence limits:</strong>${evidenceGuardrail}</div>
+    <div class="priority-diagnostic-section">
+      <h3>Check these first</h3>
+      <p class="small">These checks help investigate a condition; they do not establish its cause.</p>
+      ${checks.length ? `<ul class="priority-diagnostic-checks">${checks.join("")}</ul>` : `<p>${pageState.state === "INSUFFICIENT_EVIDENCE" ? "Not enough evidence is available to prioritize diagnostic checks." : "No Encyclopedia priority unit with first diagnostic checks is linked to these primary actions."}</p>`}
+      <div class="small"><strong>Evidence limits:</strong>${evidenceGuardrail}</div>
+    </div>
   </section>`;
 }
 
@@ -2718,6 +2727,27 @@ a {
   padding:10px 12px;
 }
 
+.common-remediation-options-sequenced {
+  counter-reset:remediation-sequence;
+}
+
+.remediation-sequence-label {
+  color:var(--prysm-primary);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.06em;
+  line-height:1.3;
+  margin:0 0 4px;
+  text-transform:uppercase;
+}
+
+.remediation-sequence-note {
+  color:var(--prysm-muted);
+  font-size:14px;
+  line-height:1.45;
+  margin:0 0 8px;
+}
+
 .common-remediation-option h4 {
   color:var(--prysm-dark);
   font-size:15px;
@@ -3414,6 +3444,7 @@ details[open] > summary {
 
 @media print {
   .action-page .priority-sequence { display:block; }
+  .action-page .priority-diagnostic-section { page-break-inside:avoid; break-inside:avoid; }
   .action-page .priority-action {
     margin:0 0 8px;
     padding:10px;
