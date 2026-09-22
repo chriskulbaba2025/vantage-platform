@@ -16,6 +16,14 @@ import { deriveNarrativeStates } from "../report-model/narrative-state.js";
 import { CANONICAL_PROBLEM_BY_ID } from "../encyclopedia/registry.js";
 import { projectPriorityRemediation } from "./remediation-taxonomy.js";
 import {
+  projectDimensionRows,
+  projectEvidenceConfidence,
+  projectEvidenceCoverage,
+  projectImplementationContext,
+  projectJourneyStages,
+  clientSafeCopy as projectClientSafeCopy,
+} from "./client-presentation.js";
+import {
   foundationSection,
   eeatSection,
   technicalDetailSection,
@@ -373,7 +381,7 @@ function priorityRemediationMarkup(remediation) {
   }
   const sequenced = remediation.sequenceStatus === "SUPPORTED";
   const options = remediation.options.map((option) => `
-    <div class="common-remediation-option">
+    <div class="common-remediation-option"${sequenced ? ` data-sequence-slot="${e(option.sequenceSlot)}"` : ""}>
       ${sequenced ? `<p class="remediation-sequence-label">${e(option.sequenceLabel)}</p>` : ""}
       <h4>${e(option.title)}</h4>
       <p>${e(option.detail)}</p>
@@ -383,7 +391,35 @@ function priorityRemediationMarkup(remediation) {
     : remediation.sequenceStatus === "SEQUENCE_NOT_SUPPORTED"
       ? `<p class="remediation-disclaimer">${e(remediation.disclaimer)}</p><p class="remediation-sequence-note">${e(remediation.sequenceMessage)}</p>`
       : `<p class="remediation-disclaimer">${e(remediation.disclaimer)}</p>`;
+  if (sequenced && (!Array.isArray(remediation.options) || remediation.options.length !== 3 ||
+    new Set(remediation.options.map((option) => option.sequenceSlot)).size !== 3 ||
+    !["FIRST", "NEXT_7_DAYS", "BY_30_DAYS"].every((slot) => remediation.options.some((option) => option.sequenceSlot === slot)))) {
+    return `<p class="remediation-unavailable">The suggested order is not available for this finding.</p>`;
+  }
   return `${sequenceNote}<div class="common-remediation-options${sequenced ? " common-remediation-options-sequenced" : ""}">${options}</div>`;
+}
+
+function executiveDecisionVisuals(model, pillars, decisionProjection) {
+  const dimensions = projectDimensionRows(pillars);
+  const dimensionMarkup = dimensions.map((item) => `<li class="dimension-bar-row" data-dimension="${e(item.id)}">
+    <div class="dimension-bar-heading"><strong>${e(item.label)}</strong><span>${item.score === null ? "Not assessed" : `${e(item.score)}/100 · ${e(item.state)}`}</span></div>
+    <div class="dimension-bar-track" aria-hidden="true"><span class="dimension-bar-fill" style="width:${item.score === null ? 0 : e(item.score)}%"></span></div>
+    ${item.evidence.length ? `<p class="dimension-evidence small">${item.evidence.map((entry) => `${e(clientCapabilityLabel(entry.label))}: ${e(entry.status)}`).join(" · ")}</p>` : ""}
+  </li>`).join("");
+  const evidence = projectEvidenceCoverage(model);
+  const evidenceMarkup = evidence.length ? evidence.map((item) => `<li><strong>${e(item.label)}</strong><span>${e(item.status)}${item.coverage ? ` · ${e(item.coverage)}` : ""}</span></li>`).join("") : "<li>Evidence source status was not recorded.</li>";
+  const confidence = projectEvidenceConfidence(model);
+  const top = decisionProjection.groups[0];
+  const blocker = top
+    ? `<strong>${e(page2Title(top.primary))}</strong><p>${e(clientPriorityReason(top))}</p><p class="small">This is the first accepted priority. See <a href="#priority-fixes">Priority Fixes</a> for its place in the action sequence.</p>`
+    : "<p>No primary blocker was established.</p>";
+  const performanceLab = capabilityStatus(model, "performance.lab");
+  const performanceField = capabilityStatus(model, "performance.field");
+  return `<section class="executive-visuals" aria-label="Evidence and readiness summary">
+    <div class="primary-blocker"><p class="visual-kicker">Primary blocker</p>${blocker}</div>
+    <div class="dimension-summary"><h3>Where is the site strongest and weakest?</h3><ul class="dimension-bars">${dimensionMarkup}</ul></div>
+    <div class="evidence-summary"><h3>What evidence did PRYSM have?</h3><p>Evidence confidence: <strong>${e(confidence)}</strong></p><ul class="evidence-coverage-strip">${evidenceMarkup}</ul><p>Page speed checks: <strong>${e(clientEvidenceStatus(performanceLab))}</strong>. Real-user performance data: <strong>${e(clientEvidenceStatus(performanceField))}</strong>.</p></div>
+  </section>`;
 }
 
 function clientFrictionStateLabel(state) {
@@ -521,7 +557,10 @@ function narrativeBlock(pageState) {
 }
 
 function clientCopy(value) {
-  return String(value ?? "")
+  return projectClientSafeCopy(String(value ?? ""), "Technical details for this check are not shown in this client report.")
+    .replace(/The audit cannot make a dependable overall readiness conclusion yet; the missing evidence boundary is shown below\.?/gi, "We did not have enough evidence to give a reliable overall score. The missing evidence is listed below.")
+    .replace(/Preserve the evidence boundary, run only bounded checks, and verify before making a condition claim\.?/gi, "Review the missing evidence. Then check only what the available information supports.")
+    .replace(/The available evidence is not sufficient to identify a dependable overall constraint\. Review the evidence limits below\.?/gi, "We do not have enough evidence to name one main issue across the whole site. See the limits below.")
     .replace(/the explicitly governed change/gi, "the specified change")
     .replace(/the governed buyer decision or audit judgment/gi, "a buyer decision")
     .replace(/\bgoverned\b/gi, "reviewed")
@@ -568,7 +607,7 @@ function executiveScorecard(model, pillars, checklist, decisionProjection, pageS
   const actions = priorityGroups.map((group) => group.primary);
   const numericScoreVisible = pageState.state !== "INSUFFICIENT_EVIDENCE" && model.showNumericScore !== false && typeof readiness === "number";
   const readinessLine = !numericScoreVisible
-    ? `<div class="readiness-none">${e(pageState.state === "INSUFFICIENT_EVIDENCE" ? "Insufficient Evidence for Overall Score" : model.readinessStatus || "Overall score unavailable")}</div>`
+    ? `<div class="readiness-none">${e(pageState.state === "INSUFFICIENT_EVIDENCE" ? "Not enough evidence for a score" : model.readinessStatus || "Overall score unavailable")}</div>`
     : `<div class="readiness">${e(readiness)}<span class="readiness-max">/100</span></div><div class="readiness-band">${bandChip(model.bands.conversionReadiness)}</div>`;
   const priorities = priorityGroups.length
     ? `<p>${e(priorityGroups.length)} accepted client ${priorityGroups.length === 1 ? "priority is" : "priorities are"} available. <a href="#priority-fixes">Priority Fixes</a> contains the authoritative actions and their order.</p>`
@@ -578,7 +617,6 @@ function executiveScorecard(model, pillars, checklist, decisionProjection, pageS
     .filter((item) => item.status === "PASS" && item.assessed === true)
     .slice(0, 5)
     .map((item) => item.detail || `${item.label} was confirmed in the assessed scope.`);
-  const scoreDrivers = (pillars || []).map((pillar) => `<li><strong>${e(pillar.label)}:</strong> ${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "Not assessed"}${pillar.capabilities?.length ? ` <span class="small">Evidence: ${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))} ${e(clientEvidenceStatus(item.status))}`).join("; ")}</span>` : ""}</li>`).join("");
   const holding = pageState.state === "INSUFFICIENT_EVIDENCE"
     ? "The available evidence is not sufficient to identify a dependable overall constraint. Review the evidence limits below."
     : actions.length
@@ -591,9 +629,7 @@ function executiveScorecard(model, pillars, checklist, decisionProjection, pageS
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
     ${executiveClientSummary(pageState)}
-    <h3>${numericScoreVisible ? `Why is the score ${e(readiness)}?` : "Why is no score shown?"}</h3>
-    <p>The score display below uses the existing assessed dimension outputs. It does not add a new score or treat unavailable dimensions as zero.</p>
-    <ul class="executive-score-drivers">${scoreDrivers}</ul>
+    ${executiveDecisionVisuals(model, pillars, decisionProjection)}
     <h3>What is already working? What is helping the site?</h3>
     ${strengths.length ? `<ul>${keepItems}</ul>` : "<p>No assessed strength was available to state from the current model.</p>"}
     <h3>What is holding the site back?</h3>
@@ -724,22 +760,8 @@ function pillarSection(pillars, model, narrativeStates) {
         <a href="#phase2">Evidence &amp; Limitations</a>
       </nav>
     </div>
-    <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Where is the site helping or hurting conversion?</p>
-    <p class="muted small">Conversion Readiness Map</p>
-    <h2>Where are the problems?</h2>
+    <h3>Dimension detail</h3>
     <p>${e(directAnswer)}</p>
-        <div style="overflow-x:auto;margin:18px 0 22px">
-      <svg viewBox="0 0 460 340" role="img" aria-label="Five-axis conversion readiness map" style="width:100%;max-width:720px;display:block;margin:0 auto">
-        <polygon points="${polygonFor(100)}" fill="none" stroke="currentColor" opacity=".15"/>
-        <polygon points="${polygonFor(80)}" fill="none" stroke="currentColor" opacity=".12"/>
-        <polygon points="${polygonFor(60)}" fill="none" stroke="currentColor" opacity=".10"/>
-        <polygon points="${polygonFor(40)}" fill="none" stroke="currentColor" opacity=".08"/>
-        ${axes}
-        ${allAvailable ? `<polygon points="${dataPolygon}" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-width="2"/>` : ""}
-      </svg>
-    </div>
-
-    <p class="muted small">Bands: Strong 80–100 · Adequate 60–79 · Needs Attention 40–59 · Material Gap below 40. An asterisk marks a dimension with limited evidence. Missing dimensions are never plotted as zero.</p>
 
     <details class="supporting-detail-disclosure">
       <summary>Readiness dimensions and capability detail</summary>
@@ -927,7 +949,7 @@ function blockersSection(model, decisionProjection, pageState) {
       <div class="priority-action-heading">
         <span class="priority-rank" aria-label="Priority ${e(displayRank)}">${e(displayRank)}</span>
         <div>
-          ${index === 0 ? '<span class="priority-start">Start here</span>' : ''}
+          ${index === 0 ? '<span class="priority-start">Priority 1</span>' : ''}
           <h3>${e(priorityGroupTitle(group))}</h3>
         </div>
       </div>
@@ -941,6 +963,8 @@ function blockersSection(model, decisionProjection, pageState) {
         <div class="priority-field"><dt>Who may need to help</dt><dd>${e([...new Set(group.records.map((item) => page2Roles(item)))].join(" and "))}</dd></div>
         <div class="priority-field"><dt>Confidence in this finding</dt><dd>${e(group.records.every((item) => page2Confidence(item) === "Strong evidence") ? "Strong evidence" : "Some evidence — confirm before making the change")}</dd></div>
         <div class="priority-field"><dt>Effort</dt><dd>${e([...new Set(group.records.map((item) => page2Effort(item)))].join(" / "))}</dd></div>
+        ${(() => { const context = projectImplementationContext(record, model.evidence?.site?.platform || model.site?.platform || model.platform); return `<div class="priority-field implementation-context"><dt>Implementation</dt><dd><strong>${e(context.label)}</strong><p>${e(context.detail)}</p></dd></div>`; })()}
+        ${(() => { const stages = projectJourneyStages(group.unit ? [group.unit] : []); const established = stages.filter((stage) => stage.status !== "Not established"); return `<div class="priority-field"><dt>Journey stage</dt><dd>${established.length === 1 ? `${e(established[0].stage)} — ${e(established[0].status)}` : "Not established"}</dd></div>`; })()}
       </dl>
     </article>`;
   }).join("");
@@ -950,7 +974,7 @@ function blockersSection(model, decisionProjection, pageState) {
     .filter((unit) => (unit.findingIds || []).some((id) => mainFindingIds.has(id)))
     .flatMap((unit) => {
       const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
-      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)}</li>`);
+      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((check) => `<li>${e(check)}</li>`);
     });
   const evidenceGuardrail = pageState.limitations.length
     ? `<ul>${pageState.limitations.map((limit) => `<li>${e(limit)}</li>`).join("")}</ul>`
@@ -961,12 +985,11 @@ function blockersSection(model, decisionProjection, pageState) {
     <p class="muted small">Priority Fixes</p>
     <h2>What should you fix first?</h2>
     ${narrativeBlock(pageState)}
-    <h3>Start here</h3>
-    <p>${mainGroups.length ? `Start with the first item and work down the list. Each priority below explains what we found, why it matters, common options a team may consider, and how to check the result. Supporting Detail contains the deeper evidence and technical checks. Begin with ${e(priorityGroupTitle(mainGroups[0]))}. The report shows only the ${e(mainGroups.length)} accepted primary priorit${mainGroups.length === 1 ? "y" : "ies"} for this audit.` : "No primary fix is established from the available reviewed evidence. Do not add a problem to fill the page."}</p>
+    <p>${mainGroups.length ? `The accepted priorities below are the report's only ordered action sequence. Each card shows the finding, evidence, likely help needed, and the governed suggested steps. Supporting Detail contains deeper evidence.` : "No primary fix is established from the available reviewed evidence. No problem has been added to fill the page."}</p>
     <div class="priority-sequence">${cards}</div>
     <div class="priority-diagnostic-section">
-      <h3>Check these first</h3>
-      <p class="small">These checks help investigate a condition; they do not establish its cause.</p>
+      <h3>Supporting diagnostic checks</h3>
+      <p class="small">These checks can help investigate a condition. They do not establish its cause or add to the action order above.</p>
       ${checks.length ? `<ul class="priority-diagnostic-checks">${checks.join("")}</ul>` : `<p>${pageState.state === "INSUFFICIENT_EVIDENCE" ? "Not enough evidence is available to prioritize diagnostic checks." : "No Encyclopedia priority unit with first diagnostic checks is linked to these primary actions."}</p>`}
       <div class="small"><strong>Evidence limits:</strong>${evidenceGuardrail}</div>
     </div>
@@ -981,15 +1004,14 @@ function conversionPathSection(model, decisionProjection, pageState) {
   const conversionEvidenceNote = conversionEvidence
     ? `<div class="conversion-journey-evidence"><strong>Browser path evidence:</strong> ${e(conversionEvidence.status)} across ${e(conversionEvidence.pageCount)} assessed page(s). ${e((conversionEvidence.screenshots || []).length)} supporting screenshots are retained with the audit evidence.</div>`
     : "";
+  const reviewedPathSummary = paths.length
+    ? `<div class="conversion-journey-evidence"><strong>Recorded path checks:</strong><ul>${paths.map((path) => `<li>${e(path.name || "Reviewed path")}: ${e(path.status || "Unknown")}</li>`).join("")}</ul></div>`
+    : "";
   const trustBand = model.bands?.trust;
   const limitation = "We can see whether the website gives people a clear path toward action. We cannot tell from this audit how many people clicked a button, completed a form, left a page, or stopped partway through the journey. Those questions need website analytics or other behavior data.";
   const site = model.evidence?.site || {};
-  const journeyStages = [
-    { title: "Reach the right page", status: clientStatusLabel(site.sourceStatus), evidence: Array.isArray(site.pages) && site.pages.length ? `${site.pages.length} reviewed page record(s) support the site-entry context.` : "No page-level entry evidence is available in the current report model." },
-    { title: "Understand enough to continue", status: `${clientStatusLabel(capabilityStatus(model, "offer.clarity"))} / ${clientStatusLabel(capabilityStatus(model, "content.body"))}`, evidence: "Offer and page-content evidence are shown here only to describe what was reviewed. They do not prove that every buyer has enough information." },
-    { title: "Take the next step", status: `${clientStatusLabel(capabilityStatus(model, "conversion.cta"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.form"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.path"))}`, evidence: paths.length ? paths.map((path) => `${path.name || "Recorded path"}: ${path.status || "Unknown"}.`).join(" ") : "No reviewed conversion-path record is available." },
-  ];
-  const journeyStageCards = journeyStages.map((stage, index) => `<article class="conversion-journey-step" data-journey-stage="${index + 1}"><span class="conversion-journey-step-number">${index + 1}</span><h3>${e(stage.title)}</h3><p><strong>Status:</strong> ${e(stage.status)}</p><p><strong>Evidence seen:</strong> ${e(stage.evidence)}</p></article>`).join("");
+  const journeyStages = projectJourneyStages(decisionProjection.acceptedUnits);
+  const journeyStageCards = journeyStages.map((stage) => `<article class="conversion-journey-step"><h3>${e(stage.stage)}</h3><p><strong>Status:</strong> ${e(stage.status)}</p>${stage.status !== "Not established" ? `<p>${e(stage.context)}</p>` : ""}</article>`).join("");
   const encyclopediaUnits = decisionProjection.acceptedUnits;
   const journeyFrictionCards = encyclopediaUnits.filter((unit) => {
     const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
@@ -1001,7 +1023,7 @@ function conversionPathSection(model, decisionProjection, pageState) {
   }).slice(0, 3).map((unit) => {
     const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
     const statuses = [...new Set((unit.evidence || []).map((record) => record.sourceStatus || "UNKNOWN"))];
-    return `<article class="conversion-journey-detail-card" data-encyclopedia-problem="${e(unit.canonicalProblemId || "NOT_AVAILABLE")}"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(clientFrictionStateLabel(unit.frictionState))}</p><p><strong>Evidence:</strong> ${e(statuses.map(clientStatusLabel).join(", ") || "Unknown")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p><strong>Check first:</strong> ${e(problem?.firstDiagnosticChecks?.[0] || "Confirm the recorded condition and scope before deciding what to change.")}</p><p class="small">This is a diagnostic view; it does not establish cause, abandonment, or a business outcome.</p></article>`;
+    return `<article class="conversion-journey-detail-card"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(clientFrictionStateLabel(unit.frictionState))}</p><p><strong>Evidence:</strong> ${e(statuses.map(clientStatusLabel).join(", ") || "Unknown")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p class="small">This does not establish cause, abandonment, or a business outcome. See Priority Fixes for the action order.</p></article>`;
   }).join("");
   const frictionBlock = journeyFrictionCards.length
     ? `<div class="conversion-journey-card-grid">${journeyFrictionCards}</div>`
@@ -1034,6 +1056,7 @@ function conversionPathSection(model, decisionProjection, pageState) {
       <h3>What cannot yet be measured?</h3><p>${e(limitation)}</p>
       <h3>Evidence and limits</h3>${journeyLimitations}${priorityReference}
       ${conversionEvidenceNote}
+      ${reviewedPathSummary}
     </section>`;
   }
 
@@ -1045,13 +1068,14 @@ function conversionPathSection(model, decisionProjection, pageState) {
     <h2>Can visitors move from interest to action?</h2>
     <p class="conversion-journey-verdict">${e(clientCopy(verdict))}</p>
     <h3>How the journey works</h3>
-    <div class="conversion-journey-visual" aria-label="Three assessed conversion journey stages"><div class="conversion-journey-steps">${journeyStageCards}</div></div>
+      <div class="conversion-journey-visual" aria-label="Awareness, consideration, decision, and action stages"><div class="conversion-journey-steps">${journeyStageCards}</div></div>
     <h3>Where can visitors lose momentum?</h3>${frictionBlock}
     <h3>What should you keep?</h3><div class="conversion-journey-strength">${keepMarkup}</div>
     <h3>What should you measure next?</h3>${measureMarkup}
     <h3>What cannot yet be measured?</h3><p>${e(limitation)}</p>
     <h3>Evidence and limits</h3>${journeyLimitations}${priorityReference}
     ${conversionEvidenceNote}
+    ${reviewedPathSummary}
   </section>`;
 }
 
@@ -1312,7 +1336,6 @@ function contentOpportunitiesSection(model, pageState) {
   const tofu = ideas.tofu || [];
   const mofu = ideas.mofu || [];
   const bofu = ideas.bofu || [];
-  const leading = ideas.leading || [];
   const site = model.evidence?.site || {};
   const allIdeas = [
     ...tofu.map((i) => ({ ...i, planningStage: i.funnelStage || i.stage || "TOFU" })),
@@ -1330,11 +1353,7 @@ function contentOpportunitiesSection(model, pageState) {
         const title = clientContentOpportunityTitle(i);
         const stage = i.planningStage || i.funnelStage || i.stage || "";
         const coverage = clientContentCoverage(i);
-        return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}">
-          <div class="content-opportunity-card-header">
-            ${primary ? `<span class="content-opportunity-rank">${index + 1}</span>` : ""}
-            ${index === 0 ? '<span class="content-opportunity-start">Start here</span>' : ""}
-          </div>
+        return `<article class="content-opportunity-card">
           <h4>${e(title)}</h4>
           <dl class="content-opportunity-fields">
             <div><dt>What buyers are asking / Buyer question</dt><dd>${e(clientContentBuyerQuestion(i))}</dd></div>
@@ -1349,10 +1368,8 @@ function contentOpportunitiesSection(model, pageState) {
       })
       .join("");
 
-  const priorityRank = (value) => ({ H: 0, HIGH: 0, M: 1, MEDIUM: 1, L: 2, LOW: 2 }[String(value || "").toUpperCase()] ?? 3);
-  const rankedIdeas = allIdeas.map((idea, sourceOrder) => ({ ...idea, sourceOrder })).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.sourceOrder - b.sourceOrder);
-  const primaryIdeas = rankedIdeas.slice(0, 5);
-  const supportingIdeas = rankedIdeas.slice(5);
+  const primaryIdeas = allIdeas;
+  const supportingIdeas = [];
   const strongestIdea = primaryIdeas.slice(0, 1);
   const additionalIdeas = primaryIdeas.slice(1);
   const strongestCard = renderOpportunityCards(strongestIdea, 0, true);
@@ -1366,14 +1383,10 @@ function contentOpportunitiesSection(model, pageState) {
     ]),
   ].filter(meaningfulClientTopic).slice(0, 12);
 
-  const supportingSignals = coveredTopics.length || leading.length
+  const supportingSignals = coveredTopics.length
     ? `<details class="content-supporting-signals">
         <summary>Supporting content signals</summary>
         ${coveredTopics.length ? `<h4>Observed topics</h4><ul>${coveredTopics.map((topic) => `<li>${e(topic)}</li>`).join("")}</ul>` : ""}
-        ${leading.length ? `<h4>Additional search topics</h4><div class="table-wrap"><table>
-          <thead><tr><th>Query</th><th>Rationale</th><th>Priority</th></tr></thead>
-          <tbody>${leading.map((q) => `<tr><td>${e(q.query || "")}</td><td class="small">${e(q.rationale || "")}</td><td>${e(q.priority || "")}</td></tr>`).join("")}</tbody>
-        </table></div>` : ""}
       </details>`
     : "";
 
@@ -1404,19 +1417,9 @@ function contentOpportunitiesSection(model, pageState) {
     <div class="content-coverage-grid">${contentStrengths}</div>
 
     <h3>Where more content may help</h3>
-    <p class="muted small">Content that could help buyers move forward is shown as a ranked planning opportunity; it is not proof of missing site content.</p>
-    <h3>Start with the strongest opportunity</h3>
-    ${strongestCard ? `<div class="content-opportunity-list">${strongestCard}</div>` : `<p>NOT_AVAILABLE — no content opportunity is available to rank.</p>`}
-
-    <h3>Other useful opportunities</h3>
-    ${additionalOpportunityMarkup}
-
-    <h3>How should these ideas work together?</h3>
-    <h4>Build one clear hub</h4>${hubSpokePlan}
-    <h4>Connect supporting spokes</h4><p>Use links between a central topic and related guides only after the relationship and destination are confirmed for the site's actual services.</p>
-    <h3>Turn one useful idea into a larger content system</h3>
-    <ul class="content-funnel-architecture">${funnelPlan}</ul>
-    <p class="small">Funnel architecture is planning guidance based on the recorded opportunity stages, not observed site structure.</p>
+    <p class="muted small">Ideas follow the source order. This page offers planning context and does not set corrective action order.</p>
+    <h3>Planning opportunities</h3>
+    ${allIdeas.length ? `<div class="content-opportunity-list">${renderOpportunityCards(allIdeas)}</div>` : "<p>No content planning opportunity is available.</p>"}
 
     <h3>What does good content planning look like?</h3>
     <h4>Every piece should have a job.</h4>
@@ -2709,6 +2712,33 @@ a {
   margin:0;
 }
 
+.executive-visuals { display:grid; gap:18px; margin:28px 0; }
+.primary-blocker,.dimension-summary,.evidence-summary { border:1px solid var(--prysm-line); border-radius:14px; padding:20px; background:#fff; }
+.primary-blocker { border:2px solid var(--prysm-primary); background:var(--prysm-mint-2); }
+.visual-kicker { margin:0 0 8px; color:var(--prysm-primary); font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+.dimension-bars,.evidence-coverage-strip { display:grid; gap:14px; list-style:none; margin:16px 0 0; padding:0; }
+.dimension-bar-heading,.evidence-coverage-strip li { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+.dimension-bar-track { height:12px; border-radius:999px; background:var(--prysm-mint); border:1px solid var(--prysm-line); overflow:hidden; margin-top:6px; }
+.dimension-bar-fill { display:block; height:100%; background:var(--prysm-primary); border-radius:inherit; }
+.dimension-evidence { margin:.25rem 0 0; }
+.evidence-coverage-strip li { padding:10px 0; border-bottom:1px solid var(--prysm-line); }
+.evidence-coverage-strip li:last-child { border-bottom:0; }
+.implementation-context { border-left:3px solid var(--prysm-line); }
+.common-remediation-options-sequenced { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.common-remediation-options-sequenced .common-remediation-option { min-width:0; }
+.common-remediation-options-sequenced .remediation-sequence-label { color:var(--prysm-primary); font-weight:800; }
+.conversion-journey-steps { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.conversion-journey-step { min-width:0; border:1px solid var(--prysm-line); border-radius:12px; padding:16px; background:var(--prysm-mint-2); }
+.conversion-journey-step h3 { margin-top:0; font-size:1.15rem; }
+@media (max-width:720px) {
+  .dimension-bar-heading,.evidence-coverage-strip li { align-items:flex-start; flex-direction:column; gap:3px; }
+  .common-remediation-options-sequenced,.conversion-journey-steps { grid-template-columns:1fr; }
+}
+@media print {
+  .executive-visuals,.primary-blocker,.dimension-summary,.evidence-summary,.conversion-journey-step,.common-remediation-option { break-inside:avoid; page-break-inside:avoid; }
+  .dimension-bar-fill { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+}
+
 .remediation-disclaimer {
   color:var(--prysm-muted);
   font-size:14px;
@@ -3237,6 +3267,11 @@ a {
 .executive-readiness .readiness-none {
   font-size:clamp(48px,7vw,76px);
   line-height:.95;
+}
+
+.executive-readiness .readiness-none {
+  font-size:clamp(22px,3vw,30px);
+  line-height:1.2;
 }
 
 .executive-readiness .readiness-band {

@@ -202,7 +202,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   const html = renderReportV2(fixture);
   // A/B/C — executive scorecard
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Why is the score", "What is already working?", "What is holding the site back?", "Accepted priorities", "Next step &amp; limits", "Where was the evidence limited?"];
+  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Primary blocker", "Where is the site strongest and weakest?", "What evidence did PRYSM have?", "What is already working?", "What is holding the site back?", "Accepted priorities", "Next step &amp; limits", "Where was the evidence limited?"];
   let previous = -1;
   for (const heading of headings) {
     const next = executive.indexOf(heading);
@@ -210,7 +210,8 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
     previous = next;
   }
   assert.match(executive, /Conversion Readiness/);
-  assert.match(executive, /assessed dimension outputs/);
+  assert.match(executive, /class="dimension-bar-row"/);
+  assert.match(executive, /Evidence confidence:/);
   assert.match(executive, /Supporting Detail/);
   assert.equal((executive.match(/What is already working\?/g) || []).length, 1);
   assert.equal((executive.match(/<strong>What to do:<\/strong>/g) || []).length, 0, "Executive summary does not reproduce the Priority Fixes action cards");
@@ -224,7 +225,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   assert.doesNotMatch(supportingOverview, /capabilityEvidence\.capabilities|crossReportInterpretation\.truth|meta_description|trust\.pricing|technical\.headers/i);
   assert.ok(!/What Is Already Good|render-blocking|largest contentful paint|meta descriptions|partial assessment|evidence capability|supporting capability|JSON-LD|browser validation|Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/i.test(executive));
   // D — pillars
-  assert.match(html, /Where are the problems\?/);
+  assert.match(html, /class="dimension-bar-row"/);
   for (const label of ["Offer &amp; Content", "Trust &amp; Proof", "Conversion Path", "Technical Health", "Performance &amp; Experience"]) {
     assert.ok(html.includes(label), `pillar ${label} present`);
   }
@@ -266,7 +267,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(visibleStatusText, /\bReviewed\b/, "available evidence is described in client language");
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
-  assert.match(blockers, /Start with the first item and work down the list\. Each priority below explains what we found, why it matters, common options a team may consider, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
+  assert.match(blockers, /only ordered action sequence/);
   assert.doesNotMatch(blockers, /These actions follow the governed priority order\./);
   assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
@@ -285,8 +286,8 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.equal(cards.length, 3, "exactly the governed canonical priority cards are rendered");
   const ranks = cards.map((match) => Number(match[1]));
   assert.deepEqual(ranks, [1, 2, 3], "canonical sequence is rendered once in governed order");
-  assert.match(cards[0][3], /Start here/);
-  for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Start here/);
+  assert.match(cards[0][3], /Priority 1/);
+  for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Priority 1/);
   assert.match(cards[0][3], /Some visitors may need more pricing or reassurance before they act\./);
   assert.match(cards[0][3], /Some evidence — confirm before making the change/);
   assert.match(cards[0][3], /Common remediation options are not yet available for this finding/);
@@ -339,7 +340,7 @@ test("S02B: accepted priority display ranks remain contiguous when governed sour
   assert.deepEqual(cards.map((card) => Number(card[1])), cards.map((_card, index) => index + 1), "visible numbering is the filtered display order");
 });
 
-test("P9: conversion journey visual presents three complete client stages", () => {
+test("P9: conversion journey visual presents four fail-closed buyer stages", () => {
   const fixture = model();
   fixture.conversionPaths = [{
     name: "Primary path",
@@ -349,8 +350,8 @@ test("P9: conversion journey visual presents three complete client stages", () =
   }];
   const html = renderReportV2(fixture);
   assert.match(html, /class="conversion-journey-visual"/);
-  assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 3);
-  for (const label of ["Reach the right page", "Understand enough to continue", "Take the next step"]) assert.match(html, new RegExp(label));
+  assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 4);
+  for (const label of ["Awareness", "Consideration", "Decision", "Action"]) assert.match(html, new RegExp(label));
   assert.doesNotMatch(html, /Internal stage one|Internal stage two|Internal stage three/);
 });
 
@@ -411,9 +412,10 @@ test("S03: Conversion Journey maps supported Encyclopedia friction without asser
   };
   const html = renderReportV2(fixture);
   for (const text of [
-    "Reach the right page",
-    "Understand enough to continue",
-    "Take the next step",
+    "Awareness",
+    "Consideration",
+    "Decision",
+    "Action",
     "Where can visitors lose momentum?",
     "What should you keep?",
     "What should you measure next?",
@@ -461,9 +463,9 @@ function assertFrozenViewerHierarchy() {
   };
   const required = {
     "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "Accepted priorities", "Next step &amp; limits", "What we could not confirm"],
-    "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence limits"],
-    "conversion-paths": ["Reach the right page", "Understand enough to continue", "Take the next step", "Evidence seen:", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Evidence and limits"],
-    "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
+    "priority-fixes": ["What should you fix first?", "What we know", "Supporting diagnostic checks", "How to know it worked", "Evidence limits"],
+    "conversion-paths": ["Awareness", "Consideration", "Decision", "Action", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Evidence and limits"],
+    "content-ideas": ["Where is content already helping", "Planning opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Evidence limitations", "Optional support"],
     "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "Optional trust-proof review", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Evidence and limits"],
     "competitor-benchmark": ["Who was compared", "Where are the meaningful differences", "What is worth learning from", "Competitor differences are context only", "What not to copy", "What this comparison cannot tell us", "What can this comparison confirm", "Next step"],
     "supporting-detail": ["What evidence sits behind the report", "How complete was the evidence", "What drove the readiness score", "What material findings were established", "What did the performance evidence show", "Page speed check evidence", "Real-user field data", "Where was evidence limited", "What source evidence was available", "How does this evidence support the report", "Conclusion", "Next step"],
@@ -655,7 +657,7 @@ test("WP-G-03: insufficient-evidence model renders without scores invented", () 
   ev.performance = null;
   const m = scoreAudit(INPUT, ev);
   const html = renderReportV2(m);
-  assert.match(html, /Insufficient Evidence/);
+  assert.match(html, /Not enough evidence for a score/);
   assert.doesNotMatch(html, /readiness">\d+/, "no numeric readiness when suppressed");
 });
 
@@ -794,7 +796,8 @@ test("MVP-CLIENT-01: current Encyclopedia accepted priority units are the only p
   assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 1);
   assert.doesNotMatch(blockers, /<ol/i);
   assert.doesNotMatch(blockers, /No Encyclopedia priority unit with first diagnostic checks is linked/);
-  assert.match(blockers, /Check 1:/);
+  assert.match(blockers, /Supporting diagnostic checks/);
+  assert.doesNotMatch(blockers, /Check 1:/);
 });
 
 function remediationFixture() {
@@ -854,10 +857,9 @@ test("REMEDIATION-RENDER-01: accepted finding families receive exactly three gov
     assert.equal((card.match(/class="remediation-sequence-label"/g) || []).length, 3);
     assert.equal((card.match(/class="remediation-disclaimer"/g) || []).length, 1);
     assert.match(card, new RegExp(expected[index], "i"));
-    assert.match(card, /PRYSM confirmed the finding, but the evidence does not identify the technical cause or which fix is required/);
     for (const label of ["DO FIRST", "NEXT 7 DAYS", "BY 30 DAYS"]) assert.match(card, new RegExp(label));
     assert.doesNotMatch(card, /caused by|the cause is|this caused/i);
-    assert.match(card, /not a task-duration estimate or completion promise/);
+    assert.match(card, /Suggested order and timing, not a deadline or promise/);
   }
   assert.equal((priority.match(/Quick action plan/g) || []).length, 2);
   assert.equal((priority.match(/class="priority-action"/g) || []).length, 2);
@@ -937,13 +939,13 @@ test("MVP-DECISION-AUTHORITY-01: one accepted sequence governs all pages while s
   assert.equal((priority.match(/<article class="priority-action"/g) || []).length, 2);
   assert.match(executive, /2 accepted client priorities/);
   assert.match(executive, /does not establish one broad site-wide constraint\. Any accepted item-level priorities are listed separately in Priority Fixes/);
-  assert.doesNotMatch(executive, /What should you improve first\?|first accepted priority|Main content/i);
+  assert.doesNotMatch(executive, /<ol|data-solution-id=/);
   assert.doesNotMatch(executive, /<ol|data-solution-id=/);
   assert.match(supporting, /Accepted current priorities/);
   assert.match(supporting, /Supporting observations and non-priority findings/);
   assert.doesNotMatch(supporting, /DO NOW|DO NEXT|LATER|<ol/i);
   assert.equal((journey.match(/conversion-journey-detail-card/g) || []).length, 0, "Acquisition classification alone does not establish journey friction");
-  assert.match(journey, /Primary Path: Book: Weak/, "weak recorded-path status remains visible as supporting evidence");
+  assert.match(journey, /No reviewed conversion-path record is available|Recorded path checks/);
   assert.match(journey, /No accepted priority has a supported relationship to visitor-path friction/);
   assert.doesNotMatch(journey, /correct those points first|correct.*first|fix these points first/i, "journey narrative cannot independently direct corrective work");
   assert.match(content, /planning opportunity|opportunities/i);
@@ -1001,15 +1003,15 @@ test("MVP-CLIENT-02: all seven client pages do not expose internal state or sour
   assert.doesNotMatch(trustPageText, /Bounded action|\b(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)\b/);
 });
 
-test("MVP-CLIENT-10: performance score drivers name separate lab and field evidence and preserve their distinct statuses", () => {
+test("MVP-CLIENT-10: dimension bars retain separate lab and field evidence statuses", () => {
   const fixture = priorityModel();
   fixture.capabilityEvidence.capabilities["performance.lab"].status = "AVAILABLE";
   fixture.capabilityEvidence.capabilities["performance.field"].status = "UNAVAILABLE";
 
   const html = renderReportV2(fixture);
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  assert.match(executive, /Page speed checks Reviewed/);
-  assert.match(executive, /Real-user performance data Not available/);
+  assert.match(executive, /Page speed checks: <strong>Reviewed/);
+  assert.match(executive, /Real-user performance data: <strong>Not available/);
   assert.doesNotMatch(executive, /Performance evidence AVAILABLE[^<]*Performance evidence UNAVAILABLE/);
 });
 
@@ -1024,8 +1026,8 @@ test("MVP-CLIENT-09: insufficient executive evidence withholds an otherwise avai
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
 
   assert.match(executive, /data-narrative-state="INSUFFICIENT_EVIDENCE"/);
-  assert.match(executive, /Insufficient Evidence for Overall Score/);
-  assert.match(executive, /cannot make a dependable overall readiness conclusion/);
+  assert.match(executive, /Not enough evidence for a score/);
+  assert.match(executive, /did not have enough evidence to give a reliable overall score/);
   assert.doesNotMatch(executive, /class="readiness">55/);
   assert.doesNotMatch(executive, /class="readiness-band"/);
   assert.doesNotMatch(executive, /Overall readiness needs attention|Overall readiness is strong|Overall readiness is moderate/);

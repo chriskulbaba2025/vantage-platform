@@ -57,16 +57,16 @@ const REMEDIATION_TAXONOMY = Object.freeze({
 });
 
 export const COMMON_REMEDIATION_DISCLAIMER =
-  "These are common options for this type of issue. PRYSM confirmed the finding, but has not established which fix is right until the affected implementation is checked.";
+  "These are common options for this finding. PRYSM confirmed the issue, but the right fix is not known until someone checks the site.";
 
 export const REMEDIATION_NOT_YET_SUPPORTED =
   "Common remediation options are not yet available for this finding. Review the supporting evidence before deciding how to correct it.";
 
 export const REMEDIATION_SEQUENCE_NOT_SUPPORTED =
-  "Three common fixes are available, but PRYSM does not have a governed sequence for this finding yet.";
+  "Three common fixes are available, but PRYSM has not established the order.";
 
 export const SEQUENCED_REMEDIATION_DISCLAIMER =
-  "This is a suggested action order and planning window, not a task-duration estimate or completion promise. Adjust it to access, approvals, and team capacity. PRYSM confirmed the finding, but the evidence does not identify the technical cause or which fix is required unless the report says otherwise.";
+  "Suggested order and timing, not a deadline or promise. Timing depends on access, approvals, and team capacity. The finding is confirmed, but the cause or required fix may still need checking.";
 
 export const REMEDIATION_SEQUENCE_SLOTS = Object.freeze([
   "FIRST",

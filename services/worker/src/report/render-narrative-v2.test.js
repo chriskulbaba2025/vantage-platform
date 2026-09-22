@@ -524,7 +524,7 @@ test(
       "How ready is your website to convert visitors?",
       "Accepted priorities",
       "What is already working?",
-      "Where are the problems?",
+      "Dimension detail",
       "What should you fix first?",
       "Can visitors move from interest to action?",
       "How does your website compare with the competitors buyers may consider?",

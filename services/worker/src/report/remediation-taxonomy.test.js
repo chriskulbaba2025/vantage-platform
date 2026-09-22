@@ -43,7 +43,7 @@ test("accepted LCP, schema, and search-result families project their own remedia
     assert.deepEqual(projection.options.map((option) => option.sequenceSlot), REMEDIATION_SEQUENCE_SLOTS);
     assert.deepEqual(projection.options.map((option) => option.sequenceLabel), ["DO FIRST", "NEXT 7 DAYS", "BY 30 DAYS"]);
     assert.match(projection.options.map(textKey).join(" "), phrase);
-    assert.match(projection.disclaimer, /has not established which fix is right/i);
+    assert.match(projection.disclaimer, /right fix is not known until someone checks the site/i);
     assert.deepEqual(unit, original, "taxonomy projection does not mutate priority identity or rank");
   }
 });

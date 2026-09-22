@@ -17,6 +17,7 @@
 
 import { FOUNDATION_STATUS } from "./foundation-readiness.js";
 import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
+import { clientSafeCopy } from "./client-presentation.js";
 import {
   requireClientTruth,
   requireCrossReportInterpretation,
@@ -2131,12 +2132,8 @@ export function performanceDetailSection(model) {
                 (
                   diagnostic,
                 ) =>
-                  `<li><strong>${e(
-                    diagnostic.diagnosticCode ||
-                      "Diagnostic",
-                  )}:</strong> ${e(
-                    diagnostic.clientExplanation ||
-                      "",
+                  `<li>${e(
+                    clientSafeCopy(diagnostic.clientExplanation, "A rendering check found a detail that is not shown in this report."),
                   )}${
                     diagnostic.affectedUrl
                       ? ` — ${e(
@@ -2154,9 +2151,9 @@ export function performanceDetailSection(model) {
     <h3>Partial or unavailable evidence</h3>
     ${fieldKeys.length === 0
       ? `<p class="small"><strong>Evidence limitation:</strong> Real-user field performance data was unavailable. The performance conclusion therefore relies on lab measurements; this does not establish real-user field performance.</p>
-         <details class="supporting-detail-disclosure"><summary>Show detailed performance limitations</summary>${(perf.limitations || []).length ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>` : "<p>No additional limitation detail was recorded.</p>"}</details>`
+         <details class="supporting-detail-disclosure"><summary>Show detailed performance limitations</summary>${(perf.limitations || []).length ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(clientSafeCopy(limitation, "Real-user field data was not available."))}</li>`).join("")}</ul>` : "<p>No additional limitation detail was recorded.</p>"}</details>`
       : (perf.limitations || []).length
-        ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>`
+        ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(clientSafeCopy(limitation, "Real-user field data was not available."))}</li>`).join("")}</ul>`
         : performancePartial
           ? '<p><span class="chip cap-neutral">PARTIAL</span> At least one performance source or tested profile had incomplete coverage. Available measurements remain valid within that scope.</p>'
           : "<p>No additional evidence limitation was recorded.</p>"

@@ -32,9 +32,9 @@ const testBaseDir = mkdtempSync(join(tmpdir(), "prysm-narrative-v2-prod-"));
 const FIXED_TS = "2026-08-20T04:30:00.000Z";
 
 test("NV2-PROD-STRUCTURE: finalization accepts the current report heading and rejects malformed output", () => {
-  const valid = '<!doctype html><html><body><main id="reportContent" tabindex="-1"><h2>Where are the problems?</h2></main></body></html>';
-  const missingDoctype = '<html><main id="reportContent" tabindex="-1"><h2>Where are the problems?</h2></main></html>';
-  const missingLayer = '<!doctype html><main><h2>Where are the problems?</h2></main>';
+  const valid = '<!doctype html><html><body><main id="reportContent" tabindex="-1"><section class="executive-visuals"></section><h2>Dimension detail</h2><section id="narrative-layer"></section></main></body></html>';
+  const missingDoctype = '<html><main id="reportContent" tabindex="-1"><section class="executive-visuals"></section><h2>Dimension detail</h2></main></html>';
+  const missingLayer = '<!doctype html><main id="reportContent" tabindex="-1"><section class="executive-visuals"></section></main>';
   const malformed = "not a report";
 
   assert.equal(hasRequiredNarrativeV2ReportStructure(valid), true);
@@ -44,10 +44,11 @@ test("NV2-PROD-STRUCTURE: finalization accepts the current report heading and re
   assert.equal(hasRequiredReportV2Structure(valid), true);
 
   assert.equal(
-    hasRequiredReportV2Structure('<!doctype html><h2>Where are the problems?</h2>'),
+    hasRequiredReportV2Structure('<!doctype html><section class="executive-visuals"></section><h2>Dimension detail</h2>'),
     true,
     "the established non-Narrative-v2 report path does not own narrative-layer",
   );
+  assert.equal(hasRequiredNarrativeV2ReportStructure('<!doctype html><main id="reportContent" tabindex="-1"><h2>Where are the problems?</h2></main>'), false);
 });
 
 function baseConfig() {

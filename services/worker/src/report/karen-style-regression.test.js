@@ -327,7 +327,7 @@ test("KAREN-REG-02: the governed v2 report semantically covers every Karen bench
     ["Scorecard", [/How ready is your website to convert visitors\?/, /Accepted priorities/, /assessment is not whole-site complete/]],
     ["Priority Fixes", [/What should you fix first\?/]],
     ["Conversion Journey", [/Can visitors move from interest to action\?/]],
-    ["Readiness Map", [/D\. Where are the problems\?/, /First Things First — Foundational Readiness/]],
+    ["Dimension detail", [/Dimension detail/, /First Things First — Foundational Readiness/]],
     ["Content Ideas", [/What content would help buyers move forward\?/]],
     ["Competitor Benchmarking", [/How does your website compare with the competitors buyers may consider\?/]],
     ["E-E-A-T Trust", [/What already builds confidence/]],
@@ -338,13 +338,12 @@ test("KAREN-REG-02: the governed v2 report semantically covers every Karen bench
     ["Performance", [/Performance Detail/]],
     ["Evidence", [/Evidence detail/, /Source statuses/, /Evidence capabilities/]],
   ];
-  benchmark[3][1][0] = /Where are the problems\?/;
 
   assert.deepEqual(benchmark.map(([label]) => label), [
     "Scorecard",
     "Priority Fixes",
     "Conversion Journey",
-    "Readiness Map",
+    "Dimension detail",
     "Content Ideas",
     "Competitor Benchmarking",
     "E-E-A-T Trust",

@@ -48,7 +48,8 @@ const FINAL_PASS_ORCHESTRATION_ARTIFACT =
 export function hasRequiredNarrativeV2ReportStructure(html) {
   return typeof html === "string"
     && /^<!doctype html>/i.test(html)
-    && html.includes("Where are the problems?")
+    && html.includes('class="executive-visuals"')
+    && html.includes("Dimension detail")
     && html.includes('<main id="reportContent" tabindex="-1">');
 }
 
