@@ -1,5 +1,35 @@
 function scopeKey(tenantId, auditId) { return `${tenantId}\u0000${auditId}`; }
 
+// Match the PostgreSQL repository's row contract on reads. The write-side
+// accepts governed application records; consumers must not observe a
+// different field vocabulary merely because local composition uses memory.
+function asEvidenceRow(record) {
+  return {
+    evidence_id: record.evidenceId,
+    tenant_id: record.tenantId,
+    client_id: record.clientId || null,
+    audit_id: record.auditId,
+    website_id: record.websiteId || null,
+    page_url: record.pageUrl || null,
+    source: record.source || "unknown",
+    provider_artifact_ref: record.providerArtifactRef || null,
+    evidence_type: record.evidenceType,
+    observed_value: record.observedValue ?? null,
+    normalized_value: record.normalizedValue ?? null,
+    observed_at: record.observedAt || null,
+    device: record.device || null,
+    scope: record.scope || null,
+    lineage: record.lineage || null,
+    independence: record.independence || null,
+    provenance: record.provenance || null,
+    sufficiency: record.sufficiency || null,
+    status: record.status || "UNKNOWN",
+    conflict_state: record.conflictState || "NONE",
+    confidence: record.confidence || null,
+    raw_evidence_ref: record.rawEvidenceRef || null,
+  };
+}
+
 export function createMemoryEvidenceGraphRepository() {
   const evidence = new Map();
   const graphs = new Map();
@@ -22,7 +52,9 @@ export function createMemoryEvidenceGraphRepository() {
     };
   }
   async function listEvidence({ tenantId, auditId, evidenceId = null } = {}) {
-    return [...evidence.values()].filter((record) => record.tenantId === tenantId && record.auditId === auditId && (!evidenceId || record.evidenceId === evidenceId));
+    return [...evidence.values()]
+      .filter((record) => record.tenantId === tenantId && record.auditId === auditId && (!evidenceId || record.evidenceId === evidenceId))
+      .map(asEvidenceRow);
   }
   return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence });
 }

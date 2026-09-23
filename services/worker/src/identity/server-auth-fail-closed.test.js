@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { Server } from "node:http";
 import { createMemoryIdentityRepository } from "./memory-identity-repository.js";
 import { createMemoryLifecycleRepository } from "../lifecycle/memory-repository.js";
+import { createMemoryEvidenceGraphRepository } from "../evidence/memory-evidence-graph-repository.js";
 import { signPrincipal } from "./authorization.js";
 
 // server.js starts a real HTTP listener as a module side effect.
@@ -55,6 +56,7 @@ const NARRATIVE_REVIEW_RESULT = Object.freeze({
 function buildHandler(
   webhookSecret,
   auditService = { listAudits: async () => [] },
+  tenantId = UAT_TENANT_ID,
 ) {
   const identityRepo = createMemoryIdentityRepository();
   const lifecycleRepo = createMemoryLifecycleRepository();
@@ -63,7 +65,7 @@ function buildHandler(
     config: {
       artifactDir: ".",
       webhookSecret,
-      vantageTenantId: UAT_TENANT_ID,
+      vantageTenantId: tenantId,
     },
     localStore: {
       list: async () => [],
@@ -81,6 +83,7 @@ function buildHandler(
     auditService,
     lifecycleRepo,
     identityRepo,
+    evidenceGraphRepo: createMemoryEvidenceGraphRepository(),
   });
 
   return {
@@ -89,6 +92,47 @@ function buildHandler(
     lifecycleRepo,
   };
 }
+
+test(
+  "Ask PRYSM API preserves audit ownership and does not disclose cross-tenant evidence",
+  async () => {
+    const auditA = "11111111-1111-4111-8111-111111111111";
+    const auditB = "22222222-2222-4222-8222-222222222222";
+    const lifecycleRepo = createMemoryLifecycleRepository();
+    const identityRepo = createMemoryIdentityRepository();
+    await identityRepo.createTenant({ id: "tenant-a", name: "Tenant A", slug: "tenant-a" });
+    await identityRepo.createTenant({ id: "tenant-b", name: "Tenant B", slug: "tenant-b" });
+    await identityRepo.createUser({ id: "user-a", cognitoSub: "sub-a", email: "a@example.com" });
+    await identityRepo.createMembership({ tenantId: "tenant-a", userId: "user-a", role: "reviewer" });
+    const evidenceGraphRepo = createMemoryEvidenceGraphRepository();
+
+    // Rebuild the handler with the repository under test while preserving the
+    // real authorization and route composition.
+    const securedHandler = createRequestHandler({
+      config: { artifactDir: ".", webhookSecret: "test-secret", vantageTenantId: "tenant-a" },
+      localStore: { list: async () => [] },
+      store: { list: async () => [] },
+      oauthService: { getAuthUrl: () => "", validateState: () => "ga4", exchangeCode: async () => ({}), getStatus: async () => ({}), disconnect: async () => ({}) },
+      auditService: { listAudits: async () => [] },
+      lifecycleRepo,
+      identityRepo,
+      evidenceGraphRepo,
+    });
+    await lifecycleRepo.createAudit({ auditId: auditA, tenantId: "tenant-a", clientId: "client-a", idempotencyKey: "ask-a", event: { auditId: auditA, tenantId: "tenant-a", nextState: "approved" } });
+    await lifecycleRepo.createAudit({ auditId: auditB, tenantId: "tenant-b", clientId: "client-b", idempotencyKey: "ask-b", event: { auditId: auditB, tenantId: "tenant-b", nextState: "approved" } });
+    await evidenceGraphRepo.upsertEvidenceRecords([{ tenantId: "tenant-a", auditId: auditA, evidenceId: "evidence-a", evidenceType: "page:title", pageUrl: "https://a.example/", status: "AVAILABLE", conflictState: "NONE", observedValue: "A" }]);
+    await evidenceGraphRepo.upsertEvidenceRecords([{ tenantId: "tenant-b", auditId: auditB, evidenceId: "evidence-b", evidenceType: "page:title", pageUrl: "https://b.example/", status: "AVAILABLE", conflictState: "NONE", observedValue: "B" }]);
+
+    const principalToken = signPrincipal({ secret: "test-secret", principal: { sub: "sub-a", email: "a@example.com" } });
+    const allowed = await request(securedHandler, "POST", `/api/v1/audits/${auditA}/ask`, { principalToken, body: { question: "What evidence supports this?" } });
+    assert.equal(allowed.status, 200);
+    assert.equal(JSON.parse(allowed.body.toString("utf8")).citations[0].evidenceId, "evidence-a");
+
+    const denied = await request(securedHandler, "POST", `/api/v1/audits/${auditB}/ask`, { principalToken, body: { question: "What evidence supports this?" } });
+    assert.equal(denied.status, 404);
+    assert.doesNotMatch(denied.body.toString("utf8"), /evidence-b|tenant-b|b\.example/);
+  },
+);
 
 async function seedUatAudit(lifecycleRepo) {
   await lifecycleRepo.createAudit({
