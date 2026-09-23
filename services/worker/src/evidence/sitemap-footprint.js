@@ -2,6 +2,7 @@ import { gunzipSync } from "node:zlib";
 import * as cheerio from "cheerio";
 import { normalizeUrl, stableHash } from "../utils.js";
 import { reconcileUrlDiscovery } from "./url-discovery-reconciliation.js";
+import { discoverSupplementalUrlSources } from "./supplemental-url-discovery.js";
 
 const HARD_MAX_SITEMAP_DOCUMENTS = 200;
 const HARD_MAX_RETAINED_URLS = 100000;
@@ -1000,6 +1001,19 @@ export async function discoverSitemapFootprint(
 
   const retainedUrls = [...retained].sort();
 
+  let supplemental = { sources: {}, statuses: {}, limitations: [], attemptedSources: 0, bounded: true };
+  if (options.enableSupplementalDiscovery !== false) {
+    supplemental = await discoverSupplementalUrlSources(normalizedTarget, {
+      fetchImpl,
+      signal: options.signal,
+      timeoutMs,
+      maxBytes: maxDocumentBytes,
+      maxSources: options.maxSupplementalSources,
+      structuralUrls: options.structuralUrls,
+    });
+    limitations.push(...supplemental.limitations);
+  }
+
   const usableSitemap =
     parsedDocuments > 0 &&
     retainedUrls.length > 0;
@@ -1009,10 +1023,12 @@ export async function discoverSitemapFootprint(
     sources: {
       XML_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("XML_SITEMAP")),
       ROBOTS_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("ROBOTS_SITEMAP")),
+      ...supplemental.sources,
     },
     sourceStatuses: {
       XML_SITEMAP: usableSitemap ? "AVAILABLE" : "UNAVAILABLE",
-      ROBOTS_SITEMAP: robotsSitemaps.length ? (incomplete ? "PARTIAL" : "AVAILABLE") : "UNAVAILABLE",
+      ROBOTS_SITEMAP: robotsSitemaps.length ? (incomplete ? "PARTIAL" : "AVAILABLE") : "NOT_APPLICABLE",
+      ...supplemental.statuses,
     },
   });
 
@@ -1062,6 +1078,12 @@ export async function discoverSitemapFootprint(
     priorityUrls,
     prioritySelection,
     urlInventory,
+    supplementalDiscovery: {
+      statuses: supplemental.statuses,
+      limitations: supplemental.limitations,
+      attemptedSources: supplemental.attemptedSources,
+      bounded: supplemental.bounded,
+    },
     coverage: {
       usableSitemap,
       complete:
@@ -1083,6 +1105,7 @@ export async function discoverSitemapFootprint(
       priorityUrlCap:
         maxPriorityUrls,
       provenanceUrlCount: urlInventory.inventory.length,
+      supplementalSourceCount: supplemental.attemptedSources,
       sourceDisagreement: urlInventory.sourceDisagreement,
       suspiciousCoverage: urlInventory.suspiciousCoverage,
     },
