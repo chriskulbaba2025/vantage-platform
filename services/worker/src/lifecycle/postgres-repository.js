@@ -14,7 +14,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "migrations");
-const MIGRATION_FILES = Object.freeze(["001_lifecycle.sql", "002_wp11_web_app_integration.sql", "003_identity.sql"]);
+const MIGRATION_FILES = Object.freeze(["001_lifecycle.sql", "002_wp11_web_app_integration.sql", "003_identity.sql", "004_evidence_graph.sql"]);
 
 const SQL = {
   insertAuditMeta:   `INSERT INTO prysm.lifecycle_audits (audit_id, tenant_id, client_id, created_at) VALUES ($1,$2,$3,$4)`,

@@ -37,6 +37,7 @@ export function createRequestHandler({
   auditService,
   lifecycleRepo,
   identityRepo,
+  evidenceGraphRepo,
   // PRYSM-NEXT-01 WP-H — governed artifact store for report-design v2
   // page serving.  Optional: absent ⇒ v2 pages are not served (v1 only).
   governedArtifacts,
@@ -511,7 +512,7 @@ export function createRequestHandler({
       }
 
       // GET /api/v1/audits/:auditId — audit status
-      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/resume|\/narrative-review|\/narrative-final-pass|\/report\/(.+))?$/);
+      const wp11AuditMatch = url.pathname.match(/^\/api\/v1\/audits\/([a-f0-9-]{36})(\/review|\/approve|\/resume|\/ask|\/narrative-review|\/narrative-final-pass|\/report\/(.+))?$/);
       if (wp11AuditMatch) {
         const auditId = wp11AuditMatch[1];
         const subPath = wp11AuditMatch[2] || "";
@@ -526,6 +527,25 @@ export function createRequestHandler({
             const status = await auditService.getAuditStatus(auditId, access.tenantId);
             if (!status) return send(res, 404, { error: "Audit not found" });
             return send(res, 200, status);
+          } catch (err) {
+            return sendRouteError(res, err);
+          }
+        }
+
+        // POST /api/v1/audits/:auditId/ask — deterministic evidence retrieval.
+        // Authorization precedes retrieval; this endpoint never RAGs a report
+        // artifact and never allows a model to invent or resolve conflicts.
+        if (req.method === "POST" && subPath === "/ask") {
+          const access = await authorizeAuditAccess(req, auditId);
+          if (access.status === 401) return send(res, 401, { error: "Unauthorized" });
+          if (access.status === 404) return send(res, 404, { error: "Audit not found" });
+          if (!evidenceGraphRepo) return send(res, 501, { error: "Ask PRYSM evidence query not configured" });
+          try {
+            const { queryAskPrysm } = await import("./evidence/ask-prysm-query.js");
+            const payload = await readJson(req);
+            const question = String(payload.question || "").trim();
+            if (!question) return send(res, 422, { error: "Question is required" });
+            return send(res, 200, await queryAskPrysm({ repository: evidenceGraphRepo, tenantId: access.tenantId, auditId, question }));
           } catch (err) {
             return sendRouteError(res, err);
           }
