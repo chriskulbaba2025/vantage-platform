@@ -49,6 +49,11 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
 
   const state = String(status!.state || "");
   const slug = String(status!.slug || "");
+  const lifecycle = Array.isArray(status!.lifecycle) ? status!.lifecycle : [];
+  const lifecycleReason =
+    lifecycle.length > 0 && typeof lifecycle[lifecycle.length - 1]?.reason === "string"
+      ? lifecycle[lifecycle.length - 1].reason
+      : null;
 
   return (
     <div>
@@ -84,7 +89,7 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
             <tr><th>From</th><th>To</th><th>Time</th><th>Reason</th></tr>
           </thead>
           <tbody>
-            {(status!.lifecycle || []).map((e: Record<string, unknown>, i: number) => {
+            {lifecycle.map((e: Record<string, unknown>, i: number) => {
               const toState = String(e.to || "");
               const failed = /failed|render_failed/i.test(toState);
               const reason = typeof e.reason === "string" && e.reason.trim() ? e.reason : null;
@@ -106,7 +111,12 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
         </table>
       </div>
 
-      <AuditReviewActions auditId={auditId} state={state} slug={slug} />
+      <AuditReviewActions
+        auditId={auditId}
+        state={state}
+        slug={slug}
+        lifecycleReason={lifecycleReason}
+      />
 
       {(state === "draft_rendered" || state === "in_review") && (
         <div className="card" style={{ borderColor: "var(--amber)" }}>

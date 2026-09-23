@@ -22,7 +22,6 @@ const ACTIVE_STATES = new Set([
   "collecting",
   "evidence_stored",
   "evidence_locked",
-  "scored",
   "narrative_pending",
   "narrative_ready",
 ]);
@@ -33,10 +32,12 @@ export default function AuditReviewActions({
   auditId,
   state,
   slug,
+  lifecycleReason,
 }: {
   auditId: string;
   state: string;
   slug: string;
+  lifecycleReason?: string | null;
 }) {
   const router = useRouter();
   const [reviewer, setReviewer] = useState("");
@@ -55,8 +56,12 @@ export default function AuditReviewActions({
     return () => window.clearInterval(timer);
   }, [router, state]);
 
+  const isPreparationFailure =
+    state === "narrative_failed" &&
+    lifecycleReason === "narrative-v2-preparation-failed";
+
   useEffect(() => {
-    if (state !== "narrative_failed") {
+    if (state !== "narrative_failed" || isPreparationFailure) {
       setNarrativeReview(null);
       return;
     }
@@ -107,7 +112,26 @@ export default function AuditReviewActions({
     return () => {
       cancelled = true;
     };
-  }, [auditId, state]);
+  }, [auditId, state, isPreparationFailure]);
+
+  async function resumePreparation() {
+    setError("");
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/audits/${auditId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Audit recovery failed");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Audit recovery failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const allChecked = useMemo(
     () => REVIEW_ITEMS.every(([id]) => checked[id] === true),
@@ -236,6 +260,24 @@ export default function AuditReviewActions({
           Prysm is collecting evidence and building the governed report. This
           page refreshes automatically.
         </p>
+      </div>
+    );
+  }
+
+  if (isPreparationFailure) {
+    return (
+      <div className="card" style={{ borderColor: "var(--amber)" }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>
+          Report preparation needs recovery
+        </h2>
+        <p style={{ marginTop: 0, marginBottom: 16 }}>
+          Prysm could not complete report preparation. Your collected evidence
+          and scores are preserved; no new collection or scoring is required.
+        </p>
+        {error && <p className="form-error">{error}</p>}
+        <button className="btn btn-primary" type="button" disabled={busy} onClick={resumePreparation}>
+          {busy ? "Recovering Report..." : "Resume Report Preparation"}
+        </button>
       </div>
     );
   }

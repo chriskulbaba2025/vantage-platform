@@ -28,6 +28,28 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function attachCanonicalEvidenceReferences({ findings, scope }) {
+  const canonicalEvidenceRef = buildArtifactKey({
+    tenantId: scope.tenantId,
+    clientId: scope.clientId,
+    auditId: scope.auditId,
+    category: "canonical",
+    artifactName: "decision-evidence.json",
+  });
+
+  return findings.map((finding) => ({
+    ...finding,
+    evidence: finding.evidence.map((evidence) => ({
+      ...evidence,
+      // Provider raw refs remain authoritative when present. Older and
+      // production-shaped source results may not expose one; bind the
+      // finding to the persisted governed DecisionEvidence artifact rather
+      // than allowing a null reference across the Narrative v2 boundary.
+      artifactRef: evidence.artifactRef || canonicalEvidenceRef,
+    })),
+  }));
+}
+
 /**
  * Build a deterministic scoredAt timestamp from canonical evidence.
  * Uses max(collectedAt) across all evidence sources so identical evidence
@@ -461,17 +483,26 @@ export async function scoreFromCanonicalEvidence({
     },
   );
 
+  const findings = attachCanonicalEvidenceReferences({
+    findings: model.findings,
+    scope,
+  });
+  const persistedModel = {
+    ...model,
+    findings,
+  };
+
   const findingsRecord =
     await persistFindings({
       store,
       scope,
-      findings: model.findings,
+      findings,
       validateContract,
     });
 
   const scoreSet =
     buildScoreSet(
-      model,
+      persistedModel,
       findingsRecord,
       null,
     );
@@ -486,13 +517,13 @@ export async function scoreFromCanonicalEvidence({
 
   const finalScoreSet =
     buildScoreSet(
-      model,
+      persistedModel,
       findingsRecord,
       scoresRecord,
     );
 
   return {
-    model,
+    model: persistedModel,
     findingsRecord,
     scoresRecord,
     scoreSet: finalScoreSet,

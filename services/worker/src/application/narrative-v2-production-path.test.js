@@ -24,6 +24,7 @@ import {
   createNarrativeV2ProductionPath,
   hasRequiredNarrativeV2ReportStructure,
 } from "../narrative-v2/production-path.js";
+import { buildSolutionAuthorityRecords } from "../solution/solution-authority-provider.js";
 import { hasRequiredReportV2Structure } from "../orchestration/audit-orchestrator.js";
 
 const T = LIFECYCLE_STATE;
@@ -1513,4 +1514,87 @@ test("NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pas
     1,
     "no Judge pass 4 may execute",
   );
+});
+
+test("PRYSM-MVP-RELIABILITY-01: scored preparation failure is durable, non-running, and resumable", async () => {
+  let failPreparation = true;
+  let writerCalls = 0;
+  let judgeCalls = 0;
+
+  const { runtime } = buildRuntime({
+    narrativeV2: {
+      enabled: true,
+      solutionAuthorityProvider: (args) => {
+        if (failPreparation) throw new Error("fixture preparation contract failure");
+        return buildSolutionAuthorityRecords(args);
+      },
+      writerExecutor: async ({ writerInput, passNumber }) => {
+        writerCalls += 1;
+        return buildPassingWriterOutput({ writerInput, passNumber });
+      },
+      judgeExecutor: async ({ writerInput, passNumber }) => {
+        judgeCalls += 1;
+        return buildPassingJudgeResponse({ writerInput, passNumber });
+      },
+    },
+  });
+
+  const created = await runtime.auditService.createAudit({
+    ...baseInput(),
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  }, tenantId);
+
+  const failed = await waitForState(runtime, created.auditId, [T.NARRATIVE_FAILED]);
+  assert.equal(failed.state, T.NARRATIVE_FAILED);
+  const history = await runtime.lifecycleService.history(created.auditId, tenantId);
+  assert.equal(history.at(-1).reason, "narrative-v2-preparation-failed");
+  assert.equal(history.some((event) => event.nextState === T.NARRATIVE_PENDING), false);
+  assert.equal(writerCalls, 0);
+  assert.equal(judgeCalls, 0);
+
+  failPreparation = false;
+  const resumed = await runtime.auditService.resumeAudit(created.auditId, tenantId);
+  assert.equal(resumed.finalState, T.DRAFT_RENDERED);
+  assert.equal(writerCalls, 1);
+  assert.equal(judgeCalls, 1);
+
+  const completedHistory = await runtime.lifecycleService.history(created.auditId, tenantId);
+  assert.deepEqual(
+    completedHistory.map((event) => event.nextState).slice(-4),
+    [T.NARRATIVE_FAILED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.DRAFT_RENDERED],
+  );
+});
+
+test("PRYSM-MVP-RELIABILITY-02: missing raw provider ref binds findings to canonical DecisionEvidence", async () => {
+  const adapters = workingAdapters();
+  const originalOnPageExecute = adapters["dataforseo-onpage"].execute;
+  adapters["dataforseo-onpage"].execute = async (...args) => {
+    const result = await originalOnPageExecute(...args);
+    result.sourceResult.evidence.rawArtifactRef = null;
+    return result;
+  };
+
+  const { runtime } = buildRuntime({
+    adapters,
+    narrativeV2: {
+      enabled: true,
+      writerExecutor: async ({ writerInput, passNumber }) =>
+        buildPassingWriterOutput({ writerInput, passNumber }),
+      judgeExecutor: async ({ writerInput, passNumber }) =>
+        buildPassingJudgeResponse({ writerInput, passNumber }),
+    },
+  });
+
+  const created = await runtime.auditService.createAudit({
+    ...baseInput(),
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  }, tenantId);
+  const completed = await waitForState(runtime, created.auditId, [T.DRAFT_RENDERED, T.NARRATIVE_FAILED]);
+
+  assert.equal(completed.state, T.DRAFT_RENDERED);
+  const findingsKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/canonical/findings.json`;
+  const findings = await readJson(runtime.artifactStore, findingsKey);
+  assert.ok(findings.some((finding) =>
+    finding.evidence.some((evidence) => evidence.artifactRef?.endsWith("/canonical/decision-evidence.json")),
+  ));
 });
