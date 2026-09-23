@@ -37,6 +37,7 @@ import { createLifecycleService } from "../lifecycle/lifecycle-service.js";
 import { createMemoryArtifactStore } from "../storage/memory-artifact-store.js";
 import { createGovernedArtifactStore, buildArtifactKey } from "../storage/governed-artifact-store.js";
 import { createAuditOrchestrator } from "../orchestration/audit-orchestrator.js";
+import { createMemoryEvidenceGraphRepository } from "./memory-evidence-graph-repository.js";
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
 import { REQUIRED_APPROVED_PAGE_FILENAMES } from "../storage/report-store.js";
 
@@ -220,6 +221,7 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
     // ── 4. Real production orchestration + REAL renderer ──
     const artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
     const lifecycleService = createLifecycleService(createMemoryLifecycleRepository());
+    const evidenceGraphRepo = createMemoryEvidenceGraphRepository();
     const realAdapters = {
       "dataforseo-onpage": { adapterVersion: "1.4.1", execute: async (a) => onpageExecute(a) },
       pagespeed: { adapterVersion: "1.1.0", execute: async (a) => pagespeedExecute(a) },
@@ -236,6 +238,7 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
       validateContract,
       clock: { now: () => "2026-01-01T00:00:00.000Z", sleep: async () => {}, setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 100)) },
       narrativeMode: "mock",
+      evidenceGraphRepo,
     });
 
     let result = await orchestrator.execute(auditRequest, { executionId });
@@ -246,6 +249,14 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
       result = await orchestrator.execute(auditRequest, { executionId: randomUUID() });
     }
     assert.equal(result.finalState, T.DRAFT_RENDERED, `production path reached draft_rendered (got ${result.finalState})`);
+
+    const persistedEvidence = await evidenceGraphRepo.listEvidence({ tenantId, auditId });
+    const persistedGraph = await evidenceGraphRepo.listGraph({ tenantId, auditId });
+    assert.ok(persistedEvidence.length > 0, "assembled audit path persisted evidence records");
+    assert.ok(persistedGraph.nodes.some((node) => node.nodeType === "Website"), "assembled audit path persisted website graph node");
+    assert.ok(persistedGraph.nodes.some((node) => node.nodeType === "Page"), "assembled audit path persisted page graph node");
+    const reconciliationKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/canonical/evidence-reconciliation.json`;
+    assert.equal(await artifactStore.exists(reconciliationKey), true, "assembled audit path persisted verified reconciliation artifact");
 
     // ── 5. All approved report pages rendered (authoritative definition) ──
     let renderedPages = 0;
