@@ -42,8 +42,8 @@ export function buildContextPack({ queryId, scope, query, lexical = [], semantic
   };
 }
 
-export function buildRetrievalTrace({ queryId, scope, query, deterministic = [], lexical = [], semantic = [], graph = {}, evidence = [], excluded = [] } = {}) {
-  return { contractVersion: "2.0.0", queryId, query, authorizationScope: scope, retrievalMethods: ["DETERMINISTIC", "LEXICAL", "VECTOR", "GRAPH"], candidateMethods: [
+export function buildRetrievalTrace({ queryId, scope, query, deterministic = [], lexical = [], semantic = [], graph = {}, evidence = [], excluded = [], embeddingStatus = { status: "NOT_CONFIGURED" } } = {}) {
+  return { contractVersion: "2.0.0", queryId, query, authorizationScope: scope, embeddingStatus, retrievalMethods: ["DETERMINISTIC", "LEXICAL", "VECTOR", "GRAPH"], candidateMethods: [
     ...deterministic.map((item) => ({ candidateId: item.evidence_id || item.evidenceId || item.documentId, method: "DETERMINISTIC" })),
     ...lexical.map((item) => ({ candidateId: item.documentId || item.document_id, method: "LEXICAL" })),
     ...semantic.map((item) => ({ candidateId: item.documentId || item.document_id, method: "VECTOR" })),

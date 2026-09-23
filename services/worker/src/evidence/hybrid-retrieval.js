@@ -72,6 +72,35 @@ export function buildRetrievalDocument(record, { embeddingAdapter = null } = {})
   };
 }
 
+export async function buildRetrievalDocumentAsync(record, { embeddingAdapter = null } = {}) {
+  const content = [record.label, record.evidenceType, record.pageUrl, record.title, record.description, record.text, record.observedValue, record.normalizedValue, record.source].map(safeText).join(" ").trim();
+  if (!content || Object.keys(record).some((key) => SECRET_FIELD.test(key))) return null;
+  const hash = contentHash(content);
+  const reused = record.contentHash === hash && Array.isArray(record.embedding);
+  const embedding = reused ? record.embedding : embeddingAdapter?.embed ? await embeddingAdapter.embed(content) : null;
+  return {
+    documentId: record.documentId || record.evidenceId || createHash("sha256").update(`${record.tenantId}:${record.auditId}:${content}`).digest("hex").slice(0, 32),
+    tenantId: record.tenantId,
+    clientId: record.clientId || null,
+    websiteId: record.websiteId || null,
+    auditId: record.auditId,
+    graphNodeId: record.graphNodeId || record.nodeId || null,
+    evidenceId: record.evidenceId || record.attributes?.evidenceId || null,
+    nodeType: record.nodeType || "EvidenceRecord",
+    source: record.source || record.provenance || "unknown",
+    content,
+    contentHash: hash,
+    embedding,
+    embeddingModel: reused ? (record.embeddingModel || null) : (embeddingAdapter?.modelVersion || null),
+    currentness: record.currentness || record.temporalContext || "CURRENT",
+    createdAt: record.createdAt || null,
+    updatedAt: record.updatedAt || null,
+    status: record.status || "UNKNOWN",
+    conflictState: record.conflictState || "NONE",
+    provenance: record.provenance || null,
+  };
+}
+
 export function rankLexical(documents, query, limit = 20) {
   const terms = tokenize(query);
   return documents.map((document) => {

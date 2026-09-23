@@ -113,6 +113,7 @@ export function createProductionRuntime({
   narrative,
   narrativeV2,
   evidenceGraphRepo,
+  embeddingAdapter,
 }) {
   if (!lifecycleRepo) {
     throw new Error("PRODUCTION STARTUP FAILED: lifecycleRepo is required (DATABASE_URL not configured?)");
@@ -198,6 +199,7 @@ export function createProductionRuntime({
       modelConfig: narrativeDeps.modelConfig,
     },
     evidenceGraphRepo: runtimeEvidenceGraphRepo,
+    embeddingAdapter,
     retryPolicyResolver: (source) => {
       // PRYSM-CLOSE-12: source-specific governed timeouts, each configurable.
       //   on-page crawls can take minutes (polling DataForSEO)

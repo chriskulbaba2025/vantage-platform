@@ -15,6 +15,7 @@ import { createSlidingWindowLimiter } from "./utils/rate-limiter.js";
 import { LOCAL_DETERMINISTIC_ONPAGE_FIXTURES } from "./local/deterministic-audit-fixture.js";
 import { validateStage2StagingPersistence } from "./local/stage2-staging-persistence.js";
 import { createPostgresIdentityRepository } from "./identity/postgres-identity-repository.js";
+import { createOpenAIEmbeddingAdapter } from "./evidence/openai-embedding-adapter.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -38,6 +39,7 @@ export function createRequestHandler({
   lifecycleRepo,
   identityRepo,
   evidenceGraphRepo,
+  embeddingAdapter,
   // PRYSM-NEXT-01 WP-H — governed artifact store for report-design v2
   // page serving.  Optional: absent ⇒ v2 pages are not served (v1 only).
   governedArtifacts,
@@ -545,7 +547,7 @@ export function createRequestHandler({
             const payload = await readJson(req);
             const question = String(payload.question || "").trim();
             if (!question) return send(res, 422, { error: "Question is required" });
-            return send(res, 200, await queryAskPrysm({ repository: evidenceGraphRepo, tenantId: access.tenantId, auditId, question }));
+            return send(res, 200, await queryAskPrysm({ repository: evidenceGraphRepo, tenantId: access.tenantId, auditId, question, embeddingAdapter }));
           } catch (err) {
             return sendRouteError(res, err);
           }
@@ -1109,6 +1111,8 @@ let auditService = null;
 let identityRepo = null;
 let pgPool = null;
 let evidenceGraphRepo = null;
+const embeddingAdapter = createOpenAIEmbeddingAdapter({ env: process.env });
+console.log(`Embedding retrieval: ${embeddingAdapter ? `enabled (${embeddingAdapter.provider}/${embeddingAdapter.modelVersion})` : "disabled (no configured provider key)"}`);
 
 const configuredPostgres = await initializeConfiguredPostgres({ databaseUrl: config.databaseUrl });
 if (configuredPostgres) {
@@ -1238,6 +1242,7 @@ if (lifecycleRepo && artifactStore) {
       lifecycleRepo,
       reportStore: store,
       evidenceGraphRepo,
+      embeddingAdapter,
     });
     auditService = runtime.auditService;
     console.log("WP12 production runtime initialized — governed API v1 available");
@@ -1293,6 +1298,7 @@ const requestListener = createRequestHandler({
   lifecycleRepo,
   identityRepo,
   evidenceGraphRepo,
+  embeddingAdapter,
   // PRYSM-NEXT-01 WP-H — report-design v2 pages live in the governed
   // artifact store (same store the orchestrator persists through).
   governedArtifacts: artifactStore,

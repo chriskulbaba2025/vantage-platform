@@ -14,7 +14,7 @@ export async function queryAskPrysm({ repository, tenantId, auditId, websiteId =
   const value = String(question || "").trim(); const type = classify(value); const id = queryId({ tenantId, auditId, question: value }); const scope = { tenantId, auditId, websiteId };
   const evidence = await repository.listEvidence({ tenantId, auditId });
   const deterministic = deterministicMatches(evidence, value, type);
-  if (type === "UNSUPPORTED") return { contractVersion: "2.0.0", supported: false, questionType: type, answer: "This question is not supported by the governed evidence query layer yet.", citations: [], limitations: ["No governed retrieval contract matched the question."], contextPack: null, trace: buildRetrievalTrace({ queryId: id, scope, query: value, evidence: [] }) };
+  if (type === "UNSUPPORTED") return { contractVersion: "2.0.0", supported: false, questionType: type, answer: "This question is not supported by the governed evidence query layer yet.", citations: [], limitations: ["No governed retrieval contract matched the question."], contextPack: null, trace: buildRetrievalTrace({ queryId: id, scope, query: value, evidence: [], embeddingStatus: embeddingAdapter ? { status: "AVAILABLE" } : { status: "NOT_CONFIGURED" } }) };
   let documents = typeof repository.listRetrievalDocuments === "function" ? await repository.listRetrievalDocuments({ tenantId, auditId, websiteId }) : [];
   if (!documents.length) documents = evidence.map((item) => buildRetrievalDocument({ ...item, evidenceId: item.evidence_id, pageUrl: item.page_url, evidenceType: item.evidence_type, observedValue: item.observed_value, conflictState: item.conflict_state })).filter(Boolean);
   const allowedByQuestion = (item) => type === "conflict"
@@ -26,20 +26,27 @@ export async function queryAskPrysm({ repository, tenantId, auditId, websiteId =
     ? await repository.searchLexical({ tenantId, auditId, websiteId, query: value, limit: 20 })
     : rankLexical(documents, value, 20)).filter(allowedByQuestion);
   let semantic = [];
+  let embeddingStatus = embeddingAdapter ? { status: "AVAILABLE", modelVersion: embeddingAdapter.modelVersion || null } : { status: "NOT_CONFIGURED" };
+  const retrievalLimitations = [];
   if (embeddingAdapter?.embed) {
-    const queryVector = embeddingAdapter.embed(value);
-    semantic = (typeof repository.searchSemantic === "function"
-      ? await repository.searchSemantic({ tenantId, auditId, websiteId, queryVector, limit: 20 })
-      : rankSemantic(documents, value, { embeddingAdapter, limit: 20 })).filter(allowedByQuestion);
+    try {
+      const queryVector = await embeddingAdapter.embed(value);
+      semantic = (typeof repository.searchSemantic === "function"
+        ? await repository.searchSemantic({ tenantId, auditId, websiteId, queryVector, limit: 20 })
+        : rankSemantic(documents, value, { embeddingAdapter: { embed: () => queryVector }, limit: 20 })).filter(allowedByQuestion);
+    } catch (error) {
+      embeddingStatus = { status: "FAILED", category: error?.category || "unavailable", modelVersion: embeddingAdapter.modelVersion || null };
+      retrievalLimitations.push("Semantic embedding retrieval was unavailable; deterministic and lexical retrieval remained active.");
+    }
   }
   const graph = await expandGovernedGraph({ repository, tenantId, auditId, seedNodeIds: [...new Set([...lexical, ...semantic].map((item) => item.graphNodeId).filter(Boolean))], maxDepth: 2, maxNodes: 50 });
   const selectedEvidenceIds = new Set([...deterministic, ...lexical, ...semantic].map((item) => item.evidenceId || item.evidence_id).filter(Boolean));
   const groundedEvidence = evidence.filter((item) => selectedEvidenceIds.has(item.evidence_id));
   const excluded = documents.filter((item) => !selectedEvidenceIds.has(item.evidenceId) && !selectedEvidenceIds.has(item.documentId)).slice(0, 20).map((item) => ({ documentId: item.documentId, reason: "not-ranked-or-outside-bounded-pack" }));
   const contextPack = buildContextPack({ queryId: id, scope, query: value, deterministic, lexical, semantic, graph, evidence: groundedEvidence, excluded });
-  const trace = buildRetrievalTrace({ queryId: id, scope, query: value, deterministic, lexical, semantic, graph, evidence: groundedEvidence, excluded });
+  const trace = buildRetrievalTrace({ queryId: id, scope, query: value, deterministic, lexical, semantic, graph, evidence: groundedEvidence, excluded, embeddingStatus });
   const citations = groundedEvidence.slice(0, 50).map((item) => ({ evidenceId: item.evidence_id, pageUrl: item.page_url, evidenceType: item.evidence_type, status: item.status, conflictState: item.conflict_state }));
   const answer = citations.length ? `${citations.length} governed evidence record(s) matched this question. Similarity was used only to retrieve candidates; review the cited source, status, and conflict state before acting.` : "The governed evidence authority does not contain enough evidence to answer this question. No negative conclusion is inferred.";
-  return { contractVersion: "2.0.0", supported: true, questionType: type, answer, citations, limitations: citations.length ? [] : ["Evidence is missing, unavailable, partial, or outside the supported query scope."], contextPack, trace };
+  return { contractVersion: "2.0.0", supported: true, questionType: type, answer, citations, limitations: [...retrievalLimitations, ...(citations.length ? [] : ["Evidence is missing, unavailable, partial, or outside the supported query scope."])], contextPack, trace };
 }
 export default { queryAskPrysm };

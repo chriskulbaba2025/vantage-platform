@@ -68,6 +68,16 @@ test("vector candidates without canonical evidence cannot manufacture citations"
   assert.match(result.answer, /not contain enough evidence/i);
 });
 
+test("provider outage fails closed to governed retrieval and records the limitation", async () => {
+  const { queryAskPrysm } = await import("./ask-prysm-query.js");
+  const repository = createMemoryEvidenceGraphRepository();
+  await repository.upsertEvidenceRecords([{ ...scope, evidenceId: "ev-lexical", evidenceType: "trust", observedValue: "customer proof", status: "AVAILABLE", conflictState: "NONE" }]);
+  const result = await queryAskPrysm({ repository, ...scope, question: "What evidence supports this recommendation?", embeddingAdapter: { modelVersion: "test-embedding-v1", embed: async () => { const error = new Error("offline"); error.category = "network"; throw error; } } });
+  assert.equal(result.trace.embeddingStatus.status, "FAILED");
+  assert.match(result.limitations[0], /embedding retrieval was unavailable/i);
+  assert.equal(result.citations.length, 1, "deterministic fallback may still cite canonical evidence");
+});
+
 test("Ask PRYSM combines PostgreSQL-shaped vector candidates with canonical evidence", async () => {
   const { queryAskPrysm } = await import("./ask-prysm-query.js");
   const repository = createMemoryEvidenceGraphRepository();

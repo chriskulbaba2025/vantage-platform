@@ -30,7 +30,7 @@ import { buildCanonicalSolutionSet } from "../solution/solution-authority-provid
 import { projectEvidenceRecords } from "../evidence/evidence-record-projection.js";
 import { reconcileCanonicalEvidence } from "../evidence/canonical-evidence-reconciliation.js";
 import { buildEvidenceGraph } from "../evidence/evidence-graph.js";
-import { buildRetrievalDocument } from "../evidence/hybrid-retrieval.js";
+import { buildRetrievalDocumentAsync } from "../evidence/hybrid-retrieval.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -249,6 +249,7 @@ export function createAuditOrchestrator({
   clock, timer, retryPolicyResolver,
   narrativeExecutor, narrativeMode, narrativeDependencies,
   n8nCallCounter, rendererImpl, evidenceGraphRepo,
+  embeddingAdapter,
   // PRYSM-NEXT-01 WP-E — testability seam: injected mock replaces the whole
   // Playwright validation call.  Default production behaviour unchanged
   // (real validator with allowLiveBrowser).
@@ -613,8 +614,9 @@ export function createAuditOrchestrator({
       const documents = [
         ...persistedRecords,
         ...graph.nodes.map((node) => ({ ...node, label: node.label, evidenceId: node.attributes?.evidenceId })),
-      ].map((record) => buildRetrievalDocument(record)).filter(Boolean);
-      await evidenceGraphRepo.upsertRetrievalDocuments(documents);
+      ].map((record) => buildRetrievalDocumentAsync(record, { embeddingAdapter }));
+      const resolvedDocuments = (await Promise.all(documents)).filter(Boolean);
+      await evidenceGraphRepo.upsertRetrievalDocuments(resolvedDocuments);
     }
 
     const bytes = Buffer.from(JSON.stringify({ ...reconciliation, records: persistedRecords }), "utf8");

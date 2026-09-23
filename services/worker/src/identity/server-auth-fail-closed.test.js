@@ -105,6 +105,7 @@ test(
     await identityRepo.createUser({ id: "user-a", cognitoSub: "sub-a", email: "a@example.com" });
     await identityRepo.createMembership({ tenantId: "tenant-a", userId: "user-a", role: "reviewer" });
     const evidenceGraphRepo = createMemoryEvidenceGraphRepository();
+    let embeddingCalls = 0;
 
     // Rebuild the handler with the repository under test while preserving the
     // real authorization and route composition.
@@ -117,6 +118,7 @@ test(
       lifecycleRepo,
       identityRepo,
       evidenceGraphRepo,
+      embeddingAdapter: { modelVersion: "test-embedding-v1", embed: async () => { embeddingCalls += 1; return [1, ...Array(1535).fill(0)]; } },
     });
     await lifecycleRepo.createAudit({ auditId: auditA, tenantId: "tenant-a", clientId: "client-a", idempotencyKey: "ask-a", event: { auditId: auditA, tenantId: "tenant-a", nextState: "approved" } });
     await lifecycleRepo.createAudit({ auditId: auditB, tenantId: "tenant-b", clientId: "client-b", idempotencyKey: "ask-b", event: { auditId: auditB, tenantId: "tenant-b", nextState: "approved" } });
@@ -127,6 +129,7 @@ test(
     const allowed = await request(securedHandler, "POST", `/api/v1/audits/${auditA}/ask`, { principalToken, body: { question: "What evidence supports this?" } });
     assert.equal(allowed.status, 200);
     assert.equal(JSON.parse(allowed.body.toString("utf8")).citations[0].evidenceId, "evidence-a");
+    assert.equal(embeddingCalls, 1, "production-shaped Ask route must inject the configured embedding adapter");
 
     const denied = await request(securedHandler, "POST", `/api/v1/audits/${auditB}/ask`, { principalToken, body: { question: "What evidence supports this?" } });
     assert.equal(denied.status, 404);
