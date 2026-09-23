@@ -49,7 +49,7 @@ const scoreSet = {
     provenance: "scoreAudit/action-priority",
     rootCauseRuleId: rules[0],
     orderedFindingIds: findings.map((finding) => finding.findingId),
-    actions: findings.map((finding, index) => ({ findingId: finding.findingId, rank: index + 1 })),
+    actions: findings.map((finding, index) => ({ findingId: finding.findingId, ruleId: finding.ruleId, rank: index + 1 })),
   },
   suppressedFindingReasons: [],
   moduleEligibility: {},
