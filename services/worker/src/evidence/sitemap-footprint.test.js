@@ -516,3 +516,32 @@ test("fails soft when no usable sitemap exists and does not infer absence of pro
     /does not prove absence of programmatic SEO/i,
   );
 });
+
+test("treats www and apex sitemap URLs as one bounded same-site scope", async () => {
+  const { fetchImpl, calls } = makeFetch({
+    "https://www.example.com/robots.txt": {
+      body: "Sitemap: https://example.com/sitemap.xml",
+      contentType: "text/plain",
+    },
+    "https://example.com/sitemap.xml": {
+      body: `
+        <urlset>
+          <url><loc>https://example.com/</loc></url>
+          <url><loc>https://www.example.com/about</loc></url>
+          <url><loc>https://external.example/not-ours</loc></url>
+        </urlset>
+      `,
+    },
+  });
+
+  const result = await discoverSitemapFootprint("https://www.example.com", {
+    fetchImpl,
+  });
+
+  assert.equal(result.status, FOOTPRINT_STATUS.AVAILABLE);
+  assert.equal(result.retainedUrlCount, 2);
+  assert.equal(result.coverage.skippedExternalPageUrlCount, 1);
+  assert.ok(calls.includes("https://example.com/sitemap.xml"));
+  assert.ok(result.priorityUrls.includes("https://example.com/"));
+  assert.ok(result.priorityUrls.includes("https://www.example.com/about"));
+});
