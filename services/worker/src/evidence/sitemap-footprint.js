@@ -1,6 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import * as cheerio from "cheerio";
 import { normalizeUrl, stableHash } from "../utils.js";
+import { reconcileUrlDiscovery } from "./url-discovery-reconciliation.js";
 
 const HARD_MAX_SITEMAP_DOCUMENTS = 200;
 const HARD_MAX_RETAINED_URLS = 100000;
@@ -791,7 +792,7 @@ export async function discoverSitemapFootprint(
   const queue = [];
   const queued = new Set();
 
-  const enqueue = (url, required) => {
+  const enqueue = (url, required, provenance) => {
     const canonical = canonicalizeHttpUrl(url, origin);
 
     if (!canonical || queued.has(canonical)) return;
@@ -801,20 +802,22 @@ export async function discoverSitemapFootprint(
     queue.push({
       url: canonical,
       required,
+      provenance: provenance || (required ? "ROBOTS_SITEMAP" : "XML_SITEMAP"),
     });
   };
 
   if (robotsSitemaps.length) {
     for (const url of robotsSitemaps) {
-      enqueue(url, true);
+      enqueue(url, true, "ROBOTS_SITEMAP");
     }
   } else {
     for (const url of fallbackSitemaps) {
-      enqueue(url, false);
+      enqueue(url, false, "XML_SITEMAP");
     }
   }
 
   const retained = new Set();
+  const retainedProvenance = new Map();
   const processedDocuments = new Set();
   const limitations = [];
 
@@ -926,7 +929,7 @@ export async function discoverSitemapFootprint(
           continue;
         }
 
-        enqueue(child, true);
+        enqueue(child, true, entry.provenance);
       }
 
       continue;
@@ -957,6 +960,9 @@ export async function discoverSitemapFootprint(
       }
 
       retained.add(pageUrl);
+      const provenance = retainedProvenance.get(pageUrl) || new Set();
+      provenance.add(entry.provenance || "XML_SITEMAP");
+      retainedProvenance.set(pageUrl, provenance);
     }
   }
 
@@ -994,6 +1000,22 @@ export async function discoverSitemapFootprint(
 
   const retainedUrls = [...retained].sort();
 
+  const usableSitemap =
+    parsedDocuments > 0 &&
+    retainedUrls.length > 0;
+
+  const urlInventory = reconcileUrlDiscovery({
+    targetUrl: normalizedTarget,
+    sources: {
+      XML_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("XML_SITEMAP")),
+      ROBOTS_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("ROBOTS_SITEMAP")),
+    },
+    sourceStatuses: {
+      XML_SITEMAP: usableSitemap ? "AVAILABLE" : "UNAVAILABLE",
+      ROBOTS_SITEMAP: robotsSitemaps.length ? (incomplete ? "PARTIAL" : "AVAILABLE") : "UNAVAILABLE",
+    },
+  });
+
   const clusters = clusterSitemapUrls(
     retainedUrls,
     options,
@@ -1011,10 +1033,6 @@ export async function discoverSitemapFootprint(
 
   const priorityUrls =
     prioritySelection.priorityUrls;
-
-  const usableSitemap =
-    parsedDocuments > 0 &&
-    retainedUrls.length > 0;
 
   if (!usableSitemap) {
     limitations.push(
@@ -1043,6 +1061,7 @@ export async function discoverSitemapFootprint(
     clusters,
     priorityUrls,
     prioritySelection,
+    urlInventory,
     coverage: {
       usableSitemap,
       complete:
@@ -1063,6 +1082,9 @@ export async function discoverSitemapFootprint(
         maxRetainedUrls,
       priorityUrlCap:
         maxPriorityUrls,
+      provenanceUrlCount: urlInventory.inventory.length,
+      sourceDisagreement: urlInventory.sourceDisagreement,
+      suspiciousCoverage: urlInventory.suspiciousCoverage,
     },
     limitations: [
       ...new Set(limitations),
