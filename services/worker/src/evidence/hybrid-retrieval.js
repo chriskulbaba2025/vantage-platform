@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-const DIMENSIONS = 32;
+const DIMENSIONS = 1536;
 const SECRET_FIELD = /password|passwd|secret|token|api[_-]?key|credential|authorization|cookie|private[_-]?key/i;
 const STOP_WORDS = new Set(["the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "is", "are", "what", "which", "how", "why"]);
 
@@ -16,7 +16,8 @@ export function tokenize(value) {
   return [...new Set(String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/).filter((word) => word && !STOP_WORDS.has(word)))].sort();
 }
 
-export function deterministicEmbedding(text, dimensions = DIMENSIONS) {
+/** Test-only deterministic fixture. It is not semantic and is never a production default. */
+export function deterministicTestEmbedding(text, dimensions = DIMENSIONS) {
   const vector = Array.from({ length: dimensions }, () => 0);
   for (const token of tokenize(text)) {
     const digest = createHash("sha256").update(token).digest();
@@ -40,7 +41,7 @@ function safeText(value) {
   return String(value);
 }
 
-export function buildRetrievalDocument(record, { embeddingAdapter = { embed: deterministicEmbedding } } = {}) {
+export function buildRetrievalDocument(record, { embeddingAdapter = null } = {}) {
   const content = [record.label, record.evidenceType, record.pageUrl, record.title, record.description, record.text, record.observedValue, record.normalizedValue, record.source].map(safeText).join(" ").trim();
   if (!content || Object.keys(record).some((key) => SECRET_FIELD.test(key))) return null;
   const hash = contentHash(content);
@@ -56,8 +57,12 @@ export function buildRetrievalDocument(record, { embeddingAdapter = { embed: det
     source: record.source || record.provenance || "unknown",
     content,
     contentHash: hash,
-    embedding: record.contentHash === hash && Array.isArray(record.embedding) ? record.embedding : embeddingAdapter.embed(content),
-    embeddingModel: embeddingAdapter.modelVersion || "deterministic-hash-v1",
+    embedding: record.contentHash === hash && Array.isArray(record.embedding)
+      ? record.embedding
+      : embeddingAdapter?.embed ? embeddingAdapter.embed(content) : null,
+    embeddingModel: record.contentHash === hash && Array.isArray(record.embedding)
+      ? (record.embeddingModel || null)
+      : (embeddingAdapter?.modelVersion || null),
     currentness: record.currentness || record.temporalContext || "CURRENT",
     createdAt: record.createdAt || null,
     updatedAt: record.updatedAt || null,
@@ -76,7 +81,8 @@ export function rankLexical(documents, query, limit = 20) {
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.documentId.localeCompare(b.documentId)).slice(0, limit);
 }
 
-export function rankSemantic(documents, query, { embeddingAdapter = { embed: deterministicEmbedding }, limit = 20 } = {}) {
+export function rankSemantic(documents, query, { embeddingAdapter = null, limit = 20 } = {}) {
+  if (!embeddingAdapter?.embed) return [];
   const queryVector = embeddingAdapter.embed(query);
   return documents.map((document) => ({ ...document, score: cosineSimilarity(queryVector, document.embedding), retrievalMethod: "SEMANTIC" }))
     .filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.documentId.localeCompare(b.documentId)).slice(0, limit);

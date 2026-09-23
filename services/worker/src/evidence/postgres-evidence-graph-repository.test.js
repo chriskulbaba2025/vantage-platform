@@ -37,13 +37,8 @@ test("evidence records preserve conflict state and tenant scope", async () => {
   assert.equal(other.length, 0);
 });
 
-test("retrieval documents are additive, idempotent, and scope-first", async () => {
+test("retrieval documents fail closed when PostgreSQL lacks pgvector", async () => {
   const repo = setup();
   const document = { documentId: "doc-1", tenantId: "tenant-a", auditId: "00000000-0000-0000-0000-000000000004", nodeType: "EvidenceRecord", source: "fixture", content: "contact form", contentHash: "hash-1", embedding: [0.1, 0.2], embeddingModel: "deterministic-hash-v1", status: "AVAILABLE", conflictState: "NONE" };
-  await repo.upsertRetrievalDocuments([document, document]);
-  const own = await repo.listRetrievalDocuments({ tenantId: "tenant-a", auditId: document.auditId });
-  const other = await repo.listRetrievalDocuments({ tenantId: "tenant-b", auditId: document.auditId });
-  assert.equal(own.length, 1);
-  assert.deepEqual(own[0].embedding, [0.1, 0.2]);
-  assert.equal(other.length, 0);
+  await assert.rejects(() => repo.upsertRetrievalDocuments([document]), /vector|type|extension/i);
 });

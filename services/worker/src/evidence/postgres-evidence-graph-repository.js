@@ -7,6 +7,10 @@ const MIGRATION = resolve(__dirname, "..", "..", "migrations", "004_evidence_gra
 const RETRIEVAL_MIGRATION = resolve(__dirname, "..", "..", "migrations", "005_retrieval_documents.sql");
 
 function json(value, fallback) { return JSON.stringify(value === undefined ? fallback : value); }
+function vectorLiteral(vector) {
+  if (!Array.isArray(vector) || vector.length !== 1536 || vector.some((value) => !Number.isFinite(value))) throw new Error("pgvector query requires a finite 1536-dimension vector");
+  return `[${vector.join(",")}]`;
+}
 
 export function createPostgresEvidenceGraphRepository({ pool }) {
   if (!pool) throw new Error("postgres-evidence-graph-repository requires a pool");
@@ -14,9 +18,9 @@ export function createPostgresEvidenceGraphRepository({ pool }) {
   let retrievalInitialized;
   async function ensureInitialized() {
     if (!initialized) {
-      initialized = readFile(MIGRATION, "utf8").then((sql) => Promise.all(
-        sql.split(";").map((statement) => statement.trim()).filter(Boolean).map((statement) => pool.query(statement)),
-      )).catch((error) => { initialized = null; throw error; });
+      initialized = readFile(MIGRATION, "utf8").then(async (sql) => {
+        for (const statement of sql.split(";").map((item) => item.trim()).filter(Boolean)) await pool.query(statement);
+      }).catch((error) => { initialized = null; throw error; });
     }
     return initialized;
   }
@@ -59,22 +63,35 @@ export function createPostgresEvidenceGraphRepository({ pool }) {
   }
   async function ensureRetrievalInitialized() {
     if (!retrievalInitialized) {
-      retrievalInitialized = readFile(RETRIEVAL_MIGRATION, "utf8").then((sql) => Promise.all(sql.split(";").map((statement) => statement.trim()).filter(Boolean).map((statement) => pool.query(statement)))).catch((error) => { retrievalInitialized = null; throw error; });
+      retrievalInitialized = readFile(RETRIEVAL_MIGRATION, "utf8").then(async (sql) => {
+        for (const statement of sql.split(";").map((item) => item.trim()).filter(Boolean)) await pool.query(statement);
+      }).catch((error) => { retrievalInitialized = null; throw error; });
     }
     return retrievalInitialized;
   }
   async function upsertRetrievalDocuments(documents = []) {
     await ensureRetrievalInitialized();
     for (const document of documents) {
-      await pool.query(`INSERT INTO prysm.retrieval_documents (document_id, tenant_id, client_id, website_id, audit_id, graph_node_id, evidence_id, node_type, source, content, content_hash, embedding_json, embedding_model, currentness, status, conflict_state, provenance, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,now()) ON CONFLICT (document_id) DO UPDATE SET content = EXCLUDED.content, content_hash = EXCLUDED.content_hash, embedding_json = EXCLUDED.embedding_json, embedding_model = EXCLUDED.embedding_model, updated_at = now() WHERE prysm.retrieval_documents.tenant_id = EXCLUDED.tenant_id AND prysm.retrieval_documents.audit_id = EXCLUDED.audit_id`, [document.documentId, document.tenantId, document.clientId || null, document.websiteId || null, document.auditId, document.graphNodeId || null, document.evidenceId || null, document.nodeType || "EvidenceRecord", document.source || "unknown", document.content, document.contentHash, document.embedding ? JSON.stringify(document.embedding) : null, document.embeddingModel || null, document.currentness || "CURRENT", document.status || "UNKNOWN", document.conflictState || "NONE", document.provenance || null]);
+      await pool.query(`INSERT INTO prysm.retrieval_documents (document_id, tenant_id, client_id, website_id, audit_id, graph_node_id, evidence_id, node_type, source, content, content_hash, embedding, embedding_model, currentness, status, conflict_state, provenance, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::vector,$13,$14,$15,$16,$17,now()) ON CONFLICT (document_id) DO UPDATE SET content = EXCLUDED.content, content_hash = EXCLUDED.content_hash, embedding = EXCLUDED.embedding, embedding_model = EXCLUDED.embedding_model, updated_at = now() WHERE prysm.retrieval_documents.tenant_id = EXCLUDED.tenant_id AND prysm.retrieval_documents.audit_id = EXCLUDED.audit_id`, [document.documentId, document.tenantId, document.clientId || null, document.websiteId || null, document.auditId, document.graphNodeId || null, document.evidenceId || null, document.nodeType || "EvidenceRecord", document.source || "unknown", document.content, document.contentHash, document.embedding ? vectorLiteral(document.embedding) : null, document.embeddingModel || null, document.currentness || "CURRENT", document.status || "UNKNOWN", document.conflictState || "NONE", document.provenance || null]);
     }
   }
   async function listRetrievalDocuments({ tenantId, auditId, websiteId = null } = {}) {
     await ensureRetrievalInitialized();
     const result = await pool.query(`SELECT * FROM prysm.retrieval_documents WHERE tenant_id = $1 AND audit_id = $2${websiteId ? " AND website_id = $3" : ""} ORDER BY document_id`, websiteId ? [tenantId, auditId, websiteId] : [tenantId, auditId]);
-    return result.rows.map((row) => ({ ...row, embedding: row.embedding_json }));
+    return result.rows.map((row) => ({ ...row, embedding: row.embedding ? String(row.embedding).replace(/^\[|\]$/g, "").split(",").filter(Boolean).map(Number) : null }));
   }
-  return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence, upsertRetrievalDocuments, listRetrievalDocuments });
+  async function searchLexical({ tenantId, auditId, websiteId = null, query, limit = 20 } = {}) {
+    await ensureRetrievalInitialized();
+    const result = await pool.query(`SELECT *, ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', $3)) AS score FROM prysm.retrieval_documents WHERE tenant_id = $1 AND audit_id = $2${websiteId ? " AND website_id = $4" : ""} AND to_tsvector('simple', content) @@ plainto_tsquery('simple', $3) ORDER BY score DESC, document_id LIMIT ${Math.max(1, Math.min(100, Number(limit) || 20))}`, websiteId ? [tenantId, auditId, query, websiteId] : [tenantId, auditId, query]);
+    return result.rows.map((row) => ({ ...row, documentId: row.document_id, evidenceId: row.evidence_id, graphNodeId: row.graph_node_id, contentHash: row.content_hash, embeddingModel: row.embedding_model, currentness: row.currentness, conflictState: row.conflict_state, retrievalMethod: "LEXICAL" }));
+  }
+  async function searchSemantic({ tenantId, auditId, websiteId = null, queryVector, limit = 20 } = {}) {
+    await ensureRetrievalInitialized();
+    const vector = vectorLiteral(queryVector);
+    const result = await pool.query(`SELECT *, 1 - (embedding <=> $3::vector) AS score FROM prysm.retrieval_documents WHERE tenant_id = $1 AND audit_id = $2${websiteId ? " AND website_id = $4" : ""} AND embedding IS NOT NULL ORDER BY embedding <=> $3::vector, document_id LIMIT ${Math.max(1, Math.min(100, Number(limit) || 20))}`, websiteId ? [tenantId, auditId, vector, websiteId] : [tenantId, auditId, vector]);
+    return result.rows.map((row) => ({ ...row, documentId: row.document_id, evidenceId: row.evidence_id, graphNodeId: row.graph_node_id, contentHash: row.content_hash, embeddingModel: row.embedding_model, currentness: row.currentness, conflictState: row.conflict_state, score: Number(row.score), retrievalMethod: "VECTOR" }));
+  }
+  return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence, upsertRetrievalDocuments, listRetrievalDocuments, searchLexical, searchSemantic });
 }
 
 export default { createPostgresEvidenceGraphRepository };

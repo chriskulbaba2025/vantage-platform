@@ -1,4 +1,5 @@
 function scopeKey(tenantId, auditId) { return `${tenantId}\u0000${auditId}`; }
+import { rankLexical, rankSemantic } from "./hybrid-retrieval.js";
 
 // Match the PostgreSQL repository's row contract on reads. The write-side
 // accepts governed application records; consumers must not observe a
@@ -66,7 +67,14 @@ export function createMemoryEvidenceGraphRepository() {
   async function listRetrievalDocuments({ tenantId, auditId, websiteId = null } = {}) {
     return [...retrieval.values()].filter((document) => document.tenantId === tenantId && document.auditId === auditId && (!websiteId || document.websiteId === websiteId));
   }
-  return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence, upsertRetrievalDocuments, listRetrievalDocuments });
+  async function searchLexical({ tenantId, auditId, websiteId = null, query, limit = 20 } = {}) {
+    return rankLexical(await listRetrievalDocuments({ tenantId, auditId, websiteId }), query, limit);
+  }
+  async function searchSemantic({ tenantId, auditId, websiteId = null, query, queryVector, embeddingAdapter, limit = 20 } = {}) {
+    const documents = await listRetrievalDocuments({ tenantId, auditId, websiteId });
+    return queryVector ? rankSemantic(documents, query, { embeddingAdapter: { embed: () => queryVector }, limit }) : rankSemantic(documents, query, { embeddingAdapter, limit });
+  }
+  return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence, upsertRetrievalDocuments, listRetrievalDocuments, searchLexical, searchSemantic });
 }
 
 export default { createMemoryEvidenceGraphRepository };

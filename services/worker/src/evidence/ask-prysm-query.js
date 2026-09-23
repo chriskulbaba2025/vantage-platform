@@ -22,7 +22,16 @@ export async function queryAskPrysm({ repository, tenantId, auditId, websiteId =
     : type === "missing"
       ? ["UNKNOWN", "UNAVAILABLE", "PARTIAL", "FAILED"].includes(item.status)
       : item.status !== "UNKNOWN";
-  const lexical = rankLexical(documents, value, 20).filter(allowedByQuestion); const semantic = rankSemantic(documents, value, { embeddingAdapter, limit: 20 }).filter(allowedByQuestion);
+  const lexical = (typeof repository.searchLexical === "function"
+    ? await repository.searchLexical({ tenantId, auditId, websiteId, query: value, limit: 20 })
+    : rankLexical(documents, value, 20)).filter(allowedByQuestion);
+  let semantic = [];
+  if (embeddingAdapter?.embed) {
+    const queryVector = embeddingAdapter.embed(value);
+    semantic = (typeof repository.searchSemantic === "function"
+      ? await repository.searchSemantic({ tenantId, auditId, websiteId, queryVector, limit: 20 })
+      : rankSemantic(documents, value, { embeddingAdapter, limit: 20 })).filter(allowedByQuestion);
+  }
   const graph = await expandGovernedGraph({ repository, tenantId, auditId, seedNodeIds: [...new Set([...lexical, ...semantic].map((item) => item.graphNodeId).filter(Boolean))], maxDepth: 2, maxNodes: 50 });
   const selectedEvidenceIds = new Set([...deterministic, ...lexical, ...semantic].map((item) => item.evidenceId || item.evidence_id).filter(Boolean));
   const groundedEvidence = evidence.filter((item) => selectedEvidenceIds.has(item.evidence_id));

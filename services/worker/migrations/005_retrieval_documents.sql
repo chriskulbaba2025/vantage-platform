@@ -1,4 +1,5 @@
 -- Additive retrieval index. Embeddings are relevance metadata, never evidence.
+CREATE EXTENSION IF NOT EXISTS vector;
 CREATE SCHEMA IF NOT EXISTS prysm;
 CREATE TABLE IF NOT EXISTS prysm.retrieval_documents (
   document_id TEXT PRIMARY KEY,
@@ -12,7 +13,7 @@ CREATE TABLE IF NOT EXISTS prysm.retrieval_documents (
   source TEXT NOT NULL,
   content TEXT NOT NULL,
   content_hash TEXT NOT NULL,
-  embedding_json JSONB,
+  embedding vector(1536),
   embedding_model TEXT,
   currentness TEXT NOT NULL DEFAULT 'CURRENT',
   status TEXT NOT NULL DEFAULT 'UNKNOWN',

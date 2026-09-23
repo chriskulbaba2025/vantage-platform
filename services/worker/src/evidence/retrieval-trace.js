@@ -43,7 +43,11 @@ export function buildContextPack({ queryId, scope, query, lexical = [], semantic
 }
 
 export function buildRetrievalTrace({ queryId, scope, query, deterministic = [], lexical = [], semantic = [], graph = {}, evidence = [], excluded = [] } = {}) {
-  return { contractVersion: "2.0.0", queryId, query, authorizationScope: scope, retrievalMethods: ["DETERMINISTIC", "LEXICAL", "SEMANTIC", "GRAPH"], seedNodeIds: [...new Set([...deterministic, ...lexical, ...semantic].map((item) => item.graphNodeId || item.nodeId || item.node_id).filter(Boolean))].sort(), lexicalMatches: lexical.map((item) => ({ documentId: item.documentId, score: item.score, terms: item.matchedTerms })), semanticMatches: semantic.map((item) => ({ documentId: item.documentId, score: item.score })), traversedEdgeTypes: [...new Set((graph.traversed || []).map((item) => item.edgeType))].sort(), traversalDepth: graph.nodes?.length ? Math.max(0, ...(graph.nodes.map((item) => item.depth || 0))) : 0, evidenceIds: evidence.map((item) => item.evidence_id || item.evidenceId).filter(Boolean).sort(), excluded, bounded: true };
+  return { contractVersion: "2.0.0", queryId, query, authorizationScope: scope, retrievalMethods: ["DETERMINISTIC", "LEXICAL", "VECTOR", "GRAPH"], candidateMethods: [
+    ...deterministic.map((item) => ({ candidateId: item.evidence_id || item.evidenceId || item.documentId, method: "DETERMINISTIC" })),
+    ...lexical.map((item) => ({ candidateId: item.documentId || item.document_id, method: "LEXICAL" })),
+    ...semantic.map((item) => ({ candidateId: item.documentId || item.document_id, method: "VECTOR" })),
+  ].filter((item) => item.candidateId).sort((a, b) => `${a.method}:${a.candidateId}`.localeCompare(`${b.method}:${b.candidateId}`)), seedNodeIds: [...new Set([...deterministic, ...lexical, ...semantic].map((item) => item.graphNodeId || item.nodeId || item.node_id).filter(Boolean))].sort(), lexicalMatches: lexical.map((item) => ({ documentId: item.documentId || item.document_id, score: item.score, terms: item.matchedTerms })), semanticMatches: semantic.map((item) => ({ documentId: item.documentId || item.document_id, score: item.score, retrievalMethod: "VECTOR" })), traversedEdgeTypes: [...new Set((graph.traversed || []).map((item) => item.edgeType))].sort(), traversalDepth: graph.nodes?.length ? Math.max(0, ...(graph.nodes.map((item) => item.depth || 0))) : 0, evidenceIds: evidence.map((item) => item.evidence_id || item.evidenceId).filter(Boolean).sort(), excluded, bounded: true };
 }
 
 export { DEFAULT_EDGE_TYPES };
