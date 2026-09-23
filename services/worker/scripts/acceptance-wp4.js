@@ -50,7 +50,7 @@ try {
 }
 
 // =========================================================================
-// 2. Transition matrix: exactly 23 authorized, 301 unauthorized
+// 2. Transition matrix: exactly 24 authorized, 300 unauthorized
 // =========================================================================
 console.log("\n─ Transition matrix enforcement ─");
 try {
@@ -70,6 +70,7 @@ try {
     "in_review→approval_rejected", "approval_rejected→in_review",
     "approved→published", "approved→publish_failed", "publish_failed→approved",
   ]);
+  VALID.add("scored" + String.fromCodePoint(0x2192) + "narrative_failed");
 
   let auth = 0, unauth = 0;
   for (const from of Object.values(T)) {
@@ -84,10 +85,10 @@ try {
       }
     }
   }
-  if (auth === 23) pass(`Authorized: ${auth}`);
-  else fail(`Authorized: expected 23, got ${auth}`);
-  if (unauth === 301) pass(`Unauthorized: ${unauth}`);
-  else fail(`Unauthorized: expected 301, got ${unauth}`);
+  if (auth === 24) pass(`Authorized: ${auth}`);
+  else fail(`Authorized: expected 24, got ${auth}`);
+  if (unauth === 300) pass(`Unauthorized: ${unauth}`);
+  else fail(`Unauthorized: expected 300, got ${unauth}`);
 
   let pubOut = 0;
   for (const to of Object.values(T)) { if (mod.isValidTransition(T.PUBLISHED, to)) pubOut++; }

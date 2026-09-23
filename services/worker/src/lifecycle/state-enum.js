@@ -73,7 +73,10 @@ export const TRANSITION_MAP = Object.freeze({
   [T.COLLECTION_FAILED]: new Set([T.COLLECTING]),
   [T.EVIDENCE_STORED]:   new Set([T.EVIDENCE_LOCKED]),
   [T.EVIDENCE_LOCKED]:   new Set([T.SCORED]),
-  [T.SCORED]:            new Set([T.NARRATIVE_PENDING]),
+  // A scored audit may fail during deterministic pre-narrative preparation.
+  // Keep the existing failure state contract and make the transition explicit
+  // so a worker cannot stop at SCORED while the client believes it is active.
+  [T.SCORED]:            new Set([T.NARRATIVE_PENDING, T.NARRATIVE_FAILED]),
   [T.NARRATIVE_PENDING]: new Set([T.NARRATIVE_READY, T.NARRATIVE_FAILED]),
   [T.NARRATIVE_FAILED]:  new Set([T.NARRATIVE_PENDING]),
   [T.NARRATIVE_READY]:   new Set([T.DRAFT_RENDERED, T.RENDER_FAILED]),

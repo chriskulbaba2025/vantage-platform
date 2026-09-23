@@ -44,6 +44,8 @@ const NARRATIVE_V2_VERSION = "2.0.0";
 const UAT_RERENDER_AUDIT_ID = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
 const FINAL_PASS_ORCHESTRATION_ARTIFACT =
   "narrative-v2/orchestration-final-pass.json";
+export const NARRATIVE_V2_PREPARATION_FAILURE_REASON =
+  "narrative-v2-preparation-failed";
 
 export function hasRequiredNarrativeV2ReportStructure(html) {
   return typeof html === "string"
@@ -997,15 +999,31 @@ async function runNarrativeV2FromScored({
     await ensureReportContentPackage({ artifactStore, auditRequest, validateContract, inputs });
     prepareCanonicalSolutions({ inputs, solutionAuthorityProvider });
   } catch (err) {
-    // Package/input preparation occurs before NARRATIVE_PENDING. Remain at
-    // SCORED so deterministic preparation can be retried without model calls.
+    // Package/input preparation occurs before any model call. Persist a
+    // governed failure state instead of returning an error-bearing SCORED
+    // result: the latter looks active to the browser after the driver stops.
+    console.error(
+      `Narrative v2 preparation failed for ${auditRequest.auditId}:`,
+      err?.stack || err?.message || String(err),
+    );
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_FAILED,
+      reason: NARRATIVE_V2_PREPARATION_FAILURE_REASON,
+    });
     return resultSummary({
       auditRequest,
       executionId,
       startedAt,
       completedAt: clock.now(),
-      finalState: T.SCORED,
-      extra: { wp8Error: err.message },
+      finalState: T.NARRATIVE_FAILED,
+      extra: {
+        narrativeV2Status: "PREPARATION_FAILED",
+        recoverable: true,
+        wp8Error: err?.message || String(err),
+      },
     });
   }
 
@@ -1554,7 +1572,37 @@ export function createNarrativeV2ProductionPath({
       });
     }
 
-        if (current?.state === T.NARRATIVE_FAILED) {
+    if (current?.state === T.NARRATIVE_FAILED) {
+      const history = typeof lifecycleService.history === "function"
+        ? await lifecycleService.history(auditRequest.auditId, auditRequest.tenantId)
+        : [];
+      const lastEvent = history?.[history.length - 1];
+
+      // Only deterministic preparation failures may be resumed through the
+      // generic recovery path. Human-review-required Narrative failures remain
+      // behind their explicit final-pass authorization boundary.
+      if (lastEvent?.reason === NARRATIVE_V2_PREPARATION_FAILURE_REASON) {
+        await transition({
+          lifecycleService,
+          auditRequest,
+          executionId,
+          toState: T.NARRATIVE_PENDING,
+          reason: "narrative-v2-preparation-recovery",
+        });
+        return runNarrativeV2FromPending({
+          auditRequest,
+          executionId,
+          startedAt,
+          lifecycleService,
+          artifactStore,
+          validateContract,
+          writerExecutor,
+          judgeExecutor,
+          solutionAuthorityProvider,
+          clock: c,
+        });
+      }
+
       // Do not automatically spend another Writer/Judge pass. Surface the
       // exact governed Judge review state and require explicit continuation.
       const orchestrationResult =

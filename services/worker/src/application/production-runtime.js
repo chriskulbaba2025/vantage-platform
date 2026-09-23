@@ -23,6 +23,7 @@ import {
   createProductionAdapters,
   createProductionContractValidator,
 } from "./production-bootstrap.js";
+import { NARRATIVE_V2_PREPARATION_FAILURE_REASON } from "../narrative-v2/production-path.js";
 
 const T = LIFECYCLE_STATE;
 const AUDIT_REQUEST_SCHEMA = "https://vantage-platform.io/prysm/contracts/v1/audit-request.schema.json";
@@ -416,7 +417,14 @@ export function createProductionRuntime({
     const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
     if (!meta) return null;
     const current = await lifecycleService.currentState(auditId, tenantId);
-    if (!current || !RESUMABLE_STATES.has(current.state)) return current?.state || null;
+    const history = typeof lifecycleService.history === "function"
+      ? await lifecycleService.history(auditId, tenantId)
+      : [];
+    const preparationFailure = current?.state === T.NARRATIVE_FAILED
+      && history?.[history.length - 1]?.reason === NARRATIVE_V2_PREPARATION_FAILURE_REASON;
+    if (!current || (!RESUMABLE_STATES.has(current.state) && !preparationFailure)) {
+      return current?.state || null;
+    }
 
     const businessName = meta.business_name || meta.businessName || "";
     const clientId = meta.client_id || meta.clientId || current.clientId || "";
