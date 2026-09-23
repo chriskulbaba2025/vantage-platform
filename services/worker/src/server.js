@@ -922,6 +922,8 @@ import { createProductionRuntime } from "./application/production-runtime.js";
 import { createPostgresLifecycleRepository } from "./lifecycle/postgres-repository.js";
 import { createGovernedArtifactStore, createFsArtifactStore, buildKey as buildArtifactKey } from "./storage/governed-artifact-store.js";
 import { createFileLifecycleRepository } from "./lifecycle/file-repository.js";
+import { createPostgresEvidenceGraphRepository } from "./evidence/postgres-evidence-graph-repository.js";
+import { createMemoryEvidenceGraphRepository } from "./evidence/memory-evidence-graph-repository.js";
 
 /**
  * Initialize the durable PostgreSQL runtime before any local fallback can be
@@ -1106,6 +1108,7 @@ let lifecycleRepo;
 let auditService = null;
 let identityRepo = null;
 let pgPool = null;
+let evidenceGraphRepo = null;
 
 const configuredPostgres = await initializeConfiguredPostgres({ databaseUrl: config.databaseUrl });
 if (configuredPostgres) {
@@ -1132,6 +1135,13 @@ if (!lifecycleRepo) {
   const { createMemoryIdentityRepository } = await import("./identity/memory-identity-repository.js");
   identityRepo = createMemoryIdentityRepository();
 }
+
+// Evidence intelligence uses the same durable PostgreSQL boundary when one
+// exists, with an explicitly local-only memory repository for deterministic
+// development/test composition.
+evidenceGraphRepo = pgPool
+  ? createPostgresEvidenceGraphRepository({ pool: pgPool })
+  : createMemoryEvidenceGraphRepository();
 
 // Local sandbox only: the mock web principal must resolve after a worker
 // restart just like the file-backed audit/report state does.  This branch is
@@ -1227,6 +1237,7 @@ if (lifecycleRepo && artifactStore) {
       artifactStore,
       lifecycleRepo,
       reportStore: store,
+      evidenceGraphRepo,
     });
     auditService = runtime.auditService;
     console.log("WP12 production runtime initialized — governed API v1 available");
@@ -1281,6 +1292,7 @@ const requestListener = createRequestHandler({
   auditService,
   lifecycleRepo,
   identityRepo,
+  evidenceGraphRepo,
   // PRYSM-NEXT-01 WP-H — report-design v2 pages live in the governed
   // artifact store (same store the orchestrator persists through).
   governedArtifacts: artifactStore,

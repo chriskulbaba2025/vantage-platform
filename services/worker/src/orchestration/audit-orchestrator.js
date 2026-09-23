@@ -27,6 +27,9 @@ import { loadAuditRequest } from "./audit-request-persistence.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 import { hydrateCurrentReportModel } from "../report-model/current-model.js";
 import { buildCanonicalSolutionSet } from "../solution/solution-authority-provider.js";
+import { projectEvidenceRecords } from "../evidence/evidence-record-projection.js";
+import { reconcileCanonicalEvidence } from "../evidence/canonical-evidence-reconciliation.js";
+import { buildEvidenceGraph } from "../evidence/evidence-graph.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -244,7 +247,7 @@ export function createAuditOrchestrator({
   lifecycleService, artifactStore, adapters, validateContract,
   clock, timer, retryPolicyResolver,
   narrativeExecutor, narrativeMode, narrativeDependencies,
-  n8nCallCounter, rendererImpl,
+  n8nCallCounter, rendererImpl, evidenceGraphRepo,
   // PRYSM-NEXT-01 WP-E — testability seam: injected mock replaces the whole
   // Playwright validation call.  Default production behaviour unchanged
   // (real validator with allowLiveBrowser).
@@ -577,6 +580,54 @@ export function createAuditOrchestrator({
     return { evidence, canonicalRecord };
   }
 
+  // Additive evidence-intelligence projection. It consumes the same validated
+  // SourceResults as decision evidence and persists a reconciled record/graph
+  // view for Ask PRYSM and future report projections.
+  async function persistEvidenceIntelligence({ auditRequest, allSourceResults, decisionEvidence }) {
+    if (!evidenceGraphRepo) return null;
+    const records = projectEvidenceRecords({ auditRequest, allSourceResults });
+    const reconciliation = reconcileCanonicalEvidence(records, { now: c.now() });
+    const stateByEvidenceId = new Map();
+    for (const group of reconciliation.records) {
+      for (const observation of group.observations) {
+        stateByEvidenceId.set(observation.evidenceId, group.state === "CONFLICT" ? "CONFLICT" : "NONE");
+      }
+    }
+    const persistedRecords = records.map((record) => ({
+      ...record,
+      conflictState: stateByEvidenceId.get(record.evidenceId) || "NONE",
+    }));
+    await evidenceGraphRepo.upsertEvidenceRecords(persistedRecords);
+    const graph = buildEvidenceGraph({
+      tenantId: auditRequest.tenantId,
+      clientId: auditRequest.clientId,
+      auditId: auditRequest.auditId,
+      websiteId: auditRequest.targetUrl,
+      websiteUrl: auditRequest.targetUrl,
+      pages: Array.isArray(decisionEvidence?.site?.pages) ? decisionEvidence.site.pages : [],
+      evidenceRecords: persistedRecords,
+    });
+    await evidenceGraphRepo.upsertGraph(graph);
+
+    const bytes = Buffer.from(JSON.stringify({ ...reconciliation, records: persistedRecords }), "utf8");
+    const record = await artifactStore.put({
+      bytes,
+      contentType: "application/json",
+      scope: artifactScope({
+        tenantId: auditRequest.tenantId,
+        clientId: auditRequest.clientId,
+        auditId: auditRequest.auditId,
+        category: "canonical",
+        artifactName: "evidence-reconciliation.json",
+      }),
+    });
+    const loaded = await artifactStore.get(record.key);
+    if (!loaded || loaded.length !== bytes.length || record.sha256 !== sha256(bytes) || !(await artifactStore.verify(record))) {
+      throw new Error("Evidence reconciliation artifact verification failed");
+    }
+    return { reconciliation, persistedRecords, graph, reconciliationRecord: record };
+  }
+
   // -------------------------------------------------------------------
   // Governed collection sequence — all inside failure boundary
   // -------------------------------------------------------------------
@@ -681,6 +732,11 @@ export function createAuditOrchestrator({
         decisionResult.errors.map((e) => String(e).slice(0, 300)).join(" | "),
       );
     }
+    const evidenceIntelligence = await persistEvidenceIntelligence({
+      auditRequest,
+      allSourceResults,
+      decisionEvidence: decisionResult.evidence,
+    });
     const decisionEvidenceRecord = await persistDecisionEvidence({
       store: artifactStore,
       scope,
@@ -774,7 +830,7 @@ export function createAuditOrchestrator({
       artifactKey: manifestKey,
     });
 
-    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, capabilityEvidenceRecord, pathValidationEvidence, isResumed };
+    return { allSourceResults, canonicalRecord, decisionEvidenceRecord, capabilityEvidenceRecord, pathValidationEvidence, evidenceIntelligence, isResumed };
   }
 
   // -------------------------------------------------------------------

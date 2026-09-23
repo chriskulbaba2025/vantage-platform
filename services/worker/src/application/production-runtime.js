@@ -23,6 +23,7 @@ import {
   createProductionAdapters,
   createProductionContractValidator,
 } from "./production-bootstrap.js";
+import { createMemoryEvidenceGraphRepository } from "../evidence/memory-evidence-graph-repository.js";
 
 const T = LIFECYCLE_STATE;
 const AUDIT_REQUEST_SCHEMA = "https://vantage-platform.io/prysm/contracts/v1/audit-request.schema.json";
@@ -111,6 +112,7 @@ export function createProductionRuntime({
   reportStore,
   narrative,
   narrativeV2,
+  evidenceGraphRepo,
 }) {
   if (!lifecycleRepo) {
     throw new Error("PRODUCTION STARTUP FAILED: lifecycleRepo is required (DATABASE_URL not configured?)");
@@ -125,6 +127,7 @@ export function createProductionRuntime({
   const lifecycleService = createLifecycleService(lifecycleRepo);
   const runtimeAdapters = injectedAdaptersAreValid(adapters) ? adapters : createProductionAdapters();
   const runtimeValidateContract = resolveValidator(validateContract);
+  const runtimeEvidenceGraphRepo = evidenceGraphRepo || createMemoryEvidenceGraphRepository();
 
   // PRYSM-NARRATIVE-V2-LIVE-01 — when no test/controlled Narrative v2
   // executors are injected, compose the explicit env-driven live binding.
@@ -194,6 +197,7 @@ export function createProductionRuntime({
       priceTable: narrativeDeps.priceTable,
       modelConfig: narrativeDeps.modelConfig,
     },
+    evidenceGraphRepo: runtimeEvidenceGraphRepo,
     retryPolicyResolver: (source) => {
       // PRYSM-CLOSE-12: source-specific governed timeouts, each configurable.
       //   on-page crawls can take minutes (polling DataForSEO)
