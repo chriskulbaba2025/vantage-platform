@@ -516,3 +516,32 @@ test("fails soft when no usable sitemap exists and does not infer absence of pro
     /does not prove absence of programmatic SEO/i,
   );
 });
+
+test("suspicious coverage invokes bounded rendered structural discovery when enabled", async () => {
+  const { fetchImpl } = makeFetch({
+    "https://example.com/robots.txt": { status: 404, contentType: "text/plain" },
+    "https://example.com/sitemap.xml": { status: 404 },
+    "https://example.com/sitemap_index.xml": { status: 404 },
+  });
+  const browserImpl = {
+    launch: async () => ({
+      newPage: async () => ({
+        goto: async () => {},
+        locator: () => ({ evaluateAll: async () => [{ url: "https://example.com/services", status: "AVAILABLE" }] }),
+        close: async () => {},
+      }),
+      close: async () => {},
+    }),
+  };
+  const result = await discoverSitemapFootprint("https://example.com", {
+    fetchImpl,
+    enableRenderedDiscovery: true,
+    browserImpl,
+  });
+  assert.equal(result.renderedDiscovery.status, "AVAILABLE");
+  assert.equal(result.renderedDiscovery.pagesAttempted, 4);
+  assert.equal(result.renderedDiscovery.urlCount, 1);
+  assert.ok(result.urlInventory.inventory.some((item) => item.provenance.includes("RENDERED_BROWSER")));
+  assert.equal(result.coverage.complete, false);
+  assert.equal(result.status, FOOTPRINT_STATUS.UNAVAILABLE);
+});

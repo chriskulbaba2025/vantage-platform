@@ -158,6 +158,11 @@ async function resolveSiteFootprint(target, options, clientOpts) {
       services: Array.isArray(options.businessServices)
         ? options.businessServices
         : [],
+      // Suspicious coverage is the governed trigger. Callers may explicitly
+      // disable browser escalation for a bounded non-browser execution.
+      enableRenderedDiscovery: options.enableRenderedDiscovery !== false,
+      browserImpl: options.browserImpl,
+      renderedDiscoveryPageCap: options.renderedDiscoveryPageCap,
     });
 
     return normalizeFootprintForAnalysis(footprint);

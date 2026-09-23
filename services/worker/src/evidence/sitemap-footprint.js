@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { normalizeUrl, stableHash } from "../utils.js";
 import { reconcileUrlDiscovery } from "./url-discovery-reconciliation.js";
 import { discoverSupplementalUrlSources } from "./supplemental-url-discovery.js";
+import { discoverRenderedStructuralUrls } from "./rendered-url-discovery.js";
 
 const HARD_MAX_SITEMAP_DOCUMENTS = 200;
 const HARD_MAX_RETAINED_URLS = 100000;
@@ -1018,19 +1019,41 @@ export async function discoverSitemapFootprint(
     parsedDocuments > 0 &&
     retainedUrls.length > 0;
 
-  const urlInventory = reconcileUrlDiscovery({
+  const discoverySources = {
+    XML_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("XML_SITEMAP")),
+    ROBOTS_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("ROBOTS_SITEMAP")),
+    ...supplemental.sources,
+  };
+  const discoveryStatuses = {
+    XML_SITEMAP: usableSitemap ? "AVAILABLE" : "UNAVAILABLE",
+    ROBOTS_SITEMAP: robotsSitemaps.length ? (incomplete ? "PARTIAL" : "AVAILABLE") : "NOT_APPLICABLE",
+    ...supplemental.statuses,
+  };
+  let renderedDiscovery = { status: "NOT_RUN", urls: [], limitations: [], pagesAttempted: 0, bounded: true };
+  let urlInventory = reconcileUrlDiscovery({
     targetUrl: normalizedTarget,
-    sources: {
-      XML_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("XML_SITEMAP")),
-      ROBOTS_SITEMAP: retainedUrls.filter((url) => retainedProvenance.get(url)?.has("ROBOTS_SITEMAP")),
-      ...supplemental.sources,
-    },
-    sourceStatuses: {
-      XML_SITEMAP: usableSitemap ? "AVAILABLE" : "UNAVAILABLE",
-      ROBOTS_SITEMAP: robotsSitemaps.length ? (incomplete ? "PARTIAL" : "AVAILABLE") : "NOT_APPLICABLE",
-      ...supplemental.statuses,
-    },
+    sources: discoverySources,
+    sourceStatuses: discoveryStatuses,
   });
+  if (urlInventory.suspiciousCoverage.present && options.enableRenderedDiscovery === true) {
+    renderedDiscovery = await discoverRenderedStructuralUrls(normalizedTarget, {
+      browserImpl: options.browserImpl,
+      signal: options.signal,
+      timeoutMs,
+      maxPages: options.renderedDiscoveryPageCap,
+      structuralUrls: options.structuralUrls,
+    });
+    limitations.push(...renderedDiscovery.limitations);
+    if (renderedDiscovery.urls.length) {
+      discoverySources.RENDERED_BROWSER = renderedDiscovery.urls;
+      discoveryStatuses.RENDERED_BROWSER = renderedDiscovery.status;
+      urlInventory = reconcileUrlDiscovery({
+        targetUrl: normalizedTarget,
+        sources: discoverySources,
+        sourceStatuses: discoveryStatuses,
+      });
+    }
+  }
 
   const clusters = clusterSitemapUrls(
     retainedUrls,
@@ -1083,6 +1106,13 @@ export async function discoverSitemapFootprint(
       limitations: supplemental.limitations,
       attemptedSources: supplemental.attemptedSources,
       bounded: supplemental.bounded,
+    },
+    renderedDiscovery: {
+      status: renderedDiscovery.status,
+      pagesAttempted: renderedDiscovery.pagesAttempted,
+      bounded: renderedDiscovery.bounded,
+      urlCount: renderedDiscovery.urls.length,
+      limitations: renderedDiscovery.limitations,
     },
     coverage: {
       usableSitemap,
