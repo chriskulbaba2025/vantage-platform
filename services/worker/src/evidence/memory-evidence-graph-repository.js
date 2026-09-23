@@ -33,6 +33,7 @@ function asEvidenceRow(record) {
 export function createMemoryEvidenceGraphRepository() {
   const evidence = new Map();
   const graphs = new Map();
+  const retrieval = new Map();
   async function upsertEvidenceRecords(records = []) {
     for (const record of records) evidence.set(`${record.tenantId}\u0000${record.auditId}\u0000${record.evidenceId}`, { ...record });
   }
@@ -56,7 +57,16 @@ export function createMemoryEvidenceGraphRepository() {
       .filter((record) => record.tenantId === tenantId && record.auditId === auditId && (!evidenceId || record.evidenceId === evidenceId))
       .map(asEvidenceRow);
   }
-  return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence });
+  async function upsertRetrievalDocuments(documents = []) {
+    for (const document of documents) {
+      if (!document?.tenantId || !document?.auditId || !document?.documentId) continue;
+      retrieval.set(`${document.tenantId}\u0000${document.auditId}\u0000${document.documentId}`, { ...document });
+    }
+  }
+  async function listRetrievalDocuments({ tenantId, auditId, websiteId = null } = {}) {
+    return [...retrieval.values()].filter((document) => document.tenantId === tenantId && document.auditId === auditId && (!websiteId || document.websiteId === websiteId));
+  }
+  return Object.freeze({ upsertEvidenceRecords, upsertGraph, listGraph, listEvidence, upsertRetrievalDocuments, listRetrievalDocuments });
 }
 
 export default { createMemoryEvidenceGraphRepository };

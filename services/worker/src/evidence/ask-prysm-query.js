@@ -1,38 +1,36 @@
-const QUESTION_PATTERNS = Object.freeze({
-  conflict: /\b(conflict|contradict|disagree|inconsistent)\b/i,
-  missing: /\b(missing|unknown|not\s+justified|insufficient)\b/i,
-  pages: /\b(which|what)\s+pages?\b|\bweak\s+(trust|proof)\b/i,
-  support: /\b(evidence|supports?|why|recommendation)\b/i,
-  developer: /\b(developer|fix\s+first|technical)\b/i,
-});
+import { createHash } from "node:crypto";
+import { buildRetrievalDocument, rankLexical, rankSemantic, tokenize } from "./hybrid-retrieval.js";
+import { buildContextPack, buildRetrievalTrace, expandGovernedGraph } from "./retrieval-trace.js";
 
-function classify(question) {
-  const value = String(question || "").trim();
-  for (const [type, pattern] of Object.entries(QUESTION_PATTERNS)) if (pattern.test(value)) return type;
-  return "UNSUPPORTED";
-}
+const QUESTION_PATTERNS = Object.freeze({ conflict: /\b(conflict(?:ing)?|contradict(?:ion|ory)?|disagree(?:ment)?|inconsistent)\b/i, missing: /\b(missing|unknown|not\s+justified|insufficient)\b/i, pages: /\b(which|what)\s+pages?\b|\bweak\s+(trust|proof)\b/i, support: /\b(evidence|supports?|why|recommendation)\b/i, developer: /\b(developer|fix\s+first|technical)\b/i });
+function classify(question) { const value = String(question || "").trim(); for (const [type, pattern] of Object.entries(QUESTION_PATTERNS)) if (pattern.test(value)) return type; return "UNSUPPORTED"; }
+function queryId({ tenantId, auditId, question }) { return createHash("sha256").update(JSON.stringify({ tenantId, auditId, question: String(question || "").trim() })).digest("hex").slice(0, 24); }
+function deterministicMatches(evidence, question, questionType) { const terms = tokenize(question); return evidence.filter((item) => { if (questionType === "conflict") return item.conflict_state === "CONFLICT" || item.status === "CONFLICT"; if (questionType === "missing") return ["UNKNOWN", "UNAVAILABLE", "PARTIAL", "FAILED"].includes(item.status); if (questionType === "pages") return item.page_url && /trust|proof|testimonial|credential/i.test(`${item.evidence_type} ${item.page_url}`); if (questionType === "support" || questionType === "developer") return item.status !== "UNKNOWN"; return terms.some((term) => tokenize(`${item.evidence_type} ${item.page_url} ${item.source} ${item.observed_value}`).includes(term)) && item.status !== "UNKNOWN"; }).sort((a, b) => String(a.evidence_id).localeCompare(String(b.evidence_id))).slice(0, 50); }
 
-/** Deterministic, read-only Ask PRYSM retrieval. No report/PDF RAG and no model call. */
-export async function queryAskPrysm({ repository, tenantId, auditId, question } = {}) {
+/** Governed hybrid retrieval. Similarity ranks relevance only; canonical rows remain authoritative. */
+export async function queryAskPrysm({ repository, tenantId, auditId, websiteId = null, question, embeddingAdapter } = {}) {
   if (!repository || typeof repository.listEvidence !== "function") throw new Error("Ask PRYSM evidence repository is required");
   if (!tenantId || !auditId) throw new Error("tenantId and auditId are required");
-  const questionType = classify(question);
+  const value = String(question || "").trim(); const type = classify(value); const id = queryId({ tenantId, auditId, question: value }); const scope = { tenantId, auditId, websiteId };
   const evidence = await repository.listEvidence({ tenantId, auditId });
-  if (questionType === "UNSUPPORTED") {
-    return { contractVersion: "1.0.0", supported: false, questionType, answer: "This question is not supported by the governed evidence query layer yet.", citations: [], limitations: ["No governed retrieval contract matched the question."], trace: { tenantId, auditId, evidenceCount: evidence.length } };
-  }
-  const matching = questionType === "conflict"
-    ? evidence.filter((item) => item.conflict_state === "CONFLICT" || item.status === "CONFLICT")
-    : questionType === "missing"
-      ? evidence.filter((item) => ["UNKNOWN", "UNAVAILABLE", "PARTIAL", "FAILED"].includes(item.status))
-      : questionType === "pages"
-        ? evidence.filter((item) => item.page_url && /trust|proof|testimonial|credential/i.test(`${item.evidence_type} ${item.page_url}`))
-        : evidence.filter((item) => item.status !== "UNKNOWN");
-  const citations = matching.slice(0, 50).map((item) => ({ evidenceId: item.evidence_id, pageUrl: item.page_url, evidenceType: item.evidence_type, status: item.status, conflictState: item.conflict_state }));
-  const answer = matching.length
-    ? `${matching.length} governed evidence record(s) matched this question. Review the cited page, source, status, and conflict state before acting.`
-    : "The governed evidence authority does not contain enough evidence to answer this question. No negative conclusion is inferred.";
-  return { contractVersion: "1.0.0", supported: true, questionType, answer, citations, limitations: matching.length ? [] : ["Evidence is missing, unavailable, partial, or outside the supported query scope."], trace: { tenantId, auditId, evidenceCount: evidence.length, matchedCount: matching.length } };
+  const deterministic = deterministicMatches(evidence, value, type);
+  if (type === "UNSUPPORTED") return { contractVersion: "2.0.0", supported: false, questionType: type, answer: "This question is not supported by the governed evidence query layer yet.", citations: [], limitations: ["No governed retrieval contract matched the question."], contextPack: null, trace: buildRetrievalTrace({ queryId: id, scope, query: value, evidence: [] }) };
+  let documents = typeof repository.listRetrievalDocuments === "function" ? await repository.listRetrievalDocuments({ tenantId, auditId, websiteId }) : [];
+  if (!documents.length) documents = evidence.map((item) => buildRetrievalDocument({ ...item, evidenceId: item.evidence_id, pageUrl: item.page_url, evidenceType: item.evidence_type, observedValue: item.observed_value, conflictState: item.conflict_state })).filter(Boolean);
+  const allowedByQuestion = (item) => type === "conflict"
+    ? item.conflictState === "CONFLICT" || item.status === "CONFLICT"
+    : type === "missing"
+      ? ["UNKNOWN", "UNAVAILABLE", "PARTIAL", "FAILED"].includes(item.status)
+      : item.status !== "UNKNOWN";
+  const lexical = rankLexical(documents, value, 20).filter(allowedByQuestion); const semantic = rankSemantic(documents, value, { embeddingAdapter, limit: 20 }).filter(allowedByQuestion);
+  const graph = await expandGovernedGraph({ repository, tenantId, auditId, seedNodeIds: [...new Set([...lexical, ...semantic].map((item) => item.graphNodeId).filter(Boolean))], maxDepth: 2, maxNodes: 50 });
+  const selectedEvidenceIds = new Set([...deterministic, ...lexical, ...semantic].map((item) => item.evidenceId || item.evidence_id).filter(Boolean));
+  const groundedEvidence = evidence.filter((item) => selectedEvidenceIds.has(item.evidence_id));
+  const excluded = documents.filter((item) => !selectedEvidenceIds.has(item.evidenceId) && !selectedEvidenceIds.has(item.documentId)).slice(0, 20).map((item) => ({ documentId: item.documentId, reason: "not-ranked-or-outside-bounded-pack" }));
+  const contextPack = buildContextPack({ queryId: id, scope, query: value, deterministic, lexical, semantic, graph, evidence: groundedEvidence, excluded });
+  const trace = buildRetrievalTrace({ queryId: id, scope, query: value, deterministic, lexical, semantic, graph, evidence: groundedEvidence, excluded });
+  const citations = groundedEvidence.slice(0, 50).map((item) => ({ evidenceId: item.evidence_id, pageUrl: item.page_url, evidenceType: item.evidence_type, status: item.status, conflictState: item.conflict_state }));
+  const answer = citations.length ? `${citations.length} governed evidence record(s) matched this question. Similarity was used only to retrieve candidates; review the cited source, status, and conflict state before acting.` : "The governed evidence authority does not contain enough evidence to answer this question. No negative conclusion is inferred.";
+  return { contractVersion: "2.0.0", supported: true, questionType: type, answer, citations, limitations: citations.length ? [] : ["Evidence is missing, unavailable, partial, or outside the supported query scope."], contextPack, trace };
 }
-
 export default { queryAskPrysm };

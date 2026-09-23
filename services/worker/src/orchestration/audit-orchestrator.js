@@ -30,6 +30,7 @@ import { buildCanonicalSolutionSet } from "../solution/solution-authority-provid
 import { projectEvidenceRecords } from "../evidence/evidence-record-projection.js";
 import { reconcileCanonicalEvidence } from "../evidence/canonical-evidence-reconciliation.js";
 import { buildEvidenceGraph } from "../evidence/evidence-graph.js";
+import { buildRetrievalDocument } from "../evidence/hybrid-retrieval.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -608,6 +609,13 @@ export function createAuditOrchestrator({
       evidenceRecords: persistedRecords,
     });
     await evidenceGraphRepo.upsertGraph(graph);
+    if (typeof evidenceGraphRepo.upsertRetrievalDocuments === "function") {
+      const documents = [
+        ...persistedRecords,
+        ...graph.nodes.map((node) => ({ ...node, label: node.label, evidenceId: node.attributes?.evidenceId })),
+      ].map((record) => buildRetrievalDocument(record)).filter(Boolean);
+      await evidenceGraphRepo.upsertRetrievalDocuments(documents);
+    }
 
     const bytes = Buffer.from(JSON.stringify({ ...reconciliation, records: persistedRecords }), "utf8");
     const record = await artifactStore.put({
