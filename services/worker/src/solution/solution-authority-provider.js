@@ -452,9 +452,19 @@ export function buildSolutionAuthorityRecords({
   pageRegistry = SOLUTION_PAGE_REGISTRY,
   registry = SOLUTION_AUTHORITY_REGISTRY,
 }) {
-  if (!Array.isArray(findings) || !findings.length) fail("AUTHORITY-INPUT", null, "findings must be a non-empty array.");
+  if (!Array.isArray(findings)) fail("AUTHORITY-INPUT", null, "findings must be an array.");
   if (!scoreSet || typeof scoreSet !== "object") fail("AUTHORITY-INPUT", null, "scoreSet is required.");
   if (!decisionEvidence || typeof decisionEvidence !== "object") fail("AUTHORITY-INPUT", null, "decisionEvidence is required.");
+  const emptyHierarchy = scoreSet.decisionHierarchy
+    && Array.isArray(scoreSet.decisionHierarchy.orderedFindingIds)
+    && Array.isArray(scoreSet.decisionHierarchy.actions)
+    && scoreSet.decisionHierarchy.orderedFindingIds.length === 0
+    && scoreSet.decisionHierarchy.actions.length === 0
+    && scoreSet.rootCauseRuleId === null;
+  if (findings.length === 0) {
+    if (!emptyHierarchy) fail("AUTHORITY-HIERARCHY", null, "Empty findings require an empty decision hierarchy and null rootCauseRuleId.");
+    return Object.freeze({});
+  }
   const hierarchyIds = scoreSet.decisionHierarchy?.orderedFindingIds;
   if (!Array.isArray(hierarchyIds)) fail("AUTHORITY-HIERARCHY", null, "ScoreSet decisionHierarchy.orderedFindingIds is required.");
   const findingById = new Map();

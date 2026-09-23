@@ -146,8 +146,9 @@ function validateHeadline(value, label, errors) {
 }
 
 function validateStrengths(strengths, writerInput, errors) {
-  if (!Array.isArray(strengths) || strengths.length === 0 || strengths.length > 5) {
-    errors.push("strengths must contain 1 to 5 evidence-backed items");
+  const zeroFindings = writerInput?.deterministicAnalysis?.conversionInfluence?.orderedFindingIds?.length === 0;
+  if (!Array.isArray(strengths) || strengths.length < (zeroFindings ? 0 : 1) || strengths.length > 5) {
+    errors.push(zeroFindings ? "strengths must contain 0 to 5 evidence-backed items when no governed findings exist" : "strengths must contain 1 to 5 evidence-backed items");
     return;
   }
   const ids = new Set();
@@ -283,8 +284,9 @@ function validateLimitations(items, writerInput, errors) {
 }
 
 function validateActionPlan(items, writerInput, errors) {
-  if (!Array.isArray(items) || items.length === 0 || items.length > 5) {
-    errors.push("actionPlan must contain 1 to 5 items");
+  const zeroFindings = writerInput?.deterministicAnalysis?.conversionInfluence?.orderedFindingIds?.length === 0;
+  if (!Array.isArray(items) || items.length < (zeroFindings ? 0 : 1) || items.length > 5) {
+    errors.push(zeroFindings ? "actionPlan must contain 0 to 5 items when no governed findings exist" : "actionPlan must contain 1 to 5 items");
     return;
   }
   const priorities = new Set();
