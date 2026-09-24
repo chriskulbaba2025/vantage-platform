@@ -39,7 +39,6 @@ const VALID_EDGES = new Set([
   "in_review→approval_rejected","approval_rejected→in_review","approved→published",
   "approved→publish_failed","publish_failed→approved",
 ]);
-VALID_EDGES.add("scored" + String.fromCodePoint(0x2192) + "narrative_failed");
 
 const PATH_TO = {
   created:[],validated:["created→validated"],validation_failed:["created→validation_failed"],
@@ -185,7 +184,7 @@ export function runLifecycleContractTests(label, repoFactory) {
         }
       }
     }
-    assert.equal(auth, 24); assert.equal(unauth, 300); assert.equal(auth + unauth, 324);
+    assert.equal(auth, 23); assert.equal(unauth, 301); assert.equal(auth + unauth, 324);
   });
 
   // ── Per-field replay: TransitionIdempotencyConflictError only ───────

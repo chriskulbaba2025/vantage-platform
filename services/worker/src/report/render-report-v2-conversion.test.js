@@ -1,5 +1,5 @@
 /**
- * PRYSM-V2-REPORT-DEPTH-01 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â conversion-first Section E + governed report depth.
+ * PRYSM-V2-REPORT-DEPTH-01 — conversion-first Section E + governed report depth.
  *
  * Proof-first suite (frozen checklist CR-01..CR-27, see
  * .governance/changes/PRYSM-V2-REPORT-DEPTH-01_CHECKLIST.md).
@@ -9,7 +9,7 @@
  * or the exported production helper whose behaviour is being accepted
  * (calculateFindingPriority / classifyFinding / buildFoundationChecklist /
  * buildActionPlan).  No mock replaces the behaviour under test, and no
- * expected value is copied from the implementation ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â expectations are
+ * expected value is copied from the implementation — expectations are
  * computed from the fixture's own inputs or from the requirement statement.
  */
 
@@ -83,18 +83,11 @@ function renderReportV2(model, options) {
       return { records: [], sequence: [] };
     }
   })();
-  const encyclopedia = model.encyclopedia || {
-    status: "AVAILABLE",
-    priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
-      const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
-      return { type: "standalone material finding", canonicalProblemId: "A06", frictionState: "FRICTION", findingIds: record?.findingRefs || [], evidence: [{ sourceStatus: "AVAILABLE" }] };
-    }),
-  };
-  return renderReportV2Base({ ...model, canonicalSolutions, encyclopedia }, options);
+  return renderReportV2Base({ ...model, canonicalSolutions }, options);
 }
 
 // ---------------------------------------------------------------------------
-// Fixtures ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â governed evidence shapes only.  No provider call.
+// Fixtures — governed evidence shapes only.  No provider call.
 // ---------------------------------------------------------------------------
 
 /** Fully assessed site: content, headers, and interactive evidence all ran. */
@@ -247,7 +240,7 @@ const findingByRule = (model, ruleId) =>
   (model.findings || []).find((f) => f.ruleId === ruleId);
 
 // ===========================================================================
-// SECTION E ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CR-01 .. CR-06
+// SECTION E — CR-01 .. CR-06
 // ===========================================================================
 
 test("CR-01: action priority uses the authorized 40/20/15/15/10 weighting", () => {
@@ -496,7 +489,7 @@ test("CR-06: readiness dimension weights and the readiness score are unchanged",
 });
 
 // ===========================================================================
-// REPORT RESTORATION ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CR-07 .. CR-15
+// REPORT RESTORATION — CR-07 .. CR-15
 // ===========================================================================
 
 test("CR-07: E-E-A-T renders four governed dimensions, and Not Assessed when unavailable", () => {
@@ -706,7 +699,7 @@ test("CR-15: consolidated executive positives require assessed evidence", () => 
 });
 
 // ===========================================================================
-// FIRST THINGS FIRST ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CR-16 .. CR-20
+// FIRST THINGS FIRST — CR-16 .. CR-20
 // ===========================================================================
 
 const itemById = (list, id) => list.find((i) => i.id === id);
@@ -802,7 +795,7 @@ test("CR-19: a not-applicable candidate renders NOT APPLICABLE", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CR-28..CR-35 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â source-failure boundary (merge-audit correction, round 2).
+// CR-28..CR-35 — source-failure boundary (merge-audit correction, round 2).
 // ---------------------------------------------------------------------------
 
 function failedSiteEvidence(status, limitation) {
@@ -1027,7 +1020,7 @@ test("CR-34: existing PASS availability behaviour is intact", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CR-36..CR-39 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â IDENTITY-frozen client wording.
+// CR-36..CR-39 — IDENTITY-frozen client wording.
 // ---------------------------------------------------------------------------
 
 const FROZEN = {
@@ -1645,7 +1638,7 @@ test("CR-35: no source-failure state produces any ACTION REQUIRED foundation", (
 });
 
 // ---------------------------------------------------------------------------
-// CR-40 / CR-41 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â GLOBAL freeze.
+// CR-40 / CR-41 — GLOBAL freeze.
 // ---------------------------------------------------------------------------
 
 const CHECKLIST_GOLDEN = {
@@ -1706,7 +1699,7 @@ test("CR-40: the complete foundation checklist is frozen for every branch", () =
   assert.deepEqual(
     actual,
     CHECKLIST_GOLDEN,
-    "foundation checklist wording/status changed ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â review each change, then re-freeze",
+    "foundation checklist wording/status changed — review each change, then re-freeze",
   );
 });
 
@@ -1729,7 +1722,7 @@ test("CR-42: the fixture matrix reaches every branch the checklist can produce",
   assert.deepEqual(
     [...reached].sort(),
     REACHABLE_BRANCHES,
-    "fixture matrix must reach exactly the reachable (item, status) pairs ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â add a fixture for any new branch",
+    "fixture matrix must reach exactly the reachable (item, status) pairs — add a fixture for any new branch",
   );
 });
 
@@ -1763,35 +1756,34 @@ const RENDER_GOLDEN = {
   "device-profile-failed": "1d0bb6982a4932acaf58991617b4d251e7ae11b03fa0910ffd0c64973f355e2c",
 };
 
-// Re-frozen after reviewing the GACM presentation diff: shared summaries and wording change visible HTML while model scoring and accepted action authority remain fixed.
 const canonicalRenderGolden = {
-  "assessed": "4bbbfaca2aba41617563c6406cc7209af04890b7a87c1c93b3a0dbfc8f33b6d8",
-  "unassessed": "ff0e07db22b1edb7fb7923fde4b7eb44247a9ef28838683eee5342e95fb300f8",
-  "provider-failed": "fadc3ca2e0ad6e5f6699e6b9ef95e49522a117b4901df67d16b84330d1b837a1",
-  "crawl-blocked": "3298cdb9bbaed8014472e21814d21c5d900b92047ea2d5394c1ea0271af3d545",
-  "target-outage": "0b6d45dceff7e99907464030a3d7573f0a52408a35c707c039013c6a73c6c4c8",
-  "outage-with-limitations": "33e657cfff8885d3eb6636b9010101e6b98db794ee51012b289c25c934dd64ff",
-  "http-and-noindex": "2a2048eb4e0cd93d4b6c2d92bf876c8db9b1de8094b2ee6ab706bcbfd8ece297",
-  "robots-retrieved": "8fe476c7f8b7720aa0ddcdd30d785f60f8857a1603493ecc70272c299d35ce0c",
-  "canonical-missing": "2ac2ebadce93dc9513b9b487659002604653a8cb1ed54bf0f3ab729aba08912e",
-  "no-conversion-mechanism": "cdda79ce8321ced443b8425419dd3e33250fe575038602f0ee2a966529e03dad",
-  "no-contact": "0d8950b4e648471ae26435218ceabcec038a316c3d6ea88f13276433f1b20535",
-  "headers-all-present": "4bbbfaca2aba41617563c6406cc7209af04890b7a87c1c93b3a0dbfc8f33b6d8",
-  "ga4-ready": "79204bdfc1eed9a2fa51c0533103fea4e57cb2a86d17a4d5346c953b4454f8ab",
-  "ga4-issues": "3d69b388e451584472559585e289eace46a2c15eac3a2997770c5e86a25d9d2c",
-  "ga4-not-applicable": "cf9b9aec3216d98e38195356f23d241867e385d259bfbcc9d8c9756e12754ef5",
-  "slow-mobile": "f833bba5a65df383053864200f66774b128b61135f00796cfe180823a4bee3e6",
-  "no-performance": "4cd5d706b4ee0ba1623ab1ed445c81691206afc5e887d05e0ac6fc0ce71907f1",
-  "path-validated-blocker": "011e0f2d2473764dbe2611ea15ed83da61fab14868a5cbf2a5449a3030052248",
-  "competitor-present": "dce2a3478934270eeed7580acc1ca96c99042ae9d669cd63cc169ae738948c70",
-  "proprietary-platform": "d37dbdd2ea7915d9fffba15b9afc0d6abb6f1f09dda2ff087439ba896b07b49f",
-  "untraced-broken-links": "be77790d23a42ec74dc3d5ebb6dc562be55ad9896455913844494d9312cbd91c",
-  "schema-confirmed-absent": "25553bacb364fce9b5f1406eafc68732e4a1136f7f32982039f7bc94b5dc6ab2",
-  "headings-absent-h1": "672c91999dd4748abbb04e819444c97d98caa4859f10ca8d47a8fc4dd22a1dbb",
-  "headings-multiple-h1": "f52f1de7837fc5727bba2fbf87f8663fc96479f5398da114bc1292d67339c3ee",
-  "perf-field-and-multipage": "05a2efd795003e75488546a4cd20d82881118a06a98e1a398131d5cb984900c8",
-  "competitor-with-limitations": "4971a2a2910a5a1aa01f281a15de6118cf46c9eeedebc56cffb98508944d6246",
-  "device-profile-failed": "d3a1a53befa995c2076dbc80841238ad28d78ffc435926e39f29c760f621787c"
+  "assessed": "d1fc559dbf91881099e3fd9cce8d6dd46daa1d313a5127182df193a09fd44fc6",
+  "unassessed": "74b0d63fb24adba3f167922c2907b59453beb365967776fa803188f892077adc",
+  "provider-failed": "80e3259a356df5de791e24fbba01c6bb9deb6198be40038670c91008e6ecf7fa",
+  "crawl-blocked": "30aea6ca20b9b200e5f2b0a858d48601ee690fe9f41d238814f5184715c68339",
+  "target-outage": "714cf907628a127cd41af3027599e9a5b0c037765ffcb258476f6a22ed664873",
+  "outage-with-limitations": "830fd6d94fecd167c59e9c3bb327e4e4a8d3c020c7e4c4c149507e252ac346d1",
+  "http-and-noindex": "1267bd4cc4efffe01f46a62cf7c05be3b1959268f06520e64af187ce2675f693",
+  "robots-retrieved": "fe175dd859451855cf99c70514175713b5bb25426a34336ce135ee97c6498166",
+  "canonical-missing": "ba910cb88caed69db8a40e26b982e6ccc01a333e0df0867bba166a10db32f26f",
+  "no-conversion-mechanism": "8d8b2c31fe9190242b2b75ce4d4e3d1996cf3eaf4117ea333adcc1209c13ef3a",
+  "no-contact": "417f3bdb53c48991377775c30285b58cb81f05c2c3e62c6ab92110a7eba6e808",
+  "headers-all-present": "d1fc559dbf91881099e3fd9cce8d6dd46daa1d313a5127182df193a09fd44fc6",
+  "ga4-ready": "bba3e12ff8c5b57051d9e7544cf1b8c7d6fcf7cf3974e7c61c548480878d632b",
+  "ga4-issues": "777221fd3a34500887d8ae19138ccb68a39c8623c51711576a7e67f2303db739",
+  "ga4-not-applicable": "4731bad62f8518135c3d5690a2cb950e7e12fdbc7a1e96f9d147cdadf152516b",
+  "slow-mobile": "bce8d3e371d7ed7e066bcb094ab8bee231ab4dbb2aa1dfc7f3c1e2277b7edcbc",
+  "no-performance": "16804287345f1a69b1034780b6219dca71bdb5387e4a4e9677aaa8518b0d37c7",
+  "path-validated-blocker": "aca3ab3ab3a51b40fb208c3bacd4abee0410271e4f4b91f10727274dce343c31",
+  "competitor-present": "c30c39999be909313682e67a8ef2e78eee16729b699a85194fa3385d9acf91b2",
+  "proprietary-platform": "85b2bd67e8faef71da7ab8a686df2c826b6ed57e517db36eea198abb5b3e4256",
+  "untraced-broken-links": "9d7f3505a9fe3061c5c9a77c89b0988c53c81bf0c3df5c79a55263aea50c25b0",
+  "schema-confirmed-absent": "f186cbafc158d16027c109420995928f7b10c44848d7ca9896837118dbd133cf",
+  "headings-absent-h1": "1ee4771d7a2a3106168cd1d34619f336dfa04b41c76efedec5a1d133ee8383e5",
+  "headings-multiple-h1": "c1b2f671172d9c4c751ed60e3555bdb4cd5af490e2651fd4a2d1f03c97c1e94a",
+  "perf-field-and-multipage": "e0535f0d82859ea866259b933efcccfc8ef30e32851d1102939731679e46244d",
+  "competitor-with-limitations": "1082d1471c2aa382d77da01b66f9af172c885d7d25d06a554be23c5e4c878c11",
+  "device-profile-failed": "b2ae50643a99cae014ed842780f409919c9010db288351a8b03d842913e67678"
 };
 
 test("CR-43: the full rendered report is frozen for every branch", () => {
@@ -1818,17 +1810,17 @@ test("CR-43: the full rendered report is frozen for every branch", () => {
     }
   }
 
-  if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+if (proofDir) writeFileSync(join(proofDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
   assert.deepEqual(
     actual,
     canonicalRenderGolden,
-    "rendered report changed ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â review every diff against the no-fabrication invariant, then re-freeze",
+    "rendered report changed — review every diff against the no-fabrication invariant, then re-freeze",
   );
 });
 
 const RENDERER_BRANCH_MARKERS = [
-  ["Priority Fixes client action sequence", "Three common fixes to consider"],
+  ["Priority Fixes client action sequence", "What to do"],
   ["competitor comparison note", "does not establish traffic, search rankings"],
   ["proprietary-platform migration risk", "proprietary platform constraints"],
   ["untraced broken-links note", "could not be traced"],
@@ -1856,7 +1848,7 @@ test("CR-44: the render matrix exercises every claim-bearing renderer branch", (
   for (const [label, marker] of RENDERER_BRANCH_MARKERS) {
     assert.ok(
       rendered.some((html) => html.includes(marker)),
-      `no fixture reaches the ${label} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â add one, or its wording is unfrozen`,
+      `no fixture reaches the ${label} — add one, or its wording is unfrozen`,
     );
   }
 });
@@ -2020,7 +2012,7 @@ test("CR-20: unavailable evidence never becomes ACTION REQUIRED", () => {
 });
 
 // ===========================================================================
-// ACTION PLAN ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CR-21 .. CR-23
+// ACTION PLAN — CR-21 .. CR-23
 // ===========================================================================
 
 test("CR-21: Do Now / Do Next / Later grouping is deterministic", () => {
@@ -2085,9 +2077,9 @@ test("CR-21: Do Now / Do Next / Later grouping is deterministic", () => {
 
   const html = renderReportV2(model);
 
-  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
-  assert.match(supporting, /Priority Fixes is the only client action sequence/);
-  assert.doesNotMatch(supporting, /DO NOW|DO NEXT|LATER/i);
+  assert.match(html, /DO NOW/i);
+  assert.match(html, /DO NEXT/i);
+  assert.match(html, /LATER/i);
 });
 test("CR-22: the governed verification method carries through to the plan", () => {
   const model = scoreWith(
@@ -2114,10 +2106,13 @@ test("CR-22: the governed verification method carries through to the plan", () =
   const html = renderReportV2(model);
   const blocker = findingByRule(model, "VAN-PATH-001");
 
-  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
-  assert.match(supporting, /Accepted current priorities/);
-  assert.match(supporting, /Supporting observations and non-priority findings/);
-  assert.doesNotMatch(supporting, /MEASURE|DO NOW|DO NEXT/i);
+  assert.match(html, /Review the relevant pages|Review the related pages/, "canonical implementation check rendered in the report");
+
+  assert.match(
+    html,
+    /MEASURE/i,
+    "action plan exposes a Measure step",
+  );
 });
 
 test("CR-23: the action plan invents no business result or ROI claim", () => {
@@ -2130,14 +2125,17 @@ test("CR-23: the action plan invents no business result or ROI claim", () => {
     ),
   );
 
-  const idx = html.indexOf("Priority and Supporting Evidence");
+  const idx = html.indexOf("Client Action Plan");
 
   assert.ok(
     idx > -1,
     "action plan section must exist",
   );
 
-  const plan = html.slice(idx, html.indexOf('id="eeat"', idx));
+  const plan = html.slice(
+    idx,
+    idx + 6000,
+  );
 
   for (const forbidden of [
     /\d+\s*%\s*(more|increase|uplift|lift|improvement in (leads|sales|revenue|conversions))/i,
@@ -2154,7 +2152,7 @@ test("CR-23: the action plan invents no business result or ROI claim", () => {
 });
 
 // ===========================================================================
-// LANGUAGE QUALITY ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CR-24 .. CR-25
+// LANGUAGE QUALITY — CR-24 .. CR-25
 // ===========================================================================
 
 const GOAL_PHRASES = [
@@ -2227,7 +2225,7 @@ test("CR-25: no malformed concatenated recommendation headings", () => {
 });
 
 // ===========================================================================
-// COMPETITOR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â CR-26 .. CR-27
+// COMPETITOR — CR-26 .. CR-27
 // ===========================================================================
 
 test("CR-26: client competitor comparison uses only usable evidence and governed own-site conversion state", () => {

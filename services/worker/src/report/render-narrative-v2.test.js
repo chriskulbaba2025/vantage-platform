@@ -411,21 +411,13 @@ function deterministicModel() {
       evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }],
     } : finding;
   });
-  const canonicalSolutions = buildCanonicalSolutionSet({
-    findings,
-    scoreSet: scored,
-    decisionEvidence: scored.evidence,
-  });
   return {
     ...scored,
-    canonicalSolutions,
-    encyclopedia: {
-      status: "AVAILABLE",
-      priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
-        const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
-        return { canonicalProblemId: "A06", findingIds: record?.findingRefs || [], frictionState: "FRICTION" };
-      }),
-    },
+    canonicalSolutions: buildCanonicalSolutionSet({
+      findings,
+      scoreSet: scored,
+      decisionEvidence: scored.evidence,
+    }),
   };
 }
 
@@ -522,9 +514,9 @@ test(
 
     for (const required of [
       "How ready is your website to convert visitors?",
-      "Accepted priorities",
+      "What should you improve first?",
       "What is already working?",
-      "Dimension detail",
+      "Where are the problems?",
       "What should you fix first?",
       "Can visitors move from interest to action?",
       "How does your website compare with the competitors buyers may consider?",

@@ -614,10 +614,7 @@ export function createRequestHandler({
             return send(res, 501, { error: "WP11 resume not configured" });
           }
           try {
-            const result = await auditService.resumeAudit(auditId, access.tenantId, {
-              reference: "authenticated-audit-resume",
-              identity: access.auth?.sub || access.auth?.email || `tenant:${access.tenantId}`,
-            });
+            const result = await auditService.resumeAudit(auditId, access.tenantId);
             // Log diagnostics internally; return safe client response
             if (result.error) {
               console.error(`Audit ${auditId} resume stalled: ${result.error}`);

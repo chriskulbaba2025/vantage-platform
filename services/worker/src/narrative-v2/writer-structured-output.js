@@ -36,17 +36,8 @@ function nonEmptyString(maxChars = null) {
 function boundedWords(maxWords) {
   // Same whitespace-delimited word model used by validateWriterOutput().
   return {
-    allOf: [
-      {
-        type: "string",
-        pattern: `^\\s*\\S+(?:\\s+\\S+){0,${maxWords - 1}}\\s*$`,
-      },
-      {
-        not: {
-          pattern: "(?:https?://|```|^\\s{0,3}#{1,6}\\s|\\[[^\\]]+\\]\\([^\\)]+\\)|</?(?:html|body|head|div|style|script|section|article|table|p|h[1-6])\\b)",
-        },
-      },
-    ],
+    type: "string",
+    pattern: `^\\s*\\S+(?:\\s+\\S+){0,${maxWords - 1}}\\s*$`,
   };
 }
 
@@ -55,7 +46,6 @@ function evidenceRefArray(allowedRefs = null) {
     type: "array",
     minItems: 1,
     maxItems: MAX_REFS_PER_ATOM,
-    uniqueItems: true,
     items: Array.isArray(allowedRefs) && allowedRefs.length > 0
       ? { type: "string", enum: allowedRefs }
       : { $ref: "#/$defs/evidenceRef" },
@@ -155,7 +145,6 @@ export function buildWriterStructuredOutputSchema({ writerInput, passNumber, mod
 
   const allowedRefs = Object.keys(writerInput.referenceIndex || {});
   if (allowedRefs.length === 0) throw new Error("writerInput.referenceIndex must contain at least one Writer reference");
-  const zeroFindings = writerInput?.deterministicAnalysis?.conversionInfluence?.orderedFindingIds?.length === 0;
 
   const funnelItem = funnelItemSchema();
   const schema = objectSchema({
@@ -172,7 +161,7 @@ export function buildWriterStructuredOutputSchema({ writerInput, passNumber, mod
     }),
     strengths: {
       type: "array",
-      minItems: zeroFindings ? 0 : 1,
+      minItems: 1,
       maxItems: 5,
       items: objectSchema({
         itemId: nonEmptyString(),
@@ -212,7 +201,7 @@ export function buildWriterStructuredOutputSchema({ writerInput, passNumber, mod
     },
     actionPlan: {
       type: "array",
-      minItems: zeroFindings ? 0 : 1,
+      minItems: 1,
       maxItems: 5,
       items: actionPlanItemSchema(),
     },

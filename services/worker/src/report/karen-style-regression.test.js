@@ -145,14 +145,7 @@ function renderReportV2(modelInput, options) {
       canonicalSolutions = buildCanonicalSolutionSet({ findings, scoreSet: modelInput, decisionEvidence: modelInput.evidence });
     } catch {}
   }
-  const encyclopedia = modelInput.encyclopedia || {
-    status: "AVAILABLE",
-    priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
-      const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
-      return { canonicalProblemId: "A06", findingIds: record?.findingRefs || [], frictionState: "FRICTION" };
-    }),
-  };
-  return renderReportV2Base({ ...modelInput, canonicalSolutions, encyclopedia }, options);
+  return renderReportV2Base({ ...modelInput, canonicalSolutions }, options);
 }
 
 function writerInput() {
@@ -324,10 +317,10 @@ test("KAREN-REG-01: the frozen Karen template still defines all 13 benchmark are
 test("KAREN-REG-02: the governed v2 report semantically covers every Karen benchmark area", () => {
   const { combined } = reportSurfaces();
   const benchmark = [
-    ["Scorecard", [/How ready is your website to convert visitors\?/, /Accepted priorities/, /assessment is not whole-site complete/]],
+    ["Scorecard", [/How ready is your website to convert visitors\?/, /What should you improve first\?/, /assessment is not whole-site complete/]],
     ["Priority Fixes", [/What should you fix first\?/]],
     ["Conversion Journey", [/Can visitors move from interest to action\?/]],
-    ["Dimension detail", [/Dimension detail/, /First Things First — Foundational Readiness/]],
+    ["Readiness Map", [/D\. Where are the problems\?/, /First Things First — Foundational Readiness/]],
     ["Content Ideas", [/What content would help buyers move forward\?/]],
     ["Competitor Benchmarking", [/How does your website compare with the competitors buyers may consider\?/]],
     ["E-E-A-T Trust", [/What already builds confidence/]],
@@ -338,12 +331,13 @@ test("KAREN-REG-02: the governed v2 report semantically covers every Karen bench
     ["Performance", [/Performance Detail/]],
     ["Evidence", [/Evidence detail/, /Source statuses/, /Evidence capabilities/]],
   ];
+  benchmark[3][1][0] = /Where are the problems\?/;
 
   assert.deepEqual(benchmark.map(([label]) => label), [
     "Scorecard",
     "Priority Fixes",
     "Conversion Journey",
-    "Dimension detail",
+    "Readiness Map",
     "Content Ideas",
     "Competitor Benchmarking",
     "E-E-A-T Trust",
@@ -367,7 +361,7 @@ test("KAREN-REG-03: diagnostic depth beyond the Karen navigation remains availab
     "Internal-Link Opportunities",
     "Machine Readability",
     "What is already working?",
-    "Priority and Supporting Evidence",
+    "Client Action Plan",
     "Deferred &amp; unavailable analysis",
   ]) {
     assert.ok(deterministic.includes(marker), `diagnostic depth preserved: ${marker}`);

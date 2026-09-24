@@ -94,7 +94,7 @@ function hierarchyActions(hierarchy) {
       throw new SolutionGeneratorError([error("input", "GEN-HIERARCHY", action.findingId, null, "decisionHierarchy.actions", "orderedFindingIds must preserve ascending governed rank.")]);
     }
   });
-  if ((hierarchy.actions.length > 0 && !Number.isInteger(hierarchy.actions[0]?.rank)) || !String(hierarchy.provenance || "").trim()) {
+  if (!Number.isInteger(hierarchy.actions[0]?.rank) || !String(hierarchy.provenance || "").trim()) {
     throw new SolutionGeneratorError([error("input", "GEN-HIERARCHY", null, null, "decisionHierarchy", "decisionHierarchy requires provenance and governed ranks.")]);
   }
   return { ranks, ordered: [...hierarchy.orderedFindingIds], rankSource: hierarchy.provenance };
@@ -171,15 +171,8 @@ function assertInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new SolutionGeneratorError([error("input", "GEN-INPUT", null, null, "input", "Generator input must be an object.")]);
   }
-  if (!Array.isArray(input.findings)) {
-    throw new SolutionGeneratorError([error("input", "GEN-FINDINGS", null, null, "findings", "findings must be an array.")]);
-  }
-  if (input.findings.length === 0) {
-    const hierarchy = input.decisionHierarchy;
-    if (!hierarchy || !Array.isArray(hierarchy.orderedFindingIds) || !Array.isArray(hierarchy.actions)
-      || hierarchy.orderedFindingIds.length !== 0 || hierarchy.actions.length !== 0 || hierarchy.rootCauseRuleId !== null) {
-      throw new SolutionGeneratorError([error("input", "GEN-HIERARCHY", null, null, "decisionHierarchy", "Empty findings require an empty decision hierarchy and null rootCauseRuleId.")]);
-    }
+  if (!Array.isArray(input.findings) || input.findings.length === 0) {
+    throw new SolutionGeneratorError([error("input", "GEN-FINDINGS", null, null, "findings", "findings must be a non-empty array.")]);
   }
   const ids = input.findings.map(findingIdOf);
   if (ids.some((id) => !id) || new Set(ids).size !== ids.length) {

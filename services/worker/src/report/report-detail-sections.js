@@ -16,8 +16,8 @@
  */
 
 import { FOUNDATION_STATUS } from "./foundation-readiness.js";
+import { ACTION_CLASS, ACTION_GROUP } from "./action-priority.js";
 import { withUnavailableRoadmap } from "./unavailable-roadmap.js";
-import { clientSafeCopy } from "./client-presentation.js";
 import {
   requireClientTruth,
   requireCrossReportInterpretation,
@@ -191,7 +191,7 @@ const EEAT_DIMENSIONS = [
   },
 ];
 
-export function eeatSection(model, decisionProjection, pageState) {
+export function eeatSection(model, pageState) {
   const site = model?.evidence?.site || {};
   const trustAssessed = capAssessed(model, "trust.proof");
   const trustComplete = capAvailable(model, "trust.proof");
@@ -245,10 +245,9 @@ export function eeatSection(model, decisionProjection, pageState) {
       finding.module === "trust_signals",
   );
   const hasMaterialTrustFinding = findings.length > 0;
-  const acceptedFindingIds = decisionProjection.acceptedFindingIds;
   const solutionByFindingId = new Map(
     (model?.canonicalSolutions?.records || []).flatMap((record) =>
-      (record.findingRefs || []).map((findingId) => [findingId, { record, accepted: acceptedFindingIds.has(findingId) }]),
+      (record.findingRefs || []).map((findingId) => [findingId, record]),
     ),
   );
 
@@ -420,11 +419,9 @@ export function eeatSection(model, decisionProjection, pageState) {
               finding.title || "Trust finding",
             )}</strong>${(() => {
               const solution = solutionByFindingId.get(finding.findingId);
-              return solution?.accepted
-                ? ` — <a href="#priority-fixes" data-solution-id="${e(solution.record.solutionId)}">Accepted priority; see Priority Fixes</a>`
-                : solution
-                  ? " — supporting observation; not an accepted priority."
-                  : " — no canonical client solution is displayed for this evidence.";
+              return solution
+                ? ` — <a href="#priority-fixes" data-solution-id="${e(solution.solutionId)}">See Priority Fixes</a>`
+                : " — no canonical client solution is displayed for this evidence.";
             })()}</li>`,
         )
         .join("")}</ul>`
@@ -453,8 +450,8 @@ export function eeatSection(model, decisionProjection, pageState) {
       ? "Trust-proof content coverage was incomplete. Observed proof is retained, but unobserved proof is not treated as established absence."
       : "Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.";
   const proofAction = trustAssessed && foundSignals.length
-    ? `<h3>Optional trust-proof review</h3><p>The site already has useful types of trust proof. If you review placement, check whether the relevant proof appears close to the decision it supports.</p><ul class="small"><li>Case studies or outcomes near service decisions.</li><li>Testimonials or client validation near commitment points.</li><li>Credentials where expertise matters.</li><li>Pricing or investment context before a buyer has to ask.</li><li>Policies, terms, or other reassurance near higher-risk actions.</li></ul><p class="small">PRYSM observed these trust assets, but did not establish their placement across every important conversion page. These checks are supporting context; use Priority Fixes for accepted corrective priorities.</p>`
-    : `<h3>Optional trust-proof review</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. If you review placement, consider which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Treat this as supporting context; use Priority Fixes for accepted corrective priorities.</p>`;
+    ? `<h3>How should you use the proof you already have?</h3><p>The site already has useful types of trust proof. The next action is not automatically to create more proof. Check whether the right proof appears close enough to the decision it supports.</p><ul class="small"><li>Check relevant case studies or outcomes near service decisions.</li><li>Check testimonials or client validation near commitment points.</li><li>Check credentials where expertise matters.</li><li>Check pricing or investment context before a buyer has to ask.</li><li>Check policies, terms, or other reassurance near higher-risk actions.</li></ul><p class="small">PRYSM observed these trust assets, but did not establish their placement across every important conversion page. After any change, review the important decision pages again and confirm that the related proof is easy to find and understand.</p>`
+    : `<h3>How should you use the proof you already have?</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. Check which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Review the relevant pages again before deciding what to add or change.</p>`;
 
   const rendered = `
   <section id="eeat" class="card primary-page-card trust-page" data-supporting-section="trust-evidence">
@@ -507,8 +504,8 @@ export function eeatSection(model, decisionProjection, pageState) {
               UNAVAILABLE,
             )}</span> Page-content trust evidence was unavailable. No missing trust signal was treated as a business failure.</p>`
     }
-    <h3>Evidence and limits</h3>
-    <ul><li>Review the proof signals and buyer-question statuses above within their assessed scope.</li><li>Check whether existing proof appears near the decision it supports; placement remains ${trustPartial ? "PARTIAL" : "NOT_AVAILABLE"} in this report model.</li><li>${e(pageState?.boundedAction || "Collect the missing evidence before making a broader trust conclusion.")}</li></ul>
+    <h3>Next step</h3>
+    <ol><li>Review the proof signals and buyer-question statuses above within their assessed scope.</li><li>Check whether existing proof appears near the decision it supports; placement remains ${trustPartial ? "PARTIAL" : "NOT_AVAILABLE"} in this report model.</li><li>${e(pageState?.boundedAction || "Collect the missing evidence before making a broader trust conclusion.")}</li></ol>
   </section>`;
   return rendered
     .replace(/<p class="muted small">Trust, E-E-A-T[\s\S]*?<\/p>/, "")
@@ -2132,8 +2129,12 @@ export function performanceDetailSection(model) {
                 (
                   diagnostic,
                 ) =>
-                  `<li>${e(
-                    clientSafeCopy(diagnostic.clientExplanation, "A rendering check found a detail that is not shown in this report."),
+                  `<li><strong>${e(
+                    diagnostic.diagnosticCode ||
+                      "Diagnostic",
+                  )}:</strong> ${e(
+                    diagnostic.clientExplanation ||
+                      "",
                   )}${
                     diagnostic.affectedUrl
                       ? ` — ${e(
@@ -2151,9 +2152,9 @@ export function performanceDetailSection(model) {
     <h3>Partial or unavailable evidence</h3>
     ${fieldKeys.length === 0
       ? `<p class="small"><strong>Evidence limitation:</strong> Real-user field performance data was unavailable. The performance conclusion therefore relies on lab measurements; this does not establish real-user field performance.</p>
-         <details class="supporting-detail-disclosure"><summary>Show detailed performance limitations</summary>${(perf.limitations || []).length ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(clientSafeCopy(limitation, "Real-user field data was not available."))}</li>`).join("")}</ul>` : "<p>No additional limitation detail was recorded.</p>"}</details>`
+         <details class="supporting-detail-disclosure"><summary>Show detailed performance limitations</summary>${(perf.limitations || []).length ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>` : "<p>No additional limitation detail was recorded.</p>"}</details>`
       : (perf.limitations || []).length
-        ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(clientSafeCopy(limitation, "Real-user field data was not available."))}</li>`).join("")}</ul>`
+        ? `<ul>${(perf.limitations || []).map((limitation) => `<li>${e(limitation)}</li>`).join("")}</ul>`
         : performancePartial
           ? '<p><span class="chip cap-neutral">PARTIAL</span> At least one performance source or tested profile had incomplete coverage. Available measurements remain valid within that scope.</p>'
           : "<p>No additional evidence limitation was recorded.</p>"
@@ -2689,24 +2690,151 @@ export function strengthsSection(model, checklist) {
   </section>`;
 }
 
-// Supporting detail projects classification only; it does not create actions.
+// ---------------------------------------------------------------------------
+// Client action plan
+// ---------------------------------------------------------------------------
 
-export function actionPlanSection(decisionProjection) {
-  const acceptedMarkup = decisionProjection.acceptedRecords.length
-    ? `<p class="small">Priority Fixes presents the ${e(decisionProjection.groups.length)} accepted client priority unit${decisionProjection.groups.length === 1 ? "" : "s"} in the sole action sequence. This section does not restate or reorder them.</p>`
-    : '<p class="small">No accepted client priority is available from the current Encyclopedia projection.</p>';
-  const supportingMarkup = decisionProjection.supportingRecords.length
-    ? `<ul class="small">${decisionProjection.supportingRecords.map((record) => `<li>${e(record.problem || record.whyItMatters || "Supporting observation")}; supporting evidence, not an accepted priority.</li>`).join("")}</ul>`
-    : '<p class="small">No additional canonical supporting observations are available.</p>';
+const GROUP_INTRO = {
+  [ACTION_GROUP.DO_NOW]:
+    "Verified foundations and the highest-confidence conversion work.",
+  [ACTION_GROUP.DO_NEXT]:
+    "Material conversion improvements once the items above are in progress.",
+  [ACTION_GROUP.LATER]:
+    "Refinement and optimization after the core issues are resolved.",
+};
+
+function actionRows(records) {
+  if (!records.length) {
+    return '<p class="small">Nothing in this group from the assessed evidence.</p>';
+  }
+
+  return `<div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>What we change</th>
+        <th>Why</th>
+        <th>Effort</th>
+      </tr>
+    </thead>
+
+    <tbody>${records
+      .map(
+        (record, index) => `<tr data-solution-id="${e(record.solutionId)}">
+          <td>${e(
+            record.sequenceInputs?.governedRank ?? index + 1,
+          )}</td>
+          <td><strong>${e(clientActionText(
+            record.problem,
+          ))}</strong><br><span class="small">${e(clientActionText(
+            record.whatToChange,
+          ))}</span></td>
+          <td class="small">${e(clientActionText(
+            record.whyItMatters,
+          ))}</td>
+          <td class="small">${e(
+            record.effortBand,
+          )}</td>
+        </tr>`,
+      )
+      .join("")}</tbody>
+  </table></div>`;
+}
+
+function clientActionText(value) {
+  return String(value || "")
+    .replace(/the governed assessment indicates that/gi, "The review found that")
+    .replace(/the governed site evidence indicates that/gi, "The review found that")
+    .replace(/the governed page evidence indicates that/gi, "The page evidence shows that")
+    .replace(/if the governed [^,]+ remains present,?/gi, "If this issue remains present,")
+    .replace(/inspect the governed [^.]+ at the assessed scope/gi, "Review the relevant pages")
+    .replace(/at the scoped page or journey stage/gi, "on the relevant page or journey stage")
+    .replace(/in the assessed scope/gi, "on the pages reviewed")
+    .replace(/at the assessed scope/gi, "on the pages reviewed")
+    .replace(/\bgoverned\b/gi, "reviewed");
+}
+
+export function actionPlanSection(canonical, checklist) {
+  const records = canonical.ordered.filter((record) => record.clientProminence?.displayAllowed);
+  const groupBlocks = [
+    ACTION_GROUP.DO_NOW,
+    ACTION_GROUP.DO_NEXT,
+    ACTION_GROUP.LATER,
+  ]
+    .map(
+      (group) => `<h3>${e(
+        group,
+      )}</h3>
+        <p class="muted small">${e(
+          GROUP_INTRO[group],
+        )}</p>
+        ${actionRows(records.filter((record) => group === ACTION_GROUP.DO_NOW
+          ? record.disposition === "FIX_NOW"
+          : group === ACTION_GROUP.DO_NEXT
+            ? record.disposition === "FIX_LATER"
+            : false))}`,
+    )
+    .join("");
+
+  const measures = [
+    ...new Set(
+      records
+        .map(
+          (a) =>
+            a.implementationCheck?.instruction,
+        )
+        .filter(Boolean),
+    ),
+  ];
+
+  const foundationsToFix =
+    (
+      checklist ||
+      []
+    )
+      .filter(
+        (i) =>
+          i.status ===
+            FOUNDATION_STATUS.ACTION_REQUIRED &&
+          i.foundational ===
+            true,
+      )
+      .map(
+        (i) =>
+          i.label,
+      );
 
   return `
   <section id="action-plan" class="card" data-supporting-section="conversion-content-evidence">
-    <h2>Priority and Supporting Evidence</h2>
+    <h2>Client Action Plan</h2>
 
-    <p class="small">Priority Fixes is the only client action sequence. This section distinguishes accepted priorities from other visible findings and planning evidence.</p>
+    <p class="small">Implementation detail follows the same existing priority order shown in <a href="#priority-fixes">Priority Fixes</a>. This section adds verification detail; it does not create a second action sequence.</p>
 
-    <h3>Accepted current priorities</h3>${acceptedMarkup}
-    <h3>Supporting observations and non-priority findings</h3>${supportingMarkup}
+    <details class="supporting-detail-disclosure"><summary>Show detailed implementation sequence</summary>
+
+    ${foundationsToFix.length
+      ? `<p class="small">Foundational evidence requiring attention is shown in the First Things First assessment above; it is not a separate client action sequence.</p>`
+      : ""}
+
+    ${groupBlocks}
+
+    <h3>MEASURE</h3>
+
+    <p class="muted small">Evidence to compare in the next audit:</p>
+
+    ${
+      measures.length
+        ? `<ul class="small">${measures
+            .map(
+              (m) =>
+                `<li>${e(
+                  clientActionText(m),
+                )}</li>`,
+            )
+            .join("")}</ul>`
+        : '<p class="small">No verification step is available because no measured action was produced.</p>'
+    }
+    </details>
   </section>`;
 }
 

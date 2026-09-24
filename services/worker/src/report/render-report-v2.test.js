@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReportV2 as renderReportV2Base, computePillars, REPORT_V2_VIEWER_PAGES } from "./render-report-v2.js";
 import { deriveNarrativeStates, NARRATIVE_PAGE_IDS } from "../report-model/narrative-state.js";
@@ -19,8 +18,8 @@ const INPUT = {
   primaryGoal: "Book consultations",
 };
 
-function canonicalSolutionsForFixture(model, { throwOnError = false } = {}) {
-  return model.canonicalSolutions || (() => {
+function renderReportV2(model, options) {
+  const canonicalSolutions = model.canonicalSolutions || (() => {
     try {
       const findings = model.findings.filter((finding) => finding.findingId).map((finding) => {
         const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
@@ -35,25 +34,11 @@ function canonicalSolutionsForFixture(model, { throwOnError = false } = {}) {
         scoreSet: model,
         decisionEvidence: model.evidence,
       });
-    } catch (error) {
-      if (throwOnError) throw error;
+    } catch {
       return { records: [], sequence: [] };
     }
   })();
-}
-
-function renderReportV2(model, options) {
-  const canonicalSolutions = canonicalSolutionsForFixture(model);
-  const encyclopedia = model._fixtureAcceptCanonicalRecords && !model.encyclopedia
-    ? {
-        status: "AVAILABLE",
-        priorityUnits: canonicalSolutions.sequence.map((solutionId) => {
-          const record = canonicalSolutions.records.find((item) => item.solutionId === solutionId);
-          return { type: "standalone material finding", canonicalProblemId: "C05", conversionAction: "contact", frictionState: "FRICTION", findingIds: record?.findingRefs || [], evidence: [{ sourceStatus: "AVAILABLE" }] };
-        }),
-      }
-    : model.encyclopedia;
-  return renderReportV2Base({ ...model, canonicalSolutions, encyclopedia }, options);
+  return renderReportV2Base({ ...model, canonicalSolutions }, options);
 }
 
 function evidence() {
@@ -137,8 +122,6 @@ function priorityModel() {
       verificationMethod: "Run the security check again.",
     },
   ];
-  // These fixtures explicitly supply an accepted Encyclopedia projection.
-  m._fixtureAcceptCanonicalRecords = true;
   return m;
 }
 
@@ -190,8 +173,8 @@ test("WP-G-02: suppressed modules yield null pillar scores, never imputed", () =
 // WP-G-03 — executive report structure and content
 // ---------------------------------------------------------------------------
 
-test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a second action sequence", () => {
-  const fixture = structuredClone(priorityModel());
+test("WP-G-03: Executive Scorecard uses the frozen hierarchy and existing assessed outputs", () => {
+  const fixture = structuredClone(model());
   fixture.crossReportInterpretation.truth = Object.fromEntries(
     Object.entries(fixture.crossReportInterpretation.truth).map(([key, record]) => [key, { ...record, state: "assessed" }]),
   );
@@ -202,7 +185,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   const html = renderReportV2(fixture);
   // A/B/C — executive scorecard
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Primary blocker", "Where is the site strongest and weakest?", "What evidence did PRYSM have?", "What is already working?", "What is holding the site back?", "Accepted priorities", "Next step &amp; limits", "Where was the evidence limited?"];
+  const headings = ["How ready is your website to convert visitors?", "Conversion Readiness", "Why is the score", "What is already working?", "What is holding the site back?", "What should you improve first?", "Keep, improve, check", "Next step &amp; limits", "Where was the evidence limited?"];
   let previous = -1;
   for (const heading of headings) {
     const next = executive.indexOf(heading);
@@ -210,11 +193,10 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
     previous = next;
   }
   assert.match(executive, /Conversion Readiness/);
-  assert.match(executive, /class="dimension-bar-row"/);
-  assert.match(executive, /Evidence confidence:/);
+  assert.match(executive, /assessed dimension outputs/);
   assert.match(executive, /Supporting Detail/);
   assert.equal((executive.match(/What is already working\?/g) || []).length, 1);
-  assert.equal((executive.match(/<strong>What to do:<\/strong>/g) || []).length, 0, "Executive summary does not reproduce the Priority Fixes action cards");
+  assert.equal((executive.match(/<strong>What to do:<\/strong>/g) || []).length, 3);
   assert.match(executive, /What we could not confirm/);
   assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)/);
   assert.match(executive, /data-narrative-state="(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)"/);
@@ -225,7 +207,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   assert.doesNotMatch(supportingOverview, /capabilityEvidence\.capabilities|crossReportInterpretation\.truth|meta_description|trust\.pricing|technical\.headers/i);
   assert.ok(!/What Is Already Good|render-blocking|largest contentful paint|meta descriptions|partial assessment|evidence capability|supporting capability|JSON-LD|browser validation|Known factors|Unknown \(excluded\)|Modules assessed|intended dimension weight/i.test(executive));
   // D — pillars
-  assert.match(html, /class="dimension-bar-row"/);
+  assert.match(html, /Where are the problems\?/);
   for (const label of ["Offer &amp; Content", "Trust &amp; Proof", "Conversion Path", "Technical Health", "Performance &amp; Experience"]) {
     assert.ok(html.includes(label), `pillar ${label} present`);
   }
@@ -239,7 +221,7 @@ test("WP-G-03: Executive Scorecard summarizes the accepted hierarchy without a s
   // CRIT 8a — conversion-path architecture + competitive context are part
   // of the governed section set (rendered from the model, never invented).
   assert.match(html, /Can visitors move from interest to action\?/);
-  assert.match(html, /Accepted priority evidence includes a supported relationship to visitor-path friction\. Priority Fixes contains the corrective action and order\.|The reviewed path records may include weak checks, but they are not independently accepted as visitor-friction priorities/);
+  assert.match(html, /The reviewed journey evidence supports preserving the working route|The reviewed journey is workable but bounded|The reviewed evidence establishes points where buyer movement becomes materially unclear or broken|The audit cannot make a broad journey judgment/);
   assert.match(html, /How does your website compare with the competitors buyers may consider\?/);
   // Versions
   assert.ok(html.includes(`Report design v${REPORT_DESIGN_V2}`));
@@ -267,7 +249,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.match(visibleStatusText, /\bReviewed\b/, "available evidence is described in client language");
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.match(blockers, /What should you fix first\?/);
-  assert.match(blockers, /only ordered action sequence/);
+  assert.match(blockers, /Start with the first item and work down the list\. Each priority below explains what we found, why it matters, what to do next, and how to check the result\. Supporting Detail contains the deeper evidence and technical checks\./);
   assert.doesNotMatch(blockers, /These actions follow the governed priority order\./);
   assert.doesNotMatch(blockers, /<table|VAN-[A-Z]+-\d{3}|HIGH_CONVERSION|OPTIMIZATION|Foundation blocker/i);
   assert.doesNotMatch(blockers, /deterministic evidence confidence|\b[ML]\b|Affected page[s]?:\s*https?:\/\//i);
@@ -286,19 +268,17 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
   assert.equal(cards.length, 3, "exactly the governed canonical priority cards are rendered");
   const ranks = cards.map((match) => Number(match[1]));
   assert.deepEqual(ranks, [1, 2, 3], "canonical sequence is rendered once in governed order");
-  assert.match(cards[0][3], /Priority 1/);
-  for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Priority 1/);
+  assert.match(cards[0][3], /Start here/);
+  for (const card of cards.slice(1)) assert.doesNotMatch(card[3], /Start here/);
   assert.match(cards[0][3], /Some visitors may need more pricing or reassurance before they act\./);
   assert.match(cards[0][3], /Some evidence — confirm before making the change/);
-  assert.match(cards[0][3], /Common remediation options are not yet available for this finding/);
+  assert.match(cards[0][3], /Add only pricing or reassurance details the business can support/);
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
-  const clientVisiblePriorityText = blockers.replace(/<[^>]*>/g, " ");
-  assert.doesNotMatch(clientVisiblePriorityText, /\b(?:I01|J04|A03)\b/, "canonical Encyclopedia identifiers stay out of client-visible diagnostic wording");
   assert.doesNotMatch(blockers, /businessImpact|legacy recommendation|affectedUrls|verificationMethod/i);
   assert.doesNotMatch(blockers, /FIX_LATER|FIX_NOW|HOLD|FRONT_END_DEVELOPMENT|TECHNICAL_SEO|CONTENT_STRATEGY|SUBJECT_MATTER_INPUT|largest-above-fold-asset|buyer-decision-support-template|structured-data-block/i);
   assert.doesNotMatch(blockers, />(?:LOW|MEDIUM|HIGH|SUPPORTED|PARTIAL|CONDITIONAL|UNKNOWN|UNAVAILABLE|FIX_NOW|FIX_LATER|HOLD)</);
   assert.doesNotMatch(blockers, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
-  const orderedLabels = ["What we know", "Why this is a priority", "Why it matters", "Three common fixes to consider", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
+  const orderedLabels = ["What we know", "Why this is a priority", "Why it matters", "What to do", "Where to look", "How to know it worked", "Who may need to help", "Confidence in this finding", "Effort"];
   let lastLabel = -1;
   for (const label of orderedLabels) {
     const nextLabel = blockers.indexOf(`<dt>${label}</dt>`);
@@ -306,8 +286,7 @@ test("S02: Priority Fixes is one ranked client sequence with bounded fields", ()
     lastLabel = nextLabel;
   }
   assert.doesNotMatch(blockers, /First Things First|Do Now|Action Plan|governed priority order/i);
-  assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 3, "the accepted priority units are rendered once");
-  assert.doesNotMatch(blockers, /<ol/i, "Priority Fixes contains one authoritative ranked card sequence without duplicate ordered lists");
+  assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 3, "no second action sequence is introduced");
 });
 
 test("S02B: accepted priority display ranks remain contiguous when governed source ranks have gaps", () => {
@@ -331,8 +310,6 @@ test("S02B: accepted priority display ranks remain contiguous when governed sour
       sequenceInputs: { ...record.sequenceInputs, governedRank: index === 0 ? 1 : index + 2 },
     })),
   };
-  const acceptedIds = sparseCanonical.records.slice(0, 3).flatMap((record) => record.findingRefs || []);
-  fixture.encyclopedia = { status: "AVAILABLE", priorityUnits: acceptedIds.map((findingId) => ({ type: "standalone material finding", canonicalProblemId: "A06", findingIds: [findingId], frictionState: "FRICTION" })) };
   const html = renderReportV2Base({ ...fixture, canonicalSolutions: sparseCanonical });
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   const cards = [...blockers.matchAll(/<article class="priority-action" data-priority-rank="(\d+)"/g)];
@@ -340,7 +317,7 @@ test("S02B: accepted priority display ranks remain contiguous when governed sour
   assert.deepEqual(cards.map((card) => Number(card[1])), cards.map((_card, index) => index + 1), "visible numbering is the filtered display order");
 });
 
-test("P9: conversion journey visual presents four fail-closed buyer stages", () => {
+test("P9: conversion journey visual presents three complete client stages", () => {
   const fixture = model();
   fixture.conversionPaths = [{
     name: "Primary path",
@@ -350,13 +327,13 @@ test("P9: conversion journey visual presents four fail-closed buyer stages", () 
   }];
   const html = renderReportV2(fixture);
   assert.match(html, /class="conversion-journey-visual"/);
-  assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 4);
-  for (const label of ["Awareness", "Consideration", "Decision", "Action"]) assert.match(html, new RegExp(label));
+  assert.equal((html.match(/class="conversion-journey-step"/g) || []).length, 3);
+  for (const label of ["Reach the right page", "Understand enough to continue", "Take the next step"]) assert.match(html, new RegExp(label));
   assert.doesNotMatch(html, /Internal stage one|Internal stage two|Internal stage three/);
 });
 
 test("P2: blocker location lists client-owned affected URLs when available", () => {
-  const m = priorityModel();
+  const m = model();
   const finding = m.findings.find((f) => f.scoreBearing === true);
   finding.affectedUrls = ["https://x.com/services/consulting"];
   const html = renderReportV2(m);
@@ -366,7 +343,7 @@ test("P2: blocker location lists client-owned affected URLs when available", () 
 });
 
 test("P2: blocker location falls back to the governed evidence source when no URL is available", () => {
-  const m = priorityModel();
+  const m = model();
   const finding = m.findings.find((f) => f.scoreBearing === true);
   finding.affectedUrls = [];
   finding.evidence = [{ field: "site.imagesMissingAlt" }];
@@ -405,32 +382,30 @@ test("S03: Conversion Journey maps supported Encyclopedia friction without asser
       title: `Reviewed friction ${id}`,
       findingIds: [acceptedFindingIds[index]],
       frictionState: "FRICTION",
-      conversionAction: "contact",
-      buyerDecisionQuestion: "How do I contact the business?",
       evidence: [{ sourceStatus: "AVAILABLE", evidenceRef: `fixture:${id}` }],
     })),
   };
   const html = renderReportV2(fixture);
   for (const text of [
-    "Awareness",
-    "Consideration",
-    "Decision",
-    "Action",
+    "Reach the right page",
+    "Understand enough to continue",
+    "Take the next step",
     "Where can visitors lose momentum?",
     "What should you keep?",
     "What should you measure next?",
     "What cannot yet be measured?",
-    "Evidence and limits",
+    "Next step",
+    "Check first:",
   ]) assert.match(html, new RegExp(text));
-  assert.equal((html.match(/class="conversion-journey-detail-card"/g) || []).length, 0, "acquisition-only units do not become visitor-path friction");
-  assert.doesNotMatch(html, /Check first:/);
+  assert.equal((html.match(/class="conversion-journey-detail-card"/g) || []).length, 3);
+  assert.match(html, /data-encyclopedia-problem="A01"/);
   assert.match(html, /analytics evidence:/i);
   assert.match(html, /abandonment.*cannot be confirmed/i);
   assert.doesNotMatch(html, /proves the cause|causes abandonment|guarantees conversion/);
   const page3 = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
   const page3Text = page3.replace(/<[^>]+>/g, " ");
   assert.doesNotMatch(page3Text, /SOL-[A-Z0-9-]+|View canonical detail|governed|canonical|client remediation|material route blocker|assessed scope/i);
-  assert.doesNotMatch(page3, /data-solution-id=/, "Journey references the authoritative priority page without repeating its sequence");
+  assert.match(page3, /data-solution-id="[^"]+"/);
   assert.doesNotMatch(html, /governed buyer decision or audit judgment|governed action/i);
   assert.doesNotMatch(page3, /Browser validation assessed conversion actions|A conversion action was observed on 6 assessed page|A visible, interactable, unobstructed action was confirmed on 6 assessed page/);
 });
@@ -462,12 +437,12 @@ function assertFrozenViewerHierarchy() {
     "supporting-detail": html.slice(html.indexOf('id="pillars"'), html.indexOf('id="blockers"')),
   };
   const required = {
-    "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "Accepted priorities", "Next step &amp; limits", "What we could not confirm"],
-    "priority-fixes": ["What should you fix first?", "What we know", "Supporting diagnostic checks", "How to know it worked", "Evidence limits"],
-    "conversion-paths": ["Awareness", "Consideration", "Decision", "Action", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Evidence and limits"],
-    "content-ideas": ["Where is content already helping", "Planning opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Evidence limitations", "Optional support"],
-    "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "Optional trust-proof review", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Evidence and limits"],
-    "competitor-benchmark": ["Who was compared", "Where are the meaningful differences", "What is worth learning from", "Competitor differences are context only", "What not to copy", "What this comparison cannot tell us", "What can this comparison confirm", "Next step"],
+    "executive-scorecard": ["Conversion Readiness", "What is helping the site", "What is holding the site back", "What should you improve first", "Keep, improve, check", "Next step &amp; limits", "What we could not confirm"],
+    "priority-fixes": ["Start here", "What we know", "Check these first", "How to know it worked", "Evidence guardrail", "Clean up after the main fixes", "Work in this order"],
+    "conversion-paths": ["Reach the right page", "Understand enough to continue", "Take the next step", "Evidence seen:", "Where can visitors lose momentum", "What should you keep", "What cannot yet be measured", "Next step"],
+    "content-ideas": ["Where is content already helping", "Start with the strongest opportunity", "Other useful opportunities", "What buyers are asking", "Why this matters", "What to create", "What it should cover", "How to use it", "Confidence in this opportunity", "Build one clear hub", "Plan", "Distribute", "Evidence limitations", "Optional support"],
+    "trust-eeat": ["Can buyers find enough proof to feel confident", "What already builds confidence", "What trust questions can the site already answer", "Where can confidence still break down", "Proof may be too far from the decision", "How should you use the proof you already have", "Why do these signals matter for growth", "Buying confidence", "Search visibility", "AI search readiness", "What should you avoid", "What can this audit confirm", "Next step"],
+    "competitor-benchmark": ["Who was compared", "Where are the meaningful differences", "What is worth learning from", "PROTECT", "IMPROVE", "DIFFERENTIATE", "IGNORE", "What not to copy", "What this comparison cannot tell us", "What can this comparison confirm", "Next step"],
     "supporting-detail": ["What evidence sits behind the report", "How complete was the evidence", "What drove the readiness score", "What material findings were established", "What did the performance evidence show", "Page speed check evidence", "Real-user field data", "Where was evidence limited", "What source evidence was available", "How does this evidence support the report", "Conclusion", "Next step"],
   };
   for (const [pageId, headings] of Object.entries(required)) {
@@ -657,7 +632,7 @@ test("WP-G-03: insufficient-evidence model renders without scores invented", () 
   ev.performance = null;
   const m = scoreAudit(INPUT, ev);
   const html = renderReportV2(m);
-  assert.match(html, /Not enough evidence for a score/);
+  assert.match(html, /Insufficient Evidence/);
   assert.doesNotMatch(html, /readiness">\d+/, "no numeric readiness when suppressed");
 });
 
@@ -674,16 +649,16 @@ test("WP-G-05: v1 renderer still renders the same model (locked path unchanged)"
   assert.doesNotMatch(v1, /Where are the problems\?/);
 });
 
-test("WP-G-03a: Executive summary references the single accepted action authority", () => {
-  const m = priorityModel();
+test("WP-G-03a: executive priorities use CRO narratives while preserving canonical linkage", () => {
+  const m = model();
   const html = renderReportV2(m);
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  assert.match(executive, /Accepted priorities/);
-  assert.match(executive, /Priority Fixes/);
+  assert.match(executive, /Some buyers may still have questions\./);
+  assert.match(executive, /<strong>What to do:<\/strong>/);
   assert.match(executive, /href="#priority-fixes">Priority Fixes<\/a>/);
   assert.doesNotMatch(executive, /\(SOL-[A-Z0-9-]+\)|>[^<]*SOL-[A-Z0-9-]+/);
   const priorities = [...executive.matchAll(/<li data-solution-id="([^"]+)" data-priority-unit-type="[^"]+">/g)].map((match) => match[1]);
-  assert.equal(priorities.length, 0, "Executive Scorecard summarizes priorities without rendering a second action list");
+  assert.equal(priorities.length, 3);
   assert.deepEqual(priorities, [...priorities], "priority order is deterministic");
   assert.equal(new Set(priorities).size, priorities.length, "each priority retains distinct internal linkage");
 });
@@ -760,12 +735,8 @@ test("AUTH-CLOSURE-02: final report has no independent remedy structures", () =>
     assert.doesNotMatch(html, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), forbidden);
   }
   assert.match(html, /data-solution-id=/);
-  assert.match(html, /Three common fixes to consider/);
-  assert.match(html, /Accepted current priorities/);
-  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
-  assert.doesNotMatch(executive, /<ol|data-solution-id=/);
-  assert.doesNotMatch(supporting, /DO NOW|DO NEXT|DO LATER|<ol/i);
+  assert.match(html, /What to do/);
+  assert.match(html, /canonical-solution-reference/);
 });
 
 
@@ -794,192 +765,8 @@ test("MVP-CLIENT-01: current Encyclopedia accepted priority units are the only p
   const html = renderReportV2(fixture);
   const blockers = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.equal((blockers.match(/<article class="priority-action"/g) || []).length, 1);
-  assert.doesNotMatch(blockers, /<ol/i);
   assert.doesNotMatch(blockers, /No Encyclopedia priority unit with first diagnostic checks is linked/);
-  assert.match(blockers, /Supporting diagnostic checks/);
-  assert.doesNotMatch(blockers, /Check 1:/);
-});
-
-function remediationFixture() {
-  const fixture = priorityModel();
-  const specs = [
-    { familyId: "I01", ruleId: "VAN-PERF-001", title: "Slow primary content display" },
-    { familyId: "J04", ruleId: "VAN-SCHEMA-001", title: "Structured data was not detected" },
-    { familyId: "A03", ruleId: "VAN-TECH-001", title: "Meta descriptions are missing" },
-  ];
-  const synthetic = specs.map((spec, index) => {
-    const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((item) => item.ruleId === spec.ruleId);
-    assert.ok(authority, `governed canonical solution exists for ${spec.ruleId}`);
-    return {
-      findingId: `remediation-fixture-${index + 1}`,
-      id: `remediation-fixture-${index + 1}`,
-      ruleId: spec.ruleId,
-      ruleVersion: authority.ruleVersion,
-      title: spec.title,
-      actionable: true,
-      scoreBearing: true,
-      severity: "High",
-      confidence: "deterministic",
-      evidence: [{ field: authority.evidenceFields[0], artifactRef: `evidence:${index + 1}`, sourceStatus: "AVAILABLE" }],
-      affectedUrls: ["https://example.test/"],
-      finalPriority: -(index + 1),
-      implementationEffort: "M",
-    };
-  });
-  fixture.findings = synthetic;
-  fixture.decisionHierarchy = {
-    provenance: "deterministic report projection fixture",
-    orderedFindingIds: synthetic.map((finding) => finding.findingId),
-    actions: synthetic.map((finding, rank) => ({ findingId: finding.findingId, rank: rank + 1 })),
-  };
-  const canonical = canonicalSolutionsForFixture(fixture, { throwOnError: true });
-  assert.ok(canonical.records.some((record) => record.findingRefs.includes(synthetic[0].findingId)), "canonical records preserve the governed finding identity");
-  fixture.canonicalSolutions = canonical;
-  fixture.encyclopedia = {
-    status: "AVAILABLE",
-    priorityUnits: synthetic.slice(0, 2).map((finding, index) => ({ type: "accepted material finding", canonicalProblemId: specs[index].familyId, findingIds: [finding.findingId], frictionState: "FRICTION", evidence: [{ sourceStatus: "AVAILABLE" }] })),
-  };
-  return { fixture, specs };
-}
-
-test("REMEDIATION-RENDER-01: accepted finding families receive exactly three governed options", () => {
-  const { fixture } = remediationFixture();
-  const html = renderReportV2(fixture);
-  if (process.env.PRYSM_ACTIONABILITY_PROOF_DIR) {
-    writeFileSync(`${process.env.PRYSM_ACTIONABILITY_PROOF_DIR}/representative-report.html`, html, "utf8");
-  }
-  const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  const cards = [...priority.matchAll(/<article class="priority-action"[\s\S]*?<\/article>/g)].map((match) => match[0]);
-  assert.equal(cards.length, 2);
-  const expected = ["above-the-fold asset", "supported structured data"];
-  for (const [index, card] of cards.entries()) {
-    assert.equal((card.match(/class="common-remediation-option"/g) || []).length, 3);
-    assert.equal((card.match(/class="remediation-sequence-label"/g) || []).length, 3);
-    assert.equal((card.match(/class="remediation-disclaimer"/g) || []).length, 1);
-    assert.match(card, new RegExp(expected[index], "i"));
-    for (const label of ["DO FIRST", "NEXT 7 DAYS", "BY 30 DAYS"]) assert.match(card, new RegExp(label));
-    assert.doesNotMatch(card, /caused by|the cause is|this caused/i);
-    assert.match(card, /Suggested order and timing, not a deadline or promise/);
-  }
-  assert.equal((priority.match(/Quick action plan/g) || []).length, 2);
-  assert.equal((priority.match(/class="priority-action"/g) || []).length, 2);
-  assert.doesNotMatch(priority, /Write useful page-specific descriptions/, "the A03 supporting observation is not promoted by taxonomy coverage alone");
-});
-
-test("REMEDIATION-SEQUENCE-RENDER-01: only Priority Fix cards display governed action windows", () => {
-  const { fixture } = remediationFixture();
-  const html = renderReportV2(fixture);
-  const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  assert.equal((priority.match(/class="remediation-sequence-label"/g) || []).length, 6);
-  const otherPages = html.replace(priority, "");
-  assert.doesNotMatch(otherPages, /DO FIRST|NEXT 7 DAYS|BY 30 DAYS|Quick action plan/);
-});
-
-test("REMEDIATION-RENDER-02: only accepted units receive options; unsupported mappings fail closed", () => {
-  const { fixture, specs } = remediationFixture();
-  fixture.encyclopedia = {
-    status: "AVAILABLE",
-    priorityUnits: specs.slice(0, 2).map((spec, index) => ({ type: "accepted material finding", canonicalProblemId: spec.familyId, findingIds: [`remediation-fixture-${index + 1}`], frictionState: "FRICTION" })),
-  };
-  const twoPriorityHtml = renderReportV2(fixture);
-  const twoPrioritySection = twoPriorityHtml.slice(twoPriorityHtml.indexOf('id="blockers"'), twoPriorityHtml.indexOf('id="foundations"'));
-  assert.equal((twoPrioritySection.match(/class="priority-action"/g) || []).length, 2, "unaccepted third record does not receive a priority card");
-  assert.equal((twoPrioritySection.match(/class="common-remediation-option"/g) || []).length, 6);
-  assert.doesNotMatch(twoPrioritySection, /Write useful page-specific descriptions/);
-
-  fixture.encyclopedia.priorityUnits = [
-    { type: "accepted material finding", canonicalProblemId: "A01", findingIds: ["remediation-fixture-1"], frictionState: "FRICTION" },
-  ];
-  const unsupportedHtml = renderReportV2(fixture);
-  const unsupportedSection = unsupportedHtml.slice(unsupportedHtml.indexOf('id="blockers"'), unsupportedHtml.indexOf('id="foundations"'));
-  const card = unsupportedSection.match(/<article class="priority-action"[\s\S]*?<\/article>/)?.[0] || "";
-  assert.ok(card);
-  assert.match(card, /Common remediation options are not yet available for this finding/);
-  assert.doesNotMatch(card, /class="common-remediation-option"/);
-  assert.doesNotMatch(card, /Canonical change|Canonical fix/);
-});
-
-test("MVP-DECISION-AUTHORITY-01: one accepted sequence governs all pages while supporting evidence stays visible", () => {
-  const fixture = priorityModel();
-  const canonical = canonicalSolutionsForFixture(fixture);
-  assert.ok(canonical.records.length >= 2, "generic fixture has two canonical records for accepted priorities");
-  const acceptedRecords = canonical.records.slice(0, 2);
-  const supportRecords = Array.from({ length: 10 }, (_, index) => {
-    const source = canonical.records[index % canonical.records.length];
-    const solutionId = `SOL-FUTURE-SUPPORT-${index + 1}`;
-    return { ...structuredClone(source), solutionId, findingRefs: [`future-support-${index + 1}`] };
-  });
-  fixture.canonicalSolutions = {
-    ...canonical,
-    records: [...canonical.records, ...supportRecords],
-    sequence: [...canonical.sequence, ...supportRecords.map((record) => record.solutionId)],
-  };
-  fixture.findings.push(...Array.from({ length: 10 }, (_, index) => ({
-    findingId: `future-support-${index + 1}`,
-    title: `Future audit supporting observation ${index + 1}`,
-    confidence: "insufficient",
-    actionable: false,
-    scoreBearing: false,
-    evidence: [{ field: "supporting.evidence", observedValue: "unknown", sourceStatus: "PARTIAL" }],
-  })));
-  fixture.encyclopedia = {
-    status: "AVAILABLE",
-    priorityUnits: acceptedRecords.map((record) => ({ type: "standalone material finding", canonicalProblemId: "A06", findingIds: record.findingRefs, frictionState: "FRICTION", evidence: [{ sourceStatus: "AVAILABLE" }] })),
-  };
-  const html = renderReportV2(fixture);
-  if (process.env.PRYSM_DECISION_HIERARCHY_REPORT_PROOF) {
-    writeFileSync(process.env.PRYSM_DECISION_HIERARCHY_REPORT_PROOF, html, "utf8");
-  }
-  const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  const journey = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
-  const content = html.slice(html.indexOf('id="content-ideas"'), html.indexOf('id="action-plan"'));
-  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
-  const detail = html.slice(html.indexOf('id="evidence"'), html.indexOf('<footer>'));
-  assert.equal((priority.match(/<article class="priority-action"/g) || []).length, 2);
-  assert.match(executive, /2 accepted client priorities/);
-  assert.match(executive, /does not establish one broad site-wide constraint\. Any accepted item-level priorities are listed separately in Priority Fixes/);
-  assert.doesNotMatch(executive, /<ol|data-solution-id=/);
-  assert.doesNotMatch(executive, /<ol|data-solution-id=/);
-  assert.match(supporting, /Accepted current priorities/);
-  assert.match(supporting, /Supporting observations and non-priority findings/);
-  assert.doesNotMatch(supporting, /DO NOW|DO NEXT|LATER|<ol/i);
-  assert.equal((journey.match(/conversion-journey-detail-card/g) || []).length, 0, "Acquisition classification alone does not establish journey friction");
-  assert.match(journey, /No reviewed conversion-path record is available|Recorded path checks/);
-  assert.match(journey, /No accepted priority has a supported relationship to visitor-path friction/);
-  assert.doesNotMatch(journey, /correct those points first|correct.*first|fix these points first/i, "journey narrative cannot independently direct corrective work");
-  assert.match(content, /planning opportunity|opportunities/i);
-  assert.doesNotMatch(content, /Priority Fixes is the only client action sequence/);
-  assert.match(detail, /Future audit supporting observation 1/);
-  assert.equal((detail.match(/Future audit supporting observation/g) || []).length, 10);
-  assert.ok((detail.match(/Supporting observation; not an accepted priority/g) || []).length >= 10);
-  assert.match(detail, /partial/i);
-  assert.doesNotMatch(html.slice(html.indexOf('id="competitors"'), html.indexOf('id="competitor-detail"')), /<ol|PROTECT|DIFFERENTIATE|IGNORE/);
-});
-
-test("MVP-DECISION-AUTHORITY-02: Conversion Journey needs explicit accepted buyer-path evidence", () => {
-  const fixture = priorityModel();
-  const findingId = fixture.decisionHierarchy.orderedFindingIds[0];
-  fixture.encyclopedia = { status: "AVAILABLE", priorityUnits: [{ canonicalProblemId: "C05", findingIds: [findingId], frictionState: "FRICTION", conversionAction: "contact", buyerDecisionQuestion: "How can a buyer contact the business?", evidence: [{ sourceStatus: "AVAILABLE" }] }] };
-  const html = renderReportV2(fixture);
-  const journey = html.slice(html.indexOf('id="paths"'), html.indexOf('id="content-ideas"'));
-  assert.equal((journey.match(/class="conversion-journey-detail-card"/g) || []).length, 1);
-  assert.doesNotMatch(journey, /<ol|Review the recorded action/);
-  assert.match(journey, /Priority Fixes/);
-});
-
-test("MVP-DECISION-AUTHORITY-03: unavailable priority authority preserves evidence without promoting it", () => {
-  const fixture = priorityModel();
-  fixture.encyclopedia = { status: "NOT_AVAILABLE", priorityUnits: [] };
-  const html = renderReportV2(fixture);
-  const priority = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
-  const supporting = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
-  const evidence = html.slice(html.indexOf('id="evidence"'), html.indexOf('<footer>'));
-  assert.equal((priority.match(/<article class="priority-action"/g) || []).length, 0);
-  assert.match(priority, /No primary fix is established/);
-  assert.match(supporting, /No accepted client priority is available/);
-  assert.match(evidence, /Findings \(/);
-  assert.match(evidence, /Supporting observation; not an accepted priority/);
+  assert.match(blockers, /Check 1:/);
 });
 
 test("MVP-CLIENT-02: all seven client pages do not expose internal state or source-status enums", () => {
@@ -998,20 +785,19 @@ test("MVP-CLIENT-02: all seven client pages do not expose internal state or sour
   const trustStart = html.indexOf('<section id="eeat"');
   const trustEnd = html.indexOf('<section id="competitors"', trustStart);
   const trustPageText = html.slice(trustStart, trustEnd).replace(/<[^>]+>/g, " ");
-  assert.match(trustPageText, /Evidence and limits/);
-  assert.doesNotMatch(trustPageText, /<ol/);
+  assert.match(trustPageText, /Next step:/);
   assert.doesNotMatch(trustPageText, /Bounded action|\b(?:STRONG|MIDDLE|WEAK|INSUFFICIENT_EVIDENCE)\b/);
 });
 
-test("MVP-CLIENT-10: dimension bars retain separate lab and field evidence statuses", () => {
+test("MVP-CLIENT-10: performance score drivers name separate lab and field evidence and preserve their distinct statuses", () => {
   const fixture = priorityModel();
   fixture.capabilityEvidence.capabilities["performance.lab"].status = "AVAILABLE";
   fixture.capabilityEvidence.capabilities["performance.field"].status = "UNAVAILABLE";
 
   const html = renderReportV2(fixture);
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  assert.match(executive, /Page speed checks: <strong>Reviewed/);
-  assert.match(executive, /Real-user performance data: <strong>Not available/);
+  assert.match(executive, /Page speed checks Reviewed/);
+  assert.match(executive, /Real-user performance data Not available/);
   assert.doesNotMatch(executive, /Performance evidence AVAILABLE[^<]*Performance evidence UNAVAILABLE/);
 });
 
@@ -1026,8 +812,8 @@ test("MVP-CLIENT-09: insufficient executive evidence withholds an otherwise avai
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
 
   assert.match(executive, /data-narrative-state="INSUFFICIENT_EVIDENCE"/);
-  assert.match(executive, /Not enough evidence for a score/);
-  assert.match(executive, /did not have enough evidence to give a reliable overall score/);
+  assert.match(executive, /Insufficient Evidence for Overall Score/);
+  assert.match(executive, /cannot make a dependable overall readiness conclusion/);
   assert.doesNotMatch(executive, /class="readiness">55/);
   assert.doesNotMatch(executive, /class="readiness-band"/);
   assert.doesNotMatch(executive, /Overall readiness needs attention|Overall readiness is strong|Overall readiness is moderate/);
@@ -1065,8 +851,6 @@ test("MVP-CLIENT-05: print contract protects report tables and headings", () => 
   assert.match(html, /table-layout:fixed/);
   assert.match(html, /overflow-wrap:anywhere/);
   assert.match(html, /break-after:avoid-page/);
-  assert.match(html, /\.action-page \.priority-sequence\s*\{\s*display:block;/);
-  assert.match(html, /\.action-page \.priority-action\s*\{[\s\S]*?break-inside:auto;/);
 });
 
 test("MVP-CLIENT-06: competitor source status falls back to canonical report source status", () => {
@@ -1090,8 +874,6 @@ test("MVP-CLIENT-07: Conversion Journey translates Encyclopedia state and eviden
       title: "Reviewed friction",
       findingIds: [acceptedFindingId],
       frictionState: "FRICTION",
-      conversionAction: "contact",
-      buyerDecisionQuestion: "How do I contact the business?",
       evidence: [{ sourceStatus: "AVAILABLE" }],
     }],
   };
@@ -1107,15 +889,7 @@ test("MVP-CLIENT-07: Conversion Journey translates Encyclopedia state and eviden
 test("MVP-CLIENT-08: an accepted friction cluster renders as one client priority unit, not multiple inflated fixes", () => {
   const fixture = priorityModel();
   const canonicalHtml = renderReportV2(fixture);
-  fixture.canonicalSolutions = buildCanonicalSolutionSet({
-    findings: fixture.findings.filter((finding) => finding.findingId).map((finding) => {
-      const authority = Object.values(SOLUTION_AUTHORITY_REGISTRY).find((candidate) => candidate.ruleId === finding.ruleId);
-      return authority ? { ...finding, ruleVersion: authority.ruleVersion, evidence: [...(finding.evidence || []), { field: authority.evidenceFields[0], artifactRef: `fixture:${finding.findingId}` }] } : finding;
-    }),
-    scoreSet: fixture,
-    decisionEvidence: fixture.evidence,
-  });
-  const findingIds = fixture.canonicalSolutions.records.slice(0, 2).flatMap((record) => record.findingRefs || []);
+  const findingIds = fixture.decisionHierarchy.orderedFindingIds.slice(0, 2);
   assert.equal(findingIds.length, 2);
   fixture.encyclopedia = {
     status: "AVAILABLE",
@@ -1126,7 +900,6 @@ test("MVP-CLIENT-08: an accepted friction cluster renders as one client priority
       title: "Accepted friction cluster",
       findingIds,
       frictionState: "FRICTION",
-      conversionAction: "contact",
       evidence: [
         { sourceStatus: "AVAILABLE", independenceKey: "family:a" },
         { sourceStatus: "AVAILABLE", independenceKey: "family:b" },
@@ -1136,12 +909,10 @@ test("MVP-CLIENT-08: an accepted friction cluster renders as one client priority
   const html = renderReportV2(fixture);
   const page = html.slice(html.indexOf('id="blockers"'), html.indexOf('id="foundations"'));
   assert.equal((page.match(/<article class="priority-action"/g) || []).length, 1);
-  assert.doesNotMatch(page, /<ol/i);
   assert.match(page, /Several related issues are affecting the same buyer step/);
   assert.match(page, /Why this is a priority/);
   assert.match(page, /Related|linked 2 separate evidence-backed issues/i);
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
-  assert.match(executive, /accepted client priority/);
-  assert.match(executive, /Priority Fixes/);
-  assert.doesNotMatch(executive, /<ol|data-solution-id=/);
+  assert.equal((executive.match(/data-priority-unit-type="accepted friction cluster"/g) || []).length, 1);
+  assert.doesNotMatch(executive, /<li data-solution-id="[^"]+" data-priority-unit-type="accepted friction cluster"[\s\S]*<li data-solution-id="[^"]+" data-priority-unit-type="accepted friction cluster"/);
 });

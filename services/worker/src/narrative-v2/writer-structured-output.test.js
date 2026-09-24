@@ -86,48 +86,6 @@ test("WRITER-STRUCT-01: schema fixes deterministic statement classes and metadat
   assert.equal(schema.additionalProperties, false);
 });
 
-test("WRITER-STRUCT-01A: structured text rejects the same URL/markup/Markdown classes as semantic validation", () => {
-  const schema = buildWriterStructuredOutputSchema({
-    writerInput: writerInput(),
-    passNumber: 1,
-    modelId: "gpt-5.6-terra",
-  });
-  const textSchema = schema.properties.conversion.properties.constraints.properties.text;
-  assert.equal(Array.isArray(textSchema.allOf), true);
-  assert.match(textSchema.allOf[1].not.pattern, /https\?:\/\//);
-  assert.match(textSchema.allOf[1].not.pattern, /html/);
-  assert.match(textSchema.allOf[1].not.pattern, /```/);
-});
-
-test("WRITER-STRUCT-01B: every generated evidenceRefs array requires unique governed references", () => {
-  const schema = buildWriterStructuredOutputSchema({
-    writerInput: writerInput(),
-    passNumber: 1,
-    modelId: "gpt-5.6-terra",
-  });
-  const evidenceRefSchemas = [];
-  const visit = (node, key = "") => {
-    if (!node || typeof node !== "object") return;
-    if (key === "evidenceRefs") {
-      evidenceRefSchemas.push(node);
-      return;
-    }
-    for (const [childKey, child] of Object.entries(node)) {
-      if (childKey === "properties" && child && typeof child === "object") {
-        for (const [propertyName, propertySchema] of Object.entries(child)) {
-          visit(propertySchema, propertyName);
-        }
-      } else if (childKey === "items" || childKey === "anyOf" || childKey === "allOf") {
-        visit(child, key);
-      }
-    }
-  };
-  visit(schema);
-  assert.ok(evidenceRefSchemas.length > 0);
-  assert.ok(evidenceRefSchemas.every((refSchema) => refSchema.type === "array"));
-  assert.ok(evidenceRefSchemas.every((refSchema) => refSchema.uniqueItems === true));
-});
-
 test("WRITER-STRUCT-02: limitation status branches bind evidence refs to the same governed status", () => {
   const schema = buildWriterStructuredOutputSchema({
     writerInput: writerInput(),
@@ -140,11 +98,8 @@ test("WRITER-STRUCT-02: limitation status branches bind evidence refs to the sam
   const failed = branches.find((branch) => branch.properties.status.enum[0] === "FAILED");
   const partial = branches.find((branch) => branch.properties.status.enum[0] === "PARTIAL");
   assert.deepEqual(failed.properties.clientExplanation.properties.evidenceRefs.items.enum, ["source:backlinks"]);
-  assert.equal(failed.properties.clientExplanation.properties.evidenceRefs.uniqueItems, true);
   assert.deepEqual(failed.properties.whatThisMeans.properties.evidenceRefs.items.enum, ["source:backlinks"]);
-  assert.equal(failed.properties.whatThisMeans.properties.evidenceRefs.uniqueItems, true);
   assert.deepEqual(partial.properties.whatThisDoesNotMean.properties.evidenceRefs.items.enum, ["capability:competitors"]);
-  assert.equal(partial.properties.whatThisDoesNotMean.properties.evidenceRefs.uniqueItems, true);
 });
 
 test("WRITER-STRUCT-03: live Writer request sends OpenAI strict json_schema response_format", async () => {

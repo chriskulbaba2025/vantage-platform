@@ -451,62 +451,6 @@ test("TRANSPORT-RECOVERY-15: post-response local failure resumes the returned re
   await assert.rejects(() => store.get(`${livePrefix()}/call-02-reservation.json`));
 });
 
-test("TRANSPORT-RECOVERY-15A: persisted validation failure authorizes one replacement pass and preserves lineage", async () => {
-  const store = createMemoryArtifactStore();
-  const payload = validWriterOutput(1);
-  const prompt = "validation-failure replacement prompt";
-  const responseSha256 = hash(JSON.stringify(payload, null, 2));
-  await putJson(store, "narrative-v2/live-usage/call-01-reservation.json", {
-    auditId: AUDIT_ID, executionId: "original-execution", reservationId: "reservation-1", callNumber: 1,
-    role: "writer", passNumber: 1, modelId: "writer-test", promptSha256: hash(prompt),
-    writerInputSha256: hash(JSON.stringify(input())), judgeRevisionSha256: hash(JSON.stringify(null)), estimatedCost: 0.01,
-  });
-  await putJson(store, "narrative-v2/live-usage/call-01-response.json", payload);
-  await putJson(store, "narrative-v2/live-usage/call-01-response-state.json", {
-    state: "RESPONSE_RETURNED", auditId: AUDIT_ID, executionId: "original-execution", reservationId: "reservation-1",
-    callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test", requestSha256: hash(prompt), responseSha256,
-  });
-  await putJson(store, "narrative-v2/live-usage/call-01-response-meta.json", {
-    state: "RESPONSE_RETURNED", auditId: AUDIT_ID, executionId: "original-execution", reservationId: "reservation-1",
-    callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test", requestSha256: hash(prompt),
-    responseSha256, responseContentSha256: responseSha256, usage: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 },
-  });
-  await putJson(store, "narrative-v2/live-usage/call-01-result.json", {
-    validationResult: "FAIL", state: "CALL_COMPLETED", auditId: AUDIT_ID, executionId: "original-execution",
-    callNumber: 1, role: "writer", passNumber: 1, modelId: "writer-test", responseSha256, actualCost: 0.01,
-  });
-
-  let fetchCalls = 0;
-  const binding = createNarrativeV2LiveBinding({
-    env: env(), artifactStore: store,
-    fetchImpl: async () => { fetchCalls += 1; return responseFor(payload); },
-  });
-  binding.registerAuditScope({ ...SCOPE, executionId: "replacement-execution" });
-  const authorization = await binding.authorizePersistedValidationRecovery({
-    auditId: AUDIT_ID, executionId: "replacement-execution", role: "writer", passNumber: 1,
-    humanAuthorizationId: "resume-auth-1", humanAuthorizationReference: "authenticated-audit-resume",
-    humanAuthorizationIdentity: "principal-1", authorizedAt: "2026-09-23T23:00:00.000Z",
-  });
-  assert.equal(authorization.authorizedRecoveryAction, "REISSUE_SAME_PASS_AFTER_PERSISTED_VALIDATION_FAILURE");
-  const output = await binding.writerExecutor({
-    prompt, passNumber: 1, writerInput: input(), recoveryAuthorization: authorization,
-  });
-  assert.equal(output.passNumber, 1);
-  assert.equal(fetchCalls, 1);
-  const replacement = JSON.parse(Buffer.from(await store.get(`${livePrefix()}/call-02-reservation.json`)).toString("utf8"));
-  assert.equal(replacement.recoveryOfReservationId, "reservation-1");
-  const result = JSON.parse(Buffer.from(await store.get(`${livePrefix()}/call-02-result.json`)).toString("utf8"));
-  assert.equal(result.validationResult, "PASS");
-  await assert.rejects(
-    () => binding.authorizePersistedValidationRecovery({
-      auditId: AUDIT_ID, executionId: "replacement-execution", role: "writer", passNumber: 1,
-      humanAuthorizationId: "resume-auth-2", humanAuthorizationReference: "authenticated-audit-resume",
-      humanAuthorizationIdentity: "principal-1", authorizedAt: "2026-09-23T23:00:01.000Z",
-    }),
-    /already authorized/,
-  );
-});
-
 test("TRANSPORT-RECOVERY-16: persisted response bytes must match the durable digest before resume", async () => {
   const store = createMemoryArtifactStore();
   const payload = validWriterOutput(1);

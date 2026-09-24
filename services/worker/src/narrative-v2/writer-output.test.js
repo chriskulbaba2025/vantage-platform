@@ -448,61 +448,6 @@ test("PRYSM-NEGATION-01: explicit do-not establishment denials are accepted with
   }
 });
 
-test("PRYSM-CAUSAL-04: assessed-to-establish non-establishment language is bounded without weakening certainty rejection", () => {
-  const accepted = [
-    "This condition was not assessed sufficiently to establish a conversion limitation.",
-    "A complete conversion path was not assessed.",
-    "The available evidence is insufficient to establish a conversion impact.",
-    "The assessment does not establish that enquiries were reduced.",
-    "Conversion outcomes were not measured.",
-    "The evidence cannot establish whether the issue affected leads.",
-    "The available evidence does not show whether the site provides a complete route toward qualified enquiries.",
-  ];
-  const rejected = [
-    "This condition establishes a conversion limitation.",
-    "This will reduce conversions.",
-    "This causes lost enquiries.",
-    "This resulted in fewer leads.",
-    "This proves conversion performance is worse.",
-    "This reduces conversions.",
-    "The conversion effect was not assessed, but this issue will reduce leads.",
-  ];
-
-  for (const text of accepted) {
-    const result = validateWriterOutput(
-      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
-      { writerInput: writerInput(), expectedPassNumber: 1 },
-    );
-    assert.deepEqual(result, { valid: true, errors: [] }, text);
-  }
-
-  for (const text of rejected) {
-    const result = validateWriterOutput(
-      { ...validOutput(), executiveConclusion: { ...validOutput().executiveConclusion, narrative: atom(text) } },
-      { writerInput: writerInput(), expectedPassNumber: 1 },
-    );
-    assert.equal(result.valid, false, text);
-    assert.match(result.errors.join("\n"), /unmeasured business outcome with causal certainty/, text);
-  }
-});
-
-test("WRITER-OUT-16: twelve repeated evidence references remain fail-closed", () => {
-  const output = validOutput(1);
-  output.limitations[0].clientExplanation.evidenceRefs = Array.from(
-    { length: 12 },
-    () => "source:backlinks",
-  );
-  const result = validateWriterOutput(output, {
-    writerInput: writerInput(),
-    expectedPassNumber: 1,
-  });
-  assert.equal(result.valid, false);
-  assert.equal(
-    result.errors.filter((error) => error.includes("contains duplicate reference")).length,
-    11,
-  );
-});
-
 test("PRYSM-CAUSAL-01: ordinary causal morphology and outcome-certainty forms reject", () => {
   const unsupportedClaims = [
     "Changes cause conversions.",

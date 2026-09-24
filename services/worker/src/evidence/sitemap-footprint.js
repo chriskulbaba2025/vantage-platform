@@ -82,15 +82,7 @@ function canonicalizeHttpUrl(input, base) {
 
 function sameOrigin(url, origin) {
   try {
-    const candidate = new URL(url);
-    const target = new URL(origin);
-    const normalizeHost = (hostname) => hostname.toLowerCase().replace(/^www\./i, "");
-
-    return (
-      (candidate.protocol === "http:" || candidate.protocol === "https:") &&
-      (target.protocol === "http:" || target.protocol === "https:") &&
-      normalizeHost(candidate.hostname) === normalizeHost(target.hostname)
-    );
+    return new URL(url).origin === origin;
   } catch {
     return false;
   }

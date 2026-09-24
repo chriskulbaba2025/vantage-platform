@@ -412,16 +412,11 @@ export function createProductionRuntime({
 
   const RESUMABLE_STATES = new Set([T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY]);
 
-  async function resumeAudit(auditId, tenantId, resumeAuthorization = {}) {
+  async function resumeAudit(auditId, tenantId) {
     const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
     if (!meta) return null;
     const current = await lifecycleService.currentState(auditId, tenantId);
-    const history = typeof lifecycleService.history === "function"
-      ? await lifecycleService.history(auditId, tenantId)
-      : [];
-    if (!current || (!RESUMABLE_STATES.has(current.state) && current.state !== T.NARRATIVE_FAILED)) {
-      return current?.state || null;
-    }
+    if (!current || !RESUMABLE_STATES.has(current.state)) return current?.state || null;
 
     const businessName = meta.business_name || meta.businessName || "";
     const clientId = meta.client_id || meta.clientId || current.clientId || "";
@@ -438,47 +433,11 @@ export function createProductionRuntime({
       );
     }
 
-    if (current.state === T.NARRATIVE_FAILED) {
-      const recovery = await orchestrator.classifyNarrativeFailureRecovery(
-        auditRequest,
-        history?.[history.length - 1]?.reason,
-      );
-      if (recovery.classification !== "STANDARD_RETRY_ELIGIBLE") {
-        return {
-          finalState: current.state,
-          recoveryClassification: recovery.classification,
-          recoveryReason: recovery.reason,
-        };
-      }
-    }
-
     if (typeof narrativeV2Deps.registerAuditScope === "function") {
       narrativeV2Deps.registerAuditScope({ tenantId, clientId, auditId, executionId });
     }
 
-    let recoveryAuthorization = null;
-    if (
-      current.state === T.NARRATIVE_FAILED
-      && typeof narrativeV2Deps.authorizePersistedValidationRecovery === "function"
-    ) {
-      recoveryAuthorization = await narrativeV2Deps.authorizePersistedValidationRecovery({
-        auditId,
-        executionId,
-        role: "writer",
-        passNumber: 1,
-        humanAuthorizationId: `narrative-resume:${auditId}:${executionId}`,
-        humanAuthorizationReference:
-          resumeAuthorization.reference || "authenticated-audit-resume",
-        humanAuthorizationIdentity:
-          resumeAuthorization.identity || `tenant:${tenantId}`,
-        authorizedAt: new Date().toISOString(),
-      });
-    }
-
-    let result = await orchestrator.execute(auditRequest, {
-      executionId,
-      recoveryAuthorization,
-    });
+    let result = await orchestrator.execute(auditRequest, { executionId });
     let previousState = null;
     for (let step = 0; step < 4; step++) {
       if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;

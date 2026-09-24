@@ -33,8 +33,7 @@ const T = LIFECYCLE_STATE;
 export function hasRequiredReportV2Structure(html, { requireNarrativeLayer = false } = {}) {
   return typeof html === "string"
     && /^<!doctype html>/i.test(html)
-    && html.includes('class="executive-visuals"')
-    && html.includes("Dimension detail")
+    && html.includes("Where are the problems?")
     && (!requireNarrativeLayer || html.includes('id="narrative-layer"'));
 }
 

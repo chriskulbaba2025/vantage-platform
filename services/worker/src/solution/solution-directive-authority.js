@@ -264,16 +264,9 @@ function hierarchyOf(scoreSet, findingIds) {
 }
 
 export function buildSolutionDirectiveInput({ findings, scoreSet, decisionEvidence, authorityRecords, pageRegistry }) {
-  if (!Array.isArray(findings)) fail("AUTH-INPUT", null, "findings", "findings must be an array.");
+  if (!Array.isArray(findings) || findings.length === 0) fail("AUTH-INPUT", null, "findings", "findings must be a non-empty array.");
   if (!scoreSet || typeof scoreSet !== "object" || Array.isArray(scoreSet)) fail("AUTH-INPUT", null, "scoreSet", "scoreSet is required.");
   if (!decisionEvidence || typeof decisionEvidence !== "object" || Array.isArray(decisionEvidence)) fail("AUTH-INPUT", null, "decisionEvidence", "decisionEvidence is required.");
-  const emptyHierarchy = scoreSet.decisionHierarchy
-    && Array.isArray(scoreSet.decisionHierarchy.orderedFindingIds)
-    && Array.isArray(scoreSet.decisionHierarchy.actions)
-    && scoreSet.decisionHierarchy.orderedFindingIds.length === 0
-    && scoreSet.decisionHierarchy.actions.length === 0
-    && scoreSet.rootCauseRuleId === null;
-  if (findings.length === 0 && !emptyHierarchy) fail("AUTH-HIERARCHY", null, "findings", "Empty findings require an empty decision hierarchy and null rootCauseRuleId.");
   const findingIds = new Set();
   for (const finding of findings) {
     if (!finding || !nonEmpty(finding.findingId) || findingIds.has(finding.findingId)) fail("AUTH-HIERARCHY", finding?.findingId, "findings", "findings require unique non-empty findingId values.");

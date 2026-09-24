@@ -22,6 +22,7 @@ const ACTIVE_STATES = new Set([
   "collecting",
   "evidence_stored",
   "evidence_locked",
+  "scored",
   "narrative_pending",
   "narrative_ready",
 ]);
@@ -32,12 +33,10 @@ export default function AuditReviewActions({
   auditId,
   state,
   slug,
-  lifecycleReason,
 }: {
   auditId: string;
   state: string;
   slug: string;
-  lifecycleReason?: string | null;
 }) {
   const router = useRouter();
   const [reviewer, setReviewer] = useState("");
@@ -48,7 +47,6 @@ export default function AuditReviewActions({
   const [narrativeReview, setNarrativeReview] =
     useState<NarrativeReview | null>(null);
   const [narrativeReviewLoading, setNarrativeReviewLoading] = useState(false);
-  const [narrativeReviewError, setNarrativeReviewError] = useState("");
 
   useEffect(() => {
     if (!ACTIVE_STATES.has(state)) return;
@@ -57,15 +55,9 @@ export default function AuditReviewActions({
     return () => window.clearInterval(timer);
   }, [router, state]);
 
-  const isStandardNarrativeRetry =
-    state === "narrative_failed" &&
-    (lifecycleReason === "narrative-v2-preparation-failed" ||
-      lifecycleReason?.startsWith("narrative-v2-execution-failed:"));
-
   useEffect(() => {
-    if (state !== "narrative_failed" || isStandardNarrativeRetry) {
+    if (state !== "narrative_failed") {
       setNarrativeReview(null);
-      setNarrativeReviewError("");
       return;
     }
 
@@ -94,13 +86,13 @@ export default function AuditReviewActions({
 
         if (!cancelled) {
           setNarrativeReview(data);
-          setNarrativeReviewError("");
         }
       } catch (e) {
         if (!cancelled) {
-          setNarrativeReview(null);
-          setNarrativeReviewError(
-            "Governed Judge review is unavailable. Report preparation failed and needs recovery; no final narrative pass is authorized.",
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Failed to load Narrative v2 human review",
           );
         }
       } finally {
@@ -115,26 +107,7 @@ export default function AuditReviewActions({
     return () => {
       cancelled = true;
     };
-  }, [auditId, state, isStandardNarrativeRetry]);
-
-  async function resumePreparation() {
-    setError("");
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/audits/${auditId}/resume`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Audit recovery failed");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Audit recovery failed");
-    } finally {
-      setBusy(false);
-    }
-  }
+  }, [auditId, state]);
 
   const allChecked = useMemo(
     () => REVIEW_ITEMS.every(([id]) => checked[id] === true),
@@ -267,47 +240,24 @@ export default function AuditReviewActions({
     );
   }
 
-  if (isStandardNarrativeRetry) {
-    return (
-      <div className="card" style={{ borderColor: "var(--amber)" }}>
-        <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>
-          Report preparation needs recovery
-        </h2>
-        <p style={{ marginTop: 0, marginBottom: 16 }}>
-          Prysm could not complete report preparation. Your collected evidence
-          and scores are preserved; retrying report preparation does not rerun
-          the website audit.
-        </p>
-        {error && <p className="form-error">{error}</p>}
-        <button className="btn btn-primary" type="button" disabled={busy} onClick={resumePreparation}>
-          {busy ? "Retrying Report Preparation..." : "Retry Report Preparation"}
-        </button>
-      </div>
-    );
-  }
-
   if (state === "narrative_failed") {
-    const hasJudgeReview = Boolean(narrativeReview);
     return (
       <div className="card" style={{ borderColor: "var(--amber)" }}>
         <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>
-          {hasJudgeReview ? "Narrative review required" : "Narrative processing failed"}
+          Narrative review required
         </h2>
 
         <p style={{ marginTop: 0, marginBottom: 16 }}>
-          {hasJudgeReview
-            ? "The report passed evidence collection and scoring, but the Narrative v2 Judge did not authorize client release within the automatic revision limit. Review the governed Judge result below before authorizing the single final revision pass."
-            : "The report passed evidence collection and scoring, but Narrative v2 report preparation did not produce a governed Judge review. The collected evidence and scores are preserved; no final narrative pass is available from this state."}
+          The report passed evidence collection and scoring, but the Narrative
+          v2 Judge did not authorize client release within the automatic
+          revision limit. Review the governed Judge result below before
+          authorizing the single final revision pass.
         </p>
 
         {narrativeReviewLoading && (
           <p style={{ marginBottom: 16 }}>
             Loading governed Judge review...
           </p>
-        )}
-
-        {!narrativeReviewLoading && narrativeReviewError && (
-          <p className="form-error">{narrativeReviewError}</p>
         )}
 
         {narrativeReview && (
@@ -339,7 +289,7 @@ export default function AuditReviewActions({
         <button
           className="btn btn-primary"
           type="button"
-          disabled={busy || narrativeReviewLoading || !hasJudgeReview}
+          disabled={busy || narrativeReviewLoading || !narrativeReview}
           onClick={authorizeNarrativeFinalPass}
         >
           {busy

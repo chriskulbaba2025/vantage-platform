@@ -146,9 +146,8 @@ function validateHeadline(value, label, errors) {
 }
 
 function validateStrengths(strengths, writerInput, errors) {
-  const zeroFindings = writerInput?.deterministicAnalysis?.conversionInfluence?.orderedFindingIds?.length === 0;
-  if (!Array.isArray(strengths) || strengths.length < (zeroFindings ? 0 : 1) || strengths.length > 5) {
-    errors.push(zeroFindings ? "strengths must contain 0 to 5 evidence-backed items when no governed findings exist" : "strengths must contain 1 to 5 evidence-backed items");
+  if (!Array.isArray(strengths) || strengths.length === 0 || strengths.length > 5) {
+    errors.push("strengths must contain 1 to 5 evidence-backed items");
     return;
   }
   const ids = new Set();
@@ -284,9 +283,8 @@ function validateLimitations(items, writerInput, errors) {
 }
 
 function validateActionPlan(items, writerInput, errors) {
-  const zeroFindings = writerInput?.deterministicAnalysis?.conversionInfluence?.orderedFindingIds?.length === 0;
-  if (!Array.isArray(items) || items.length < (zeroFindings ? 0 : 1) || items.length > 5) {
-    errors.push(zeroFindings ? "actionPlan must contain 0 to 5 items when no governed findings exist" : "actionPlan must contain 1 to 5 items");
+  if (!Array.isArray(items) || items.length === 0 || items.length > 5) {
+    errors.push("actionPlan must contain 1 to 5 items");
     return;
   }
   const priorities = new Set();
@@ -410,7 +408,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:confirm|confirms|confirmed|confirming|establish|establishes|established|establishing|prove|proves|proved|proven|proving|demonstrate|demonstrates|demonstrated|demonstrating|show|shows|showed|shown|showing)\b/i;
 
   const nonEstablishmentOutcomePattern =
-    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\b(?:cannot|can't)\s+establish\b|\b(?:does|do|did)\s+not\s+(?:show|demonstrate|indicate)\s+whether\b|\bneither\b[^.!?]{0,120}\b(?:establish(?:es|ed|ing)?|measur(?:es|ed|ing)?|collect(?:s|ed|ing)?|confirm(?:s|ed|ing)?|prov(?:es|ed|en|ing))\b|\bnot\s+(?:measured|collected|established|confirmed|proven)\b|\bwithout\s+(?:establish(?:ed|ing)?|demonstrat(?:e|ed|es|ing)?|prov(?:e|ed|en|ing))\b|\bnot\s+assessed(?:\s+sufficiently)?\s+to\s+establish\b|\bnot\s+sufficiently\s+assessed\s+to\s+establish\b|\binsufficiently\s+assessed\s+to\s+establish\b|\binsufficient\s+(?:evidence\s+)?to\s+establish\b|\b(?:the\s+)?(?:available\s+)?evidence\s+is\s+insufficient\s+to\s+establish\b)/i;
+    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\bneither\b[^.!?]{0,120}\b(?:establish(?:es|ed|ing)?|measur(?:es|ed|ing)?|collect(?:s|ed|ing)?|confirm(?:s|ed|ing)?|prov(?:es|ed|en|ing))\b|\bnot\s+(?:measured|collected|established|confirmed|proven)\b|\bwithout\s+(?:establish(?:ed|ing)?|demonstrat(?:e|ed|es|ing)?|prov(?:e|ed|en|ing))\b)/i;
 
   const observedConversionActionPattern =
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
@@ -558,7 +556,7 @@ export function validateWriterSemanticFidelity(
         );
 
       return (
-        (hasCausalCertainty && !isBounded && !isExplicitlyNonEstablishing) ||
+        (hasCausalCertainty && !isBounded) ||
         (hasEstablishedOutcome && !isExplicitlyNonEstablishing && !isBounded && !isObservedConversionAction)
       );
     };

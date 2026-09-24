@@ -38,23 +38,17 @@ import {
 } from "../solution/solution-authority-provider.js";
 import { buildSolutionDirectiveInput } from "../solution/solution-directive-authority.js";
 import { generateCanonicalSolutions } from "../solution/solution-generator.js";
-import {
-  classifyNarrativeFailureRecovery as classifyFailureRecovery,
-} from "./failure-recovery.js";
 
 const T = LIFECYCLE_STATE;
 const NARRATIVE_V2_VERSION = "2.0.0";
 const UAT_RERENDER_AUDIT_ID = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
 const FINAL_PASS_ORCHESTRATION_ARTIFACT =
   "narrative-v2/orchestration-final-pass.json";
-export const NARRATIVE_V2_PREPARATION_FAILURE_REASON =
-  "narrative-v2-preparation-failed";
 
 export function hasRequiredNarrativeV2ReportStructure(html) {
   return typeof html === "string"
     && /^<!doctype html>/i.test(html)
-    && html.includes('class="executive-visuals"')
-    && html.includes("Dimension detail")
+    && html.includes("Where are the problems?")
     && html.includes('<main id="reportContent" tabindex="-1">');
 }
 
@@ -145,30 +139,6 @@ async function loadJsonArtifact({ artifactStore, auditRequest, artifactName }) {
   }
   if (!bytes) return null;
   return JSON.parse(Buffer.from(bytes).toString("utf8"));
-}
-
-async function loadRecoveryArtifact({ artifactStore, auditRequest, artifactName }) {
-  const key = buildArtifactKey({
-    ...scopeFor(auditRequest),
-    category: "report-v2",
-    artifactName,
-  });
-  let bytes;
-  try {
-    bytes = await artifactStore.get(key);
-  } catch {
-    return { present: false, value: null, malformed: false };
-  }
-  if (!bytes) return { present: false, value: null, malformed: false };
-  try {
-    return {
-      present: true,
-      value: JSON.parse(Buffer.from(bytes).toString("utf8")),
-      malformed: false,
-    };
-  } catch {
-    return { present: true, value: null, malformed: true };
-  }
 }
 
 async function loadEffectiveOrchestrationResult({
@@ -1026,31 +996,15 @@ async function runNarrativeV2FromScored({
     await ensureReportContentPackage({ artifactStore, auditRequest, validateContract, inputs });
     prepareCanonicalSolutions({ inputs, solutionAuthorityProvider });
   } catch (err) {
-    // Package/input preparation occurs before any model call. Persist a
-    // governed failure state instead of returning an error-bearing SCORED
-    // result: the latter looks active to the browser after the driver stops.
-    console.error(
-      `Narrative v2 preparation failed for ${auditRequest.auditId}:`,
-      err?.stack || err?.message || String(err),
-    );
-    await transition({
-      lifecycleService,
-      auditRequest,
-      executionId,
-      toState: T.NARRATIVE_FAILED,
-      reason: NARRATIVE_V2_PREPARATION_FAILURE_REASON,
-    });
+    // Package/input preparation occurs before NARRATIVE_PENDING. Remain at
+    // SCORED so deterministic preparation can be retried without model calls.
     return resultSummary({
       auditRequest,
       executionId,
       startedAt,
       completedAt: clock.now(),
-      finalState: T.NARRATIVE_FAILED,
-      extra: {
-        narrativeV2Status: "PREPARATION_FAILED",
-        recoverable: true,
-        wp8Error: err?.message || String(err),
-      },
+      finalState: T.SCORED,
+      extra: { wp8Error: err.message },
     });
   }
 
@@ -1595,47 +1549,11 @@ export function createNarrativeV2ProductionPath({
         writerExecutor,
         judgeExecutor,
         solutionAuthorityProvider,
-        recoveryAuthorization: opts.recoveryAuthorization || null,
         clock: c,
       });
     }
 
-    if (current?.state === T.NARRATIVE_FAILED) {
-      const history = typeof lifecycleService.history === "function"
-        ? await lifecycleService.history(auditRequest.auditId, auditRequest.tenantId)
-        : [];
-      const lastEvent = history?.[history.length - 1];
-
-      const recovery = await classifyNarrativeFailureRecovery(
-        auditRequest,
-        lastEvent?.reason,
-      );
-
-      if (recovery.classification === "STANDARD_RETRY_ELIGIBLE") {
-        await transition({
-          lifecycleService,
-          auditRequest,
-          executionId,
-          toState: T.NARRATIVE_PENDING,
-          reason: lastEvent?.reason === NARRATIVE_V2_PREPARATION_FAILURE_REASON
-            ? "narrative-v2-preparation-recovery"
-            : "narrative-v2-execution-recovery",
-        });
-        return runNarrativeV2FromPending({
-          auditRequest,
-          executionId,
-          startedAt,
-          lifecycleService,
-          artifactStore,
-          validateContract,
-          writerExecutor,
-          judgeExecutor,
-          solutionAuthorityProvider,
-          recoveryAuthorization: opts.recoveryAuthorization || null,
-          clock: c,
-        });
-      }
-
+        if (current?.state === T.NARRATIVE_FAILED) {
       // Do not automatically spend another Writer/Judge pass. Surface the
       // exact governed Judge review state and require explicit continuation.
       const orchestrationResult =
@@ -1696,7 +1614,7 @@ export function createNarrativeV2ProductionPath({
     return baseOrchestrator.execute(auditRequest, opts);
   }
 
-  async function getNarrativeV2HumanReview(auditRequest) {
+    async function getNarrativeV2HumanReview(auditRequest) {
     if (!isNarrativeV2Request(auditRequest)) {
       throw new Error(
         "Narrative v2 human review requires a Narrative v2 audit",
@@ -1729,57 +1647,6 @@ export function createNarrativeV2ProductionPath({
     return buildHumanReviewSummary({
       auditRequest,
       orchestrationResult,
-    });
-  }
-
-  async function classifyNarrativeFailureRecovery(auditRequest, failureReason) {
-    const writerInputArtifact = await loadRecoveryArtifact({
-      artifactStore,
-      auditRequest,
-      artifactName: "narrative-v2/writer-input.json",
-    });
-    const orchestrationArtifact = await loadRecoveryArtifact({
-      artifactStore,
-      auditRequest,
-      artifactName: "narrative-v2/orchestration.json",
-    });
-    const finalPassArtifact = await loadRecoveryArtifact({
-      artifactStore,
-      auditRequest,
-      artifactName: FINAL_PASS_ORCHESTRATION_ARTIFACT,
-    });
-
-    let scoredInputsAvailable = false;
-    try {
-      await loadScoredInputs({
-        artifactStore,
-        auditRequest,
-        validateContract,
-      });
-      scoredInputsAvailable = true;
-    } catch {
-      scoredInputsAvailable = false;
-    }
-
-    const validOrchestration =
-      orchestrationArtifact.present
-      && !orchestrationArtifact.malformed
-      && writerInputArtifact.present
-      && !writerInputArtifact.malformed
-      && validatePersistedHumanReviewContinuation(
-        writerInputArtifact.value,
-        orchestrationArtifact.value,
-      ).valid;
-
-    return classifyFailureRecovery({
-      auditRequest,
-      failureReason,
-      scoredInputsAvailable,
-      orchestration: validOrchestration ? orchestrationArtifact.value : null,
-      orchestrationMalformed:
-        orchestrationArtifact.malformed
-        || (orchestrationArtifact.present && !validOrchestration),
-      finalPassArtifactPresent: finalPassArtifact.present,
     });
   }
 
@@ -1874,7 +1741,6 @@ export function createNarrativeV2ProductionPath({
         writerInput,
         writerExecutor: args.writerExecutor,
         judgeExecutor: args.judgeExecutor,
-        recoveryAuthorization: args.recoveryAuthorization || null,
       });
       const orchestrationRecord = await persistJsonArtifact({
         artifactStore: args.artifactStore,
@@ -1940,7 +1806,6 @@ export function createNarrativeV2ProductionPath({
   return Object.freeze({
     execute,
     getNarrativeV2HumanReview,
-    classifyNarrativeFailureRecovery,
     continueNarrativeV2FinalPass,
   });
 }

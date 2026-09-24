@@ -67,14 +67,6 @@ function model(canonicalSolutions) {
       performance: { sourceStatus: "UNAVAILABLE" },
     },
     canonicalSolutions,
-    encyclopedia: {
-      status: "AVAILABLE",
-      priorityUnits: canonicalSolutions.records.map((record) => ({
-        canonicalProblemId: "A06",
-        findingIds: record.findingRefs,
-        frictionState: "FRICTION",
-      })),
-    },
     conversionPaths: [],
     readinessMap: [],
     contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
@@ -121,10 +113,11 @@ test("Priority Fixes renders canonical detail and stable IDs in governed order",
   assert.match(priority, /data-solution-id="SOL-TWO"/);
   assert.match(priority, /Canonical problem 2/);
   assert.match(priority, /Canonical reason 2/);
-  assert.match(priority, /Common remediation options are not yet available for this finding/);
-  assert.doesNotMatch(priority, /Canonical change 2|Canonical fix 2/);
+  assert.match(priority, /Canonical change 2/);
+  assert.match(priority, /Canonical fix 2/);
   assert.doesNotMatch(priority, /<dt>What needs attention<\/dt>/);
-  assert.match(priority, /<dt>Three common fixes to consider<\/dt>/);
+  assert.match(priority, /<dt>What to do<\/dt>[\s\S]*Canonical change 2/);
+  assert.match(priority, /<dt>What to do<\/dt>[\s\S]*Canonical fix 2/);
   assert.ok(priority.indexOf("SOL-TWO") < priority.indexOf("SOL-ONE"));
 });
 

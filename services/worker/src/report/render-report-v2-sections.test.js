@@ -162,10 +162,10 @@ test("V2R-01: content opportunities presents actionable ideas in the client stor
   assert.match(html, /What content would help buyers move forward\?/i, "client heading present");
   assert.match(html, /What is already helping buyers/);
   assert.match(html, /Where more content may help/);
-  assert.match(html, /Ideas follow the source order/);
+  assert.match(html, /Content that could help buyers move forward/);
   assert.match(html, /content-opportunity-card/);
   const primaryContent = html.slice(html.indexOf('<section id="content-ideas"'), html.indexOf('<section id="content-opportunities-detail"'));
-  assert.ok((primaryContent.match(/class="content-opportunity-card(?: |")/g) || []).length > 0, "all available ideas remain available as planning context");
+  assert.equal((primaryContent.match(/class="content-opportunity-card(?: |")/g) || []).length, 5, "primary S05 shows only the first five governed opportunities");
   assert.match(html, /id="content-opportunities-detail"/);
   /*
   assert.match(html, /Qualified opportunity — partial content coverage|Supported within assessed content/);
@@ -179,7 +179,7 @@ test("V2R-01: content opportunities presents actionable ideas in the client stor
   // scoreAudit's contentIdeas() titles the leading topic from the first
   // candidate ("Coaching") — assert the exact generated idea text.
   assert.match(html, /Explain what coaching is/, "question-shaped TOFU input is projected as a client-facing title");
-  assert.doesNotMatch(html, /Additional search topics|canonical leading query/i, "generated query-like wording is not shown as search evidence");
+  assert.match(html, /Coaching for decision making/i, "canonical leading query rendered");
 });
 
 // ---------------------------------------------------------------------------
@@ -341,11 +341,11 @@ test("V2R-06: existing executive sections remain intact", async () => {
   const html = await render(m);
   for (const golden of [
     "How ready is your website to convert visitors?",
-    "Accepted priorities",
+    "What should you improve first?",
     "What is already working?",
     "Where was the evidence limited?",
     "Supporting Detail",
-    "Dimension detail",
+    "Where are the problems?",
     "What should you fix first?",
     "Evidence detail",
     "Source statuses",
@@ -359,23 +359,21 @@ test("SUPPORTING-DETAIL-EVIDENCE-01: detail keeps visuals, deterministic samples
   const supporting = html.slice(html.indexOf('id="supporting-detail-orientation"'));
 
   assert.match(supporting, /Supporting Detail proves and explains the six primary-page conclusions/);
-  assert.doesNotMatch(supporting, /Conversion Readiness Map|Five-axis conversion readiness map/);
-  assert.match(supporting, /Readiness dimensions and capability detail/);
+  assert.match(supporting, /aria-label="Five-axis conversion readiness map"/);
   assert.match(supporting, /aria-label="Business entity relationship diagram"/);
-  assert.match(supporting, /Representative examples|additional supporting evidence|Readiness dimensions and capability detail/i);
+  assert.match(supporting, /Representative examples|additional supporting evidence/i);
   assert.match(supporting, /PARTIAL|UNAVAILABLE|NOT_ASSESSED|limitations/i);
   assert.match(supporting, /<details[^>]*class="supporting-detail-disclosure"/);
   assert.match(supporting, /data-supporting-section="internal-links"/);
   assert.match(supporting, /1 identified .* showing 1 examples/);
 });
 
-test("SUPPORTING-DETAIL-VERIFICATION-01: Supporting Detail classifies priorities without an action sequence", async () => {
+test("SUPPORTING-DETAIL-VERIFICATION-01: verification remains consolidated in MEASURE", async () => {
   const html = await render(scoreAudit(INPUT, richEvidence()));
-  const plan = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="eeat"'));
+  const plan = html.slice(html.indexOf('id="action-plan"'), html.indexOf('id="competitors"'));
   assert.doesNotMatch(plan, /How we verify it/);
-  assert.match(plan, /Accepted current priorities/);
-  assert.match(plan, /Supporting observations and non-priority findings/);
-  assert.doesNotMatch(plan, /MEASURE|DO NOW|DO NEXT|<ol/i);
+  assert.match(plan, /MEASURE/);
+  assert.match(plan, /Evidence to compare in the next audit/);
 });
 
 test("INTERNAL-LINKS-DISCLOSURE-01: orphan count and governed full list are progressive", async () => {
@@ -410,9 +408,9 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
   assert.match(trustPage, /Visible proof is established in the reviewed scope/);
   assert.equal((trustPage.match(/Visible proof is established in the reviewed scope/g) || []).length, 1, "the Trust state message and verdict are not repeated");
   assert.doesNotMatch(trustPage, /relative strength at|Priority Fix threshold/);
-  assert.match(trustPage, /Optional trust-proof review/);
-  assert.match(trustPage, /If you review placement, check whether the relevant proof appears close to the decision it supports/);
-  assert.match(trustPage, /These checks are supporting context; use Priority Fixes for accepted corrective priorities/);
+  assert.match(trustPage, /How should you use the proof you already have\?/);
+  assert.match(trustPage, /Check whether the right proof appears close enough to the decision it supports/);
+  assert.match(trustPage, /PRYSM observed these trust assets, but did not establish their placement across every important conversion page/);
   assert.match(trustPage, /search systems understand the site/);
   assert.match(trustPage, /AI search readiness/);
   assert.match(trustPage, /does not establish AI visibility, citation, or inclusion/);
@@ -421,7 +419,7 @@ test("TRUST-WORDING-01: trust narrative consumes shared evidence state rather th
 });
 
 test("TRUST-WORDING-02: a Trust verdict remains when no shared narrative message is supplied", () => {
-  const rendered = eeatSection(scoreAudit(INPUT, richEvidence()), { acceptedFindingIds: new Set() }, null);
+  const rendered = eeatSection(scoreAudit(INPUT, richEvidence()), null);
   assert.match(rendered, /class="trust-verdict">Trust evidence is shown below within its assessed scope\.<\/p>/);
 });
 
@@ -472,7 +470,7 @@ test("V2R-08: v2 draft represents the complete 15-area required-section contract
     ["1 executive scorecard", /How ready is your website to convert visitors\?/],
     ["2 priority fixes", /What should you fix first\?/],
     ["3 conversion journey", /Can visitors move from interest to action\?/],
-    ["4 dimension summary", /Where is the site strongest and weakest/],
+    ["4 conversion readiness map", /Where are the problems\?/],
     ["5 content opportunities", /What content would help buyers move forward\?/],
     ["6 competitor benchmark", /How does your website compare with the competitors buyers may consider\?/],
     ["7 trust and E-E-A-T", /Trust &amp; Proof|Trust & Proof/],
