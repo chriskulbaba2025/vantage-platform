@@ -88,7 +88,8 @@ function sameOrigin(url, origin) {
 
     return (
       (candidate.protocol === "http:" || candidate.protocol === "https:") &&
-      (target.protocol === "http:" || target.protocol === "https:") &&
+      candidate.protocol === target.protocol &&
+      candidate.port === target.port &&
       normalizeHost(candidate.hostname) === normalizeHost(target.hostname)
     );
   } catch {

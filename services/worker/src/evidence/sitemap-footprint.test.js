@@ -545,3 +545,20 @@ test("treats www and apex sitemap URLs as one bounded same-site scope", async ()
   assert.ok(result.priorityUrls.includes("https://example.com/"));
   assert.ok(result.priorityUrls.includes("https://www.example.com/about"));
 });
+
+test("does not broaden same-site scope across protocol or port", async () => {
+  const { fetchImpl } = makeFetch({
+    "https://www.example.com/robots.txt": {
+      body: `Sitemap: http://example.com:8080/sitemap.xml`,
+      contentType: "text/plain",
+    },
+    "http://example.com:8080/sitemap.xml": {
+      body: `<urlset><url><loc>http://example.com:8080/</loc></url></urlset>`,
+    },
+  });
+
+  const result = await discoverSitemapFootprint("https://www.example.com", { fetchImpl });
+
+  assert.equal(result.retainedUrlCount, 0);
+  assert.equal(result.coverage.skippedExternalPageUrlCount, 0);
+});
