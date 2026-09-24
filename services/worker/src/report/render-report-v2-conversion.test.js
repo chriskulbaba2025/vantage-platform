@@ -1759,8 +1759,8 @@ const RENDER_GOLDEN = {
 const canonicalRenderGolden = {
   "assessed": "d1fc559dbf91881099e3fd9cce8d6dd46daa1d313a5127182df193a09fd44fc6",
   "unassessed": "74b0d63fb24adba3f167922c2907b59453beb365967776fa803188f892077adc",
-  "provider-failed": "80e3259a356df5de791e24fbba01c6bb9deb6198be40038670c91008e6ecf7fa",
-  "crawl-blocked": "30aea6ca20b9b200e5f2b0a858d48601ee690fe9f41d238814f5184715c68339",
+  "provider-failed": "82a333ed986834b0bae023b2e2541bbff9377e778ef408761bb81e8e15d34a4e",
+  "crawl-blocked": "fc5629acf9a17edcb5ee88e2d041b33ae32855647704c1072ebd37a9a37df896",
   "target-outage": "714cf907628a127cd41af3027599e9a5b0c037765ffcb258476f6a22ed664873",
   "outage-with-limitations": "830fd6d94fecd167c59e9c3bb327e4e4a8d3c020c7e4c4c149507e252ac346d1",
   "http-and-noindex": "1267bd4cc4efffe01f46a62cf7c05be3b1959268f06520e64af187ce2675f693",

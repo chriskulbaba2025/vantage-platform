@@ -572,6 +572,7 @@ function buildNotAssessedModel(
   input,
   evidence,
   scoredAt,
+  persistedCapabilityEvidence = null,
 ) {
   const perfScore =
     scorePerformance(
@@ -661,6 +662,29 @@ function buildNotAssessedModel(
       });
     }
   }
+
+  const capabilityRecord = persistedCapabilityEvidence &&
+    typeof persistedCapabilityEvidence === "object"
+    ? {
+        capabilityEvidenceVersion:
+          persistedCapabilityEvidence.capabilityEvidenceVersion || "2.0.0",
+        summary: persistedCapabilityEvidence.summary || {},
+        capabilities: persistedCapabilityEvidence.capabilities || {},
+      }
+    : {
+        capabilityEvidenceVersion: "2.0.0",
+        summary: {
+          total: 0,
+          available: 0,
+          partial: 0,
+          unavailable: 0,
+          failed: 0,
+          notConnected: 0,
+          notApplicable: 0,
+          assessed: 0,
+        },
+        capabilities: {},
+      };
 
   return {
     contractVersion: "1.0.0",
@@ -761,23 +785,7 @@ function buildNotAssessedModel(
     findings: [],
     suppressedFindingReasons: [],
 
-    capabilityEvidence: {
-      capabilityEvidenceVersion:
-        "2.0.0",
-
-      summary: {
-        total: 0,
-        available: 0,
-        partial: 0,
-        unavailable: 0,
-        failed: 0,
-        notConnected: 0,
-        notApplicable: 0,
-        assessed: 0,
-      },
-
-      capabilities: {},
-    },
+    capabilityEvidence: capabilityRecord,
 
     aiReadinessBasis:
       "structural",
@@ -1123,6 +1131,7 @@ export function scoreAudit(
               fallbackSite,
           },
           scoredAt,
+          capabilityEvidence,
         );
 
       const performanceEligibility =
@@ -1151,6 +1160,7 @@ export function scoreAudit(
       input,
       evidence,
       scoredAt,
+      capabilityEvidence,
     );
   }
 

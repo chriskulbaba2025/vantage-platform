@@ -819,6 +819,31 @@ test("MVP-CLIENT-09: insufficient executive evidence withholds an otherwise avai
   assert.doesNotMatch(executive, /Overall readiness needs attention|Overall readiness is strong|Overall readiness is moderate/);
 });
 
+test("E2S-01: non-viable crawl report projection preserves independent lab evidence", () => {
+  const fixture = evidence();
+  fixture.site = {
+    ...fixture.site,
+    sourceStatus: "FAILED",
+    status: "FAILED",
+    pages: [],
+    pageCount: 0,
+    _contentEvidenceAvailable: false,
+    _responseHeadersAvailable: false,
+    limitations: ["No usable page evidence was returned"],
+  };
+
+  const scored = scoreAudit(INPUT, fixture, { scoredAt: FIXED_TS });
+  const html = renderReportV2(scored);
+
+  assert.equal(scored.capabilityEvidence.capabilities["performance.lab"].status, "AVAILABLE");
+  assert.equal(scored.capabilityEvidence.capabilities["performance.field"].status, "UNAVAILABLE");
+  assert.equal(scored.moduleEligibility.performance, true);
+  assert.match(html, /Performance &amp; Experience/);
+  assert.match(html, /Page speed checks/);
+  assert.match(html, /Real-user performance data: Not available/);
+  assert.match(html, /Insufficient Evidence for Overall Score/);
+});
+
 test("MVP-CLIENT-03: competitor benchmark does not compare page-count coverage with qualitative competitor signals", () => {
   const fixture = model();
   fixture.input = { ...fixture.input, businessName: "Example Business" };
