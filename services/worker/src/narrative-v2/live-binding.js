@@ -2087,11 +2087,17 @@ export function createNarrativeV2LiveBinding({
     );
 
     if (!combinedValidation.valid) {
-      throw new Error(
-        `Narrative v2 ${role} validation failed: ${combinedValidation.errors.join(
-          "; ",
-        )}`,
+      const validationError = new Error(
+        `Narrative v2 ${role} validation failed: ${combinedValidation.errors.join("; ")}`,
       );
+      validationError.code = role === "writer"
+        ? "WRITER_OUTPUT_INVALID"
+        : "JUDGE_RESPONSE_INVALID";
+      validationError.stage = role === "writer"
+        ? "WRITER_VALIDATION"
+        : "JUDGE_VALIDATION";
+      validationError.validationErrors = combinedValidation.errors;
+      throw validationError;
     }
 
     return parsed;

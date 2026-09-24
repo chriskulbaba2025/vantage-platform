@@ -459,11 +459,14 @@ export async function runNarrativeV2Orchestration({
         await writerExecutor(writerRequest);
     } catch (cause) {
       throw new NarrativeV2OrchestrationError(
-        NARRATIVE_V2_ERROR.WRITER_EXECUTION_FAILED,
+        cause?.code === NARRATIVE_V2_ERROR.WRITER_OUTPUT_INVALID
+          ? NARRATIVE_V2_ERROR.WRITER_OUTPUT_INVALID
+          : NARRATIVE_V2_ERROR.WRITER_EXECUTION_FAILED,
         `Writer execution failed on pass ${passNumber}: ${cause.message}`,
         {
           passNumber,
-          stage: "WRITER_EXECUTION",
+          stage: cause?.stage || "WRITER_EXECUTION",
+          validationErrors: cause?.validationErrors,
           cause,
         },
       );
