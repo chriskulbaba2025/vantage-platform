@@ -418,6 +418,38 @@ test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted withou
   }
 });
 
+test("PDV5-WRITER-OUT-10b: qualified non-establishment with by-itself modifier remains bounded", () => {
+  const accepted = validateWriterOutput(
+    {
+      ...validOutput(),
+      content: {
+        ...validOutput().content,
+        businessMeaning: atom(
+          "The listed service scope does not by itself establish buyer comprehension or content support for qualified enquiries.",
+          ["business:primaryGoal"],
+        ),
+      },
+    },
+    { writerInput: writerInput(), expectedPassNumber: 1 },
+  );
+  assert.deepEqual(accepted, { valid: true, errors: [] });
+
+  const rejected = validateWriterOutput(
+    {
+      ...validOutput(),
+      content: {
+        ...validOutput().content,
+        businessMeaning: atom(
+          "The missing proof does not by itself establish that the site will increase qualified enquiries.",
+          ["business:primaryGoal"],
+        ),
+      },
+    },
+    { writerInput: writerInput(), expectedPassNumber: 1 },
+  );
+  assert.ok(rejected.errors.some((error) => /unmeasured business outcome with causal certainty/.test(error)));
+});
+
 test("PRYSM-NEGATION-01: explicit do-not establishment denials are accepted without laundering claims", () => {
   const accepted = [
     "A visible invitation and a clear assessed path do not establish visitor completion or conversion performance.",
