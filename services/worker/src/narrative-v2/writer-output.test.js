@@ -378,6 +378,8 @@ test("PDV5-WRITER-OUT-10: explicit non-establishment language is accepted withou
   const accepted = [
     "Conversion, offer, trust, and completed enquiry-path evidence were not collected, so no overall conversion conclusion is established.",
     "No conversion outcome was established.",
+    "No material conversion constraint was established from the assessed evidence; conversion impact was not measured.",
+    "No material constraint on the assessed next-step route was established from the available evidence; downstream impact was not measured.",
     "The evidence does not establish a conversion outcome.",
     "Completed enquiry outcomes were not measured.",
     "No sales conclusion can be established from the available evidence.",
