@@ -44,6 +44,9 @@ const NARRATIVE_V2_VERSION = "2.0.0";
 const UAT_RERENDER_AUDIT_ID = "d3b4cc62-9217-4c0b-b169-e24beb46a79c";
 const FINAL_PASS_ORCHESTRATION_ARTIFACT =
   "narrative-v2/orchestration-final-pass.json";
+const NARRATIVE_FAILURE_ARTIFACT =
+  "narrative-v2/failure.json";
+const NARRATIVE_FAILURE_CONTRACT_VERSION = "1.0.0";
 
 export function hasRequiredNarrativeV2ReportStructure(html) {
   return typeof html === "string"
@@ -162,6 +165,74 @@ async function loadEffectiveOrchestrationResult({
     auditRequest,
     artifactName:
       "narrative-v2/orchestration.json",
+  });
+}
+
+async function loadNarrativeFailure({ artifactStore, auditRequest }) {
+  return loadJsonArtifact({
+    artifactStore,
+    auditRequest,
+    artifactName: NARRATIVE_FAILURE_ARTIFACT,
+  });
+}
+
+function sanitizeFailureMessage(value) {
+  return String(value || "")
+    .replace(/(authorization|api[- ]?key|secret|password|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .slice(0, 320);
+}
+
+function classifyNarrativeFailure(error) {
+  const code = String(error?.code || "NARRATIVE_EXECUTION_FAILED");
+  const stage = String(error?.stage || "NARRATIVE_ORCHESTRATION");
+  const failureByCode = {
+    WRITER_PROMPT_FAILED: {
+      failureStage: "writer_prompt",
+      failureKind: "writer_prompt_failure",
+      clientMessage: "Narrative generation could not prepare the Writer request.",
+    },
+    WRITER_EXECUTION_FAILED: {
+      failureStage: "writer_provider",
+      failureKind: "writer_provider_failure",
+      clientMessage: "Narrative generation could not complete because the Writer request failed before Judge review.",
+    },
+    WRITER_OUTPUT_INVALID: {
+      failureStage: "writer_validation",
+      failureKind: "writer_validation_failure",
+      clientMessage: "Narrative generation produced Writer content that did not pass governed validation before Judge review.",
+    },
+    JUDGE_EXECUTION_FAILED: {
+      failureStage: "judge_provider",
+      failureKind: "judge_provider_failure",
+      clientMessage: "Narrative review could not complete because the Judge request failed.",
+    },
+    JUDGE_RESPONSE_INVALID: {
+      failureStage: "judge_validation",
+      failureKind: "judge_validation_failure",
+      clientMessage: "Narrative review could not complete because the Judge response did not pass governed validation.",
+    },
+  }[code] || {
+    failureStage: stage.toLowerCase(),
+    failureKind: "narrative_orchestration_failure",
+    clientMessage: "Narrative generation could not complete at a governed processing boundary.",
+  };
+
+  return Object.freeze({
+    contractVersion: NARRATIVE_FAILURE_CONTRACT_VERSION,
+    code,
+    stage,
+    failureStage: failureByCode.failureStage,
+    failureKind: failureByCode.failureKind,
+    passNumber: Number.isInteger(error?.passNumber) ? error.passNumber : null,
+    message: sanitizeFailureMessage(error?.message),
+    validationErrors: Object.freeze(
+      (Array.isArray(error?.validationErrors) ? error.validationErrors : [])
+        .map((item) => sanitizeFailureMessage(item))
+        .slice(0, 12),
+    ),
+    clientMessage: failureByCode.clientMessage,
+    judgeRan: code === "JUDGE_EXECUTION_FAILED" || code === "JUDGE_RESPONSE_INVALID",
+    finalPassAvailable: false,
   });
 }
 
@@ -564,7 +635,28 @@ function validatePersistedHumanReviewContinuation(
 function buildHumanReviewSummary({
   auditRequest,
   orchestrationResult,
+  failure = null,
 }) {
+  if (failure) {
+    return Object.freeze({
+      contractVersion: "1.0.0",
+      auditId: auditRequest.auditId,
+      status: "FAILURE",
+      passCount: failure.passNumber,
+      judgeDecision: null,
+      defects: Object.freeze([]),
+      revisionDirective: null,
+      failureCode: failure.code,
+      failureStage: failure.failureStage,
+      failureKind: failure.failureKind,
+      clientMessage: failure.clientMessage,
+      technicalMessage: failure.message,
+      validationErrors: failure.validationErrors,
+      judgeRan: failure.judgeRan,
+      finalPassAvailable: false,
+    });
+  }
+
   const judgeResponse =
     orchestrationResult?.finalJudgeResponse || null;
 
@@ -591,6 +683,13 @@ function buildHumanReviewSummary({
       && judgeResponse?.decision === "REVISE"
       && judgeResponse?.revisionDirective?.required === true
       && judgeResponse?.revisionDirective?.mode === "TARGETED",
+    failureCode: null,
+    failureStage: null,
+    failureKind: null,
+    clientMessage: null,
+    technicalMessage: null,
+    validationErrors: [],
+    judgeRan: Boolean(judgeResponse),
   });
 }
 
@@ -1091,12 +1190,20 @@ async function runNarrativeV2FromScored({
       },
     });
   } catch (err) {
+    const failure = classifyNarrativeFailure(err);
+    const failureRecord = await persistJsonArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName: NARRATIVE_FAILURE_ARTIFACT,
+      value: failure,
+    });
     await transition({
       lifecycleService,
       auditRequest,
       executionId,
       toState: T.NARRATIVE_FAILED,
-      reason: `narrative-v2-execution-failed:${String(err.message || "").slice(0, 120)}`,
+      reason: `narrative-v2-${failure.failureKind}`,
+      artifactKey: failureRecord.key,
     });
     return resultSummary({
       auditRequest,
@@ -1104,7 +1211,11 @@ async function runNarrativeV2FromScored({
       startedAt,
       completedAt: clock.now(),
       finalState: T.NARRATIVE_FAILED,
-      extra: { narrativeV2Error: err.message },
+      extra: {
+        narrativeV2Error: failure.technicalMessage,
+        narrativeV2Failure: failure,
+        humanReview: buildHumanReviewSummary({ auditRequest, failure }),
+      },
     });
   }
 }
@@ -1553,14 +1664,13 @@ export function createNarrativeV2ProductionPath({
       });
     }
 
-        if (current?.state === T.NARRATIVE_FAILED) {
+    if (current?.state === T.NARRATIVE_FAILED) {
       // Do not automatically spend another Writer/Judge pass. Surface the
       // exact governed Judge review state and require explicit continuation.
-      const orchestrationResult =
-        await loadEffectiveOrchestrationResult({
-          artifactStore,
-          auditRequest,
-        });
+      const [orchestrationResult, failure] = await Promise.all([
+        loadEffectiveOrchestrationResult({ artifactStore, auditRequest }),
+        loadNarrativeFailure({ artifactStore, auditRequest }),
+      ]);
 
       return resultSummary({
         auditRequest,
@@ -1571,10 +1681,7 @@ export function createNarrativeV2ProductionPath({
         extra: {
           narrativeV2Status:
             orchestrationResult?.status || "FAILED",
-          humanReview: buildHumanReviewSummary({
-            auditRequest,
-            orchestrationResult,
-          }),
+          humanReview: buildHumanReviewSummary({ auditRequest, orchestrationResult, failure }),
         },
       });
     }
@@ -1632,11 +1739,14 @@ export function createNarrativeV2ProductionPath({
       );
     }
 
-    const orchestrationResult =
-      await loadEffectiveOrchestrationResult({
-        artifactStore,
-        auditRequest,
-      });
+    const [orchestrationResult, failure] = await Promise.all([
+      loadEffectiveOrchestrationResult({ artifactStore, auditRequest }),
+      loadNarrativeFailure({ artifactStore, auditRequest }),
+    ]);
+
+    if (failure) {
+      return buildHumanReviewSummary({ auditRequest, failure });
+    }
 
     if (!orchestrationResult) {
       throw new Error(
@@ -1647,6 +1757,7 @@ export function createNarrativeV2ProductionPath({
     return buildHumanReviewSummary({
       auditRequest,
       orchestrationResult,
+      failure,
     });
   }
 
@@ -1785,12 +1896,20 @@ export function createNarrativeV2ProductionPath({
         extra: { narrativeV2Status: orchestrationResult.status, narrativeV2PassCount: orchestrationResult.passCount },
       });
     } catch (err) {
+      const failure = classifyNarrativeFailure(err);
+      const failureRecord = await persistJsonArtifact({
+        artifactStore: args.artifactStore,
+        auditRequest: args.auditRequest,
+        artifactName: NARRATIVE_FAILURE_ARTIFACT,
+        value: failure,
+      });
       await transition({
         lifecycleService: args.lifecycleService,
         auditRequest: args.auditRequest,
         executionId: args.executionId,
         toState: T.NARRATIVE_FAILED,
-        reason: `narrative-v2-execution-failed:${String(err.message || "").slice(0, 120)}`,
+        reason: `narrative-v2-${failure.failureKind}`,
+        artifactKey: failureRecord.key,
       });
       return resultSummary({
         auditRequest: args.auditRequest,
@@ -1798,7 +1917,11 @@ export function createNarrativeV2ProductionPath({
         startedAt: args.startedAt,
         completedAt: args.clock.now(),
         finalState: T.NARRATIVE_FAILED,
-        extra: { narrativeV2Error: err.message },
+        extra: {
+          narrativeV2Error: failure.technicalMessage,
+          narrativeV2Failure: failure,
+          humanReview: buildHumanReviewSummary({ auditRequest: args.auditRequest, failure }),
+        },
       });
     }
   }

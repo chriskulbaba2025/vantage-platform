@@ -1433,6 +1433,44 @@ test("NV2-PROD-07: NARRATIVE_FAILED exposes exact Judge defects and an authorize
   );
 });
 
+test("NV2-PROD-09: Writer failure artifact is reviewable without Judge assumptions or final-pass action", async () => {
+  const fixture = await buildContinuationFixture({ finalJudgeOutcome: "PASS" });
+  await putJson(
+    fixture.artifactStore,
+    {
+      tenantId,
+      clientId: fixture.auditRequest.clientId,
+      auditId: fixture.auditRequest.auditId,
+      category: "report-v2",
+      artifactName: "narrative-v2/failure.json",
+    },
+    {
+      contractVersion: "1.0.0",
+      code: "WRITER_OUTPUT_INVALID",
+      stage: "WRITER",
+      failureStage: "writer_validation",
+      failureKind: "writer_validation_failure",
+      passNumber: 1,
+      message: "sanitized validation failure",
+      validationErrors: ["rootCause.narrative: bounded wording required"],
+      clientMessage: "Narrative generation produced Writer content that did not pass governed validation before Judge review.",
+      judgeRan: false,
+      finalPassAvailable: false,
+    },
+  );
+
+  const review = await fixture.productionPath.getNarrativeV2HumanReview(
+    fixture.auditRequest,
+  );
+
+  assert.equal(review.status, "FAILURE");
+  assert.equal(review.failureKind, "writer_validation_failure");
+  assert.equal(review.judgeRan, false);
+  assert.equal(review.finalPassAvailable, false);
+  assert.equal(review.judgeDecision, null);
+  assert.match(review.clientMessage, /before Judge review/i);
+});
+
 test("NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pass 4", async () => {
   const fixture = await buildContinuationFixture({
     finalJudgeOutcome: "HUMAN_REVIEW_REQUIRED",

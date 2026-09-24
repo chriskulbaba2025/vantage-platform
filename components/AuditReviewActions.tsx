@@ -241,29 +241,34 @@ export default function AuditReviewActions({
   }
 
   if (state === "narrative_failed") {
+    const judgeRan = narrativeReview?.judgeRan === true;
+    const finalPassAvailable = narrativeReview?.finalPassAvailable === true;
+    const clientMessage =
+      typeof narrativeReview?.clientMessage === "string"
+        ? narrativeReview.clientMessage
+        : judgeRan
+          ? "The governed Judge did not authorize client release. Review the result below before authorizing the permitted final pass."
+          : "Narrative generation failed before a governed Judge review was available.";
     return (
       <div className="card" style={{ borderColor: "var(--amber)" }}>
         <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>
-          Narrative review required
+          {finalPassAvailable ? "Narrative review required" : "Narrative generation failed"}
         </h2>
 
         <p style={{ marginTop: 0, marginBottom: 16 }}>
-          The report passed evidence collection and scoring, but the Narrative
-          v2 Judge did not authorize client release within the automatic
-          revision limit. Review the governed Judge result below before
-          authorizing the single final revision pass.
+          {clientMessage}
         </p>
 
         {narrativeReviewLoading && (
           <p style={{ marginBottom: 16 }}>
-            Loading governed Judge review...
+            Loading governed Narrative failure details...
           </p>
         )}
 
         {narrativeReview && (
           <div style={{ marginBottom: 16 }}>
             <h3 style={{ fontSize: "0.95rem", marginBottom: 8 }}>
-              Governed Judge review
+              {judgeRan ? "Governed Judge review" : "Governed Narrative failure"}
             </h3>
 
             <pre
@@ -286,27 +291,25 @@ export default function AuditReviewActions({
 
         {error && <p className="form-error">{error}</p>}
 
-        <button
-          className="btn btn-primary"
-          type="button"
-          disabled={busy || narrativeReviewLoading || !narrativeReview}
-          onClick={authorizeNarrativeFinalPass}
-        >
-          {busy
-            ? "Running Final Narrative Pass..."
-            : "Authorize Final Narrative Pass"}
-        </button>
+        {finalPassAvailable && (
+          <button
+            className="btn btn-primary"
+            type="button"
+            disabled={busy || narrativeReviewLoading}
+            onClick={authorizeNarrativeFinalPass}
+          >
+            {busy
+              ? "Running Final Narrative Pass..."
+              : "Authorize Final Narrative Pass"}
+          </button>
+        )}
 
-        <p
-          style={{
-            marginTop: 12,
-            marginBottom: 0,
-            fontSize: "0.85rem",
-          }}
-        >
-          This authorizes one final governed Writer/Judge round only. It does
-          not recollect evidence or rerun scoring.
-        </p>
+        {finalPassAvailable && (
+          <p style={{ marginTop: 12, marginBottom: 0, fontSize: "0.85rem" }}>
+            This authorizes one final governed Writer/Judge round only. It does
+            not recollect evidence or rerun scoring.
+          </p>
+        )}
       </div>
     );
   }
