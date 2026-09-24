@@ -1112,15 +1112,37 @@ export function scoreAudit(
           false,
       };
 
-      return buildNotAssessedModel(
-        input,
-        {
-          ...evidence,
-          site:
-            fallbackSite,
+      const fallbackModel =
+        buildNotAssessedModel(
+          input,
+          {
+            ...evidence,
+            site:
+              fallbackSite,
+          },
+          scoredAt,
+        );
+
+      const performanceEligibility =
+        checkModuleEligibility(
+          MODULES.performance,
+          evidence,
+          capabilities,
+        );
+
+      return {
+        ...fallbackModel,
+        moduleEligibility: {
+          ...fallbackModel.moduleEligibility,
+          performance:
+            performanceEligibility.eligible,
         },
-        scoredAt,
-      );
+        dimensionEligibility: {
+          ...fallbackModel.dimensionEligibility,
+          technical_performance:
+            performanceEligibility.eligible,
+        },
+      };
     }
 
     return buildNotAssessedModel(

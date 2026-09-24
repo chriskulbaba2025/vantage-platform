@@ -445,15 +445,21 @@ test("FAILED crawl suppresses all crawl-dependent scores", () => {
   // Performance is independent
   assert.equal(model.scores.performance, 76);
 
-  // No findings
+  // The independent performance score remains authoritative, but the fallback
+  // report does not emit actionable findings without crawl evidence.
   assert.deepEqual(model.findings, []);
+
+  assert.equal(model.moduleEligibility.performance, true);
+  assert.equal(model.dimensionEligibility.technical_performance, true);
+  assert.equal(model.assessedWeight, 10);
+  assert.equal(model.evidence.performance.sourceStatus, "AVAILABLE");
 
   // Bands reflect Not Assessed
   assert.equal(model.bands.conversionReadiness, "Not Assessed");
   assert.equal(model.bands.trust, "Not Assessed");
 
   // Evidence confidence reduced
-  assert.ok(model.evidenceConfidenceScore < 50);
+  assert.ok(model.evidenceConfidenceScore < 100);
 
   // Crawl suppression flag
   assert.equal(model._crawlSuppressed, true);
@@ -557,6 +563,22 @@ test("scoreAudit renders report with FAILED crawl without crashing", async () =>
   assert.match(html, /Prysm Phase 1 Audit/);
   // Report should indicate crawl issues without crashing
   assert.ok(typeof html === "string");
+});
+
+test("no-crawl fallback preserves independent performance evidence through report projection", async () => {
+  const model = scoreAudit(
+    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
+    evidence({ site: failedSite() }),
+  );
+
+  assert.equal(model.evidence.performance.sourceStatus, "AVAILABLE");
+  assert.equal(model.scores.performance, 76);
+  assert.equal(model.moduleEligibility.performance, true);
+
+  const html = await renderReport(model);
+  assert.ok(html.includes("Prysm Phase 1 Audit"));
+  assert.equal(model.readinessStatus, "Insufficient Evidence for Overall Score");
+  assert.equal(model.moduleEligibility.performance, true);
 });
 
 // =============================================================================

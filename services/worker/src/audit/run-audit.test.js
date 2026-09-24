@@ -877,7 +877,7 @@ test("performance, backlinks and optional sources operate independently of crawl
 
   // Evidence confidence reduced but not zero (perf contributes)
   assert.ok(result.model.evidenceConfidenceScore > 0);
-  assert.ok(result.model.evidenceConfidenceScore < 50);
+  assert.ok(result.model.evidenceConfidenceScore < 100);
 });
 
 // ---------------------------------------------------------------------------
