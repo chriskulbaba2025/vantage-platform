@@ -12,6 +12,7 @@ if (process.env.VERCEL_ENV === "preview" && !process.env.VANTAGE_WORKER_API_URL)
 }
 const WORKER_BASE = process.env.VANTAGE_WORKER_API_URL || "http://localhost:3000";
 const WORKER_SECRET = process.env.VANTAGE_WEBHOOK_SECRET || "";
+const CONFIGURED_TENANT = process.env.VANTAGE_TENANT_ID || "";
 
 interface WorkerClientOpts {
   baseUrl?: string;
@@ -34,7 +35,7 @@ class WorkerClient {
     this.baseUrl = opts?.baseUrl || WORKER_BASE;
     this.secret = opts?.secret || WORKER_SECRET;
     this.principal = opts?.principal || null;
-    this.tenant = opts?.tenant || null;
+    this.tenant = opts?.tenant || CONFIGURED_TENANT || null;
   }
 
   /** Bind this client to an authenticated principal (server-side only). */
