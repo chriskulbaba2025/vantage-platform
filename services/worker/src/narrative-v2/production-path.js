@@ -1595,6 +1595,7 @@ export function createNarrativeV2ProductionPath({
         writerExecutor,
         judgeExecutor,
         solutionAuthorityProvider,
+        recoveryAuthorization: opts.recoveryAuthorization || null,
         clock: c,
       });
     }
@@ -1630,6 +1631,7 @@ export function createNarrativeV2ProductionPath({
           writerExecutor,
           judgeExecutor,
           solutionAuthorityProvider,
+          recoveryAuthorization: opts.recoveryAuthorization || null,
           clock: c,
         });
       }
@@ -1872,6 +1874,7 @@ export function createNarrativeV2ProductionPath({
         writerInput,
         writerExecutor: args.writerExecutor,
         judgeExecutor: args.judgeExecutor,
+        recoveryAuthorization: args.recoveryAuthorization || null,
       });
       const orchestrationRecord = await persistJsonArtifact({
         artifactStore: args.artifactStore,

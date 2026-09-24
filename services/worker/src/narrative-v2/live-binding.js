@@ -83,6 +83,8 @@ export const NARRATIVE_V2_CALL_STATE = Object.freeze({
 
 export const NARRATIVE_V2_RECOVERY_ACTION =
   "REISSUE_SAME_PASS_AFTER_HUMAN_AUTHORIZATION";
+export const NARRATIVE_V2_VALIDATION_RECOVERY_ACTION =
+  "REISSUE_SAME_PASS_AFTER_PERSISTED_VALIDATION_FAILURE";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -952,6 +954,94 @@ export function createNarrativeV2LiveBinding({
     return Object.freeze(authorizationRecord);
   }
 
+  async function authorizePersistedValidationRecovery({
+    auditId,
+    executionId,
+    role,
+    passNumber,
+    humanAuthorizationId,
+    humanAuthorizationReference,
+    humanAuthorizationIdentity,
+    authorizedAt,
+  }) {
+    const scope = resolveScope(auditId);
+    if (role !== "writer" || !Number.isInteger(passNumber) || passNumber < 1) {
+      throw new Error("Narrative v2 validation recovery requires a Writer pass");
+    }
+    const existing = await existingReservations(scope);
+    const original = existing.find((entry) =>
+      entry.role === role && entry.passNumber === passNumber && !entry.recoveryOfReservationId,
+    );
+    if (!original) return null;
+    const result = await readJsonByName(artifactStore, scope, resultName(original.callNumber));
+    if (!result || result.validationResult !== "FAIL") return null;
+    const [response, responseMeta, responseState] = await Promise.all([
+      readJsonByName(artifactStore, scope, responseName(original.callNumber)),
+      readJsonByName(artifactStore, scope, responseMetaName(original.callNumber)),
+      readJsonByName(artifactStore, scope, responseStateName(original.callNumber)),
+    ]);
+    if (!response || !responseMeta || !responseState) {
+      throw new Error("Narrative v2 validation recovery requires persisted original response artifacts");
+    }
+    const responseDigest = sha256(JSON.stringify(response, null, 2));
+    if (
+      responseState.state !== NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED
+      || ![NARRATIVE_V2_CALL_STATE.RESPONSE_RETURNED, NARRATIVE_V2_CALL_STATE.POST_RESPONSE_LOCAL_FAILURE].includes(responseMeta.state)
+      || responseState.responseSha256 !== responseDigest
+      || responseMeta.responseSha256 !== responseDigest
+      || responseMeta.responseContentSha256 !== responseDigest
+      || result.responseSha256 !== responseDigest
+    ) {
+      throw new Error("Narrative v2 validation recovery original response identity or digest mismatch");
+    }
+    if (existing.some((entry) => entry.recoveryOfReservationId === original.reservationId)) {
+      throw new Error("Narrative v2 validation recovery already authorized for original reservation");
+    }
+    const normalizedId = String(humanAuthorizationId || "").trim();
+    if (!normalizedId || !humanAuthorizationReference || !humanAuthorizationIdentity || !authorizedAt) {
+      throw new Error("Narrative v2 validation recovery requires explicit authorization fields");
+    }
+    const authorization = Object.freeze({
+      contractVersion: "1.0.0",
+      bindingVersion: NARRATIVE_V2_LIVE_BINDING_VERSION,
+      authorizationId: normalizedId,
+      auditId,
+      executionId,
+      originalExecutionId: original.executionId,
+      role,
+      passNumber,
+      originalReservationId: original.reservationId,
+      originalCallNumber: original.callNumber,
+      originalRequestSha256: original.promptSha256,
+      originalModelId: original.modelId,
+      originalWriterInputSha256: original.writerInputSha256,
+      judgeRevisionSha256: original.judgeRevisionSha256,
+      originalValidationResult: result.validationResult,
+      originalResponseSha256: responseDigest,
+      humanAuthorizationReference,
+      humanAuthorizationIdentity,
+      authorizedAt,
+      authorizedRecoveryAction: NARRATIVE_V2_VALIDATION_RECOVERY_ACTION,
+      maxAdditionalCallCount: 1,
+      relationship: "recovery-of-original-reservation",
+      conservativeCostTreatment: "original-cost-retained-and-replacement-cost-added",
+      state: NARRATIVE_V2_CALL_STATE.RECOVERY_AUTHORIZED,
+    });
+    const authorizationRecord = {
+      ...authorization,
+      authorizationSha256: objectSha256(authorization),
+    };
+    await persistJson(artifactStore, scope, recoveryName(normalizedId), authorizationRecord);
+    return Object.freeze(authorizationRecord);
+  }
+
+  function effectiveReservations(existing) {
+    const superseded = new Set(
+      existing.filter((entry) => entry.recoveryOfReservationId).map((entry) => entry.recoveryOfReservationId),
+    );
+    return existing.filter((entry) => !superseded.has(entry.reservationId));
+  }
+
   async function reserveCall({
     scope,
     role,
@@ -983,6 +1073,7 @@ export function createNarrativeV2LiveBinding({
     try {
       const existing =
         await existingReservations(scope);
+      const logical = effectiveReservations(existing);
 
       if (
         passNumber <=
@@ -1047,27 +1138,36 @@ export function createNarrativeV2LiveBinding({
           : null;
         const validRecovery =
           recovery.state === NARRATIVE_V2_CALL_STATE.RECOVERY_AUTHORIZED &&
-          recovery.authorizedRecoveryAction === NARRATIVE_V2_RECOVERY_ACTION &&
+          [NARRATIVE_V2_RECOVERY_ACTION, NARRATIVE_V2_VALIDATION_RECOVERY_ACTION].includes(recovery.authorizedRecoveryAction) &&
           recovery.maxAdditionalCallCount === 1 &&
           recovery.auditId === scope.auditId &&
-          recovery.executionId === scope.executionId &&
           recovery.role === role &&
           recovery.passNumber === passNumber &&
           original &&
-          transport?.state === NARRATIVE_V2_CALL_STATE.TRANSPORT_OUTCOME_UNCERTAIN &&
           existing.filter((entry) => entry.recoveryOfReservationId === recovery.originalReservationId).length === 0 &&
           recovery.originalModelId === modelId &&
           recovery.originalRequestSha256 === sha256(prompt) &&
           recovery.originalWriterInputSha256 === writerInputSha256 &&
           recovery.judgeRevisionSha256 === objectSha256(previousJudgeResponse || null);
+        const transportRecoveryValid =
+          validRecovery
+          && recovery.authorizedRecoveryAction === NARRATIVE_V2_RECOVERY_ACTION
+          && recovery.executionId === scope.executionId
+          && transport?.state === NARRATIVE_V2_CALL_STATE.TRANSPORT_OUTCOME_UNCERTAIN;
+        const validationRecoveryValid =
+          validRecovery
+          && recovery.authorizedRecoveryAction === NARRATIVE_V2_VALIDATION_RECOVERY_ACTION
+          && recovery.originalExecutionId === original?.executionId;
         const authenticatedRecovery =
-          validRecovery &&
+          (transportRecoveryValid || validationRecoveryValid) &&
           durableAuthorization &&
           durableAuthorization.authorizationSha256 === durableAuthorizationHash &&
           durableAuthorization.authorizationSha256 === recovery.authorizationSha256 &&
           durableAuthorization.authorizationId === recovery.authorizationId &&
           durableAuthorization.auditId === scope.auditId &&
-          durableAuthorization.executionId === scope.executionId &&
+          (recovery.authorizedRecoveryAction === NARRATIVE_V2_VALIDATION_RECOVERY_ACTION
+            ? durableAuthorization.executionId === recovery.executionId
+            : durableAuthorization.executionId === scope.executionId) &&
           durableAuthorization.originalReservationId === recovery.originalReservationId;
         if (!authenticatedRecovery) {
           throw new Error("Narrative v2 recovery authorization identity or lineage mismatch");
@@ -1076,7 +1176,7 @@ export function createNarrativeV2LiveBinding({
         role === "writer" &&
         passNumber === 1
       ) {
-        if (existing.length !== 0) {
+        if (logical.length !== 0) {
           throw new Error(
             "Narrative v2 live sequence requires Writer pass 1 as call 1",
           );
@@ -1086,10 +1186,10 @@ export function createNarrativeV2LiveBinding({
         passNumber === 1
       ) {
         if (
-          existing.length !== 1 ||
-          existing[0].role !==
+          logical.length !== 1 ||
+          logical[0].role !==
             "writer" ||
-          existing[0].passNumber !== 1
+          logical[0].passNumber !== 1
         ) {
           throw new Error(
             "Narrative v2 live sequence requires Judge pass 1 as call 2 after Writer pass 1",
@@ -1098,7 +1198,7 @@ export function createNarrativeV2LiveBinding({
 
         await requireValidatedResult(
           scope,
-          existing[0],
+          logical[0],
           "Judge pass 1",
         );
       } else if (
@@ -1106,13 +1206,13 @@ export function createNarrativeV2LiveBinding({
         passNumber === 2
       ) {
         const ordered =
-          existing.length === 2 &&
-          existing[0].role ===
+          logical.length === 2 &&
+          logical[0].role ===
             "writer" &&
-          existing[0].passNumber === 1 &&
-          existing[1].role ===
+          logical[0].passNumber === 1 &&
+          logical[1].role ===
             "judge" &&
-          existing[1].passNumber === 1;
+          logical[1].passNumber === 1;
 
         if (!ordered) {
           throw new Error(
@@ -1122,7 +1222,7 @@ export function createNarrativeV2LiveBinding({
 
         await requireValidatedResult(
           scope,
-          existing[1],
+          logical[1],
           "Writer pass 2",
         );
 
@@ -1145,16 +1245,16 @@ export function createNarrativeV2LiveBinding({
         passNumber === 2
       ) {
         const ordered =
-          existing.length === 3 &&
-          existing[0].role ===
+          logical.length === 3 &&
+          logical[0].role ===
             "writer" &&
-          existing[0].passNumber === 1 &&
-          existing[1].role ===
+          logical[0].passNumber === 1 &&
+          logical[1].role ===
             "judge" &&
-          existing[1].passNumber === 1 &&
-          existing[2].role ===
+          logical[1].passNumber === 1 &&
+          logical[2].role ===
             "writer" &&
-          existing[2].passNumber === 2;
+          logical[2].passNumber === 2;
 
         if (!ordered) {
           throw new Error(
@@ -1164,7 +1264,7 @@ export function createNarrativeV2LiveBinding({
 
         await requireValidatedResult(
           scope,
-          existing[2],
+          logical[2],
           "Judge pass 2",
         );
       } else if (
@@ -1172,19 +1272,19 @@ export function createNarrativeV2LiveBinding({
         passNumber === 3
       ) {
         const ordered =
-          existing.length === 4 &&
-          existing[0].role ===
+          logical.length === 4 &&
+          logical[0].role ===
             "writer" &&
-          existing[0].passNumber === 1 &&
-          existing[1].role ===
+          logical[0].passNumber === 1 &&
+          logical[1].role ===
             "judge" &&
-          existing[1].passNumber === 1 &&
-          existing[2].role ===
+          logical[1].passNumber === 1 &&
+          logical[2].role ===
             "writer" &&
-          existing[2].passNumber === 2 &&
-          existing[3].role ===
+          logical[2].passNumber === 2 &&
+          logical[3].role ===
             "judge" &&
-          existing[3].passNumber === 2;
+          logical[3].passNumber === 2;
 
         if (!ordered) {
           throw new Error(
@@ -1194,7 +1294,7 @@ export function createNarrativeV2LiveBinding({
 
         await requireValidatedResult(
           scope,
-          existing[3],
+          logical[3],
           "Writer pass 3",
         );
 
@@ -1228,22 +1328,22 @@ export function createNarrativeV2LiveBinding({
         passNumber === 3
       ) {
         const ordered =
-          existing.length === 5 &&
-          existing[0].role ===
+          logical.length === 5 &&
+          logical[0].role ===
             "writer" &&
-          existing[0].passNumber === 1 &&
-          existing[1].role ===
+          logical[0].passNumber === 1 &&
+          logical[1].role ===
             "judge" &&
-          existing[1].passNumber === 1 &&
-          existing[2].role ===
+          logical[1].passNumber === 1 &&
+          logical[2].role ===
             "writer" &&
-          existing[2].passNumber === 2 &&
-          existing[3].role ===
+          logical[2].passNumber === 2 &&
+          logical[3].role ===
             "judge" &&
-          existing[3].passNumber === 2 &&
-          existing[4].role ===
+          logical[3].passNumber === 2 &&
+          logical[4].role ===
             "writer" &&
-          existing[4].passNumber === 3;
+          logical[4].passNumber === 3;
 
         if (!ordered) {
           throw new Error(
@@ -1253,7 +1353,7 @@ export function createNarrativeV2LiveBinding({
 
         await requireValidatedResult(
           scope,
-          existing[4],
+          logical[4],
           "Judge pass 3",
         );
 
@@ -2445,6 +2545,8 @@ export function createNarrativeV2LiveBinding({
     resumePersistedCall,
 
     authorizeTransportRecovery,
+
+    authorizePersistedValidationRecovery,
 
     authorizeFinalPass,
 

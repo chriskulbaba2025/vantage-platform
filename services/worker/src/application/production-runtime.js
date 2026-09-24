@@ -412,7 +412,7 @@ export function createProductionRuntime({
 
   const RESUMABLE_STATES = new Set([T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY]);
 
-  async function resumeAudit(auditId, tenantId) {
+  async function resumeAudit(auditId, tenantId, resumeAuthorization = {}) {
     const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
     if (!meta) return null;
     const current = await lifecycleService.currentState(auditId, tenantId);
@@ -456,7 +456,29 @@ export function createProductionRuntime({
       narrativeV2Deps.registerAuditScope({ tenantId, clientId, auditId, executionId });
     }
 
-    let result = await orchestrator.execute(auditRequest, { executionId });
+    let recoveryAuthorization = null;
+    if (
+      current.state === T.NARRATIVE_FAILED
+      && typeof narrativeV2Deps.authorizePersistedValidationRecovery === "function"
+    ) {
+      recoveryAuthorization = await narrativeV2Deps.authorizePersistedValidationRecovery({
+        auditId,
+        executionId,
+        role: "writer",
+        passNumber: 1,
+        humanAuthorizationId: `narrative-resume:${auditId}:${executionId}`,
+        humanAuthorizationReference:
+          resumeAuthorization.reference || "authenticated-audit-resume",
+        humanAuthorizationIdentity:
+          resumeAuthorization.identity || `tenant:${tenantId}`,
+        authorizedAt: new Date().toISOString(),
+      });
+    }
+
+    let result = await orchestrator.execute(auditRequest, {
+      executionId,
+      recoveryAuthorization,
+    });
     let previousState = null;
     for (let step = 0; step < 4; step++) {
       if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;

@@ -318,6 +318,10 @@ test("CONTRACT-CLOSURE-02: Writer strict schema binds ordinary atoms to exact re
   const ajv = new Ajv({ allErrors: true, strict: false });
   const validate = ajv.compile(schema);
   const valid = rawWriterOutput();
+  // The strict generation contract now requires unique evidence references.
+  // The duplicate fixture remains intentionally covered by normalization and
+  // fail-closed validation tests below.
+  valid.limitations[0].whatThisMeans.evidenceRefs = [CAP_REF];
   assert.equal(validate(valid), true, JSON.stringify(validate.errors));
   valid.content.coverageAssessment.evidenceRefs = ["scoreGovernance:notCanonical"];
   assert.equal(validate(valid), false);
