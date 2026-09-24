@@ -48,6 +48,7 @@ export default function AuditReviewActions({
   const [narrativeReview, setNarrativeReview] =
     useState<NarrativeReview | null>(null);
   const [narrativeReviewLoading, setNarrativeReviewLoading] = useState(false);
+  const [narrativeReviewError, setNarrativeReviewError] = useState("");
 
   useEffect(() => {
     if (!ACTIVE_STATES.has(state)) return;
@@ -63,6 +64,7 @@ export default function AuditReviewActions({
   useEffect(() => {
     if (state !== "narrative_failed" || isPreparationFailure) {
       setNarrativeReview(null);
+      setNarrativeReviewError("");
       return;
     }
 
@@ -91,13 +93,13 @@ export default function AuditReviewActions({
 
         if (!cancelled) {
           setNarrativeReview(data);
+          setNarrativeReviewError("");
         }
       } catch (e) {
         if (!cancelled) {
-          setError(
-            e instanceof Error
-              ? e.message
-              : "Failed to load Narrative v2 human review",
+          setNarrativeReview(null);
+          setNarrativeReviewError(
+            "Governed Judge review is unavailable. Report preparation failed and needs recovery; no final narrative pass is authorized.",
           );
         }
       } finally {
@@ -283,23 +285,27 @@ export default function AuditReviewActions({
   }
 
   if (state === "narrative_failed") {
+    const hasJudgeReview = Boolean(narrativeReview);
     return (
       <div className="card" style={{ borderColor: "var(--amber)" }}>
         <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>
-          Narrative review required
+          {hasJudgeReview ? "Narrative review required" : "Narrative processing failed"}
         </h2>
 
         <p style={{ marginTop: 0, marginBottom: 16 }}>
-          The report passed evidence collection and scoring, but the Narrative
-          v2 Judge did not authorize client release within the automatic
-          revision limit. Review the governed Judge result below before
-          authorizing the single final revision pass.
+          {hasJudgeReview
+            ? "The report passed evidence collection and scoring, but the Narrative v2 Judge did not authorize client release within the automatic revision limit. Review the governed Judge result below before authorizing the single final revision pass."
+            : "The report passed evidence collection and scoring, but Narrative v2 report preparation did not produce a governed Judge review. The collected evidence and scores are preserved; no final narrative pass is available from this state."}
         </p>
 
         {narrativeReviewLoading && (
           <p style={{ marginBottom: 16 }}>
             Loading governed Judge review...
           </p>
+        )}
+
+        {!narrativeReviewLoading && narrativeReviewError && (
+          <p className="form-error">{narrativeReviewError}</p>
         )}
 
         {narrativeReview && (
@@ -331,7 +337,7 @@ export default function AuditReviewActions({
         <button
           className="btn btn-primary"
           type="button"
-          disabled={busy || narrativeReviewLoading || !narrativeReview}
+          disabled={busy || narrativeReviewLoading || !hasJudgeReview}
           onClick={authorizeNarrativeFinalPass}
         >
           {busy

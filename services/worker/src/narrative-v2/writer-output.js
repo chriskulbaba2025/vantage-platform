@@ -410,7 +410,7 @@ export function validateWriterSemanticFidelity(
     /\b(?:confirm|confirms|confirmed|confirming|establish|establishes|established|establishing|prove|proves|proved|proven|proving|demonstrate|demonstrates|demonstrated|demonstrating|show|shows|showed|shown|showing)\b/i;
 
   const nonEstablishmentOutcomePattern =
-    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|cannot|can't|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\bneither\b[^.!?]{0,120}\b(?:establish(?:es|ed|ing)?|measur(?:es|ed|ing)?|collect(?:s|ed|ing)?|confirm(?:s|ed|ing)?|prov(?:es|ed|en|ing))\b|\bnot\s+(?:measured|collected|established|confirmed|proven)\b|\bwithout\s+(?:establish(?:ed|ing)?|demonstrat(?:e|ed|es|ing)?|prov(?:e|ed|en|ing))\b)/i;
+    /\b(?:no\b[^.!?]{0,160}\b(?:outcome|conclusion|result|effect|impact)\b[^.!?]{0,80}\b(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))\b|(?:do|does|did|has|have|can|was|were|is|are)\s+not\s+(?:establish(?:ed|ing)?|measur(?:ed|e|ing)?|collect(?:ed|ion|ing)?|confirm(?:ed|ing)?|prov(?:e|ed|en))|\b(?:cannot|can't)\s+establish\b|\b(?:does|do|did)\s+not\s+(?:show|demonstrate|indicate)\s+whether\b|\bneither\b[^.!?]{0,120}\b(?:establish(?:es|ed|ing)?|measur(?:es|ed|ing)?|collect(?:s|ed|ing)?|confirm(?:s|ed|ing)?|prov(?:es|ed|en|ing))\b|\bnot\s+(?:measured|collected|established|confirmed|proven)\b|\bwithout\s+(?:establish(?:ed|ing)?|demonstrat(?:e|ed|es|ing)?|prov(?:e|ed|en|ing))\b|\bnot\s+assessed(?:\s+sufficiently)?\s+to\s+establish\b|\bnot\s+sufficiently\s+assessed\s+to\s+establish\b|\binsufficiently\s+assessed\s+to\s+establish\b|\binsufficient\s+(?:evidence\s+)?to\s+establish\b|\b(?:the\s+)?(?:available\s+)?evidence\s+is\s+insufficient\s+to\s+establish\b)/i;
 
   const observedConversionActionPattern =
     /\b(?:conversion[-\s]+)?(?:action|path|route|cta|form)s?\b/i;
@@ -558,7 +558,7 @@ export function validateWriterSemanticFidelity(
         );
 
       return (
-        (hasCausalCertainty && !isBounded) ||
+        (hasCausalCertainty && !isBounded && !isExplicitlyNonEstablishing) ||
         (hasEstablishedOutcome && !isExplicitlyNonEstablishing && !isBounded && !isObservedConversionAction)
       );
     };

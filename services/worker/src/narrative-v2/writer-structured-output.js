@@ -36,8 +36,17 @@ function nonEmptyString(maxChars = null) {
 function boundedWords(maxWords) {
   // Same whitespace-delimited word model used by validateWriterOutput().
   return {
-    type: "string",
-    pattern: `^\\s*\\S+(?:\\s+\\S+){0,${maxWords - 1}}\\s*$`,
+    allOf: [
+      {
+        type: "string",
+        pattern: `^\\s*\\S+(?:\\s+\\S+){0,${maxWords - 1}}\\s*$`,
+      },
+      {
+        not: {
+          pattern: "(?:https?://|```|^\\s{0,3}#{1,6}\\s|\\[[^\\]]+\\]\\([^\\)]+\\)|</?(?:html|body|head|div|style|script|section|article|table|p|h[1-6])\\b)",
+        },
+      },
+    ],
   };
 }
 
@@ -46,6 +55,7 @@ function evidenceRefArray(allowedRefs = null) {
     type: "array",
     minItems: 1,
     maxItems: MAX_REFS_PER_ATOM,
+    uniqueItems: true,
     items: Array.isArray(allowedRefs) && allowedRefs.length > 0
       ? { type: "string", enum: allowedRefs }
       : { $ref: "#/$defs/evidenceRef" },
