@@ -684,6 +684,8 @@ function buildNotAssessedModel(
       consideration: null,
       decision: null,
       aiReadiness: null,
+      technicalPerformanceDimension:
+        perfScore,
     },
 
     bands: {

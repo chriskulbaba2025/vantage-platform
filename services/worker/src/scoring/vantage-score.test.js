@@ -573,6 +573,7 @@ test("no-crawl fallback preserves independent performance evidence through repor
 
   assert.equal(model.evidence.performance.sourceStatus, "AVAILABLE");
   assert.equal(model.scores.performance, 76);
+  assert.equal(model.scores.technicalPerformanceDimension, 76);
   assert.equal(model.moduleEligibility.performance, true);
 
   const html = await renderReport(model);
