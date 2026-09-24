@@ -38,6 +38,9 @@ import {
 } from "../solution/solution-authority-provider.js";
 import { buildSolutionDirectiveInput } from "../solution/solution-directive-authority.js";
 import { generateCanonicalSolutions } from "../solution/solution-generator.js";
+import {
+  classifyNarrativeFailureRecovery as classifyFailureRecovery,
+} from "./failure-recovery.js";
 
 const T = LIFECYCLE_STATE;
 const NARRATIVE_V2_VERSION = "2.0.0";
@@ -142,6 +145,30 @@ async function loadJsonArtifact({ artifactStore, auditRequest, artifactName }) {
   }
   if (!bytes) return null;
   return JSON.parse(Buffer.from(bytes).toString("utf8"));
+}
+
+async function loadRecoveryArtifact({ artifactStore, auditRequest, artifactName }) {
+  const key = buildArtifactKey({
+    ...scopeFor(auditRequest),
+    category: "report-v2",
+    artifactName,
+  });
+  let bytes;
+  try {
+    bytes = await artifactStore.get(key);
+  } catch {
+    return { present: false, value: null, malformed: false };
+  }
+  if (!bytes) return { present: false, value: null, malformed: false };
+  try {
+    return {
+      present: true,
+      value: JSON.parse(Buffer.from(bytes).toString("utf8")),
+      malformed: false,
+    };
+  } catch {
+    return { present: true, value: null, malformed: true };
+  }
 }
 
 async function loadEffectiveOrchestrationResult({
@@ -1578,16 +1605,20 @@ export function createNarrativeV2ProductionPath({
         : [];
       const lastEvent = history?.[history.length - 1];
 
-      // Only deterministic preparation failures may be resumed through the
-      // generic recovery path. Human-review-required Narrative failures remain
-      // behind their explicit final-pass authorization boundary.
-      if (lastEvent?.reason === NARRATIVE_V2_PREPARATION_FAILURE_REASON) {
+      const recovery = await classifyNarrativeFailureRecovery(
+        auditRequest,
+        lastEvent?.reason,
+      );
+
+      if (recovery.classification === "STANDARD_RETRY_ELIGIBLE") {
         await transition({
           lifecycleService,
           auditRequest,
           executionId,
           toState: T.NARRATIVE_PENDING,
-          reason: "narrative-v2-preparation-recovery",
+          reason: lastEvent?.reason === NARRATIVE_V2_PREPARATION_FAILURE_REASON
+            ? "narrative-v2-preparation-recovery"
+            : "narrative-v2-execution-recovery",
         });
         return runNarrativeV2FromPending({
           auditRequest,
@@ -1663,7 +1694,7 @@ export function createNarrativeV2ProductionPath({
     return baseOrchestrator.execute(auditRequest, opts);
   }
 
-    async function getNarrativeV2HumanReview(auditRequest) {
+  async function getNarrativeV2HumanReview(auditRequest) {
     if (!isNarrativeV2Request(auditRequest)) {
       throw new Error(
         "Narrative v2 human review requires a Narrative v2 audit",
@@ -1696,6 +1727,57 @@ export function createNarrativeV2ProductionPath({
     return buildHumanReviewSummary({
       auditRequest,
       orchestrationResult,
+    });
+  }
+
+  async function classifyNarrativeFailureRecovery(auditRequest, failureReason) {
+    const writerInputArtifact = await loadRecoveryArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName: "narrative-v2/writer-input.json",
+    });
+    const orchestrationArtifact = await loadRecoveryArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName: "narrative-v2/orchestration.json",
+    });
+    const finalPassArtifact = await loadRecoveryArtifact({
+      artifactStore,
+      auditRequest,
+      artifactName: FINAL_PASS_ORCHESTRATION_ARTIFACT,
+    });
+
+    let scoredInputsAvailable = false;
+    try {
+      await loadScoredInputs({
+        artifactStore,
+        auditRequest,
+        validateContract,
+      });
+      scoredInputsAvailable = true;
+    } catch {
+      scoredInputsAvailable = false;
+    }
+
+    const validOrchestration =
+      orchestrationArtifact.present
+      && !orchestrationArtifact.malformed
+      && writerInputArtifact.present
+      && !writerInputArtifact.malformed
+      && validatePersistedHumanReviewContinuation(
+        writerInputArtifact.value,
+        orchestrationArtifact.value,
+      ).valid;
+
+    return classifyFailureRecovery({
+      auditRequest,
+      failureReason,
+      scoredInputsAvailable,
+      orchestration: validOrchestration ? orchestrationArtifact.value : null,
+      orchestrationMalformed:
+        orchestrationArtifact.malformed
+        || (orchestrationArtifact.present && !validOrchestration),
+      finalPassArtifactPresent: finalPassArtifact.present,
     });
   }
 
@@ -1855,6 +1937,7 @@ export function createNarrativeV2ProductionPath({
   return Object.freeze({
     execute,
     getNarrativeV2HumanReview,
+    classifyNarrativeFailureRecovery,
     continueNarrativeV2FinalPass,
   });
 }

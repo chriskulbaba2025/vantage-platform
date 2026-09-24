@@ -23,7 +23,6 @@ import {
   createProductionAdapters,
   createProductionContractValidator,
 } from "./production-bootstrap.js";
-import { NARRATIVE_V2_PREPARATION_FAILURE_REASON } from "../narrative-v2/production-path.js";
 
 const T = LIFECYCLE_STATE;
 const AUDIT_REQUEST_SCHEMA = "https://vantage-platform.io/prysm/contracts/v1/audit-request.schema.json";
@@ -420,9 +419,7 @@ export function createProductionRuntime({
     const history = typeof lifecycleService.history === "function"
       ? await lifecycleService.history(auditId, tenantId)
       : [];
-    const preparationFailure = current?.state === T.NARRATIVE_FAILED
-      && history?.[history.length - 1]?.reason === NARRATIVE_V2_PREPARATION_FAILURE_REASON;
-    if (!current || (!RESUMABLE_STATES.has(current.state) && !preparationFailure)) {
+    if (!current || (!RESUMABLE_STATES.has(current.state) && current.state !== T.NARRATIVE_FAILED)) {
       return current?.state || null;
     }
 
@@ -439,6 +436,20 @@ export function createProductionRuntime({
       throw new Error(
         `Cannot resume audit ${auditId}: persisted AuditRequest not found (durable record required)`,
       );
+    }
+
+    if (current.state === T.NARRATIVE_FAILED) {
+      const recovery = await orchestrator.classifyNarrativeFailureRecovery(
+        auditRequest,
+        history?.[history.length - 1]?.reason,
+      );
+      if (recovery.classification !== "STANDARD_RETRY_ELIGIBLE") {
+        return {
+          finalState: current.state,
+          recoveryClassification: recovery.classification,
+          recoveryReason: recovery.reason,
+        };
+      }
     }
 
     if (typeof narrativeV2Deps.registerAuditScope === "function") {

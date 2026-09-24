@@ -1565,6 +1565,51 @@ test("PRYSM-MVP-RELIABILITY-01: scored preparation failure is durable, non-runni
   );
 });
 
+test("PRYSM-MVP-RELIABILITY-01B: Writer execution failure before Judge review is retryable", async () => {
+  let failWriter = true;
+  let writerCalls = 0;
+  let judgeCalls = 0;
+
+  const { runtime } = buildRuntime({
+    narrativeV2: {
+      enabled: true,
+      writerExecutor: async ({ writerInput, passNumber }) => {
+        writerCalls += 1;
+        if (failWriter) throw new Error("Writer execution failed on pass 1");
+        return buildPassingWriterOutput({ writerInput, passNumber });
+      },
+      judgeExecutor: async ({ writerInput, passNumber }) => {
+        judgeCalls += 1;
+        return buildPassingJudgeResponse({ writerInput, passNumber });
+      },
+    },
+  });
+
+  const created = await runtime.auditService.createAudit({
+    ...baseInput(),
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  }, tenantId);
+
+  const failed = await waitForState(runtime, created.auditId, [T.NARRATIVE_FAILED]);
+  assert.equal(failed.state, T.NARRATIVE_FAILED);
+  const history = await runtime.lifecycleService.history(created.auditId, tenantId);
+  assert.match(history.at(-1).reason, /^narrative-v2-execution-failed:/);
+  assert.equal(writerCalls, 1);
+  assert.equal(judgeCalls, 0);
+
+  failWriter = false;
+  const resumed = await runtime.auditService.resumeAudit(created.auditId, tenantId);
+  assert.equal(resumed.finalState, T.DRAFT_RENDERED);
+  assert.equal(writerCalls, 2, "retry performs a fresh governed Writer attempt");
+  assert.equal(judgeCalls, 1);
+
+  const completedHistory = await runtime.lifecycleService.history(created.auditId, tenantId);
+  assert.deepEqual(
+    completedHistory.map((event) => event.nextState).slice(-4),
+    [T.NARRATIVE_FAILED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.DRAFT_RENDERED],
+  );
+});
+
 test("PRYSM-MVP-RELIABILITY-02: missing raw provider ref binds findings to canonical DecisionEvidence", async () => {
   const adapters = workingAdapters();
   const originalOnPageExecute = adapters["dataforseo-onpage"].execute;

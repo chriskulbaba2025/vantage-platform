@@ -57,12 +57,13 @@ export default function AuditReviewActions({
     return () => window.clearInterval(timer);
   }, [router, state]);
 
-  const isPreparationFailure =
+  const isStandardNarrativeRetry =
     state === "narrative_failed" &&
-    lifecycleReason === "narrative-v2-preparation-failed";
+    (lifecycleReason === "narrative-v2-preparation-failed" ||
+      lifecycleReason?.startsWith("narrative-v2-execution-failed:"));
 
   useEffect(() => {
-    if (state !== "narrative_failed" || isPreparationFailure) {
+    if (state !== "narrative_failed" || isStandardNarrativeRetry) {
       setNarrativeReview(null);
       setNarrativeReviewError("");
       return;
@@ -114,7 +115,7 @@ export default function AuditReviewActions({
     return () => {
       cancelled = true;
     };
-  }, [auditId, state, isPreparationFailure]);
+  }, [auditId, state, isStandardNarrativeRetry]);
 
   async function resumePreparation() {
     setError("");
@@ -266,7 +267,7 @@ export default function AuditReviewActions({
     );
   }
 
-  if (isPreparationFailure) {
+  if (isStandardNarrativeRetry) {
     return (
       <div className="card" style={{ borderColor: "var(--amber)" }}>
         <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>
@@ -274,11 +275,12 @@ export default function AuditReviewActions({
         </h2>
         <p style={{ marginTop: 0, marginBottom: 16 }}>
           Prysm could not complete report preparation. Your collected evidence
-          and scores are preserved; no new collection or scoring is required.
+          and scores are preserved; retrying report preparation does not rerun
+          the website audit.
         </p>
         {error && <p className="form-error">{error}</p>}
         <button className="btn btn-primary" type="button" disabled={busy} onClick={resumePreparation}>
-          {busy ? "Recovering Report..." : "Resume Report Preparation"}
+          {busy ? "Retrying Report Preparation..." : "Retry Report Preparation"}
         </button>
       </div>
     );
