@@ -1,4 +1,5 @@
 import { buildEncyclopediaProjection } from "../encyclopedia/index.js";
+import { buildSemanticLedger } from "../report-intelligence/semantic-ledger.js";
 
 /**
  * Canonical current report-model hydration boundary.
@@ -66,5 +67,11 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
     contentIdeas: scoreSet.contentIdeas,
     competitors: scoreSet.competitors,
     crossReportInterpretation: scoreSet.crossReportInterpretation,
+    semanticLedger: buildSemanticLedger({
+      scoreSet,
+      findings,
+      decisionEvidence,
+      contentIdeas: scoreSet.contentIdeas,
+    }),
   };
 }

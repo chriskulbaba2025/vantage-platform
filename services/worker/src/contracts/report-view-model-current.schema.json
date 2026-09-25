@@ -7,7 +7,7 @@
   "version": "2.0.0",
   "contractVersion": "2.0.0",
   "additionalProperties": false,
-  "required": ["contractVersion","reportVersion","reportDesignVersion","generatedAt","input","scores","bands","assessedWeight","readinessStatus","showNumericScore","evidenceConfidenceScore","rootCause","rootCauseRuleId","decisionHierarchy","findings","conversionPaths","readinessMap","contentIdeas","competitors","crossReportInterpretation","sourceStatus","limitations","evidence","capabilityEvidence","narrative","gate"],
+  "required": ["contractVersion","reportVersion","reportDesignVersion","generatedAt","input","scores","bands","assessedWeight","readinessStatus","showNumericScore","evidenceConfidenceScore","rootCause","rootCauseRuleId","decisionHierarchy","findings","conversionPaths","readinessMap","contentIdeas","competitors","crossReportInterpretation","semanticLedger","sourceStatus","limitations","evidence","capabilityEvidence","narrative","gate"],
   "properties": {
     "contractVersion": { "const": "2.0.0" },
     "reportVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
@@ -31,6 +31,7 @@
     },
     "competitors": { "type": "object" },
     "crossReportInterpretation": { "type": "object", "required": ["version","constructs"], "additionalProperties": true },
+    "semanticLedger": { "type": "object", "required": ["version","evidenceAuthority","dimensions","concepts","contentOpportunities","contradictions","usefulness","routing","provenance"], "additionalProperties": true },
     "encyclopedia": { "type": "object", "required": ["projectionVersion","status","projections","relationships","priorityUnits"], "properties": { "projectionVersion": { "type": "string" }, "status": { "type": "string", "enum": ["AVAILABLE","NOT_AVAILABLE"] }, "projections": { "type": "array" }, "relationships": { "type": "array" }, "priorityUnits": { "type": "array", "maxItems": 5 }, "limitations": { "type": "array" } }, "additionalProperties": true },
     "sourceStatus": { "type": "object" },
     "limitations": { "type": "array" },

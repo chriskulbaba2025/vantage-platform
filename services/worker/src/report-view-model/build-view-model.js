@@ -285,6 +285,7 @@ export function buildReportViewModel({
       },
     },
     ...(current ? { crossReportInterpretation: current.crossReportInterpretation } : {}),
+    ...(current ? { semanticLedger: current.semanticLedger } : {}),
     ...(current ? { encyclopedia: current.encyclopedia } : {}),
     // Source status
     sourceStatus: {

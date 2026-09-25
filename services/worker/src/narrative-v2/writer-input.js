@@ -12,6 +12,7 @@
 import { buildWriterBusinessContext } from "./writer-business-context.js";
 import { buildWriterScoreContext } from "./writer-scores.js";
 import { buildWriterFindings } from "./writer-findings.js";
+import { buildSemanticLedger } from "../report-intelligence/semantic-ledger.js";
 
 export const WRITER_INPUT_VERSION = "1.2.0";
 
@@ -789,6 +790,13 @@ export function buildWriterInput({
       scoreSet,
       DETERMINISTIC_ANALYSIS_FIELDS,
     );
+
+  deterministicAnalysis.semanticLedger = buildSemanticLedger({
+    scoreSet,
+    findings,
+    decisionEvidence,
+    contentIdeas: scoreSet.contentIdeas,
+  });
 
   deterministicAnalysis.conversionInfluence =
     buildWriterConversionInfluence(
