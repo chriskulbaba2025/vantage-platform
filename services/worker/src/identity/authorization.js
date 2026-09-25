@@ -17,11 +17,26 @@
  * @module identity/authorization
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { ROLES } from "./identity-model.js";
 
 const PRINCIPAL_HEADER = "x-prysm-principal";
 const SELECTED_TENANT_HEADER = "x-prysm-tenant";
+
+function principalFingerprint(sub) {
+  return createHash("sha256").update(String(sub)).digest("hex").slice(0, 16);
+}
+
+/** Safe operational evidence for the governed auth boundary.  Values are
+ * structural only; raw tokens, cookies, secrets, and credentials never enter
+ * this record. */
+function emitAuthorizationDiagnostic(req, fields) {
+  console.info(JSON.stringify({
+    event: "prysm_authorization_diagnostic",
+    route: typeof req?.url === "string" ? req.url.split("?", 1)[0] : "unknown",
+    ...fields,
+  }));
+}
 
 /** Maximum principal token age (seconds). */
 const PRINCIPAL_MAX_AGE_S = 60;
@@ -96,26 +111,76 @@ export function verifyPrincipal({ secret, token, nowMs }) {
  */
 export async function resolveAuthorization({ req, secret, identityRepo, nowMs }) {
   const token = req.headers[PRINCIPAL_HEADER];
+  const principalHeaderPresent = typeof token === "string";
+  const tokenFormatValid = principalHeaderPresent && token.lastIndexOf(".") > 0;
   const selectedTenant = typeof req.headers[SELECTED_TENANT_HEADER] === "string"
     ? req.headers[SELECTED_TENANT_HEADER].trim()
     : null;
 
   const principal = verifyPrincipal({ secret, token, nowMs });
   if (!principal) {
+    emitAuthorizationDiagnostic(req, {
+      authStage: "principal_verification",
+      authReason: "invalid or expired principal token",
+      principalHeaderPresent,
+      principalTokenFormatValid: tokenFormatValid,
+      principalVerificationPassed: false,
+      finalAllow: false,
+      httpStatus: 401,
+    });
     return { authenticated: false, reason: "invalid or expired principal token" };
   }
 
   const user = await identityRepo.findUserByCognitoSub(principal.sub);
   if (!user) {
+    emitAuthorizationDiagnostic(req, {
+      authStage: "user_lookup",
+      authReason: "no Prysm user for authenticated principal",
+      principalHeaderPresent,
+      principalTokenFormatValid: tokenFormatValid,
+      principalVerificationPassed: true,
+      principalSubFingerprint: principalFingerprint(principal.sub),
+      userLookupFound: false,
+      finalAllow: false,
+      httpStatus: 401,
+    });
     return { authenticated: false, reason: "no Prysm user for authenticated principal" };
   }
   if (user.status !== "active") {
+    emitAuthorizationDiagnostic(req, {
+      authStage: "user_status",
+      authReason: "user disabled",
+      principalHeaderPresent,
+      principalTokenFormatValid: tokenFormatValid,
+      principalVerificationPassed: true,
+      principalSubFingerprint: principalFingerprint(principal.sub),
+      userLookupFound: true,
+      userStatus: user.status,
+      finalAllow: false,
+      httpStatus: 401,
+    });
     return { authenticated: false, reason: "user disabled" };
   }
 
   const membershipRows = await identityRepo.findMembershipsForUser(user.id);
   const activeMemberships = membershipRows.filter((m) => m.status === "active");
   if (activeMemberships.length === 0) {
+    emitAuthorizationDiagnostic(req, {
+      authStage: "membership_lookup",
+      authReason: "no active tenant membership",
+      principalHeaderPresent,
+      principalTokenFormatValid: tokenFormatValid,
+      principalVerificationPassed: true,
+      principalSubFingerprint: principalFingerprint(principal.sub),
+      userLookupFound: true,
+      userStatus: user.status,
+      membershipCount: membershipRows.length,
+      activeMembershipCount: 0,
+      membershipTenantIds: [],
+      selectedTenant,
+      finalAllow: false,
+      httpStatus: 401,
+    });
     return { authenticated: false, reason: "no active tenant membership" };
   }
 
@@ -128,6 +193,24 @@ export async function resolveAuthorization({ req, secret, identityRepo, nowMs })
   if (selectedTenant) {
     const belongs = activeMemberships.some((m) => m.tenant_id === selectedTenant);
     if (!belongs && !isPlatformAdmin) {
+      emitAuthorizationDiagnostic(req, {
+        authStage: "tenant_selection",
+        authReason: "selected tenant not authorized",
+        principalHeaderPresent,
+        principalTokenFormatValid: tokenFormatValid,
+        principalVerificationPassed: true,
+        principalSubFingerprint: principalFingerprint(principal.sub),
+        userLookupFound: true,
+        userStatus: user.status,
+        membershipCount: membershipRows.length,
+        activeMembershipCount: activeMemberships.length,
+        membershipTenantIds: activeMemberships.map((m) => m.tenant_id),
+        selectedTenant,
+        selectedTenantAuthorized: false,
+        roles,
+        finalAllow: false,
+        httpStatus: 401,
+      });
       return { authenticated: false, reason: "selected tenant not authorized" };
     }
     authorizedTenant = selectedTenant;
@@ -135,6 +218,25 @@ export async function resolveAuthorization({ req, secret, identityRepo, nowMs })
     authorizedTenant = activeMemberships[0].tenant_id;
   }
   // Multiple memberships without an explicit selection → caller must select.
+
+  emitAuthorizationDiagnostic(req, {
+    authStage: "authorization_complete",
+    authReason: "authorized",
+    principalHeaderPresent,
+    principalTokenFormatValid: tokenFormatValid,
+    principalVerificationPassed: true,
+    principalSubFingerprint: principalFingerprint(principal.sub),
+    userLookupFound: true,
+    userStatus: user.status,
+    membershipCount: membershipRows.length,
+    activeMembershipCount: activeMemberships.length,
+    membershipTenantIds: activeMemberships.map((m) => m.tenant_id),
+    selectedTenant,
+    selectedTenantAuthorized: Boolean(authorizedTenant),
+    roles,
+    finalAllow: true,
+    httpStatus: 200,
+  });
 
   return {
     authenticated: true,
