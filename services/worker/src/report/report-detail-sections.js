@@ -197,6 +197,10 @@ export function eeatSection(model, pageState) {
   const trustComplete = capAvailable(model, "trust.proof");
   const trustPartial = capPartial(model, "trust.proof");
   const trust = site.trust || {};
+  const presentationTrust = model?.clientPresentation?.trust || {};
+  const presentationProof = presentationTrust.proofForms || [];
+  const presentationQualifier = presentationTrust.qualifier;
+  const pricingConflict = presentationTrust.pricingConflict;
 
   const dimensionCards = EEAT_DIMENSIONS
     .map((dim) => {
@@ -452,6 +456,12 @@ export function eeatSection(model, pageState) {
   const proofAction = trustAssessed && foundSignals.length
     ? `<h3>How should you use the proof you already have?</h3><p>The site already has useful types of trust proof. The next action is not automatically to create more proof. Check whether the right proof appears close enough to the decision it supports.</p><ul class="small"><li>Check relevant case studies or outcomes near service decisions.</li><li>Check testimonials or client validation near commitment points.</li><li>Check credentials where expertise matters.</li><li>Check pricing or investment context before a buyer has to ask.</li><li>Check policies, terms, or other reassurance near higher-risk actions.</li></ul><p class="small">PRYSM observed these trust assets, but did not establish their placement across every important conversion page. After any change, review the important decision pages again and confirm that the related proof is easy to find and understand.</p>`
     : `<h3>How should you use the proof you already have?</h3><p>The available trust evidence is limited, so do not assume that more proof is needed everywhere. Check which proof is available, where buyers make important decisions, and whether the connection between the two is clear.</p><p class="small">PRYSM did not establish proof placement across every important conversion page. Review the relevant pages again before deciding what to add or change.</p>`;
+  const presentationProofBlock = presentationProof.length
+    ? `<div class="note" data-presentation-contract="trust-proof"><strong>Observed proof forms:</strong> ${e(presentationProof.join(", "))}.${presentationQualifier ? ` ${e(presentationQualifier)}` : ""}</div>`
+    : "";
+  const pricingConflictBlock = pricingConflict
+    ? `<div class="note" data-presentation-contract="pricing-scope">${e(pricingConflict.message)}</div>`
+    : "";
 
   const rendered = `
   <section id="eeat" class="card primary-page-card trust-page" data-supporting-section="trust-evidence">
@@ -479,6 +489,8 @@ export function eeatSection(model, pageState) {
     <p>Use the recorded proof type that answers the relevant buyer question. Do not treat a signal in one area as evidence for every decision.</p>
     ${breakdown}
 
+    ${presentationProofBlock}
+    ${pricingConflictBlock}
     ${proofAction}
 
     <h3>Why do these signals matter for growth?</h3>

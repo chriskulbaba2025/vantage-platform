@@ -13,6 +13,8 @@ import { SOURCE_STATUS } from "../scoring/evidence-contracts.js";
 import { computePillars } from "./v2-pillars.js";
 import { buildFoundationChecklist } from "./foundation-readiness.js";
 import { deriveNarrativeStates } from "../report-model/narrative-state.js";
+import { buildClientPresentation, presentationContentKey } from "../report-intelligence/client-presentation.js";
+import { normalizeUrl } from "../report-intelligence/semantic-ledger.js";
 import { CANONICAL_PROBLEM_BY_ID } from "../encyclopedia/registry.js";
 import {
   foundationSection,
@@ -116,7 +118,8 @@ export function clientFacingPageUrls(model, urls) {
     targetHost = "";
   }
 
-  return urls.filter((value) => {
+  return urls
+    .filter((value) => {
     try {
       const parsed = new URL(String(value));
       const host = parsed.hostname
@@ -143,11 +146,13 @@ export function clientFacingPageUrls(model, urls) {
         return false;
       }
 
-      return true;
+      return Boolean(normalizeUrl(value));
     } catch {
       return false;
     }
-  });
+    })
+    .map((value) => normalizeUrl(value))
+    .filter(Boolean);
 }
 
 function clientFacingReportModel(model) {
@@ -179,9 +184,24 @@ function clientFacingReportModel(model) {
       )
     : canonicalSolutions?.records;
 
-  return {
+  const clientModel = {
     ...model,
     findings,
+    evidence: model?.evidence?.site
+      ? {
+          ...model.evidence,
+          site: {
+            ...model.evidence.site,
+            pages: Array.isArray(model.evidence.site.pages)
+              ? model.evidence.site.pages.map((page) => ({
+                  ...page,
+                  ...(page?.url ? { url: normalizeUrl(page.url) } : {}),
+                  ...(page?.crawledUrl ? { crawledUrl: normalizeUrl(page.crawledUrl) } : {}),
+                }))
+              : model.evidence.site.pages,
+          },
+        }
+      : model?.evidence,
     decisionHierarchy: model?.decisionHierarchy
       ? {
           ...model.decisionHierarchy,
@@ -205,6 +225,11 @@ function clientFacingReportModel(model) {
             : canonicalSolutions.sequence,
         }
       : canonicalSolutions,
+  };
+  return {
+    ...clientModel,
+    clientPresentation: buildClientPresentation(clientModel),
+    clientPresentationAuthoritative: Boolean(model?.semanticLedger?.version),
   };
 }
 
@@ -303,11 +328,11 @@ function acceptedPriorityGroups(model, canonical) {
     (record) => record.clientProminence?.displayAllowed,
   );
   if (model?.encyclopedia?.status !== "AVAILABLE") {
-    return visible.map((record) => ({
+    return sortPriorityGroups(model, visible.map((record) => ({
       unit: null,
       records: [record],
       primary: record,
-    }));
+    })));
   }
 
   const byFindingId = new Map();
@@ -318,7 +343,7 @@ function acceptedPriorityGroups(model, canonical) {
     }
   }
 
-  return (model.encyclopedia.priorityUnits || [])
+  return sortPriorityGroups(model, (model.encyclopedia.priorityUnits || [])
     .map((unit) => {
       const records = [...new Set(
         (unit.findingIds || []).flatMap((findingId) => byFindingId.get(findingId) || []),
@@ -328,7 +353,20 @@ function acceptedPriorityGroups(model, canonical) {
       );
       return { unit, records, primary: records[0] || null };
     })
-    .filter((group) => group.primary);
+    .filter((group) => group.primary));
+}
+
+function sortPriorityGroups(model, groups) {
+  if (!model?.clientPresentationAuthoritative || !(model?.clientPresentation?.priority?.orderedFindingIds || []).length) return groups;
+  const order = new Map((model?.clientPresentation?.priority?.orderedFindingIds || []).map((id, index) => [id, index]));
+  return groups
+    .map((group, sourceOrder) => ({
+      group,
+      sourceOrder,
+      rank: Math.min(...(group.records || []).flatMap((record) => (record.findingRefs || []).map((id) => order.get(id) ?? Number.MAX_SAFE_INTEGER))),
+    }))
+    .sort((left, right) => left.rank - right.rank || left.sourceOrder - right.sourceOrder)
+    .map(({ group }) => group);
 }
 
 function acceptedPriorityRecords(model, canonical) {
@@ -596,12 +634,14 @@ function executiveScorecard(model, pillars, checklist, canonical, pageState, nar
   const keepItems = strengths.length ? strengths.map((item) => `<li>${e(item)}</li>`).join("") : "<li>No assessed strength was available to state from the current model.</li>";
   const improveItems = priorityGroups.length ? priorityGroups.map((group) => `<li>${e(priorityGroupTitle(group))}</li>`).join("") : "<li>No additional fix is established by the available evidence-backed actions.</li>";
   const checkItems = priorityGroups.length ? priorityGroups.map((group) => `<li>${e(clientCopy(group.primary?.implementationCheck?.passCondition || "Use the verification step recorded for this priority."))}</li>`).join("") : "<li>Keep the current evidence boundary and verify only if new evidence becomes available.</li>";
+  const conversionQualification = model.clientPresentation?.scoreQualifications?.conversionPath;
   return `
   <section id="executive" class="card primary-page-card executive-page">
     <h2>How ready is your website to convert visitors?</h2>
     <p class="muted small">Executive Scorecard</p>
     <div class="executive-readiness"><h3>Conversion Readiness</h3>${readinessLine}<p class="muted small">How effectively the site supports a visitor moving toward action.</p></div>
     ${executiveClientSummary(pageState)}
+    ${conversionQualification ? `<p class="note" data-presentation-contract="conversion-path-qualification">${e(conversionQualification.message)}${conversionQualification.weakPathNames?.length ? ` Reviewed weak path: ${e(conversionQualification.weakPathNames.join(", "))}.` : ""}</p>` : ""}
     <h3>${numericScoreVisible ? `Why is the score ${e(readiness)}?` : "Why is no score shown?"}</h3>
     <p>The score display below uses the existing assessed dimension outputs. It does not add a new score or treat unavailable dimensions as zero.</p>
     <ul class="executive-score-drivers">${scoreDrivers}</ul>
@@ -934,6 +974,14 @@ function blockersSection(model, canonical, pageState) {
   const groups = acceptedPriorityGroups(model, canonical);
   const mainGroups = groups.slice(0, 3);
   const cleanupGroups = groups.slice(3);
+  const verificationByFindingId = model.clientPresentation?.verificationByFindingId || {};
+  const verificationFor = (record) => {
+    const canonical = page2Verify(record);
+    const governed = (record?.findingRefs || []).map((id) => verificationByFindingId[id]).find(Boolean);
+    return record?.implementationCheck?.passCondition && !/repeat the relevant check and confirm the issue has improved/i.test(canonical)
+      ? canonical
+      : governed || canonical;
+  };
   const cards = mainGroups.map((group, index) => {
     const record = group.primary;
     // Visible ranks describe this filtered client list, not pre-filter source
@@ -955,7 +1003,7 @@ function blockersSection(model, canonical, pageState) {
         <div class="priority-field priority-field-attention"><dt>Why it matters</dt><dd>${e(priorityGroupMeaning(group))}</dd></div>
         <div class="priority-field priority-field-attention"><dt>What to do</dt><dd>${e(priorityGroupAction(group))}${supporting.length ? `<ol>${group.records.slice(0, 3).map((item) => `<li>${e(page2Action(item))}</li>`).join("")}</ol>` : ""}</dd></div>
         <div class="priority-field"><dt>Where to look</dt><dd>${e(page2Location(record))}</dd></div>
-        <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(group.records.length > 1 ? "Repeat each related verification check and confirm every included issue has improved." : page2Verify(record))}</dd></div>
+        <div class="priority-field priority-field-attention"><dt>How to know it worked</dt><dd>${e(group.records.length > 1 ? "Repeat each related verification check and confirm every included issue has improved." : verificationFor(record))}</dd></div>
         <div class="priority-field"><dt>Who may need to help</dt><dd>${e([...new Set(group.records.map((item) => page2Roles(item)))].join(" and "))}</dd></div>
         <div class="priority-field"><dt>Confidence in this finding</dt><dd>${e(group.records.every((item) => page2Confidence(item) === "Strong evidence") ? "Strong evidence" : "Some evidence — confirm before making the change")}</dd></div>
         <div class="priority-field"><dt>Effort</dt><dd>${e([...new Set(group.records.map((item) => page2Effort(item)))].join(" / "))}</dd></div>
@@ -1020,7 +1068,13 @@ function conversionPathSection(model, pageState) {
     { title: "Take the next step", status: `${clientStatusLabel(capabilityStatus(model, "conversion.cta"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.form"))} / ${clientStatusLabel(capabilityStatus(model, "conversion.path"))}`, evidence: paths.length ? paths.map((path) => `${path.name || "Recorded path"}: ${path.status || "Unknown"}.`).join(" ") : "No reviewed conversion-path record is available." },
   ];
   const journeyStageCards = journeyStages.map((stage, index) => `<article class="conversion-journey-step" data-journey-stage="${index + 1}"><span class="conversion-journey-step-number">${index + 1}</span><h3>${e(stage.title)}</h3><p><strong>Status:</strong> ${e(stage.status)}</p><p><strong>Evidence seen:</strong> ${e(stage.evidence)}</p></article>`).join("");
-  const encyclopediaUnits = model.encyclopedia?.status === "AVAILABLE" ? (model.encyclopedia.priorityUnits || []).slice(0, 3) : [];
+  const governedJourneyIds = model.clientPresentation?.journey?.findingIds || [];
+  const journeyFindingIds = new Set(governedJourneyIds);
+  const encyclopediaUnits = model.encyclopedia?.status === "AVAILABLE"
+    ? (model.encyclopedia.priorityUnits || [])
+      .filter((unit) => !model.clientPresentationAuthoritative || !governedJourneyIds.length || (unit.findingIds || []).some((id) => journeyFindingIds.has(id)))
+      .slice(0, 3)
+    : [];
   const journeyFrictionCards = encyclopediaUnits.map((unit) => {
     const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
     const statuses = [...new Set((unit.evidence || []).map((record) => record.sourceStatus || "UNKNOWN"))];
@@ -1113,12 +1167,13 @@ function competitorSectionClient(model, pageState) {
     try { return interpretationFor(model); } catch { return { constructs: {} }; }
   })();
   const site = model.evidence?.site || {};
+  const governedOwnValues = model.clientPresentation?.competitor?.ownValues || {};
   const ownValues = {
-    offerClarity: interpretation.constructs?.offerClarity,
-    trustProof: interpretation.constructs?.trustProof,
-    contentDepth: interpretation.constructs?.contentDepth,
-    ctaClarity: interpretation.constructs?.ctaClarity,
-    pathClarity: interpretation.constructs?.conversionPathClarity,
+    offerClarity: governedOwnValues.offerClarity || interpretation.constructs?.offerClarity,
+    trustProof: governedOwnValues.trustProof || interpretation.constructs?.trustProof,
+    contentDepth: governedOwnValues.contentDepth || interpretation.constructs?.contentDepth,
+    ctaClarity: governedOwnValues.ctaClarity || interpretation.constructs?.ctaClarity,
+    pathClarity: governedOwnValues.pathClarity || interpretation.constructs?.conversionPathClarity,
   };
   const valueText = (value) => {
     const text = String(value ?? "").trim();
@@ -1353,6 +1408,13 @@ function contentOpportunitiesSection(model, pageState) {
     ...mofu.map((i) => ({ ...i, planningStage: i.funnelStage || i.stage || "MOFU" })),
     ...bofu.map((i) => ({ ...i, planningStage: i.funnelStage || i.stage || "BOFU" })),
   ];
+  const presentationByKey = model.clientPresentation?.content?.byKey || {};
+  const governedIdeas = allIdeas
+    .map((idea) => ({
+      ...idea,
+      presentation: presentationByKey[presentationContentKey(idea.planningStage, idea.topic || idea.idea || idea.query)],
+    }))
+    .filter((idea) => !model.clientPresentationAuthoritative || !idea.presentation || idea.presentation.action !== "NO_ACTION");
 
   const evidenceLabel = (i) => clientOpportunityConfidence(i.evidenceStatus);
 
@@ -1364,6 +1426,7 @@ function contentOpportunitiesSection(model, pageState) {
         const title = clientContentOpportunityTitle(i);
         const stage = i.planningStage || i.funnelStage || i.stage || "";
         const coverage = clientContentCoverage(i);
+        const action = i.presentation?.action;
         return `<article class="content-opportunity-card${index === 0 ? " content-opportunity-card-start" : ""}">
           <div class="content-opportunity-card-header">
             ${primary ? `<span class="content-opportunity-rank">${index + 1}</span>` : ""}
@@ -1373,7 +1436,8 @@ function contentOpportunitiesSection(model, pageState) {
           <dl class="content-opportunity-fields">
             <div><dt>What buyers are asking / Buyer question</dt><dd>${e(clientContentBuyerQuestion(i))}</dd></div>
             <div><dt>Why this matters / Why it may matter</dt><dd>${e(clientContentWhy(i))}</dd></div>
-            <div><dt>What to create</dt><dd>${e(clientContentRecommendation(i))}</dd></div>
+            ${action ? `<div><dt>Content action</dt><dd>${e(action)}</dd></div>` : ""}
+            <div><dt>What to create / change</dt><dd>${e(clientContentRecommendation(i))}</dd></div>
             <div class="content-opportunity-coverage"><dt>What it should cover</dt><dd><ul>${coverage.map((point) => `<li>${e(point)}</li>`).join("")}</ul></dd></div>
             <div><dt>Where it helps</dt><dd>${e(stage || "Buyer journey")} — ${e(clientBuyerJourneyStage(stage))}</dd></div>
             <div><dt>How to use it / Placement guidance</dt><dd>${e(clientContentPlacement(i))}</dd></div>
@@ -1384,7 +1448,7 @@ function contentOpportunitiesSection(model, pageState) {
       .join("");
 
   const priorityRank = (value) => ({ H: 0, HIGH: 0, M: 1, MEDIUM: 1, L: 2, LOW: 2 }[String(value || "").toUpperCase()] ?? 3);
-  const rankedIdeas = allIdeas.map((idea, sourceOrder) => ({ ...idea, sourceOrder })).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.sourceOrder - b.sourceOrder);
+  const rankedIdeas = governedIdeas.map((idea, sourceOrder) => ({ ...idea, sourceOrder })).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.sourceOrder - b.sourceOrder);
   const primaryIdeas = rankedIdeas.slice(0, 5);
   const supportingIdeas = rankedIdeas.slice(5);
   const strongestIdea = primaryIdeas.slice(0, 1);
