@@ -95,6 +95,35 @@ function coverageFor(topic, site, status) {
   };
 }
 
+function genericServiceDefinition(topic, row, site) {
+  const normalized = text(topic).toLowerCase().replace(/[?.!]+$/g, "");
+  const match =
+    normalized.match(/^what (?:is|are) (.+)$/i) ||
+    normalized.match(/^explain what (.+) is$/i);
+  if (!match) return false;
+
+  const subject = text(match[1]).toLowerCase();
+  if (!subject) return false;
+
+  const decisionQuestion = text(row?.question || row?.buyerQuestion).toLowerCase();
+  const looksPurelyDefinitional =
+    !decisionQuestion ||
+    /^(what is this|what is it|what does this mean)\??$/.test(decisionQuestion);
+
+  const services = (Array.isArray(site?.services) ? site.services : [])
+    .map((value) => text(value).toLowerCase())
+    .filter(Boolean);
+  const subjectWords = subject.split(/\s+/).filter((word) => word.length >= 3);
+  const matchesKnownService = services.some((service) => {
+    const serviceWords = service.split(/\s+/).filter((word) => word.length >= 3);
+    if (!serviceWords.length || !subjectWords.length) return false;
+    const overlap = subjectWords.filter((word) => serviceWords.includes(word)).length;
+    return overlap >= Math.max(1, Math.ceil(Math.min(subjectWords.length, serviceWords.length) * 0.6));
+  });
+
+  return looksPurelyDefinitional && matchesKnownService;
+}
+
 function classifyOpportunity(row, site, contentStatus) {
   const topic = text(row?.topic || row?.idea || row?.query);
   const coverage = coverageFor(topic, site, contentStatus);
@@ -103,8 +132,11 @@ function classifyOpportunity(row, site, contentStatus) {
   }
   if (coverage.state === "MATERIAL") return { action: "NO_ACTION", reason: "Assessed content materially answers this buyer need.", coverage };
   if (coverage.state === "PARTIAL") return { action: "IMPROVE", reason: "Related assessed content exists but does not fully answer the buyer need.", coverage };
-  if (/\bwhat is|explain|definition\b/i.test(topic) && topic.split(/\s+/).length < 4) {
-    return { action: "NO_ACTION", reason: "The suggestion is generic ontology slot-filling rather than a decision-support need.", coverage };
+  if (
+    genericServiceDefinition(topic, row, site) ||
+    (/\bwhat is|explain|definition\b/i.test(topic) && topic.split(/\s+/).length < 4)
+  ) {
+    return { action: "NO_ACTION", reason: "The suggestion is generic ontology slot-filling rather than a specific buyer decision-support need.", coverage };
   }
   return { action: "CREATE", reason: "No materially covering assessed content was found for this buyer need.", coverage };
 }
