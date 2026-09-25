@@ -2626,20 +2626,29 @@ export function buildFindings(site, performance, gsc, opts = {}) {
 
   // â”€â”€ Additional crawl-dependent findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  if (site.pageCount <= 1 || site.services.length > site.pageCount * 2) {
-    add({
-      ruleId: "VAN-CONTENT-001",
-      dimension: "content_funnel",
-      module: "content_depth",
-      title: "Services lack dedicated page depth",
+    const serviceDepthStatus = Object.values(SOURCE_STATUS).includes(site.sourceStatus)
+      ? site.sourceStatus
+      : SOURCE_STATUS.UNKNOWN;
+    if ((serviceDepthStatus === SOURCE_STATUS.AVAILABLE || serviceDepthStatus === SOURCE_STATUS.PARTIAL)
+      && (site.pageCount <= 1 || site.services.length > site.pageCount * 2)) {
+      const partialServiceDepth = serviceDepthStatus === SOURCE_STATUS.PARTIAL;
+      add({
+        ruleId: "VAN-CONTENT-001",
+        dimension: "content_funnel",
+        module: "content_depth",
+        title: partialServiceDepth
+          ? "Dedicated service-page depth was not established in the assessed scope"
+          : "Services lack dedicated page depth",
       severity: "Medium",
       key: "pages",
       confidence: CONFIDENCE_LEVELS.DETERMINISTIC,
       evidence: [
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "page_count", observedValue: site.pageCount },
-        { provider: "dataforseo_onpage", sourceStatus: SOURCE_STATUS.AVAILABLE, field: "services", observedValue: site.services.length },
-      ],
-      evidenceText: `${site.pageCount} crawlable page(s) for ${site.services.length || "multiple"} service topics`,
+          { provider: "dataforseo_onpage", sourceStatus: serviceDepthStatus, field: "page_count", observedValue: site.pageCount },
+          { provider: "dataforseo_onpage", sourceStatus: serviceDepthStatus, field: "services", observedValue: site.services.length },
+        ],
+        evidenceText: partialServiceDepth
+          ? `${site.pageCount} crawlable page(s) were assessed; dedicated service-page depth was not established in the available assessment; unassessed pages remain unknown`
+          : `${site.pageCount} crawlable page(s) for ${site.services.length || "multiple"} service topics`,
       businessImpact: "Limited dedicated page depth may make it harder for individual offers to build relevance and answer buyer questions.",
       recommendation: "Create one focused page for each primary service",
       effort: "H",

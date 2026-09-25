@@ -119,7 +119,7 @@ const REGISTRY_ENTRIES = [
     evidenceFields: ["page_count", "services"],
     anchorType: "PAGE_TEMPLATE",
     anchorLocator: "service-page-template",
-    problem: "The governed assessment indicates that primary service topics lack dedicated page depth.",
+      problem: "The available assessment did not establish dedicated page depth across all primary service topics.",
     whyItMatters: "Visitors may have less context for evaluating a service when the assessed topic lacks a dedicated page.",
     whatToChange: "If the governed service-depth condition remains present, create a focused page for each primary service topic.",
     howToFix: "Define the primary service set, create one scoped page per service, and verify that each page is present in the governed crawl.",

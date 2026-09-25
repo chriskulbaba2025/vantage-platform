@@ -223,3 +223,12 @@ test("current deterministic AVAILABLE evidence is CONFIRMED while partial or sup
   }));
   assert.equal(supported["F-1"].evidenceGrade, "PARTIAL");
 });
+
+test("VAN-CONTENT-001 partial authority keeps the problem statement bounded", () => {
+  const records = buildSolutionAuthorityRecords(input({ findings: [finding("VAN-CONTENT-001", 1, {
+    confidence: "deterministic",
+    evidence: [{ field: "page_count", observedValue: 1, artifactRef: "E-partial", sourceStatus: "PARTIAL" }],
+  })] }));
+  assert.match(records["F-1"].problem, /available assessment did not establish/i);
+  assert.doesNotMatch(records["F-1"].problem, /topics lack dedicated page depth/i);
+});

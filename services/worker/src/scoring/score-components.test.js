@@ -143,6 +143,25 @@ function capsOf(ev) {
   }).capabilities;
 }
 
+test("VAN-CONTENT-001 keeps PARTIAL service depth bounded", () => {
+  const model = scoreAudit(INPUT, evidenceOf({
+    site: site({ sourceStatus: SOURCE_STATUS.PARTIAL, pageCount: 1, services: [] }),
+  }));
+  const finding = model.findings.find((item) => item.ruleId === "VAN-CONTENT-001");
+  assert.ok(finding);
+  assert.equal(finding.evidence.every((item) => item.sourceStatus === SOURCE_STATUS.PARTIAL), true);
+  assert.match(finding.title, /assessed scope/i);
+  assert.match(finding.evidenceText, /unassessed pages remain unknown/i);
+  assert.doesNotMatch(finding.title, /lack/i);
+});
+
+test("VAN-CONTENT-001 does not emit a negative finding for UNKNOWN service evidence", () => {
+  const model = scoreAudit(INPUT, evidenceOf({
+    site: site({ sourceStatus: SOURCE_STATUS.UNKNOWN, pageCount: 1, services: [] }),
+  }));
+  assert.equal(model.findings.some((item) => item.ruleId === "VAN-CONTENT-001"), false);
+});
+
 // ---------------------------------------------------------------------------
 // WP-D-01 — weighting defect proven and corrected
 // ---------------------------------------------------------------------------
