@@ -755,8 +755,14 @@ export function createNarrativeV2LiveBinding({
         auditId,
       )
     ) {
-      throw new Error(
-        `Narrative v2 final pass already authorized for audit ${auditId}`,
+      throw Object.assign(
+        new Error(
+          "Final narrative pass is already authorized for this audit",
+        ),
+        {
+          statusCode: 409,
+          code: "NARRATIVE_V2_FINAL_PASS_ALREADY_AUTHORIZED",
+        },
       );
     }
 
