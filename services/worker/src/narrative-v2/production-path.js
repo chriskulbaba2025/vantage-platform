@@ -729,8 +729,14 @@ async function runNarrativeV2FinalPass({
     });
 
   if (existingFinalResult) {
-    throw new Error(
-      "Narrative v2 final-pass orchestration already exists; refusing duplicate continuation",
+    throw Object.assign(
+      new Error(
+        "Final narrative pass already completed for this audit; refresh to view the current status",
+      ),
+      {
+        statusCode: 409,
+        code: "NARRATIVE_V2_FINAL_PASS_ALREADY_COMPLETED",
+      },
     );
   }
 
