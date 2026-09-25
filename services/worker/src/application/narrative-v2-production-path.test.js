@@ -1537,7 +1537,15 @@ test("NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pas
           authorizationId: "human-approval-003",
         },
       ),
-    /already exists/i,
+    (error) => {
+      assert.equal(error.statusCode, 409);
+      assert.equal(
+        error.code,
+        "NARRATIVE_V2_FINAL_PASS_ALREADY_COMPLETED",
+      );
+      assert.match(error.message, /already completed/i);
+      return true;
+    },
   );
 
   assert.equal(
