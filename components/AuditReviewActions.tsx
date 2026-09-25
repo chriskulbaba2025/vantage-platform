@@ -214,6 +214,16 @@ export default function AuditReviewActions({
         );
       }
 
+      // The final governed pass may legitimately return to narrative_failed
+      // with finalPassAvailable=false. Update local review state immediately;
+      // router.refresh() alone does not rerun the review effect when the
+      // lifecycle state string remains narrative_failed.
+      if (data?.humanReview && typeof data.humanReview === "object") {
+        setNarrativeReview(data.humanReview as NarrativeReview);
+      } else {
+        setNarrativeReview(null);
+      }
+
       router.refresh();
     } catch (e) {
       setError(
