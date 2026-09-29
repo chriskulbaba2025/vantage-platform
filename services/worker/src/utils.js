@@ -8,7 +8,12 @@ export function normalizeUrl(input) {
 }
 
 export function domainOf(input) {
-  return new URL(normalizeUrl(input)).hostname.replace(/^www\./, "").toLowerCase();
+  return providerTargetOf(input);
+}
+
+/** DataForSEO On-Page task_post target: hostname only, no scheme or www. */
+export function providerTargetOf(input) {
+  return new URL(normalizeUrl(input)).hostname.replace(/^www\./i, "").toLowerCase();
 }
 
 export function slugify(value) {

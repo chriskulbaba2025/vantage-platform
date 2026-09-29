@@ -12,7 +12,7 @@ const required = [
   "src/application/*.test.js",
   "src/narrative-v2/*.test.js",
   "src/contracts/validator.test.js",
-  "src/report/verify-template.js",
+  "src/report/legacy-report-retirement.test.js",
   "scripts/prysm-whole-app-gate.js",
 ];
 for (const path of required) {
@@ -23,6 +23,8 @@ for (const path of required) {
 
 const commands = [
   [["--test", "scripts/report-route-print-nav.test.js"], "report route print-navigation contract"],
+  [["scripts/acceptance-v2-pdf.js"], "real Chromium seven-page PDF acceptance"],
+  [["scripts/acceptance-responsive-conversion.js"], "real Chromium responsive conversion acceptance"],
 
   [["--test", "src/evidence/*.test.js", "src/scoring/*.test.js", "src/report/*.test.js", "src/audit/*.test.js", "src/storage/*.test.js", "src/adapters/**/*.test.js", "src/auth/*.test.js", "src/n8n/*.test.js", "src/utils/*.test.js"], "worker regression families"],
   // production-bootstrap.test.js temporarily instruments globalThis.fetch;

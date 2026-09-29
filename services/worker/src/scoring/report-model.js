@@ -1,11 +1,15 @@
 import { domainOf } from "../utils.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 import { band, scoreTrust } from "./score-components.js";
+import { isObserved } from "../report-intelligence/semantic-evidence-authority.js";
 
 function buildConversionPaths(
   site,
   capabilities = {},
+  semanticEvidence = null,
 ) {
+  const hasTestimonials = semanticEvidence ? isObserved(semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials;
+  const hasCredentials = semanticEvidence ? isObserved(semanticEvidence, "FORMAL_CREDENTIAL") : site.trust.credentials;
   const unique = [];
   const seen = new Set();
 
@@ -42,8 +46,8 @@ function buildConversionPaths(
         const blockers = [];
 
         if (
-          !site.trust.testimonials &&
-          !site.trust.credentials
+          !hasTestimonials &&
+          !hasCredentials
         ) {
           blockers.push(
             "no trust proof",
@@ -148,8 +152,8 @@ function buildConversionPaths(
       }
 
       if (
-        !site.trust.testimonials &&
-        !site.trust.credentials
+        !hasTestimonials &&
+        !hasCredentials
       ) {
         blockers.push(
           "no trust proof",
@@ -289,7 +293,9 @@ function tokenMatch(text, tokensArr) {
   return words.some((w) => set.has(w)) || set.has(String(text || "").toLowerCase().trim());
 }
 
-function topicRows(site, input = {}, capabilities = {}) {
+function topicRows(site, input = {}, capabilities = {}, semanticEvidence = null) {
+  const hasCredentials = semanticEvidence ? isObserved(semanticEvidence, "FORMAL_CREDENTIAL") : site.trust.credentials;
+  const hasTestimonials = semanticEvidence ? isObserved(semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials;
   // Prefer business-context services; fall back to validated crawl services;
   // finally multi-word topicKeywords.
   const business = (input.services || []).filter(Boolean);
@@ -381,23 +387,23 @@ function topicRows(site, input = {}, capabilities = {}) {
           : stage === "BOFU" &&
               !site.trust.pricing
             ? "Offer clarity"
-            : !site.trust.credentials
+            : !hasCredentials
               ? "Doubt"
               : "Unclear next step";
 
       const trustAsset =
         !trustEvidenceAvailable
           ? "Not Assessed"
-          : !site.trust.credentials
+          : !hasCredentials
             ? "Credential"
-            : !site.trust.testimonials
+            : !hasTestimonials
               ? "Testimonial"
               : "Process proof";
 
       const eeat =
         !trustEvidenceAvailable
           ? "Not Assessed"
-          : !site.trust.credentials
+          : !hasCredentials
             ? "Expertise proof"
             : "Experience proof";
 

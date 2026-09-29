@@ -109,8 +109,8 @@ async function executeControlled(request) {
   });
 }
 
-test("PC-02/06: production adapter v1.2.0 benchmarks supplied URL with zero DataForSEO calls when SERP is not connected", async () => {
-  assert.equal(ADAPTER_VERSION, "1.2.0");
+test("PC-02/06: production adapter v1.3.0 benchmarks supplied URL with zero DataForSEO calls when SERP is not connected", async () => {
+  assert.equal(ADAPTER_VERSION, "1.3.0");
   const { fetchImpl, calls } = directCrawlFetch();
 
   const result = await withDfsCredentials(null, null, () => executeControlled(auditRequest(fetchImpl)));
@@ -255,8 +255,8 @@ test("PC-04: direct supplied benchmark wins same-domain de-duplication over SERP
     executeControlled(auditRequest(fetchImpl)));
   const items = result.sourceResult.evidence.competitors;
 
-  assert.equal(calls.filter((url) => url.includes("api.dataforseo.com")).length, 1,
-    "controlled test must execute the real production SERP client exactly once");
+  assert.equal(calls.filter((url) => url.includes("/serp/google/organic/live/advanced")).length, 1,
+    "controlled test must execute the real production organic SERP client exactly once");
   assert.equal(calls.some((url) => url.startsWith("https://other-competitor.example")), false,
     "SERP-discovered competitors must not be direct-crawled unless explicitly supplied");
   assert.equal(result.sourceResult.status, "AVAILABLE");

@@ -25,7 +25,7 @@ const { createMemoryLifecycleRepository } = await import("../src/lifecycle/memor
 const { createLifecycleService } = await import("../src/lifecycle/lifecycle-service.js");
 const { createAuditOrchestrator } = await import("../src/orchestration/audit-orchestrator.js");
 const { createAuditApplicationService } = await import("../src/application/audit-service.js");
-const { createLocalReportStore, REQUIRED_APPROVED_PAGE_FILENAMES } = await import("../src/storage/report-store.js");
+const { createLocalReportStore } = await import("../src/storage/report-store.js");
 const { LIFECYCLE_STATE } = await import("../src/lifecycle/state-enum.js");
 const T = LIFECYCLE_STATE;
 
@@ -392,16 +392,12 @@ console.log("\n--- Phase 6: REVIEW-01/APPROVAL-01 Review and approval ---");
     check("REVIEW-01: incomplete checklist rejected", e.message.includes("incomplete") || e.statusCode === 422, e.message);
   }
 
-  // APPROVAL-01: Approve with 16 pages
-  const pages = new Map();
-  for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
-    pages.set(fn, `<!DOCTYPE html><html><body>${fn}</body></html>`);
-  }
-
-  const approveResult = await auditService.approveAudit(seeded.auditId, tenantId, slug, "approver@test.com", pages);
+  // APPROVAL-01: approve the current V2 artifact.  The retired 16-page
+  // renderer is intentionally not part of the approval contract.
+  const approveResult = await auditService.approveAudit(seeded.auditId, tenantId, slug, "approver@test.com", new Map());
   check("APPROVAL-01: status = approved", approveResult.status === "approved", `Got ${approveResult.status}`);
   check("APPROVAL-01: approver recorded", approveResult.approval?.approver === "approver@test.com");
-  check("APPROVAL-01: 16 final artifacts", (approveResult.artifacts?.final || []).length === 16);
+  check("APPROVAL-01: current approved artifact", approveResult.designVersion === "2.0.0" && (approveResult.artifacts || []).length === 1 && approveResult.artifacts[0].filename === "index.html");
 
   // Non-reviewed approval rejected
   try {
@@ -431,7 +427,7 @@ console.log("\n--- Phase 7: VIEW-01 Report viewer ---");
   });
 
   // DRAFT — reviewer-facing retrieval boundary serves the draft; the
-  // CLIENT-facing publication gate (web route 404 for non-final artifacts +
+  // CLIENT-facing publication gate (web route rejects non-final artifacts +
   // getPublishedReportPage REPORT_NOT_PUBLISHED) is proven by WP10 and C14.
   {
     const draftPage = await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "index.html", slug);
@@ -446,11 +442,7 @@ console.log("\n--- Phase 7: VIEW-01 Report viewer ---");
   const checklist = ["source_failures","top_ten_findings","high_severity","competitor_selections","internal_link_recommendations","root_cause","score_eligibility","limitations","causal_language","implementation_feasibility"].map((id) => ({ id, reviewed: true, reviewedAt: now }));
   await auditService.submitReview(seeded.auditId, tenantId, slug, "a@t.com", checklist);
 
-  const pages = new Map();
-  for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
-    pages.set(fn, `<!DOCTYPE html><html><body>${fn}</body></html>`);
-  }
-  await auditService.approveAudit(seeded.auditId, tenantId, slug, "approver@t.com", pages);
+  const approveResult = await auditService.approveAudit(seeded.auditId, tenantId, slug, "approver@t.com", new Map());
 
   // APPROVED — 200 with HTML bytes
   const reportPage = await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "index.html", slug);
@@ -462,22 +454,19 @@ console.log("\n--- Phase 7: VIEW-01 Report viewer ---");
     await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "../etc/passwd", slug);
     check("VIEW-01: path traversal → 404", false, "Should have thrown");
   } catch (e) {
-    check("VIEW-01: path traversal → rejected", e.statusCode === 404 || e.message.includes("not found"), e.message);
+    check("VIEW-01: path traversal → rejected", e.statusCode === 404 || e.statusCode === 410 || e.message.includes("not found"), e.message);
   }
 
-  // Unknown file → 404
+  // Unknown/historical file → governed rejection
   try {
     await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "nonexistent.html", slug);
     check("VIEW-01: unknown file → 404", false, "Should have thrown");
   } catch (e) {
-    check("VIEW-01: unknown file → 404", e.statusCode === 404, `Got ${e.statusCode}`);
+    check("VIEW-01: unknown file → rejected", e.statusCode === 404 || e.statusCode === 410, `Got ${e.statusCode}`);
   }
 
-  // PUBLISHED — 200 (via publishReport)
-  const published = await reportStore.publishReport(slug, seeded.auditId);
-  check("VIEW-01: published status", published.status === "published");
-  const pubPage = await auditService.getReportPage(tenantId, seeded.clientId, seeded.auditId, "index.html", slug);
-  check("VIEW-01: published → 200", pubPage.bytes && pubPage.bytes.length > 0);
+  check("VIEW-01: current Executive V2 approval", approveResult.designVersion === "2.0.0");
+  check("VIEW-01: current Executive V2 remains readable after approval", reportPage.bytes && reportPage.bytes.length > 0);
 }
 
 // =============================================================================

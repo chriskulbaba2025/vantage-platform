@@ -194,10 +194,10 @@ test("PRYSM-NEXT-01 WP-E: path-validation options participate in the key", () =>
   assert.notEqual(base.sourceExecutionKey, changed.sourceExecutionKey);
 });
 
-test("PRYSM-NEXT-01 WP-G: report design version participates in the key", () => {
+test("PRYSM-NEXT-01 WP-G: explicit report design version participates in the key", () => {
   const base = buildSourceExecutionIdentity({ auditRequest: BASE_REQUEST, source: "dataforseo-onpage", adapterVersion: "1.1.0" });
   const changed = buildSourceExecutionIdentity({
-    auditRequest: { ...BASE_REQUEST, report: { designVersion: "2.0.0" } },
+    auditRequest: { ...BASE_REQUEST, report: { designVersion: "9.9.9" } },
     source: "dataforseo-onpage",
     adapterVersion: "1.1.0",
   });

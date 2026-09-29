@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { collectBrandAssetCandidates } from "./brand-assets.js";
 
 const CTA_RE = /\b(book|schedule|contact|call|subscribe|buy|start|get started|learn more|request|download|join|register|sign up|free consultation|discovery)\b/i;
 const TESTIMONIAL_RE = /\b(testimonials?|what clients say|client stories|reviews?|success stor(?:y|ies))\b/i;
@@ -150,6 +151,30 @@ function parseSchemaTypes($) {
   return [...types].sort();
 }
 
+function extractIdentityCandidates($) {
+  const out = [];
+  const add = (value, source) => {
+    const cleaned = cleanText(value);
+    if (cleaned) out.push({ value: cleaned, source });
+  };
+  add($('meta[property="og:site_name"]').attr("content") || $("meta[name=application-name]").attr("content"), "site-name-meta");
+  $("script[type='application/ld+json']").each((_, el) => {
+    try {
+      const visit = (node) => {
+        if (!node || typeof node !== "object") return;
+        if (Array.isArray(node)) return node.forEach(visit);
+        const types = (Array.isArray(node["@type"]) ? node["@type"] : [node["@type"]]).filter(Boolean).map((v) => String(v).toLowerCase());
+        if (types.some((v) => v === "organization" || v === "localbusiness" || v.endsWith("business"))) {
+          add(node.name, types.includes("localbusiness") ? "local-business-schema" : "organization-schema");
+        }
+        Object.values(node).forEach(visit);
+      };
+      visit(JSON.parse($(el).text()));
+    } catch { /* malformed identity is not evidence */ }
+  });
+  return out;
+}
+
 function detectPlatform($, html, headers) {
   const generator = cleanText($('meta[name="generator"]').attr("content"));
   const haystack = `${generator} ${html.slice(0, 120000)}`.toLowerCase();
@@ -164,6 +189,7 @@ function detectPlatform($, html, headers) {
 }
 
 export function extractPage(url, status, headers, html, rendered = false) {
+  const brandAssetCandidates = collectBrandAssetCandidates(html, url);
   const $ = cheerio.load(html);
   $("script,style,noscript,svg").remove();
   const bodyText = cleanText($("body").text());
@@ -227,6 +253,7 @@ export function extractPage(url, status, headers, html, rendered = false) {
     }
   }
   const serviceCandidates = merged;
+  const identityCandidates = extractIdentityCandidates(cheerio.load(html));
 
   return {
     url,
@@ -249,6 +276,8 @@ export function extractPage(url, status, headers, html, rendered = false) {
     emailLinks,
     phoneLinks,
     serviceCandidates: [...new Set(serviceCandidates)].slice(0, 20),
+    identityCandidates,
+    brandAssetCandidates,
     signals: {
       testimonials: TESTIMONIAL_RE.test(bodyText),
       credentials: CREDENTIAL_RE.test(bodyText),

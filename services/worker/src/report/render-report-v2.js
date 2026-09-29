@@ -35,9 +35,9 @@ export const REPORT_V2_VIEWER_PAGES = Object.freeze([
   Object.freeze({ pageId: "executive-scorecard", title: "Executive Scorecard", tier: "PRIMARY", sectionIds: Object.freeze(["executive"]) }),
   Object.freeze({ pageId: "priority-fixes", title: "Priority Fixes", tier: "PRIMARY", sectionIds: Object.freeze(["blockers"]) }),
   Object.freeze({ pageId: "conversion-paths", title: "Conversion Journey", tier: "PRIMARY", sectionIds: Object.freeze(["paths"]) }),
-  Object.freeze({ pageId: "content-ideas", title: "Content Opportunities", tier: "PRIMARY", sectionIds: Object.freeze(["content-ideas"]) }),
   Object.freeze({ pageId: "trust-eeat", title: "Trust & Credibility", tier: "PRIMARY", sectionIds: Object.freeze(["eeat"]) }),
   Object.freeze({ pageId: "competitor-benchmark", title: "Competitor Comparison", tier: "PRIMARY", sectionIds: Object.freeze(["competitors"]) }),
+  Object.freeze({ pageId: "content-ideas", title: "Content Opportunities", tier: "PRIMARY", sectionIds: Object.freeze(["content-ideas"]) }),
   Object.freeze({
     pageId: "supporting-detail",
     title: "Supporting Detail",
@@ -226,9 +226,17 @@ function clientFacingReportModel(model) {
         }
       : canonicalSolutions,
   };
+  const canonicalOrder = clientModel.canonicalDecisionModel?.orderedFindingIds || clientModel.decisionHierarchy?.orderedFindingIds || [];
+  const presentation = buildClientPresentation(clientModel);
   return {
     ...clientModel,
-    clientPresentation: buildClientPresentation(clientModel),
+    clientPresentation: {
+      ...presentation,
+      priority: {
+        ...(presentation.priority || {}),
+        orderedFindingIds: [...canonicalOrder],
+      },
+    },
     clientPresentationAuthoritative: Boolean(model?.semanticLedger?.version),
   };
 }
@@ -778,11 +786,11 @@ function pillarSection(pillars, model, narrativeStates) {
       </nav>
     </div>
     <p style="font-size:1.15rem;font-weight:700;margin-bottom:6px">Where is the site helping or hurting conversion?</p>
-    <p class="muted small">Conversion Readiness Map</p>
+    <p class="muted small">Readiness overview</p>
     <h2>Where are the problems?</h2>
     <p>${e(directAnswer)}</p>
         <div style="overflow-x:auto;margin:18px 0 22px">
-      <svg viewBox="0 0 460 340" role="img" aria-label="Five-axis conversion readiness map" style="width:100%;max-width:720px;display:block;margin:0 auto">
+      <svg viewBox="0 0 460 340" role="img" aria-label="Five-axis readiness overview" style="width:100%;max-width:720px;display:block;margin:0 auto">
         <polygon points="${polygonFor(100)}" fill="none" stroke="currentColor" opacity=".15"/>
         <polygon points="${polygonFor(80)}" fill="none" stroke="currentColor" opacity=".12"/>
         <polygon points="${polygonFor(60)}" fill="none" stroke="currentColor" opacity=".10"/>
@@ -970,6 +978,24 @@ function page2Verify(record) {
   return ({ performance: "Run the same speed test again and confirm the main content appears sooner.", "buyer-decision": "Review the relevant pages and confirm the common buyer questions are answered clearly.", "structured-data": "Check the published structured data with a validator and confirm it matches the page content.", "meta-description": "Check the affected pages and confirm each page has a useful description in its metadata.", "heading-structure": "Read the headings from top to bottom and confirm the order is clear and consistent." }[page2Kind(record)] || plainLanguage(record.implementationCheck?.passCondition || "Repeat the relevant check and confirm the issue has improved."));
 }
 
+function clientDiagnosticCheck(_problem, record, index) {
+  const location = page2Location(record);
+  const kind = page2Kind(record);
+  if (index === 0) {
+    return ({
+      performance: `Retest the slow mobile loading issue on ${location}.`,
+      "meta-description": `Confirm the missing search-result description on ${location} before making changes.`,
+      "structured-data": `Check the structured data on ${location} and confirm it matches the page content.`,
+      "heading-structure": `Review the headings on ${location} and confirm the main heading structure is clear.`,
+      "buyer-decision": `Review the buyer information on ${location} and confirm the reported question is answered clearly.`,
+    }[kind] || `Review the reported issue on ${location} before making changes.`);
+  }
+  if (index === 1) {
+    return `Check the surrounding evidence on ${location} for another explanation before making changes.`;
+  }
+  return `Retest ${location} after any change and compare the result with the reported issue.`;
+}
+
 function blockersSection(model, canonical, pageState) {
   const groups = acceptedPriorityGroups(model, canonical);
   const mainGroups = groups.slice(0, 3);
@@ -1016,7 +1042,9 @@ function blockersSection(model, canonical, pageState) {
     .filter((unit) => (unit.findingIds || []).some((id) => mainFindingIds.has(id)))
     .flatMap((unit) => {
       const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
-      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(check)} <span class="small">Diagnostic guidance; this does not assert a cause.</span></li>`);
+      const record = acceptedPriorityRecords(model, canonical)
+        .find((candidate) => (candidate.findingRefs || []).some((findingId) => (unit.findingIds || []).includes(findingId)));
+      return (problem?.firstDiagnosticChecks || []).slice(0, 3).map((_check, index) => `<li data-encyclopedia-problem="${e(unit.canonicalProblemId)}" data-diagnostic-check="${index + 1}"><strong>Check ${index + 1}:</strong> ${e(clientDiagnosticCheck(problem, record, index))} <span class="small">Diagnostic guidance; this does not assert a cause.</span></li>`);
     });
   const cleanupList = cleanupGroups.length
     ? `<ol>${cleanupGroups.map((group) => `<li data-solution-id="${e(group.primary.solutionId)}"><strong>${e(priorityGroupTitle(group))}.</strong> ${e(priorityGroupMeaning(group))}</li>`).join("")}</ol>`
@@ -1077,8 +1105,10 @@ function conversionPathSection(model, pageState) {
     : [];
   const journeyFrictionCards = encyclopediaUnits.map((unit) => {
     const problem = CANONICAL_PROBLEM_BY_ID[unit.canonicalProblemId];
+    const record = acceptedPriorityRecords(model, canonical)
+      .find((candidate) => (candidate.findingRefs || []).some((findingId) => (unit.findingIds || []).includes(findingId)));
     const statuses = [...new Set((unit.evidence || []).map((record) => record.sourceStatus || "UNKNOWN"))];
-    return `<article class="conversion-journey-detail-card" data-encyclopedia-problem="${e(unit.canonicalProblemId || "NOT_AVAILABLE")}"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(clientFrictionStateLabel(unit.frictionState))}</p><p><strong>Evidence:</strong> ${e(statuses.map(clientStatusLabel).join(", ") || "Unknown")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p><strong>Check first:</strong> ${e(problem?.firstDiagnosticChecks?.[0] || "Confirm the recorded condition and scope before deciding what to change.")}</p><p class="small">This is a diagnostic view; it does not establish cause, abandonment, or a business outcome.</p></article>`;
+    return `<article class="conversion-journey-detail-card" data-encyclopedia-problem="${e(unit.canonicalProblemId || "NOT_AVAILABLE")}"><h4>${e(unit.title || problem?.name || "Reviewed friction")}</h4><p><strong>Status:</strong> ${e(clientFrictionStateLabel(unit.frictionState))}</p><p><strong>Evidence:</strong> ${e(statuses.map(clientStatusLabel).join(", ") || "Unknown")}</p><p><strong>Why it may matter:</strong> ${e(clientEncyclopediaEffect(problem?.whyItMayMatter))}</p><p><strong>Check first:</strong> ${e(clientDiagnosticCheck(problem, record, 0))}</p><p class="small">This is a diagnostic view; it does not establish cause, abandonment, or a business outcome.</p></article>`;
   }).join("");
   const frictionBlock = journeyFrictionCards.length
     ? `<div class="conversion-journey-card-grid">${journeyFrictionCards}</div>`
@@ -1741,6 +1771,10 @@ function clientCapabilityLabel(key) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function isRawIndexabilityCoverageRow(key) {
+  return key === "technical.indexability";
+}
+
 function clientModuleLabel(key) {
   const labels = {
     offer_clarity: "Offer clarity",
@@ -1863,7 +1897,7 @@ function deepEvidenceLayer(model, pageState) {
 
   const caps = model.capabilityEvidence?.capabilities || {};
   const capRows = Object.entries(caps)
-    .filter(([key]) => key !== "technical.headers")
+    .filter(([key]) => key !== "technical.headers" && !isRawIndexabilityCoverageRow(key))
     .map(([key, c]) =>
       `<tr><td>${e(clientCapabilityLabel(key))}</td><td><span class="chip ${capabilityStatusClass(c.status)}">${e(clientEvidenceStatus(c.status))}</span></td><td class="small">${e(clientLimitationText((c.limitations || []).join("; ")))}</td><td class="small">${c.validated ? "Direct check" : "Based on the available evidence"}</td></tr>`,
     )
@@ -1901,7 +1935,10 @@ function deepEvidenceLayer(model, pageState) {
 
 function supportingOverviewSectionInner(model, pillars, pageState, narrativeStates) {
   const capabilities = model.capabilityEvidence?.capabilities || {};
-  const completenessRows = Object.entries(capabilities).map(([key, item]) => `<tr><th scope="row">${e(publicEvidenceAreaLabel(key))}</th><td>${e(clientEvidenceStatus(item.status))}</td><td>${e(item.coverage?.completed ?? "NOT_AVAILABLE")}${item.coverage?.requested !== null && item.coverage?.requested !== undefined ? ` / ${e(item.coverage.requested)}` : ""}</td><td>${e((item.limitations || []).filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))).join(" ") || "No further client-facing limitation is available for this evidence area.")}</td></tr>`).join("");
+  const completenessRows = Object.entries(capabilities)
+    .filter(([key]) => !isRawIndexabilityCoverageRow(key))
+    .map(([key, item]) => `<tr><th scope="row">${e(publicEvidenceAreaLabel(key))}</th><td>${e(clientEvidenceStatus(item.status))}</td><td>${e(item.coverage?.completed ?? "NOT_AVAILABLE")}${item.coverage?.requested !== null && item.coverage?.requested !== undefined ? ` / ${e(item.coverage.requested)}` : ""}</td><td>${e((item.limitations || []).filter((note) => !/security headers?|response headers?|technical\.headers/i.test(String(note))).join(" ") || "No further client-facing limitation is available for this evidence area.")}</td></tr>`)
+    .join("");
   const readinessRows = (pillars || []).map((pillar) => `<tr><th scope="row">${e(pillar.label)}</th><td>${typeof pillar.score === "number" ? `${e(pillar.score)}/100` : "Not assessed"}</td><td>${pillar.capabilities.map((item) => `${e(clientCapabilityLabel(item.key))}: ${e(clientEvidenceStatus(item.status))}`).join("; ")}</td></tr>`).join("");
   const findings = (model.findings || []).filter((finding) => finding.scoreBearing === true || finding.actionable === true);
   const findingMarkup = findings.length
@@ -2490,11 +2527,30 @@ footer {
     padding:0;
   }
 
-  body.viewer-ready main > section:not(.viewer-active) {
+  body.viewer-ready:not(.print-full-report) main > section:not(.viewer-active) {
     display:none !important;
   }
 
-  body.viewer-ready main > section.viewer-active { display:block !important; }
+  body.viewer-ready:not(.print-full-report) main > section.viewer-active { display:block !important; }
+
+  body.print-full-report main {
+    display:flex !important;
+    flex-direction:column;
+  }
+
+  body.print-full-report main > section.viewer-section {
+    display:block !important;
+  }
+
+  body.print-full-report main > section.print-page-start {
+    break-before:page;
+    page-break-before:always;
+  }
+
+  body.print-full-report main > section.print-page-start:first-child {
+    break-before:auto;
+    page-break-before:auto;
+  }
 
   .card:not(.primary-page-card),
   .pillar,
@@ -3802,9 +3858,9 @@ footer {
       <button
         type="button"
         class="print-page-btn"
-        onclick="window.print()"
-        aria-label="Print or save this page as PDF"
-      >Print or save this page as PDF</button>
+        onclick="printFullReport()"
+        aria-label="Print or save full seven-page report as PDF"
+      >Print or save full report as PDF</button>
     </div>
 
     <main id="reportContent" tabindex="-1">
@@ -3917,6 +3973,41 @@ footer {
       content.focus({ preventScroll: true });
     }
   }
+
+  function prepareFullReportPrint() {
+    let order = 0;
+    for (const page of pages) {
+      let firstExistingSection = null;
+      for (const sectionId of page.sectionIds) {
+        const section = document.getElementById(sectionId);
+        if (!section) continue;
+        section.style.order = String(order++);
+        section.classList.remove("print-page-start");
+        if (!firstExistingSection) firstExistingSection = section;
+      }
+      if (firstExistingSection && page !== fallback) {
+        firstExistingSection.classList.add("print-page-start");
+      }
+    }
+    document.body.classList.add("print-full-report");
+  }
+
+  function cleanupFullReportPrint() {
+    document.body.classList.remove("print-full-report");
+    for (const id of allSectionIds) {
+      const section = document.getElementById(id);
+      if (!section) continue;
+      section.style.removeProperty("order");
+      section.classList.remove("print-page-start");
+    }
+  }
+
+  window.printFullReport = function printFullReport() {
+    prepareFullReportPrint();
+    window.print();
+  };
+
+  window.addEventListener("afterprint", cleanupFullReportPrint);
 
   function syncFromHash(options = {}) {
     const route = resolveRoute();

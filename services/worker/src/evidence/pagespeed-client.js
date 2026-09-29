@@ -308,6 +308,80 @@ async function callPsi(url, strategy, apiKey, fetchImpl) {
   };
 }
 
+
+// ---------------------------------------------------------------------------
+// DataForSEO Lighthouse Live API
+// ---------------------------------------------------------------------------
+
+async function callDataForSeoLighthouse(url, strategy, login, password, fetchImpl) {
+  if (!login || !password) {
+    const error = new Error("DataForSEO Lighthouse credentials are not configured");
+    error.errorCategory = ERROR_CATEGORY.AUTH;
+    throw error;
+  }
+
+  const endpoint = "https://api.dataforseo.com/v3/on_page/lighthouse/live/json";
+  const auth = Buffer.from(`${login}:${password}`, "utf8").toString("base64");
+  const payload = [{
+    url,
+    for_mobile: strategy === "mobile",
+    categories: ["performance", "accessibility", "best_practices", "seo"],
+  }];
+
+  const makeRequest = async () => {
+    const response = await withTimeout(fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${auth}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }), 120000, `DataForSEO Lighthouse ${strategy}`);
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      const error = new Error(`DataForSEO Lighthouse ${strategy} failed (${response.status}): ${body.slice(0, 300)}`);
+      error.status = response.status;
+      error.errorCategory =
+        response.status === 429 ? ERROR_CATEGORY.RATE_LIMIT
+        : response.status === 401 || response.status === 403 ? ERROR_CATEGORY.AUTH
+        : response.status >= 500 ? ERROR_CATEGORY.INTERNAL
+        : ERROR_CATEGORY.SCHEMA_VALIDATION;
+      throw error;
+    }
+
+    const body = await response.json();
+    const task = body?.tasks?.[0];
+    const lhr = task?.result?.[0];
+
+    if (body?.status_code !== 20000 || task?.status_code !== 20000 || !lhr) {
+      const error = new Error(
+        `DataForSEO Lighthouse ${strategy} returned no usable result: ${task?.status_message || body?.status_message || "unknown provider response"}`,
+      );
+      error.errorCategory = ERROR_CATEGORY.SCHEMA_VALIDATION;
+      throw error;
+    }
+
+    return {
+      lhr,
+      requestId: task.id || null,
+      cost: task.cost ?? null,
+    };
+  };
+
+  const { result, retryCount, transientError } = await retryOnce(makeRequest, `DataForSEO Lighthouse ${strategy}`);
+  if (!result) {
+    transientError.retryCount = retryCount;
+    throw transientError;
+  }
+
+  return {
+    ...result,
+    retryCount,
+    rawArtifactRef: result.requestId ? `dataforseo://lighthouse/${result.requestId}` : "dataforseo://lighthouse/live",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Local Lighthouse CLI fallback
 // ---------------------------------------------------------------------------
@@ -407,7 +481,7 @@ export async function collectPerformance(url, options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const cacheDir = options.cacheDir || resolve("artifacts", "cache", "pagespeed");
   const ttlMs = options.ttlMs ?? 24 * 60 * 60 * 1000;
-  const cacheKey = `${url}|${options.apiKey ? "key" : "nokey"}`;
+  const cacheKey = `${url}|${options.dataForSeoLogin && options.dataForSeoPassword ? "dfs" : "nodfs"}`;
   if (!options.disableCache) {
     const cached = await readCache(cacheDir, cacheKey, ttlMs);
     if (cached) return { ...cached, cache: "hit" };
@@ -423,32 +497,71 @@ export async function collectPerformance(url, options = {}) {
     const psiFailureInfo = {};
 
     try {
-      const psiResult = await callPsi(url, strategy, options.apiKey || "", fetchImpl);
-      totalRetries += psiResult.retryCount;
-      const normalized = normalizeLighthouse(psiResult.lhr, "pagespeed-insights", strategy, {
+      // When DataForSEO credentials are unavailable, use keyless/configured
+      // PSI as the primary eligible lab source. This keeps the no-key path
+      // useful while retaining DataForSEO as the preferred provider when it
+      // is configured.
+      if (!(options.dataForSeoLogin && options.dataForSeoPassword)) {
+        const psiResult = await callPsi(url, strategy, options.apiKey || "", fetchImpl);
+        totalRetries += psiResult.retryCount || 0;
+        results[strategy] = normalizeLighthouse(psiResult.lhr, "pagespeed-insights", strategy, {
+          url,
+          fallbackUsed: false,
+          rawArtifactRef: psiResult.rawArtifactRef,
+          captureDiagnosticEvidence: options.captureDiagnosticEvidence !== false,
+        });
+        continue;
+      }
+      const lighthouseResult = await callDataForSeoLighthouse(
+        url,
+        strategy,
+        options.dataForSeoLogin || "",
+        options.dataForSeoPassword || "",
+        fetchImpl,
+      );
+      totalRetries += lighthouseResult.retryCount;
+      const normalized = normalizeLighthouse(lighthouseResult.lhr, "dataforseo-lighthouse", strategy, {
         url,
         fallbackUsed: false,
-        rawArtifactRef: psiResult.rawArtifactRef,
+        rawArtifactRef: lighthouseResult.rawArtifactRef,
         captureDiagnosticEvidence: options.captureDiagnosticEvidence !== false,
       });
-      // Attach CrUX data from the same PageSpeed response when available
-      if (psiResult.cruxData?.metrics) {
-        normalized.cruxMetrics = psiResult.cruxData.metrics;
-        normalized.cruxCollectionPeriod = psiResult.cruxData.collectionPeriod || null;
-      }
       results[strategy] = normalized;
-    } catch (psiError) {
-      // Preserve PageSpeed failure for provenance
-      psiFailureInfo.category = psiError.errorCategory || ERROR_CATEGORY.INTERNAL;
-      psiFailureInfo.message = psiError.message;
-      psiFailureInfo.status = psiError.status || null;
-      // Capture retry count from the psiError (set by callPsi)
-      totalRetries += psiError.retryCount || 0;
-      limitations.push(psiError.message);
+    } catch (providerError) {
+      // Preserve DataForSEO Lighthouse failure for provenance
+      psiFailureInfo.category = providerError.errorCategory || ERROR_CATEGORY.INTERNAL;
+      psiFailureInfo.message = providerError.message;
+      psiFailureInfo.status = providerError.status || null;
+      totalRetries += providerError.retryCount || 0;
+      limitations.push(providerError.message);
       strategyErrors[strategy] = {
         category: psiFailureInfo.category,
-        message: psiError.message,
+        message: providerError.message,
       };
+
+      // Google PSI remains an eligible lab provider when DataForSEO
+      // Lighthouse is unavailable. The PSI API accepts keyless requests for
+      // basic access; configured keys are passed through without changing
+      // the provider status contract.
+      try {
+        const psiResult = await callPsi(url, strategy, options.apiKey || "", fetchImpl);
+        const normalizedPsi = normalizeLighthouse(psiResult.lhr, "pagespeed-insights", strategy, {
+          url,
+          fallbackUsed: false,
+          psiFailure: psiFailureInfo,
+          rawArtifactRef: psiResult.rawArtifactRef,
+          captureDiagnosticEvidence: options.captureDiagnosticEvidence !== false,
+        });
+        results[strategy] = normalizedPsi;
+        continue;
+      } catch (psiError) {
+        totalRetries += psiError.retryCount || 0;
+        limitations.push(`PageSpeed Insights ${strategy} failed: ${psiError.message}`);
+        strategyErrors[strategy] = {
+          category: psiError.errorCategory || strategyErrors[strategy]?.category || ERROR_CATEGORY.INTERNAL,
+          message: `${providerError.message}; PageSpeed Insights: ${psiError.message}`,
+        };
+      }
 
       // Attempt Lighthouse CLI fallback
       try {
@@ -471,12 +584,12 @@ export async function collectPerformance(url, options = {}) {
           psiFailure: psiFailureInfo,
           rawArtifactRef: raw.rawArtifactRef || `lighthouse-cli://${strategy}/${encodeURIComponent(url)}`,
         };
-        limitations.push(`PageSpeed ${strategy} failed (${psiError.message.slice(0, 120)}); fell back to Lighthouse CLI.`);
+        limitations.push(`PageSpeed ${strategy} failed (${providerError.message.slice(0, 120)}); fell back to Lighthouse CLI.`);
       } catch (localError) {
         limitations.push(`Local Lighthouse ${strategy} failed: ${localError.message}`);
         strategyErrors[strategy] = {
           category: strategyErrors[strategy]?.category || ERROR_CATEGORY.INTERNAL,
-          message: `${psiError.message}; Local Lighthouse: ${localError.message}`,
+          message: `${providerError.message}; Local Lighthouse: ${localError.message}`,
         };
         results[strategy] = {
           status: SOURCE_STATUS.FAILED,
@@ -588,10 +701,15 @@ export async function collectPerformance(url, options = {}) {
     : SOURCE_STATUS.FAILED;
 
   // ── Determine providers used ─────────────────────────────────────────
-  const intendedProvider = "pagespeed-insights";
   const actualProviders = new Set(strategies.map((r) => r.source));
-  const primarySource = actualProviders.has("pagespeed-insights")
-    ? "pagespeed-insights"
+  const intendedProvider = actualProviders.has("dataforseo-lighthouse")
+    || (options.dataForSeoLogin && options.dataForSeoPassword)
+    ? "dataforseo-lighthouse"
+    : "pagespeed-insights";
+  const primarySource = actualProviders.has("dataforseo-lighthouse")
+    ? "dataforseo-lighthouse"
+    : actualProviders.has("pagespeed-insights")
+      ? "pagespeed-insights"
     : actualProviders.has("lighthouse-cli-fallback")
       ? "lighthouse-cli-fallback"
       : "unavailable";
@@ -619,11 +737,15 @@ export async function collectPerformance(url, options = {}) {
   // Build a precise limitation message
   let sourceLimitation = null;
   if (ranCount === 0) {
-    sourceLimitation = "No usable PageSpeed or Lighthouse result.";
+    sourceLimitation = intendedProvider === "pagespeed-insights"
+      ? "No usable PageSpeed or Lighthouse result."
+      : "No usable DataForSEO Lighthouse, PageSpeed Insights, or Lighthouse result.";
   } else if (usableCount === 0 && ranCount > 0) {
     sourceLimitation = "Performance tests ran but did not produce measurable scores. The page may have timed out during metric collection or lacked sufficient content for Lighthouse scoring.";
   } else if (fallbackUsed) {
-    sourceLimitation = "PageSpeed failed for at least one strategy; Lighthouse CLI fallback succeeded.";
+    sourceLimitation = intendedProvider === "pagespeed-insights"
+      ? "PageSpeed failed for at least one strategy; Lighthouse CLI fallback succeeded."
+      : "DataForSEO Lighthouse failed for at least one strategy; local Lighthouse fallback succeeded.";
   } else if (usableCount < totalStrategies) {
     sourceLimitation = `Only ${usableCount} of ${totalStrategies} device strategies produced a measurable performance score.`;
   }
@@ -697,7 +819,7 @@ export async function collectPerformanceForPages(urls, options = {}) {
       pageResults.push({
         evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
         source: "unavailable",
-        intendedProvider: "pagespeed-insights",
+        intendedProvider: options.dataForSeoLogin && options.dataForSeoPassword ? "dataforseo-lighthouse" : "pagespeed-insights",
         sourceStatus: SOURCE_STATUS.FAILED,
         status: SOURCE_STATUS.FAILED,
         url,
@@ -711,7 +833,7 @@ export async function collectPerformanceForPages(urls, options = {}) {
         rawArtifactRef: null,
         _sourceStatus: buildSourceStatus({
           provider: "unavailable",
-          intendedProvider: "pagespeed-insights",
+          intendedProvider: options.dataForSeoLogin && options.dataForSeoPassword ? "dataforseo-lighthouse" : "pagespeed-insights",
           adapterVersion: "1.0.0",
           startedAt: null,
           completedAt: new Date().toISOString(),
@@ -742,13 +864,18 @@ export async function collectPerformanceForPages(urls, options = {}) {
   // Aggregate providers
   const allSources = new Set();
   const allFallbackUsed = pageResults.some((p) => p.fallbackUsed === true);
-  let intendedProvider = "pagespeed-insights";
   for (const pr of pageResults) {
     if (pr.mobile?.source) allSources.add(pr.mobile.source);
     if (pr.desktop?.source) allSources.add(pr.desktop.source);
   }
-  const primarySource = allSources.has("pagespeed-insights")
-    ? "pagespeed-insights"
+  const intendedProvider = allSources.has("dataforseo-lighthouse")
+    || (options.dataForSeoLogin && options.dataForSeoPassword)
+    ? "dataforseo-lighthouse"
+    : "pagespeed-insights";
+  const primarySource = allSources.has("dataforseo-lighthouse")
+    ? "dataforseo-lighthouse"
+    : allSources.has("pagespeed-insights")
+      ? "pagespeed-insights"
     : allSources.has("lighthouse-cli-fallback")
       ? "lighthouse-cli-fallback"
       : "unavailable";
@@ -805,9 +932,9 @@ export async function collectPerformanceForPages(urls, options = {}) {
             : ERROR_CATEGORY.INTERNAL)
         : null,
       limitation: allFailed
-        ? "No usable PageSpeed or Lighthouse result for any tested page."
+        ? "No usable DataForSEO Lighthouse result for any tested page."
         : allFallbackUsed
-          ? "PageSpeed failed for some pages; Lighthouse CLI fallback used."
+          ? "DataForSEO Lighthouse failed for some pages; local Lighthouse fallback used."
           : null,
       rawArtifactRef: null,
     }),
@@ -833,7 +960,7 @@ function sanitizeCoverage(cov) {
 // Governed execute() contract — WP6 universal adapter interface
 // ---------------------------------------------------------------------------
 
-const PAGESPEED_ADAPTER_VERSION = "1.1.0";
+const PAGESPEED_ADAPTER_VERSION = "1.2.0";
 
 /**
  * Execute the PageSpeed + Lighthouse adapter behind the universal source contract.
@@ -852,42 +979,24 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
 
   // Build options from audit request
   const options = {
-    apiKey: perfConfig.pagespeedApiKey || process.env.PAGESPEED_API_KEY || "",
+    dataForSeoLogin: perfConfig.dataForSeoLogin || process.env.DATAFORSEO_LOGIN || "",
+    dataForSeoPassword: perfConfig.dataForSeoPassword || process.env.DATAFORSEO_PASSWORD || "",
+    apiKey: perfConfig.pagespeedApiKey || process.env.GOOGLE_PAGESPEED_API_KEY || process.env.PAGESPEED_API_KEY || "",
     cruxApiKey: perfConfig.cruxApiKey || process.env.CRUX_API_KEY || "",
     disableCache: true,
     captureDiagnosticEvidence: true,
     fetchImpl: perfConfig.fetchImpl || null,
     localRunner: perfConfig.localRunner || null,
+    // Diagnostic screenshots belong to the durable audit/report lineage.
+    // executionId identifies one orchestration attempt and may change across
+    // retries/recovery; it must never become the report runId.
+    screenshotMeta: {
+      runId: auditRequest.auditId || null,
+      slug: auditRequest.clientId || auditRequest.auditId || "audit",
+      diagnosticCode: sourceExecutionKey || `pagespeed-${attempt || 0}`,
+      artifactRoot: perfConfig.artifactRoot || resolve("artifacts"),
+    },
   };
-
-  // Fast-fail: without an API key AND without a fetchImpl mock, live collection
-  // would hang or throw asynchronously (Chrome launch for Lighthouse fallback).
-  // When fetchImpl is injected (test mode), proceed normally — the mock controls
-  // the HTTP and Lighthouse behaviour.
-  if (!options.apiKey && !perfConfig.fetchImpl) {
-    const completedAt = new Date().toISOString();
-    return {
-      rawBytes: null,
-      contentType: null,
-      sourceResult: {
-        contractVersion: "1.0.0",
-        schemaVersion: "1.0.0",
-        source,
-        provider: "Google",
-        adapterVersion: PAGESPEED_ADAPTER_VERSION,
-        status: "NOT_CONNECTED",
-        startedAt,
-        completedAt,
-        retryCount: 0,
-        expectedRecords: 2,
-        returnedRecords: 0,
-        coverage: { requested: 2, completed: 0, failed: 2 },
-        limitations: ["PageSpeed API key not configured. Performance testing requires PAGESPEED_API_KEY."],
-        errorCategory: "not_configured",
-        evidence: { sourceStatus: "NOT_CONNECTED", intendedProvider: "pagespeed-insights" },
-      },
-    };
-  }
 
   try {
     let envelope;
@@ -936,7 +1045,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       evidence: {
         sourceStatus: envelope.sourceStatus || envelope.status,
         source: envelope.source,
-        intendedProvider: envelope.intendedProvider || "pagespeed-insights",
+        intendedProvider: envelope.intendedProvider || "dataforseo-lighthouse",
         fallbackUsed: envelope.fallbackUsed || false,
         mobile: envelope.mobile ? {
           status: envelope.mobile.status,
@@ -952,6 +1061,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         pageResults: envelope.pageResults || [],
         testedUrls: envelope.testedUrls || [],
         renderingDiagnostics: envelope.renderingDiagnostics || null,
+        usableScores: envelope.coverage?.usableScores ?? 0,
         collectedAt: envelope.collectedAt,
         coverage: envelope.coverage || null,
         limitations: envelope.limitations || [],

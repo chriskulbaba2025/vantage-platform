@@ -15,10 +15,14 @@ import { createNarrativeV2LiveBinding } from "../narrative-v2/live-binding.js";
 import { validateNarrativeConfiguration } from "../narrative/narrative-configuration.js";
 import { persistAuditRequest, loadAuditRequest } from "../orchestration/audit-request-persistence.js";
 import { createAuditApplicationService } from "./audit-service.js";
+import { validateNewAuditIntake } from "./intake-contract.js";
 import { createLifecycleService } from "../lifecycle/lifecycle-service.js";
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
 import { REQUIRED_APPROVED_PAGE_FILENAMES } from "../storage/report-store.js";
+import { rejectRetiredReport, isCurrentExecutiveHtml, isAllowedReportManifest } from "../report/report-product-contract.js";
 import { buildSolutionAuthorityRecords } from "../solution/solution-authority-provider.js";
+import { loadAndValidateDecisionEvidence } from "../evidence/decision-evidence.js";
+import { evaluateReportEvidenceSufficiency } from "../report/evidence-sufficiency.js";
 import {
   createProductionAdapters,
   createProductionContractValidator,
@@ -66,6 +70,31 @@ function buildClientId(targetUrl, businessName) {
   const safeHost = host.replace(/[^a-zA-Z0-9.-]/g, "-");
   const safeBusiness = businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `${safeHost}-${safeBusiness}`;
+}
+
+function canonicalizeRequestIntent(value) {
+  if (Array.isArray(value)) return value.map(canonicalizeRequestIntent);
+  if (!value || typeof value !== "object") {
+    return typeof value === "function" || value === undefined ? null : value;
+  }
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .filter((key) => value[key] !== undefined && typeof value[key] !== "function")
+      .map((key) => [key, canonicalizeRequestIntent(value[key])]),
+  );
+}
+
+function requestIntentFingerprint(auditRequest) {
+  const {
+    auditId: _auditId,
+    tenantId: _tenantId,
+    clientId: _clientId,
+    idempotencyKey: _idempotencyKey,
+    contractVersion: _contractVersion,
+    ...intent
+  } = auditRequest || {};
+  return JSON.stringify(canonicalizeRequestIntent(intent));
 }
 
 function injectedAdaptersAreValid(adapters) {
@@ -252,8 +281,26 @@ export function createProductionRuntime({
     validateContract: runtimeValidateContract,
   });
 
-  async function runAuditToReviewableDraft({ auditRequest, executionId, slug }) {
-    let result = await orchestrator.execute(auditRequest, { executionId });
+  async function runAuditToReviewableDraft({
+    auditRequest,
+    executionId,
+    slug,
+    current = { state: T.CREATED },
+  }) {
+    let result;
+    if (current.state === T.NARRATIVE_FAILED) {
+      if (typeof orchestrator.retryNarrativeV2PreJudgeFailure !== "function") {
+        return current.state;
+      }
+      result = await orchestrator.retryNarrativeV2PreJudgeFailure(
+        auditRequest,
+        { executionId },
+      );
+      if (!result) return current.state;
+    } else {
+      result = await orchestrator.execute(auditRequest, { executionId });
+    }
+
     let previousState = null;
 
     for (let step = 0; step < 4; step++) {
@@ -285,11 +332,13 @@ export function createProductionRuntime({
   }
 
   async function createAudit(input, tenantId) {
+    input = validateNewAuditIntake(input);
     const targetUrl = normalizeUrl(input.targetUrl);
     const businessName = deriveBusinessName(targetUrl, input.businessName);
     const auditId = randomUUID();
     const clientId = buildClientId(targetUrl, businessName);
-    const idempotencyKey = `web:${auditId}`;
+    const suppliedIdempotencyKey = String(input.idempotencyKey || "").trim();
+    const idempotencyKey = suppliedIdempotencyKey || `web:${auditId}`;
     const executionId = randomUUID();
     const slug = slugify(businessName);
 
@@ -323,13 +372,12 @@ export function createProductionRuntime({
     };
     if (input.ga4?.propertyId) auditRequest.ga4 = { propertyId: String(input.ga4.propertyId).replace(/\D/g, "") };
     if (input.gsc?.siteUrl) auditRequest.gsc = { siteUrl: String(input.gsc.siteUrl).trim() };
-    if (input.report && typeof input.report === "object") {
-      auditRequest.report = {
-        designVersion:
-          input.report.designVersion === "2.0.0" ? "2.0.0" : "1.0.0",
-        narrativeVersion: requestedNarrativeV2 ? "2.0.0" : "1.0.0",
-      };
-    }
+    auditRequest.report = {
+      designVersion:
+        input.report?.designVersion ?? "2.0.0",
+      narrativeVersion: requestedNarrativeV2 ? "2.0.0" : "1.0.0",
+      snapshotVersion: "1.0.0",
+    };
 
     auditRequest.crawl =
       input.crawl && typeof input.crawl === "object" ? { ...input.crawl } : {};
@@ -375,6 +423,64 @@ export function createProductionRuntime({
       throw err;
     }
 
+    // Client-supplied idempotency is checked before lifecycle creation,
+    // provider execution, or narrative registration. Same intent replays the
+    // existing audit; conflicting reuse fails closed.
+    if (
+      suppliedIdempotencyKey &&
+      typeof lifecycleRepo.loadByIdempotencyKey === "function"
+    ) {
+      const existing = await lifecycleRepo.loadByIdempotencyKey(
+        tenantId,
+        suppliedIdempotencyKey,
+      );
+
+      if (existing) {
+        const existingRequest = await loadAuditRequest({
+          store: artifactStore,
+          scope: {
+            tenantId,
+            clientId: existing.clientId,
+            auditId: existing.auditId,
+          },
+          validateContract: runtimeValidateContract,
+        }).catch(() => null);
+
+        if (!existingRequest) {
+          throw Object.assign(
+            new Error("An audit with this idempotency key is still being initialized"),
+            { statusCode: 409, code: "AUDIT_IDEMPOTENCY_PENDING" },
+          );
+        }
+
+        if (
+          requestIntentFingerprint(existingRequest) !==
+          requestIntentFingerprint(auditRequest)
+        ) {
+          throw Object.assign(
+            new Error("Idempotency key was already used for different audit input"),
+            { statusCode: 409, code: "AUDIT_IDEMPOTENCY_CONFLICT" },
+          );
+        }
+
+        const current = await lifecycleService.currentState(
+          existing.auditId,
+          tenantId,
+        ).catch(() => null);
+
+        return {
+          auditId: existing.auditId,
+          tenantId,
+          clientId: existing.clientId,
+          executionId: null,
+          finalState: current?.state || T.CREATED,
+          slug,
+          backgroundStarted: false,
+          idempotentReplay: true,
+        };
+      }
+    }
+
     // Register audit scope before any background narrative execution. This
     // scope is used only for immutable usage/cost records; it is never added
     // to the Writer/Judge model payload.
@@ -410,19 +516,27 @@ export function createProductionRuntime({
     };
   }
 
-  const RESUMABLE_STATES = new Set([T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY]);
+  const RESUMABLE_STATES = new Set([T.SCORED, T.NARRATIVE_PENDING, T.NARRATIVE_READY, T.RENDER_FAILED, T.DRAFT_RENDERED, T.COLLECTION_FAILED]);
 
   async function resumeAudit(auditId, tenantId) {
     const meta = await loadAuditMetadata(lifecycleRepo, auditId, tenantId).catch(() => null);
     if (!meta) return null;
     const current = await lifecycleService.currentState(auditId, tenantId);
-    if (!current || !RESUMABLE_STATES.has(current.state)) return current?.state || null;
+    if (
+      !current
+      || (
+        !RESUMABLE_STATES.has(current.state)
+        && current.state !== T.NARRATIVE_FAILED
+      )
+    ) {
+      return current?.state || null;
+    }
 
     const businessName = meta.business_name || meta.businessName || "";
     const clientId = meta.client_id || meta.clientId || current.clientId || "";
     const executionId = randomUUID();
 
-    const auditRequest = await loadAuditRequest({
+    let auditRequest = await loadAuditRequest({
       store: artifactStore,
       scope: { tenantId, clientId, auditId },
       validateContract: runtimeValidateContract,
@@ -433,11 +547,49 @@ export function createProductionRuntime({
       );
     }
 
-    if (typeof narrativeV2Deps.registerAuditScope === "function") {
-      narrativeV2Deps.registerAuditScope({ tenantId, clientId, auditId, executionId });
+    let forceEvidenceRecovery = false;
+    if (current.state === T.DRAFT_RENDERED || current.state === T.COLLECTION_FAILED || current.state === T.RENDER_FAILED) {
+      const decisionKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/canonical/decision-evidence.json`;
+      const decisionBytes = await artifactStore.get(decisionKey).catch(() => null);
+      let evaluation = null;
+      try {
+        const decision = decisionBytes ? JSON.parse(Buffer.from(decisionBytes).toString("utf8")) : {};
+        evaluation = evaluateReportEvidenceSufficiency(decision);
+      } catch { evaluation = evaluateReportEvidenceSufficiency({}); }
+      if (!evaluation.reportable) {
+        forceEvidenceRecovery = true;
+        auditRequest = {
+          ...auditRequest,
+          crawl: { ...(auditRequest.crawl || {}), recoveryRevision: `r${Number(current.version || 0) + 1}` },
+        };
+      } else {
+        return current.state;
+      }
     }
 
-    let result = await orchestrator.execute(auditRequest, { executionId });
+    if (typeof narrativeV2Deps.registerAuditScope === "function") {
+      narrativeV2Deps.registerAuditScope({
+        tenantId,
+        clientId,
+        auditId,
+        executionId,
+        liveUsageNamespace: executionId,
+      });
+    }
+
+    let result;
+    if (current.state === T.NARRATIVE_FAILED) {
+      if (typeof orchestrator.retryNarrativeV2PreJudgeFailure !== "function") {
+        return current.state;
+      }
+      result = await orchestrator.retryNarrativeV2PreJudgeFailure(
+        auditRequest,
+        { executionId },
+      );
+      if (!result) return current.state;
+    } else {
+      result = await orchestrator.execute(auditRequest, { executionId, forceEvidenceRecovery });
+    }
     let previousState = null;
     for (let step = 0; step < 4; step++) {
       if (result.finalState === T.DRAFT_RENDERED || FAILURE_STATES.has(result.finalState)) break;
@@ -661,11 +813,13 @@ export function createProductionRuntime({
     };
   }
 
+  // Automatic startup recovery is reserved for interrupted non-terminal work.
+  // Controlled failure states require an explicit retry/continuation path so
+  // legacy or incompatible persisted artifacts are never retried on every boot.
   const STRANDED_ACTIVE_STATES = new Set([
-    T.CREATED, T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED,
+    T.CREATED, T.VALIDATED, T.COLLECTING,
     T.EVIDENCE_STORED, T.EVIDENCE_LOCKED, T.SCORED,
-    T.NARRATIVE_PENDING, T.NARRATIVE_FAILED, T.NARRATIVE_READY,
-    T.RENDER_FAILED,
+    T.NARRATIVE_PENDING, T.NARRATIVE_READY,
   ]);
 
   async function recoverStrandedAudits(tenantId) {
@@ -817,18 +971,7 @@ export function createProductionRuntime({
         if (!v2Bytes) throw Object.assign(new Error("Current Narrative v2 page missing"), { statusCode: 422 });
         currentV2Page = Buffer.from(v2Bytes).toString("utf8");
       } else {
-        governedPages = new Map();
-        for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
-          const key = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`;
-          let bytes = null;
-          try {
-            bytes = await artifactStore.get(key);
-          } catch {
-            bytes = null;
-          }
-          if (!bytes) throw Object.assign(new Error(`Draft report page missing: ${filename}`), { statusCode: 422 });
-          governedPages.set(filename, Buffer.from(bytes).toString("utf8"));
-        }
+        throw rejectRetiredReport("Current Executive Report artifact is unavailable; legacy pages are not accepted");
       }
     }
 
@@ -944,14 +1087,20 @@ export function createProductionRuntime({
     }
 
     const v2ManifestKey = `tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report-v2/manifest.json`;
-    const isCurrentV2 = Boolean(await artifactStore.get(v2ManifestKey).catch(() => null));
-    const bytes = isCurrentV2
-      ? await reportStore.readPublishedV2Page(slug, auditId, filename)
-      : await artifactStore.get(`tenants/${tenantId}/clients/${current.clientId}/audits/${auditId}/report/pages/${filename}`);
+    const v2ManifestBytes = await artifactStore.get(v2ManifestKey).catch(() => null);
+    let isCurrentV2 = false;
+    if (v2ManifestBytes) {
+      try { isCurrentV2 = isAllowedReportManifest(JSON.parse(Buffer.from(v2ManifestBytes).toString("utf8"))); } catch { isCurrentV2 = false; }
+    }
+    if (!isCurrentV2) throw rejectRetiredReport("Historical report artifacts are not publishable");
+    const bytes = await reportStore.readPublishedV2Page(slug, auditId, filename);
     if (!bytes) {
       const err = new Error("Report file not found");
       err.statusCode = 404;
       throw err;
+    }
+    if (!isCurrentExecutiveHtml(Buffer.from(bytes).toString("utf8"))) {
+      throw rejectRetiredReport("Published report artifact is not the current Executive product");
     }
 
     return {

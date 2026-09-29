@@ -53,6 +53,9 @@ async function capturePersistedRequest(input, tenantId) {
     {
       targetUrl: "https://example.com",
       businessName: "Example",
+      market: "Canada",
+      primaryGoal: "Generate enquiries",
+      services: ["Consulting"],
       ...input,
     },
     tenantId,
@@ -148,5 +151,65 @@ test(
         process.env.PRYSM_DISABLE_LIVE_BROWSER = previous;
       }
     }
+  },
+);
+
+
+test(
+  "GACM-INTAKE-IDEMPOTENCY-01: exact retries reuse one audit and conflicting reuse fails closed",
+  async () => {
+    const artifactStore = createGovernedArtifactStore({
+      store: createMemoryArtifactStore(),
+    });
+    const lifecycleRepo = createMemoryLifecycleRepository();
+    const runtime = createProductionRuntime({
+      config: {
+        artifactDir: ".",
+        narrativeMode: "mock",
+      },
+      adapters: controlledAdapters(),
+      validateContract: noopValidator,
+      artifactStore,
+      lifecycleRepo,
+      reportStore: {},
+      narrativeV2: { enabled: false },
+    });
+
+    const input = {
+      targetUrl: "https://idempotent.example",
+      businessName: "Idempotent Example",
+      market: "Canada",
+      primaryGoal: "Generate enquiries",
+      services: ["Consulting"],
+      idempotencyKey: "audit-retry-0001",
+    };
+
+    const first = await runtime.auditService.createAudit(
+      input,
+      "tenant-idempotency",
+    );
+    const replay = await runtime.auditService.createAudit(
+      input,
+      "tenant-idempotency",
+    );
+
+    assert.equal(replay.auditId, first.auditId, "same request reuses the existing audit");
+    assert.equal(replay.clientId, first.clientId);
+    assert.equal(replay.backgroundStarted, false, "replay never starts provider/background work");
+    assert.equal(replay.idempotentReplay, true);
+
+    await assert.rejects(
+      runtime.auditService.createAudit(
+        {
+          ...input,
+          primaryGoal: "Sell products online",
+        },
+        "tenant-idempotency",
+      ),
+      (error) =>
+        error.statusCode === 409 &&
+        error.code === "AUDIT_IDEMPOTENCY_CONFLICT",
+      "same key with changed intent must fail closed",
+    );
   },
 );

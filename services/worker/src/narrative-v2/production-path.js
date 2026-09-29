@@ -48,6 +48,18 @@ const NARRATIVE_FAILURE_ARTIFACT =
   "narrative-v2/failure.json";
 const NARRATIVE_FAILURE_CONTRACT_VERSION = "1.0.0";
 
+function narrativeFailureArtifactForExecution(executionId) {
+  const safeExecutionId = String(executionId || "unknown")
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+  return `${NARRATIVE_FAILURE_ARTIFACT.replace(/\.json$/, "")}-${safeExecutionId}.json`;
+}
+
+function narrativeWriterInputArtifactForExecution(executionId) {
+  const safeExecutionId = String(executionId || "unknown")
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+  return `narrative-v2/writer-input-${safeExecutionId}.json`;
+}
+
 export function hasRequiredNarrativeV2ReportStructure(html) {
   return typeof html === "string"
     && /^<!doctype html>/i.test(html)
@@ -1817,6 +1829,65 @@ export function createNarrativeV2ProductionPath({
     });
   }
 
+  async function retryNarrativeV2PreJudgeFailure(
+    auditRequest,
+    {
+      executionId = randomUUID(),
+    } = {},
+  ) {
+    if (!isNarrativeV2Request(auditRequest)) return null;
+    if (!enabled) return null;
+    if (!isReportDesignV2(auditRequest.report?.designVersion)) return null;
+
+    const current = await lifecycleService.currentState(
+      auditRequest.auditId,
+      auditRequest.tenantId,
+    );
+
+    if (current?.state !== T.NARRATIVE_FAILED) return null;
+
+    const [orchestrationResult, failure] = await Promise.all([
+      loadEffectiveOrchestrationResult({ artifactStore, auditRequest }),
+      loadNarrativeFailure({ artifactStore, auditRequest }),
+    ]);
+
+    const retryableWriterStages = new Set([
+      "writer_prompt",
+      "writer_provider",
+      "writer_validation",
+    ]);
+
+    const retryable =
+      Boolean(failure)
+      && !orchestrationResult
+      && failure.judgeRan === false
+      && failure.finalPassAvailable === false
+      && retryableWriterStages.has(failure.failureStage);
+
+    if (!retryable) return null;
+
+    await transition({
+      lifecycleService,
+      auditRequest,
+      executionId,
+      toState: T.NARRATIVE_PENDING,
+      reason: "narrative-v2-pre-judge-retry-authorized",
+    });
+
+    return runNarrativeV2FromPending({
+      auditRequest,
+      executionId,
+      startedAt: c.now(),
+      lifecycleService,
+      artifactStore,
+      validateContract,
+      writerExecutor,
+      judgeExecutor,
+      solutionAuthorityProvider,
+      clock: c,
+    });
+  }
+
   // Crash recovery from NARRATIVE_PENDING may need to re-run when no terminal
   // orchestration artifact exists. Keep that path separate so it does not try
   // SCORED → NARRATIVE_PENDING a second time.
@@ -1851,7 +1922,7 @@ export function createNarrativeV2ProductionPath({
       await persistJsonArtifact({
         artifactStore: args.artifactStore,
         auditRequest: args.auditRequest,
-        artifactName: "narrative-v2/writer-input.json",
+        artifactName: narrativeWriterInputArtifactForExecution(args.executionId),
         value: writerInput,
       });
       orchestrationResult = await runNarrativeV2Orchestration({
@@ -1906,7 +1977,7 @@ export function createNarrativeV2ProductionPath({
       const failureRecord = await persistJsonArtifact({
         artifactStore: args.artifactStore,
         auditRequest: args.auditRequest,
-        artifactName: NARRATIVE_FAILURE_ARTIFACT,
+        artifactName: narrativeFailureArtifactForExecution(args.executionId),
         value: failure,
       });
       await transition({
@@ -1936,6 +2007,7 @@ export function createNarrativeV2ProductionPath({
     execute,
     getNarrativeV2HumanReview,
     continueNarrativeV2FinalPass,
+    retryNarrativeV2PreJudgeFailure,
   });
 }
 

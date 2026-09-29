@@ -18,7 +18,7 @@ import { hydrateCurrentReportModel } from "../report-model/current-model.js";
 // ---------------------------------------------------------------------------
 // Locked report design version — must match schema const
 // ---------------------------------------------------------------------------
-export const LOCKED_REPORT_DESIGN_VERSION = "1.0.0";
+export const LOCKED_REPORT_DESIGN_VERSION = "2.0.0";
 
 // ---------------------------------------------------------------------------
 // Renderer lock — SHA-256 of all frozen renderer assets
@@ -28,16 +28,9 @@ export const RENDERER_LOCK = Object.freeze({
   // Baseline hashes computed at WP10 freeze time — filled by lock verification
   baselineSha256: null,
   files: Object.freeze([
-    "services/worker/src/report/karen-leslie-template.html",
-    "services/worker/src/report/render-report.js",
-    "services/worker/src/report/render-approved-report.js",
-    "services/worker/src/report/html-helpers.js",
-    "services/worker/src/report/sections-conversion.js",
-    "services/worker/src/report/sections-trust.js",
-    "services/worker/src/report/sections-seo.js",
-    "services/worker/src/report/sections-performance.js",
-    "services/worker/src/report/sections-internal-links.js",
-    "services/worker/src/report/verify-template.js",
+    "services/worker/src/report/render-report-v2.js",
+    "services/worker/src/report/report-design.js",
+    "services/worker/src/report/report-product-contract.js",
   ]),
 });
 

@@ -31,6 +31,34 @@ const SOURCE_KEY = Object.freeze({
 });
 
 const VIABLE_STATUSES = new Set(["AVAILABLE", "PARTIAL"]);
+const NON_COMPETITOR_HOSTS = new Set(["facebook.com", "instagram.com", "linkedin.com", "youtube.com", "reddit.com", "wikipedia.org", "yelp.com", "yellowpages.ca", "yellowpages.com", "mapquest.com"]);
+
+function qualifySerpCandidate(item, auditRequest = {}) {
+  const url = item.url || item.candidateUrl || item.link || "";
+  let domain = item.domain || "";
+  try { domain = domain || new URL(url).hostname; } catch { /* unresolved */ }
+  const baseDomain = domain.replace(/^www\./i, "").toLowerCase();
+  const query = String(item._keyword || item.keyword || "").trim();
+  const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+  const reasons = [];
+  if (!url || !domain) reasons.push("domain_identity_unresolved");
+  if (NON_COMPETITOR_HOSTS.has(baseDomain)) reasons.push("excluded_result_class");
+  if (/directory|yellowpages|yelp|mapquest|listings?/i.test(`${baseDomain}${url}`)) reasons.push("excluded_result_class");
+  const services = (auditRequest.services || []).map(String).filter(Boolean);
+  if (!services.some((service) => text.includes(service.toLowerCase()) || query.toLowerCase().includes(service.toLowerCase()))) reasons.push("service_relevance_unproven");
+  const market = String(auditRequest.market || "").split(",")[0].trim().toLowerCase();
+  if (market && !text.includes(market) && !query.toLowerCase().includes(market)) reasons.push("geographic_relevance_unproven");
+  if (!item.businessType && !item.entityType && !/business|local|organization|company/i.test(String(item.resultType || item.pageType || ""))) reasons.push("business_identity_unproven");
+  if (!text && !query) reasons.push("commercial_identity_unproven");
+  return {
+    candidateUrl: url || null,
+    domain: domain || null,
+    status: reasons.length === 0 ? "QUALIFIED" : "UNRESOLVED",
+    qualified: reasons.length === 0,
+    reasons,
+    provenance: { source: "dataforseo-serp", keyword: query || null, targetDomain: (() => { try { return new URL(auditRequest.targetUrl).hostname; } catch { return null; } })(), providerRecord: item.rawArtifactRef || null },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,6 +116,7 @@ function hydrateSite(sourceResult) {
     // site at the persistence boundary (malformed evidence fails closed).
     domain: ev.domain || undefined,
     targetUrl: ev.targetUrl || undefined,
+    identityCandidates: ev.identityCandidates,
     pages: ev.pages,
     services: ev.services,
     trust: ev.trust,
@@ -176,6 +205,7 @@ function hydratePerformance(sourceResult) {
     mobile: ev.mobile || undefined,
     desktop: ev.desktop || undefined,
     renderingDiagnostics: ev.renderingDiagnostics || undefined,
+    usableScores: ev.usableScores ?? undefined,
     limitations: sourceResult.limitations || [],
     coverage: sourceResult.coverage || undefined,
   });
@@ -280,7 +310,7 @@ function deriveInternalLinkOpportunities(site) {
  * @param {function} [opts.validateContract] — optional contract validator
  * @returns {{ evidence: object, errors: Array<string> }}
  */
-export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, validateContract }) {
+export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, validateContract, auditRequest = {} }) {
   const errors = [];
    const evidence = {
     contractVersion: "1.0.0",
@@ -352,6 +382,18 @@ export function buildDecisionEvidence({ allSourceResults, suppliedCompetitors, v
         break;
       case "competitors":
         evidence.competitors = hydrateCompetitors(sr, suppliedCompetitors);
+        {
+          const qualification = evidence.competitors.map((candidate) => qualifySerpCandidate(candidate.evidence || candidate, auditRequest));
+          const qualified = qualification.filter((candidate) => candidate.qualified);
+          const excluded = qualification.filter((candidate) => !candidate.qualified);
+        evidence.competitorOpportunities = {
+          status: evidence.competitors.length ? "AVAILABLE" : (sr.status || "UNAVAILABLE"),
+          candidates: { qualified, excluded, totalQualified: qualified.length, totalExcluded: excluded.length },
+          gaps: [],
+          allGaps: [],
+          provenance: { source: "dataforseo-serp", sourceStatus: sr.status || "UNKNOWN", rawArtifactRef: sr.rawArtifactRef || null },
+        };
+        }
         break;
       case "backlinks":
         evidence.backlinks = hydrateMidSource(sr);

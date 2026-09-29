@@ -59,7 +59,7 @@ function okSourceResult(source, evidence = {}) {
 function workingAdapters() {
   return {
     "dataforseo-onpage": { adapterVersion: "1.0.0", execute: async () => ({ rawBytes: null, contentType: null, sourceResult: okSourceResult("dataforseo-onpage", {
-      sourceStatus: "AVAILABLE", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
+      sourceStatus: "AVAILABLE", rawArtifactRef: "fixture://governed-onpage-evidence", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
       pages: [{ url: "https://proof.example.com", title: "Proof", headings: { h1: ["Proof"], h2: [], h3: [] }, description: "D", content: { text: "x", wordCount: 300 }, images: [], links: { internal: [], external: [] }, statusCode: 200 }],
       services: ["Governed Evidence Service"], trust: { credentials: true }, platform: "ProofCMS", schemaTypes: ["ProfessionalService"],
       statusCounts: { "200": 1 }, totalWords: 300, averageWords: 300, missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
@@ -129,6 +129,7 @@ test("PRYSM-CLOSE-10a: audit acceptance creates a durable work record", async ()
       language: "en-CA",
       primaryGoal: "book a consultation",
       services: ["Governed Evidence Service"],
+      report: { designVersion: "2.0.0" },
       competitors: ["https://competitor-proof.example.net"],
     },
     tenantId,
@@ -275,3 +276,114 @@ test("PRYSM-CLOSE-10c: reclamation leaves completed audits untouched", async () 
   const after = (await runtimeB.lifecycleService.currentState(auditId, tenantId))?.state;
   assert.equal(after, T.DRAFT_RENDERED, "lifecycle unchanged");
 });
+
+test("PRYSM-CLOSE-10d: startup recovery does not retry controlled failure states", async (t) => {
+  const failurePaths = [
+    {
+      state: T.COLLECTION_FAILED,
+      path: [T.VALIDATED, T.COLLECTING, T.COLLECTION_FAILED],
+    },
+    {
+      state: T.NARRATIVE_FAILED,
+      path: [
+        T.VALIDATED,
+        T.COLLECTING,
+        T.EVIDENCE_STORED,
+        T.EVIDENCE_LOCKED,
+        T.SCORED,
+        T.NARRATIVE_PENDING,
+        T.NARRATIVE_FAILED,
+      ],
+    },
+    {
+      state: T.RENDER_FAILED,
+      path: [
+        T.VALIDATED,
+        T.COLLECTING,
+        T.EVIDENCE_STORED,
+        T.EVIDENCE_LOCKED,
+        T.SCORED,
+        T.NARRATIVE_PENDING,
+        T.NARRATIVE_READY,
+        T.RENDER_FAILED,
+      ],
+    },
+  ];
+
+  for (const failureCase of failurePaths) {
+    await t.test(failureCase.state, async () => {
+      const stores = newSharedStores();
+      const repo = wrapRepo(createMemoryLifecycleRepository());
+      const { createLifecycleService } = await import("../lifecycle/lifecycle-service.js");
+      const { persistAuditRequest } = await import("../orchestration/audit-request-persistence.js");
+      const { randomUUID } = await import("node:crypto");
+
+      const lifecycle = createLifecycleService(repo);
+      const auditId = randomUUID();
+      const clientId = "proof.example.com-prysm-production-proof";
+      const auditRequest = {
+        contractVersion: "1.0.0",
+        auditId,
+        tenantId,
+        clientId,
+        idempotencyKey: randomUUID(),
+        targetUrl: "https://proof.example.com",
+        businessName: "Prysm Production Proof",
+        market: "Toronto, Ontario",
+        language: "en-CA",
+        primaryGoal: "book a consultation",
+        services: ["Governed Evidence Service"],
+        competitors: [],
+      };
+
+      await lifecycle.create({
+        auditId,
+        tenantId,
+        clientId,
+        idempotencyKey: auditRequest.idempotencyKey,
+      });
+
+      for (const toState of failureCase.path) {
+        await lifecycle.transition({
+          auditId,
+          tenantId,
+          toState,
+          transitionIdempotencyKey: `${auditId}:${toState}`,
+        });
+      }
+
+      await persistAuditRequest({
+        store: stores.artifactStore,
+        auditRequest,
+        validateContract: () => ({ valid: true, errors: [] }),
+      });
+      await repo.updateAuditMetadata(auditId, tenantId, {
+        business_name: auditRequest.businessName,
+        target_url: auditRequest.targetUrl,
+        client_id: clientId,
+      });
+
+      const runtime = createProductionRuntime({
+        config: baseConfig(),
+        adapters: workingAdapters(),
+        validateContract: () => ({ valid: true, errors: [] }),
+        artifactStore: stores.artifactStore,
+        lifecycleRepo: repo,
+        reportStore: stores.reportStore,
+      });
+
+      const recovered = await runtime.recoverStrandedAudits(tenantId);
+      assert.equal(
+        recovered.some((row) => row.auditId === auditId),
+        false,
+        `${failureCase.state} audit is not automatically reclaimed`,
+      );
+      assert.equal(
+        (await runtime.lifecycleService.currentState(auditId, tenantId))?.state,
+        failureCase.state,
+        `${failureCase.state} lifecycle state remains unchanged`,
+      );
+    });
+  }
+});
+

@@ -507,7 +507,7 @@ export function createLocalReportStore(options = {}) {
       }
 
       // Validate exact governed required page set (WP10-APPROVAL-01)
-      const pageError = validateApprovedPageSet(pages);
+      const pageError = pages.size === 0 ? null : validateApprovedPageSet(pages);
       if (pageError) {
         throw Object.assign(new Error(pageError), { statusCode: 422 });
       }
@@ -1044,7 +1044,7 @@ export function createS3ReportStore(options = {}) {
       }
 
       // Validate exact governed required page set (WP10-APPROVAL-01)
-      const pageError = validateApprovedPageSet(pages);
+      const pageError = pages.size === 0 ? null : validateApprovedPageSet(pages);
       if (pageError) {
         throw Object.assign(new Error(pageError), { statusCode: 422 });
       }

@@ -208,7 +208,10 @@ test("no schema anywhere and content unknown → schema capability UNAVAILABLE (
   });
 
   assert.equal(cap(result, "schema.structured_data").status, "UNAVAILABLE");
-  assert.equal(cap(result, "content.body").status, "UNAVAILABLE");
+  assert.equal(cap(result, "content.body").status, "PARTIAL");
+  assert.equal(cap(result, "offer.clarity").status, "PARTIAL");
+  assert.equal(cap(result, "trust.proof").status, "PARTIAL");
+  assert.match(cap(result, "content.body").limitations.join(" "), /unknown/i);
   assert.equal(cap(result, "technical.headers").status, "UNAVAILABLE");
 });
 

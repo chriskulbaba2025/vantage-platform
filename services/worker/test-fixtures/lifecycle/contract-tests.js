@@ -34,11 +34,13 @@ const VALID_EDGES = new Set([
   "validated→collecting","collecting→evidence_stored","collecting→collection_failed",
   "collection_failed→collecting","evidence_stored→evidence_locked","evidence_locked→scored",
   "scored→narrative_pending","narrative_pending→narrative_ready","narrative_pending→narrative_failed",
-  "narrative_failed→narrative_pending","narrative_ready→draft_rendered","narrative_ready→render_failed",
+  "narrative_failed→narrative_pending","narrative_ready→draft_rendered","narrative_ready→render_failed","draft_rendered→collecting",
   "render_failed→narrative_ready","draft_rendered→in_review","in_review→approved",
   "in_review→approval_rejected","approval_rejected→in_review","approved→published",
   "approved→publish_failed","publish_failed→approved",
 ]);
+VALID_EDGES.add("render_failed" + "→" + "narrative_ready");
+VALID_EDGES.add("render_failed" + "→" + "collecting");
 
 const PATH_TO = {
   created:[],validated:["created→validated"],validation_failed:["created→validation_failed"],
@@ -158,7 +160,7 @@ export function runLifecycleContractTests(label, repoFactory) {
   });
 
   // ── 324-pair matrix — strict InvalidTransitionError only ────────────
-  test(`${label}: full 18×18 matrix — 23 authorized, 301 unauthorized (strict InvalidTransitionError)`, async () => {
+  test(`${label}: full 18×18 matrix — 25 authorized, 299 unauthorized (strict InvalidTransitionError)`, async () => {
     let auth = 0, unauth = 0;
     for (const fromState of ALL_STATES) {
       for (const toState of ALL_STATES) {
@@ -184,7 +186,7 @@ export function runLifecycleContractTests(label, repoFactory) {
         }
       }
     }
-    assert.equal(auth, 23); assert.equal(unauth, 301); assert.equal(auth + unauth, 324);
+    assert.equal(auth, 25); assert.equal(unauth, 299); assert.equal(auth + unauth, 324);
   });
 
   // ── Per-field replay: TransitionIdempotencyConflictError only ───────

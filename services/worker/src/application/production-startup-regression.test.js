@@ -54,12 +54,24 @@ function n8nCalls() {
 
 async function importServerWithoutBindingTestPort() {
   const priorTestMode = process.env.VANTAGE_TEST_MODE;
+  const priorMemoryStore = process.env.VANTAGE_DEV_MEMORY_STORE;
+  const priorDatabaseUrl = process.env.DATABASE_URL;
+  const priorReportsBucket = process.env.VANTAGE_REPORTS_BUCKET;
   process.env.VANTAGE_TEST_MODE = "true";
+  process.env.VANTAGE_DEV_MEMORY_STORE = "true";
+  delete process.env.DATABASE_URL;
+  delete process.env.VANTAGE_REPORTS_BUCKET;
   try {
     return await import("../server.js");
   } finally {
     if (priorTestMode === undefined) delete process.env.VANTAGE_TEST_MODE;
     else process.env.VANTAGE_TEST_MODE = priorTestMode;
+    if (priorMemoryStore === undefined) delete process.env.VANTAGE_DEV_MEMORY_STORE;
+    else process.env.VANTAGE_DEV_MEMORY_STORE = priorMemoryStore;
+    if (priorDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = priorDatabaseUrl;
+    if (priorReportsBucket === undefined) delete process.env.VANTAGE_REPORTS_BUCKET;
+    else process.env.VANTAGE_REPORTS_BUCKET = priorReportsBucket;
   }
 }
 
@@ -118,7 +130,7 @@ describe("BL-10: Startup import graph — zero provider calls", () => {
     const before = capturedCalls.length;
     const adapter = createBacklinksAdapter({});
     assert.equal(capturedCalls.length - before, 0);
-    assert.equal(adapter.adapterVersion, "1.0.0");
+    assert.equal(adapter.adapterVersion, "1.1.0");
     assert.equal(typeof adapter.execute, "function");
   });
 

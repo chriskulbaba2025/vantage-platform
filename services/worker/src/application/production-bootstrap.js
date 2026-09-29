@@ -28,15 +28,17 @@ const MIGRATIONS = Object.freeze([
 
 async function executePageSpeedWithProductionConfig(args) {
   const existing = args.auditRequest?.performance || {};
-  const pagespeedApiKey = existing.pagespeedApiKey || process.env.GOOGLE_PAGESPEED_API_KEY || process.env.PAGESPEED_API_KEY || "";
-  const cruxApiKey = existing.cruxApiKey || process.env.GOOGLE_CRUX_API_KEY || process.env.CRUX_API_KEY || pagespeedApiKey;
+  const dataForSeoLogin = existing.dataForSeoLogin || process.env.DATAFORSEO_LOGIN || "";
+  const dataForSeoPassword = existing.dataForSeoPassword || process.env.DATAFORSEO_PASSWORD || "";
+  const cruxApiKey = existing.cruxApiKey || process.env.GOOGLE_CRUX_API_KEY || process.env.CRUX_API_KEY || "";
   return pagespeedExecute({
     ...args,
     auditRequest: {
       ...args.auditRequest,
       performance: {
         ...existing,
-        pagespeedApiKey,
+        dataForSeoLogin,
+        dataForSeoPassword,
         cruxApiKey,
       },
     },
@@ -47,9 +49,9 @@ async function executePageSpeedWithProductionConfig(args) {
 export function createProductionAdapters() {
   return Object.freeze({
     "dataforseo-onpage": Object.freeze({ adapterVersion: ONPAGE_VERSION, execute: onpageExecute }),
-    pagespeed: Object.freeze({ adapterVersion: "1.1.0", execute: executePageSpeedWithProductionConfig }),
+    pagespeed: Object.freeze({ adapterVersion: "1.2.0", execute: executePageSpeedWithProductionConfig }),
     "dataforseo-serp": Object.freeze({ adapterVersion: SERP_VERSION, execute: serpExecute }),
-    backlinks: Object.freeze({ adapterVersion: "1.0.0", execute: backlinksExecute }),
+    backlinks: Object.freeze({ adapterVersion: "1.1.0", execute: backlinksExecute }),
     ga4: Object.freeze({ adapterVersion: "1.0.0", execute: ga4Execute }),
     gsc: Object.freeze({ adapterVersion: "1.0.0", execute: gscExecute }),
   });

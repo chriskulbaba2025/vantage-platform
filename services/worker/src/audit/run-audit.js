@@ -9,7 +9,6 @@ import { collectCompetitorOpportunities } from "../evidence/competitor-opportuni
 import { generateInternalLinkOpportunities } from "../evidence/internal-link-opportunity.js";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import { runFinalizationGate } from "../scoring/report-finalization-gate.js";
-import { renderReport } from "../report/render-report.js";
 import { createReportStore } from "../storage/report-store.js";
 import { createRunId, domainOf, normalizeUrl, slugify } from "../utils.js";
 import { loadConfig } from "../config.js";
@@ -31,7 +30,7 @@ import {
   validateCompetitorDecisions,
   buildCompetitorOverrides,
 } from "./review-gate.js";
-import { renderApprovedReport } from "../report/render-approved-report.js";
+import { rejectRetiredReport } from "../report/report-product-contract.js";
 
 // ---------------------------------------------------------------------------
 // Input validation
@@ -484,13 +483,11 @@ export async function runAudit(rawInput, options = {}) {
     // Audit stays in draft; structured errors attached to model for auditor review
     gatedModel._renderBlocked = true;
   }
-  const html = gate.passed
-    ? await (options.renderReport || renderReport)(gatedModel, { artifactRoot })
-    : "";
+  const html = "";
   const completedAt = new Date().toISOString();
 
   const manifest = {
-    artifactVersion: "1.0.0",
+    artifactVersion: "2.0.0",
     reportVersion: gatedModel.reportVersion,
     runId,
     slug,
@@ -515,9 +512,7 @@ export async function runAudit(rawInput, options = {}) {
       gscSiteUrl: effectiveGscSiteUrl,
       competitors: input.competitors,
     },
-    files: gate.passed
-      ? ["index.html", "audit.json", "evidence.json", "manifest.json"]
-      : ["audit.json", "evidence.json", "manifest.json"],
+    files: ["audit.json", "evidence.json", "manifest.json"],
   };
 
   const store =
@@ -526,7 +521,7 @@ export async function runAudit(rawInput, options = {}) {
     slug,
     runId,
     html: gate.passed ? html : "",
-    includeIndexHtml: gate.passed,
+    includeIndexHtml: false,
     model: gatedModel,
     manifest,
   });
@@ -864,32 +859,16 @@ export async function approveAudit(store, slug, runId, approver, opts = {}) {
     );
   }
 
-  // Render approved multi-page report (all-or-nothing)
-  let approvedPages;
-  try {
-    const result = renderApprovedReport(model);
-    approvedPages = result.pages; // Map<filename, html>
-  } catch (renderErr) {
-    await store.addLimitation(
-      slug, runId,
-      `Approved report rendering failed: ${renderErr.message}`,
-    );
-    throw Object.assign(
-      new Error(`Approved report rendering failed: ${renderErr.message}`),
-      { statusCode: 500 },
-    );
-  }
-
-  // Write all approved pages atomically
-  // If any page write fails, the store throws and lifecycle stays at reviewed
+  // Approval remains a lifecycle operation, but this legacy entrypoint never
+  // writes client HTML. The current Executive product owns publication.
   const updatedLc = await store.writeApprovedPages(
-    slug, runId, approvalRecord, approvedPages,
+    slug,
+    runId,
+    approvalRecord,
+    new Map(),
   );
 
-  return {
-    lifecycle: updatedLc,
-    pageCount: approvedPages.size,
-  };
+  return { lifecycle: updatedLc, pageCount: 0 };
 }
 
 /**

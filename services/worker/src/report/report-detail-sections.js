@@ -1,7 +1,7 @@
 /**
  * PRYSM-V2-REPORT-DEPTH-01 — governed depth sections for report design v2.
  *
- * Restores the useful diagnostic depth of the v1 ("Karen Leslie") report
+ * Provides diagnostic depth beneath the v2 executive summary
  * beneath the v2 executive A–E summary, with the modern governance rule
  * applied throughout:
  *
@@ -22,6 +22,12 @@ import {
   requireClientTruth,
   requireCrossReportInterpretation,
 } from "../report-model/cross-report-interpretation.js";
+import {
+  buildSemanticEvidenceAuthority,
+  isObserved,
+  semanticFact,
+  SEMANTIC_FACT_STATE,
+} from "../report-intelligence/semantic-evidence-authority.js";
 
 function interpretationFor(model) {
   return model?.crossReportInterpretation?.version === "2.0.0"
@@ -193,10 +199,19 @@ const EEAT_DIMENSIONS = [
 
 export function eeatSection(model, pageState) {
   const site = model?.evidence?.site || {};
+  const semanticEvidence = model?.semanticEvidence || model?.semanticLedger?.semanticEvidence || buildSemanticEvidenceAuthority(model?.evidence || {});
   const trustAssessed = capAssessed(model, "trust.proof");
-  const trustComplete = capAvailable(model, "trust.proof");
-  const trustPartial = capPartial(model, "trust.proof");
-  const trust = site.trust || {};
+  const trustPartial = capPartial(model, "trust.proof") || Object.values(semanticEvidence.facts || {}).some((item) => item.state === SEMANTIC_FACT_STATE.PARTIAL);
+  const trustComplete = capAvailable(model, "trust.proof") && !trustPartial;
+  const trust = {
+    credentials: isObserved(semanticEvidence, "FORMAL_CREDENTIAL"),
+    caseStudies: isObserved(semanticEvidence, "DETAILED_CASE_STUDY"),
+    testimonials: isObserved(semanticEvidence, "TESTIMONIAL_OR_REVIEW"),
+    contact: site.trust?.contact === true,
+    policies: site.trust?.policies === true,
+    pricing: site.trust?.pricing === true,
+    completedWork: isObserved(semanticEvidence, "COMPLETED_WORK"),
+  };
   const presentationTrust = model?.clientPresentation?.trust || {};
   const presentationProof = presentationTrust.proofForms || [];
   const presentationQualifier = presentationTrust.qualifier;
@@ -268,8 +283,8 @@ export function eeatSection(model, pageState) {
     ],
     [
       "Have they done this successfully before?",
-      "caseStudies",
-      "Evidence of completed work or outcomes",
+      "completedWork",
+      "Evidence of completed work",
     ],
     [
       "Why should I believe the claims?",
@@ -296,7 +311,8 @@ export function eeatSection(model, pageState) {
           policies: "Policy or terms content",
           pricing: "pricing or investment context",
           credentials: "Named credentials, qualifications, or expertise proof",
-          caseStudies: "Case studies, examples, or documented outcomes",
+          caseStudies: "Detailed case studies or documented outcomes",
+          completedWork: "Completed work or project examples",
           testimonials: "Independent validation such as testimonials",
           contact: "Clear contact information and next-step expectations",
         })[flag] || flag);
@@ -356,6 +372,7 @@ export function eeatSection(model, pageState) {
     ? Object.entries({
         credentials: trust.credentials,
         caseStudies: trust.caseStudies,
+        completedWork: trust.completedWork,
         testimonials: trust.testimonials,
         contact: trust.contact,
         policies: trust.policies,
@@ -394,7 +411,8 @@ export function eeatSection(model, pageState) {
           (signal) =>
             `<li>${e(({
               credentials: "Credentials and qualifications",
-              caseStudies: "Case studies and documented outcomes",
+              caseStudies: "Detailed case studies and documented outcomes",
+              completedWork: "Completed work and project examples",
               testimonials: "Testimonials and client validation",
               contact: "Contact information",
               policies: "Policies and terms",
@@ -432,7 +450,8 @@ export function eeatSection(model, pageState) {
     : '<p class="small">No material trust finding was produced from the assessed evidence.</p>';
 
   const proofGroups = [
-    ["Experience and results", trust.caseStudies === true, "Case studies or documented outcomes were observed."],
+    ["Completed work", trust.completedWork === true, "Completed-work evidence was observed; it does not by itself establish a detailed outcome case study."],
+    ["Detailed outcomes", trust.caseStudies === true, "Detailed case studies or documented outcomes were observed."],
     ["Expertise", trust.credentials === true, "Credentials, qualifications, or certifications were observed."],
     ["Independent proof", trust.testimonials === true, "Testimonials or client validation were observed."],
     ["Risk reduction", [trust.contact, trust.policies, trust.pricing].some((value) => value === true), "Contact information, policies or terms, and pricing or investment context were observed."],
@@ -1270,6 +1289,7 @@ export function schemaSection(model) {
   const site =
     model?.evidence?.site ||
     {};
+  const semanticEvidence = model?.semanticEvidence || model?.semanticLedger?.semanticEvidence || buildSemanticEvidenceAuthority(model?.evidence || {});
 
   const schemaAssessed =
     capAssessed(
@@ -1344,8 +1364,7 @@ export function schemaSection(model) {
 
   const expertiseObserved =
     trustAssessed &&
-    site.trust?.credentials ===
-      true;
+    isObserved(semanticEvidence, "FORMAL_CREDENTIAL");
 
   const supportingPages =
     Array.isArray(
@@ -2561,6 +2580,7 @@ export function strengthsSection(model, checklist) {
   const site =
     model?.evidence?.site ||
     {};
+  const semanticEvidence = model?.semanticEvidence || model?.semanticLedger?.semanticEvidence || buildSemanticEvidenceAuthority(model?.evidence || {});
 
   const strengths = [];
 
@@ -2604,29 +2624,22 @@ export function strengthsSection(model, checklist) {
       "trust.proof",
     )
   ) {
-    const found =
-      Object.entries(
-        site.trust ||
-        {},
-      )
-        .filter(
-          (
-            [
-              ,
-              present,
-            ],
-          ) =>
-            present ===
-            true,
-        )
-        .map(
-          (
-            [
-              name,
-            ],
-          ) =>
-            name,
-        );
+    const semanticNames = {
+      FORMAL_CREDENTIAL: "credentials",
+      OPERATING_EXPERIENCE: "experience",
+      TESTIMONIAL_OR_REVIEW: "testimonials",
+      DETAILED_CASE_STUDY: "caseStudies",
+      COMPLETED_WORK: "completedWork",
+      CUSTOMER_OUTCOME: "outcomes",
+    };
+    const found = [
+      ...Object.entries(semanticEvidence.facts || {})
+        .filter(([, present]) => present?.state === SEMANTIC_FACT_STATE.OBSERVED)
+        .map(([name]) => semanticNames[name] || name),
+      ...Object.entries(site.trust || {})
+        .filter(([name, present]) => present === true && !Object.values(semanticNames).includes(name))
+        .map(([name]) => name),
+    ];
 
     if (found.length) {
       strengths.push([

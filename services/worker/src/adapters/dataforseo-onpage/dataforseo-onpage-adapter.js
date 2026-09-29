@@ -21,7 +21,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { domainOf } from "../../utils.js";
+import { domainOf, providerTargetOf } from "../../utils.js";
 import {
   SOURCE_STATUS,
   ERROR_CATEGORY,
@@ -34,6 +34,8 @@ import {
 import { selectImportantPages, normalizeUrl } from "../../evidence/important-page-selector.js";
 import { discoverSitemapFootprint } from "../../evidence/sitemap-footprint.js";
 import { analyzeProgrammaticSeo } from "../../evidence/programmatic-seo-analysis.js";
+import { makeBrandAssetCandidate, summarizeBrandAssets } from "../../evidence/brand-assets.js";
+import { collectPublicAccessFallback } from "../../evidence/public-access-fallback.js";
 
 // ---------------------------------------------------------------------------
 // Adapter version
@@ -362,6 +364,19 @@ function normalizePage(raw, context = {}) {
     height: img.height || null,
     loading: img.loading || null,
   }));
+  const brandAssetCandidates = [];
+  for (const image of images) {
+    if (/logo|brand/i.test(image.alt || "")) {
+      brandAssetCandidates.push(makeBrandAssetCandidate({ url: image.src, sourceUrl: raw.url, sourceType: "header-logo", identityText: image.alt, likelyLogo: true }));
+    }
+    if (/favicon|icon/i.test(image.src || "")) {
+      brandAssetCandidates.push(makeBrandAssetCandidate({ url: image.src, sourceUrl: raw.url, sourceType: "favicon", likelyLogo: true }));
+    }
+  }
+  const favicon = raw.favicon || raw.meta?.favicon || raw.meta?.icon;
+  if (favicon) brandAssetCandidates.push(makeBrandAssetCandidate({ url: favicon, sourceUrl: raw.url, sourceType: "favicon", likelyLogo: true }));
+  const ogImage = raw.og_image || raw.meta?.og_image || raw.meta?.ogImage;
+  if (ogImage) brandAssetCandidates.push(makeBrandAssetCandidate({ url: ogImage, sourceUrl: raw.url, sourceType: "og-image", likelyLogo: false }));
 
   // Schema types from structured data (not available from pages endpoint;
   // falls back to empty for real API, uses test fixtures when present).
@@ -379,6 +394,9 @@ function normalizePage(raw, context = {}) {
 
   // Service candidates from headings and schema
   const serviceCandidates = extractServiceCandidates(raw);
+  const identityCandidates = Array.isArray(raw.identityCandidates)
+    ? raw.identityCandidates
+    : Array.isArray(raw.identity_candidates) ? raw.identity_candidates : [];
 
   // Content availability: true only when actual body text was extracted.
   // DataForSEO pages endpoint does not provide body text, so this will be
@@ -460,6 +478,8 @@ function normalizePage(raw, context = {}) {
     emailLinks: links.filter((l) => l.url && l.url.startsWith("mailto:")),
     phoneLinks: links.filter((l) => l.url && l.url.startsWith("tel:")),
     serviceCandidates,
+    identityCandidates,
+    brandAssetCandidates: brandAssetCandidates.filter((item) => item.url),
     signals,
     bodyText: bodyText.slice(0, 50000),
     responseHeaders: extractResponseHeaders(raw),
@@ -934,6 +954,7 @@ function summarizeSite({
   jsContentMissing,
   robotsBlocked,
   loginBlocked,
+  businessName = "",
 }) {
   const domain = domainOf(targetUrl);
 
@@ -981,6 +1002,8 @@ function summarizeSite({
   const allSchema = new Set(pages.flatMap((p) => p.schemaTypes));
   for (const t of microdataTypes) allSchema.add(t);
   const allServices = new Set(pages.flatMap((p) => p.serviceCandidates));
+  const identityCandidates = pages.flatMap((p) => Array.isArray(p.identityCandidates) ? p.identityCandidates : []);
+  const brandIdentity = summarizeBrandAssets(pages, { canonicalDomain: domain, businessName: businessName || identityCandidates.find((item) => item.source === "organization-schema" || item.source === "local-business-schema")?.value || "" });
 
   // Build topic keywords from validated services, titles, and H1s.
   //
@@ -1357,6 +1380,8 @@ function summarizeSite({
     brokenLinksCount,
     platform: dominantPlatform,
     services: [...allServices].slice(0, 12),
+    identityCandidates,
+    brandIdentity,
     topicKeywords,
     // PRYSM-NEXT-01 WP-B-09 — deep acquisition evidence (unknown stays null)
     contentParsing,
@@ -1455,7 +1480,7 @@ function summarizeSite({
 /**
  * Crawl a website using the DataForSEO On-Page API.
  *
- * This is the primary crawl provider for Vantage Phase 1 (PRD v3.0 §8).
+ * This is the primary crawl provider for the governed website audit.
  * It replaces the Screaming Frog / cheerio-based crawler for production use.
  *
  * @param {string} target - Target URL or domain.
@@ -1539,7 +1564,9 @@ export async function crawlWithDataforseo(target, options = {}) {
       rawTaskId = resumeTaskId;
       taskPostResult = { taskId: resumeTaskId, resumed: true };
     } else {
-      taskPostResult = await client.taskPost(target, {
+      // DataForSEO task_post accepts a domain target. Keep the canonical URL
+      // for evidence/provenance, but normalize this provider boundary.
+      taskPostResult = await client.taskPost(providerTargetOf(target), {
         maxPages,
         maxDepth: options.maxDepth,
         enableJavascript: options.enableJavascript ?? DEFAULTS.enableJavascript,
@@ -2306,6 +2333,7 @@ export async function crawlWithDataforseo(target, options = {}) {
     jsContentMissing,
     robotsBlocked,
     loginBlocked,
+    businessName: options.businessName || "",
   });
 
   const programmaticSeo = analyzeProgrammaticSeo({
@@ -2512,6 +2540,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     nonIndexableLimit: crawl.nonIndexableLimit ?? DEFAULTS.nonIndexableLimit,
     resourcesPageLimit: crawl.resourcesPageLimit ?? DEFAULTS.resourcesPageLimit,
     businessServices: auditRequest.services || [],
+    businessName: auditRequest.businessName || "",
     clientOptions: {
       mode: crawl.fixtures || crawl.fetchImpl ? (crawl.fixtures ? "fixture" : "live") : "live",
       fixtures: crawl.fixtures || null,
@@ -2522,7 +2551,33 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
   };
 
   try {
-    const envelope = await crawlWithDataforseo(target, crawlOptions);
+    let envelope;
+    if (crawl.publicAccessFallbackOnly === true) {
+      envelope = {
+        source: "dataforseo-onpage",
+        sourceStatus: SOURCE_STATUS.FAILED,
+        status: SOURCE_STATUS.FAILED,
+        targetUrl: target,
+        pageCount: 0,
+        pages: [],
+        limitations: ["Persisted primary website collection failed; governed public-access recovery requested."],
+      };
+    } else {
+      envelope = await crawlWithDataforseo(target, crawlOptions);
+    }
+    const fallback = await collectPublicAccessFallback({
+      targetUrl: target,
+      primary: envelope,
+      options: {
+        maxPages: crawlOptions.maxPages,
+        browserMode: crawl.browserMode || "auto",
+        allowUndetailedProbe: Boolean(crawl.recoveryRevision),
+        fetchImpl: crawlOptions.clientOptions?.fetchImpl || undefined,
+        browserRenderer: crawl.browserRenderer,
+        businessName: auditRequest.businessName || "",
+      },
+    });
+    if (fallback) envelope = fallback;
 
     // Build the schema-valid source result from the envelope
     const sourceStatus = envelope._sourceStatus || {};
@@ -2535,13 +2590,26 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
     } else if (rawData.taskId) {
       const rawPayload = JSON.stringify(rawData);
       rawBytes = Buffer.from(rawPayload, "utf-8");
+    } else if (envelope.fallbackUsed) {
+      rawBytes = Buffer.from(JSON.stringify({
+        primary: {
+          source: envelope.primarySource,
+          status: envelope.primaryStatus,
+          limitations: envelope.primaryLimitations,
+        },
+        fallback: {
+          type: envelope.fallbackType,
+          pageCount: envelope.pageCount,
+          urls: (envelope.pages || []).map((page) => page.url),
+        },
+      }), "utf-8");
     }
 
     const sourceResult = {
       contractVersion: "1.0.0",
       schemaVersion: "1.0.0",
       source,
-      provider: "DataForSEO",
+      provider: envelope.fallbackUsed ? "prysm-public-access-fallback" : "DataForSEO",
       adapterVersion: ADAPTER_VERSION,
       status: envelope.sourceStatus || envelope.status || "AVAILABLE",
       startedAt: sourceStatus.startedAt || startedAt,
@@ -2608,6 +2676,13 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
           : {}),
         _metaFieldAvailability: envelope._metaFieldAvailability || null,
         rawArtifactRef: envelope.rawArtifactRef || null,
+        ...(envelope.fallbackUsed ? {
+          fallbackUsed: true,
+          fallbackType: envelope.fallbackType,
+          primarySource: envelope.primarySource,
+          primaryStatus: envelope.primaryStatus,
+          primaryLimitations: envelope.primaryLimitations,
+        } : {}),
       },
     };
 

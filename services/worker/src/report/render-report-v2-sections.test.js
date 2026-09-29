@@ -12,11 +12,9 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReportV2 as renderReportV2Base } from "./render-report-v2.js";
 import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
-import { renderReport } from "./render-report.js";
 import { eeatSection } from "./report-detail-sections.js";
 
 const FIXED_TS = "2026-01-15T12:00:00.000Z";
@@ -28,7 +26,6 @@ const FIXED_TS = "2026-01-15T12:00:00.000Z";
 // strings whose exact bytes vary with ICU/Node versions across
 // environments (Node 22 CI vs Node 24 local) — the structure and heading
 // text are source-code literals and are environment-stable.
-const V1_GOLDEN_SHA = "5e8d364279ba462f3929d50986a49db08ef38245f60c9781797758c1d44f2025";
 
 const INPUT = {
   targetUrl: "https://x.com",
@@ -359,7 +356,7 @@ test("SUPPORTING-DETAIL-EVIDENCE-01: detail keeps visuals, deterministic samples
   const supporting = html.slice(html.indexOf('id="supporting-detail-orientation"'));
 
   assert.match(supporting, /Supporting Detail proves and explains the six primary-page conclusions/);
-  assert.match(supporting, /aria-label="Five-axis conversion readiness map"/);
+  assert.match(supporting, /aria-label="Five-axis readiness overview"/);
   assert.match(supporting, /aria-label="Business entity relationship diagram"/);
   assert.match(supporting, /Representative examples|additional supporting evidence/i);
   assert.match(supporting, /PARTIAL|UNAVAILABLE|NOT_ASSESSED|limitations/i);
@@ -445,21 +442,6 @@ test("SUPPORTING-DETAIL-PERFORMANCE-02: raw performance diagnostics stay behind 
 
 // ---------------------------------------------------------------------------
 // V2R-07 — v1 renderer/report unchanged (frozen golden hash)
-// ---------------------------------------------------------------------------
-
-test("V2R-07: v1 renderer output matches the frozen pre-change golden hash", async () => {
-  const m = scoreAudit(INPUT, baseEvidence());
-  const html = await renderReport(m);
-  const ids = [...html.matchAll(/id="([^"]+)"/g)].map((x) => x[1]).filter((x) => !/^page-/.test(x) && x !== "nav");
-  const heads = [...html.matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi)]
-    .map((x) => x[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const fingerprint = JSON.stringify({ ids: [...new Set(ids)].sort(), heads });
-  const sha = createHash("sha256").update(fingerprint).digest("hex");
-  assert.equal(sha, V1_GOLDEN_SHA, "v1 structure must be identical to the pre-change golden");
-});
-
-// ---------------------------------------------------------------------------
 // V2R-08 — Complete required-section structural contract (15 areas)
 // ---------------------------------------------------------------------------
 
@@ -470,7 +452,7 @@ test("V2R-08: v2 draft represents the complete 15-area required-section contract
     ["1 executive scorecard", /How ready is your website to convert visitors\?/],
     ["2 priority fixes", /What should you fix first\?/],
     ["3 conversion journey", /Can visitors move from interest to action\?/],
-    ["4 conversion readiness map", /Where are the problems\?/],
+    ["4 readiness overview", /Where are the problems\?/],
     ["5 content opportunities", /What content would help buyers move forward\?/],
     ["6 competitor benchmark", /How does your website compare with the competitors buyers may consider\?/],
     ["7 trust and E-E-A-T", /Trust &amp; Proof|Trust & Proof/],

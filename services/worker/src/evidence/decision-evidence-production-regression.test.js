@@ -38,7 +38,6 @@ import { createMemoryArtifactStore } from "../storage/memory-artifact-store.js";
 import { createGovernedArtifactStore, buildArtifactKey } from "../storage/governed-artifact-store.js";
 import { createAuditOrchestrator } from "../orchestration/audit-orchestrator.js";
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
-import { REQUIRED_APPROVED_PAGE_FILENAMES } from "../storage/report-store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const T = LIFECYCLE_STATE;
@@ -55,10 +54,11 @@ addFormats(_ajv);
   "finding.schema.json", "lifecycle-event.schema.json", "lifecycle-state.schema.json",
   "narrative-response.schema.json", "report-content.schema.json",
   "report-manifest.schema.json", "report-view-model.schema.json",
+  "report-manifest-v2.schema.json",
   "report-view-model-current.schema.json", "score.schema.json",
   "score-current.schema.json", "source-result.schema.json",
 ].forEach((f) => {
-  const version = ["report-view-model-current.schema.json", "score-current.schema.json"].includes(f) ? "v2" : "v1";
+  const version = ["report-view-model-current.schema.json", "score-current.schema.json", "report-manifest-v2.schema.json"].includes(f) ? "v2" : "v1";
   _ajv.addSchema(JSON.parse(readFileSync(resolve(schemasDir, f), "utf-8")), `https://vantage-platform.io/prysm/contracts/${version}/${f}`);
 });
 function validateContract(sid, obj) {
@@ -141,7 +141,7 @@ const pagespeedFetchImpl = async (url) => {
 // DE-16: the named permanent regression
 // ---------------------------------------------------------------------------
 
-test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved pages render", async () => {
+test("DE-16: real On-Page adapter → complete DecisionEvidence → current Executive report renders", async () => {
   // Controlled credentials (transport is fully controlled — zero network).
   process.env.DATAFORSEO_LOGIN = "controlled-user";
   process.env.DATAFORSEO_PASSWORD = "controlled-pass";
@@ -168,6 +168,7 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
       gsc: { siteUrl: `https://${SENTINEL.domain}` },
       crawl: { fixtures: onpageFixtures, maxPages: 10 },
       performance: { fetchImpl: pagespeedFetchImpl },
+      report: { designVersion: "2.0.0" },
     };
 
     const execArgs = {
@@ -222,7 +223,7 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
     const lifecycleService = createLifecycleService(createMemoryLifecycleRepository());
     const realAdapters = {
       "dataforseo-onpage": { adapterVersion: "1.4.1", execute: async (a) => onpageExecute(a) },
-      pagespeed: { adapterVersion: "1.1.0", execute: async (a) => pagespeedExecute(a) },
+      pagespeed: { adapterVersion: "1.2.0", execute: async (a) => pagespeedExecute(a) },
       "dataforseo-serp": { adapterVersion: "1.0.0", execute: async (a) => serpExecute(a) },
       backlinks: { adapterVersion: "1.0.0", execute: async (a) => backlinksExecute(a) },
       ga4: { adapterVersion: "1.0.0", execute: async (a) => (await import("./ga4-client.js")).execute(a) },
@@ -247,20 +248,15 @@ test("DE-16: real On-Page adapter → complete DecisionEvidence → all approved
     }
     assert.equal(result.finalState, T.DRAFT_RENDERED, `production path reached draft_rendered (got ${result.finalState})`);
 
-    // ── 5. All approved report pages rendered (authoritative definition) ──
-    let renderedPages = 0;
-    let sentinelInHtml = false;
-    for (const filename of REQUIRED_APPROVED_PAGE_FILENAMES) {
-      const pageKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/${filename}`;
-      if (await artifactStore.exists(pageKey)) {
-        renderedPages++;
-        const html = Buffer.from(await artifactStore.get(pageKey)).toString("utf8");
-        if (html.includes(SENTINEL.domain)) sentinelInHtml = true;
-      }
+    // ── 5. Current Executive artifact rendered (legacy pages are prohibited) ──
+    const pageKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report-v2/pages/index.html`;
+    assert.equal(await artifactStore.exists(pageKey), true, "current Executive artifact exists");
+    const html = Buffer.from(await artifactStore.get(pageKey)).toString("utf8");
+    assert.match(html, /data-report-design="2\.0\.0"/);
+    assert.match(html, new RegExp(SENTINEL.domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    for (const legacySignature of ["APPROVED CLIENT REPORT", "Prysm Phase 1 Audit", "Vantage Phase 1", "Conversion Readiness Map"]) {
+      assert.doesNotMatch(html, new RegExp(legacySignature, "i"), `legacy signature absent: ${legacySignature}`);
     }
-    assert.equal(renderedPages, REQUIRED_APPROVED_PAGE_FILENAMES.length,
-      `all ${REQUIRED_APPROVED_PAGE_FILENAMES.length} approved pages rendered (got ${renderedPages})`);
-    assert.equal(sentinelInHtml, true, "sentinel domain present in rendered HTML");
 
     // ── 6. Persisted decision evidence: load + validate (same contract) ──
     const loaded = await loadAndValidateDecisionEvidence({

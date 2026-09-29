@@ -154,10 +154,17 @@ export function buildArtifactKey(scope) {
     });
   }
 
+  // Recovery revisions create a new immutable artifact identity while the
+  // audit remains the same. Normal artifacts retain their historical keys.
+  const revision = scope.artifactRevision == null ? "" : String(scope.artifactRevision);
+  if (revision && !/^r[0-9]+$/.test(revision)) {
+    throw new InvalidScopeError("artifactRevision must match r<number>", { segment: "artifactRevision", value: revision });
+  }
+
   // Validate artifact name with the same rules
   validateSegment(artifactName, "artifactName");
 
-  return `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/${category}/${artifactName}`;
+  return `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/${category}/${artifactName}${revision ? `.${revision}` : ""}`;
 }
 
 /**

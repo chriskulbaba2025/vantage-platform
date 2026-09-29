@@ -28,6 +28,7 @@ import {
   attachClientTruthActions,
   buildCrossReportInterpretation,
 } from "../report-model/cross-report-interpretation.js";
+import { buildSemanticEvidenceAuthority } from "../report-intelligence/semantic-evidence-authority.js";
 import { classifyRenderingDiagnostics } from "./rendering-diagnostics.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 import { scopeSiteForDecision } from "./decision-scope.js";
@@ -76,6 +77,7 @@ function isPerformanceViable(performance) {
 function scoreModules(evidence, capabilities, input) {
   const site = evidence.site;
   const performance = evidence.performance;
+  const semanticEvidence = buildSemanticEvidenceAuthority(evidence);
 
   const moduleResults = new Map();
   const dimensionData = new Map();
@@ -120,6 +122,7 @@ function scoreModules(evidence, capabilities, input) {
       performance,
       input,
       capabilities,
+      semanticEvidence,
     };
 
     const rawScore = mod.scorer(
@@ -831,6 +834,7 @@ function buildNotAssessedModel(
 
     crossReportInterpretation: buildCrossReportInterpretation({
       site: evidence.site,
+      semanticEvidence: buildSemanticEvidenceAuthority(evidence),
       scores: { performance: perfScore, technical: null },
       bands: { trust: "Not Assessed" },
       conversionPaths: [{ status: "Not Assessed" }],
@@ -1243,6 +1247,7 @@ export function scoreAudit(
         capabilities,
         suppressedReasons:
           suppressedFindingReasons,
+        semanticEvidence: buildSemanticEvidenceAuthority({ site: decisionSite }),
       },
     );
 
@@ -1298,12 +1303,13 @@ export function scoreAudit(
   // detail, and renderer conclusions all receive the same persisted authority.
   const crossReportInterpretation = buildCrossReportInterpretation({
     site: decisionSite,
+    semanticEvidence: buildSemanticEvidenceAuthority({ site: decisionSite }),
     performance,
     scores: legacyScores,
     bands: {
       trust: legacyScores.trust !== null ? band(legacyScores.trust) : "Not Assessed",
     },
-    conversionPaths: buildConversionPaths(decisionSite, capabilities),
+    conversionPaths: buildConversionPaths(decisionSite, capabilities, buildSemanticEvidenceAuthority({ site: decisionSite })),
     capabilities,
   });
 
@@ -1624,6 +1630,7 @@ export function scoreAudit(
       buildConversionPaths(
         decisionSite,
         capabilities,
+        buildSemanticEvidenceAuthority({ site: decisionSite }),
       ),
 
     readinessMap:
@@ -1631,6 +1638,7 @@ export function scoreAudit(
         decisionSite,
         input,
         capabilities,
+        buildSemanticEvidenceAuthority({ site: decisionSite }),
       ),
 
     contentIdeas:

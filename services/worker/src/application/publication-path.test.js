@@ -23,7 +23,7 @@ import { createProductionRuntime } from "./production-runtime.js";
 import { createMemoryArtifactStore } from "../storage/memory-artifact-store.js";
 import { createGovernedArtifactStore, buildArtifactKey } from "../storage/governed-artifact-store.js";
 import { createMemoryLifecycleRepository } from "../lifecycle/memory-repository.js";
-import { createLocalReportStore, REQUIRED_APPROVED_PAGE_FILENAMES } from "../storage/report-store.js";
+import { createLocalReportStore } from "../storage/report-store.js";
 import { LIFECYCLE_STATE } from "../lifecycle/state-enum.js";
 
 const T = LIFECYCLE_STATE;
@@ -58,7 +58,7 @@ function okSourceResult(source, evidence = {}) {
 function workingAdapters() {
   return {
     "dataforseo-onpage": { adapterVersion: "1.0.0", execute: async () => ({ rawBytes: null, contentType: null, sourceResult: okSourceResult("dataforseo-onpage", {
-      sourceStatus: "AVAILABLE", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
+      sourceStatus: "AVAILABLE", rawArtifactRef: "fixture://governed-onpage-evidence", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
       pages: [{ url: "https://proof.example.com", title: "Proof", headings: { h1: ["Proof"], h2: [], h3: [] }, description: "D", content: { text: "x", wordCount: 300 }, images: [], links: { internal: [], external: [] }, statusCode: 200 }],
       services: ["Governed Evidence Service"], trust: { credentials: true }, platform: "ProofCMS", schemaTypes: ["ProfessionalService"],
       statusCounts: { "200": 1 }, totalWords: 300, averageWords: 300, missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
@@ -125,6 +125,7 @@ test("PRYSM-CLOSE-14: DRAFT_RENDERED → IN_REVIEW → APPROVED → PUBLISHED wi
       language: "en-CA",
       primaryGoal: "book a consultation",
       services: ["Governed Evidence Service"],
+      report: { designVersion: "2.0.0" },
       ga4: { propertyId: "400123456" },
       gsc: { siteUrl: "https://proof.example.com" },
     },
@@ -147,7 +148,7 @@ test("PRYSM-CLOSE-14: DRAFT_RENDERED → IN_REVIEW → APPROVED → PUBLISHED wi
   assert.ok(rptRecord, "report-store draft record initialized");
 
   // Snapshot rendered artifact identity BEFORE publication
-  const indexKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/index.html`;
+  const indexKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report-v2/pages/index.html`;
   const indexBefore = await artifactStore.get(indexKey);
   assert.ok(indexBefore, "index.html artifact exists");
 
@@ -161,14 +162,7 @@ test("PRYSM-CLOSE-14: DRAFT_RENDERED → IN_REVIEW → APPROVED → PUBLISHED wi
   assert.equal(inReview.state, T.IN_REVIEW, "canonical lifecycle in_review");
 
   // 2. Approval: IN_REVIEW → APPROVED
-  const pages = new Map();
-  for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
-    const pageKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/${fn}`;
-    const pageBytes = await artifactStore.get(pageKey);
-    assert.ok(pageBytes, `page ${fn} exists for approval`);
-    pages.set(fn, Buffer.from(pageBytes).toString("utf8"));
-  }
-  const approveResult = await runtime.auditService.approveAudit(auditId, tenantId, slug, "approver@proof.example.com", pages);
+  const approveResult = await runtime.auditService.approveAudit(auditId, tenantId, slug, "approver@proof.example.com");
   assert.equal(approveResult.status, T.APPROVED, "approval accepted");
   const approved = await runtime.lifecycleService.currentState(auditId, tenantId);
   assert.equal(approved.state, T.APPROVED, "canonical lifecycle approved");

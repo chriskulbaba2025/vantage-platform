@@ -23,6 +23,12 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { contentIdeas as deriveContentIdeas } from "../src/scoring/report-model.js";
 import { scoreAudit as deriveCurrentReplayModel } from "../src/scoring/vantage-score.js";
+import {
+  buildSolutionAuthorityRecords,
+  SOLUTION_PAGE_REGISTRY,
+} from "../src/solution/solution-authority-provider.js";
+import { buildSolutionDirectiveInput } from "../src/solution/solution-directive-authority.js";
+import { generateCanonicalSolutions } from "../src/solution/solution-generator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -885,12 +891,15 @@ function buildV2Model({
   findings,
   capabilityEvidence,
   decisionEvidence,
+  canonicalSolutions,
 }) {
+  const resolvedCanonicalSolutions = canonicalSolutions || { records: [], sequence: [] };
   const current = hydrateCurrentReportModel({
     scoreSet,
     findings,
     decisionEvidence,
     capabilityEvidence,
+    canonicalSolutions: resolvedCanonicalSolutions,
   });
 
   return {
@@ -941,6 +950,22 @@ function buildV2Model({
         },
       },
   };
+}
+
+function buildReplayCanonicalSolutions({ findings, scoreSet, decisionEvidence }) {
+  const authorityRecords = buildSolutionAuthorityRecords({
+    findings,
+    scoreSet,
+    decisionEvidence,
+    pageRegistry: SOLUTION_PAGE_REGISTRY,
+  });
+  return generateCanonicalSolutions(buildSolutionDirectiveInput({
+    findings,
+    scoreSet,
+    decisionEvidence,
+    authorityRecords,
+    pageRegistry: SOLUTION_PAGE_REGISTRY,
+  }));
 }
 
 async function loadSavedHtml(
@@ -1038,6 +1063,11 @@ async function replayFixture({
       inputs.capabilityEvidence,
     decisionEvidence:
       inputs.decisionEvidence,
+    canonicalSolutions: buildReplayCanonicalSolutions({
+      findings: inputs.findings,
+      scoreSet: inputs.scoreSet,
+      decisionEvidence: inputs.decisionEvidence,
+    }),
   });
 
   const gate = runFinalizationGate(

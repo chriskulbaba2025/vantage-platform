@@ -102,7 +102,8 @@ async function isObstructed(page, cta) {
 
 async function checkCta(page, pageUrl) {
   const result = { found: false, visible: null, interactable: null, target: null, targetResolves: null, obstructed: null };
-  let cta = null;
+  const semanticMatches = [];
+
   for (const sel of CTA_SELECTORS) {
     const els = await page.$$(sel);
     for (const el of els) {
@@ -110,20 +111,31 @@ async function checkCta(page, pageUrl) {
       try {
         text = (await el.textContent()) || "";
       } catch { /* keep empty */ }
-      if (CTA_TEXT_RE.test(text)) {
-        cta = el;
-        break;
-      }
+      if (!CTA_TEXT_RE.test(text)) continue;
+
+      let visible = null;
+      let enabled = null;
+      try { visible = await el.isVisible(); } catch { /* unknown */ }
+      try { enabled = visible === true ? await el.isEnabled() : false; } catch { /* unknown */ }
+
+      semanticMatches.push({ el, visible, enabled });
     }
-    if (cta) break;
   }
-  if (!cta) return result;
+
+  if (semanticMatches.length === 0) return result;
+
+  // Responsive layouts commonly keep hidden desktop controls in the DOM.
+  // Prefer a visible, enabled semantic CTA; only fall back to the first
+  // semantic match when no visible candidate can be established.
+  const selected =
+    semanticMatches.find((candidate) => candidate.visible === true && candidate.enabled === true) ||
+    semanticMatches.find((candidate) => candidate.visible === true) ||
+    semanticMatches[0];
+  const cta = selected.el;
 
   result.found = true;
-  try { result.visible = await cta.isVisible(); } catch { result.visible = null; }
-  try {
-    result.interactable = result.visible === true ? (await cta.isEnabled()) : false;
-  } catch { result.interactable = null; }
+  result.visible = selected.visible;
+  result.interactable = selected.visible === true ? selected.enabled : false;
 
   let href = null;
   try { href = await cta.getAttribute("href"); } catch { /* no href */ }
@@ -143,18 +155,36 @@ async function checkMenu(page, mobileViewport) {
     const nav = await page.$("nav, header");
     result.found = Boolean(nav);
     if (nav) {
-      if (mobileViewport) {
-        const toggle = await page.$(
-          'button[aria-label*="menu" i], button[aria-label*="nav" i], .hamburger, .menu-toggle, [class*="menu"][class*="toggle"], [class*="hamburger"]',
-        );
-        const toggleVisible = toggle ? await toggle.isVisible() : false;
-        result.usable = Boolean(toggleVisible);
-      } else {
-        const links = await page.$$("nav a[href], header a[href]");
-        let visibleCount = 0;
-        for (const link of links) {
+      const links = await page.$$("nav a[href], header a[href]");
+      let visibleCount = 0;
+      for (const link of links) {
+        try {
           if (await link.isVisible()) visibleCount += 1;
+        } catch {
+          // Keep evaluating other links.
         }
+      }
+
+      if (mobileViewport) {
+        if (visibleCount >= 2) {
+          result.usable = true;
+        } else {
+          const toggle = await page.$(
+            'button[aria-label*="menu" i], button[aria-label*="nav" i], button[aria-controls], button[aria-expanded], .hamburger, .menu-toggle, [class*="menu"][class*="toggle"], [class*="hamburger"]',
+          );
+          if (toggle) {
+            try {
+              result.usable = await toggle.isVisible();
+            } catch {
+              result.usable = null;
+            }
+          } else {
+            // A selector miss does not prove that responsive navigation is
+            // unusable. Preserve uncertainty instead of manufacturing a fail.
+            result.usable = null;
+          }
+        }
+      } else {
         result.usable = visibleCount >= 2;
       }
     }

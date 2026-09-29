@@ -40,6 +40,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { runCostPreflight } from "../narrative/cost-preflight.js";
 import { createUsageLedgerEntry } from "../narrative/usage-ledger.js";
+import { measureWriterInputBudget } from "./writer-input.js";
 import {
   WRITER_PROMPT_VERSION,
   enforceTargetedWriterRevision,
@@ -376,13 +377,24 @@ function recoveredResultName(callNumber) {
 }
 
 function scopeWithName(scope, artifactName) {
+  const scopedArtifactName = scope.liveUsageNamespace
+    && artifactName.startsWith(`${RESERVATION_PREFIX}/`)
+    ? `${RESERVATION_PREFIX}/${String(scope.liveUsageNamespace).replace(/[^a-zA-Z0-9_-]/g, "-")}/${artifactName.slice(RESERVATION_PREFIX.length + 1)}`
+    : artifactName;
   return {
     tenantId: scope.tenantId,
     clientId: scope.clientId,
     auditId: scope.auditId,
     category: "report-v2",
-    artifactName,
+    artifactName: scopedArtifactName,
   };
+}
+
+function scopedArtifactName(scope, artifactName) {
+  return scope.liveUsageNamespace
+    && artifactName.startsWith(`${RESERVATION_PREFIX}/`)
+    ? `${RESERVATION_PREFIX}/${String(scope.liveUsageNamespace).replace(/[^a-zA-Z0-9_-]/g, "-")}/${artifactName.slice(RESERVATION_PREFIX.length + 1)}`
+    : artifactName;
 }
 
 async function readJsonByName(
@@ -394,7 +406,7 @@ async function readJsonByName(
     `tenants/${scope.tenantId}` +
     `/clients/${scope.clientId}` +
     `/audits/${scope.auditId}` +
-    `/report-v2/${artifactName}`;
+    `/report-v2/${scopedArtifactName(scope, artifactName)}`;
 
   let bytes;
 
@@ -666,6 +678,7 @@ export function createNarrativeV2LiveBinding({
     clientId,
     auditId,
     executionId,
+    liveUsageNamespace,
   }) {
     if (
       !tenantId ||
@@ -686,6 +699,7 @@ export function createNarrativeV2LiveBinding({
         executionId:
           executionId ||
           `${auditId}:narrative-v2`,
+        ...(liveUsageNamespace ? { liveUsageNamespace } : {}),
       }),
     );
   }
@@ -963,6 +977,7 @@ export function createNarrativeV2LiveBinding({
     role,
     modelId,
     prompt,
+    writerInput = null,
     maxOutputTokens,
     passNumber,
     previousJudgeResponse = null,
@@ -1328,10 +1343,38 @@ export function createNarrativeV2LiveBinding({
           },
         });
 
+      const writerInputBudget = writerInput
+        ? measureWriterInputBudget(writerInput)
+        : null;
+      const safeInputTokenLimit = Math.floor(config.maxInputTokens * 0.8);
+      const contextBudget = Object.freeze({
+        ceilingTokens: config.maxInputTokens,
+        safeInputTokenLimit,
+        promptEstimatedTokens: preflight.estimate.inputTokens,
+        writerInput: writerInputBudget,
+        marginTokens: Math.max(0, safeInputTokenLimit - preflight.estimate.inputTokens),
+      });
+
       if (!preflight.allowed) {
         throw new Error(
           `Narrative v2 cost preflight rejected ${role}: ${preflight.reason}`,
         );
+      }
+
+      if (preflight.estimate.inputTokens > safeInputTokenLimit) {
+        const largestCategory = writerInputBudget
+          ? Object.entries(writerInputBudget.categories)
+              .sort(([, left], [, right]) => right.estimatedTokens - left.estimatedTokens)[0]
+          : null;
+        const categoryDetail = largestCategory
+          ? ` largest packet category=${largestCategory[0]} (${largestCategory[1].estimatedTokens} estimated tokens).`
+          : "";
+        const error = new Error(
+          `Narrative v2 context preflight rejected ${role}: estimated ${preflight.estimate.inputTokens} input tokens exceeds safe budget ${safeInputTokenLimit} (80% of ceiling ${config.maxInputTokens}).${categoryDetail}`,
+        );
+        error.code = "NARRATIVE_V2_CONTEXT_BUDGET_EXCEEDED";
+        error.contextBudget = contextBudget;
+        throw error;
       }
 
       const callNumber =
@@ -1376,6 +1419,8 @@ export function createNarrativeV2LiveBinding({
           estimatedInputTokens:
             preflight.estimate
               .inputTokens,
+
+          contextBudget,
 
           maxOutputTokens,
 
@@ -1663,6 +1708,7 @@ export function createNarrativeV2LiveBinding({
       role,
       modelId,
       prompt,
+      writerInput,
       maxOutputTokens,
       passNumber,
       previousJudgeResponse,

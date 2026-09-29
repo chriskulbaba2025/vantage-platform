@@ -4,8 +4,7 @@ import { scoreAudit } from "../scoring/vantage-score.js";
 import { renderReportV2 as renderReportV2Base, computePillars, REPORT_V2_VIEWER_PAGES } from "./render-report-v2.js";
 import { deriveNarrativeStates, NARRATIVE_PAGE_IDS } from "../report-model/narrative-state.js";
 import { buildCanonicalSolutionSet, SOLUTION_AUTHORITY_REGISTRY } from "../solution/solution-authority-provider.js";
-import { REPORT_DESIGN_V1, REPORT_DESIGN_V2, DEFAULT_REPORT_DESIGN } from "./report-design.js";
-import { renderReport } from "./render-report.js";
+import { REPORT_DESIGN_V2, DEFAULT_REPORT_DESIGN } from "./report-design.js";
 
 // PRYSM-NEXT-01 WP-G — report design v2 golden tests.
 
@@ -129,10 +128,9 @@ function priorityModel() {
 // WP-G-01 — design registry
 // ---------------------------------------------------------------------------
 
-test("WP-G-01: design registry has v1 + v2 and defaults to v1", () => {
-  assert.equal(REPORT_DESIGN_V1, "1.0.0");
+test("WP-G-01: design registry exposes only the current Executive product", () => {
   assert.equal(REPORT_DESIGN_V2, "2.0.0");
-  assert.equal(DEFAULT_REPORT_DESIGN, "1.0.0");
+  assert.equal(DEFAULT_REPORT_DESIGN, "2.0.0");
 });
 
 // ---------------------------------------------------------------------------
@@ -415,9 +413,9 @@ function assertFrozenViewerHierarchy() {
     ["executive-scorecard", "Executive Scorecard", "executive"],
     ["priority-fixes", "Priority Fixes", "blockers"],
     ["conversion-paths", "Conversion Journey", "paths"],
-    ["content-ideas", "Content Opportunities", "content-ideas"],
     ["trust-eeat", "Trust & Credibility", "eeat"],
     ["competitor-benchmark", "Competitor Comparison", "competitors"],
+    ["content-ideas", "Content Opportunities", "content-ideas"],
     ["supporting-detail", "Supporting Detail", "pillars"],
   ];
   assert.deepEqual(REPORT_V2_VIEWER_PAGES.map(({ pageId, title, sectionIds }) => [pageId, title, sectionIds[0]]), expected);
@@ -449,8 +447,8 @@ function assertFrozenViewerHierarchy() {
     assert.ok(pages[pageId].length > 0, `${pageId} page section exists`);
     for (const heading of headings) assert.ok(pages[pageId].includes(heading), `${pageId} includes ${heading}`);
   }
-  assert.match(html, /onclick="window\.print\(\)"/);
-  assert.match(html, /body\.viewer-ready main > section\.viewer-active \{ display:block !important; \}/);
+  assert.match(html, /onclick="printFullReport\(\)"/);
+  assert.match(html, /body\.viewer-ready:not\(\.print-full-report\) main > section\.viewer-active \{ display:block !important; \}/);
 }
 
 function assertFourNarrativeStatesAcrossFrozenPages() {
@@ -636,19 +634,59 @@ test("WP-G-03: insufficient-evidence model renders without scores invented", () 
   assert.doesNotMatch(html, /readiness">\d+/, "no numeric readiness when suppressed");
 });
 
-// ---------------------------------------------------------------------------
-// WP-G-05 — v1 untouched (same model renders through the locked v1 renderer)
-// ---------------------------------------------------------------------------
-
-test("WP-G-05: v1 renderer still renders the same model (locked path unchanged)", async () => {
-  const m = model();
-  const v1 = await renderReport(m);
-  assert.ok(v1.length > 0);
-  assert.match(v1, /Prysm Phase 1 Audit/);
-  // v1 must NOT contain the v2 design markers.
-  assert.doesNotMatch(v1, /Where are the problems\?/);
+test("REPORT-CLEANUP-01: meaningless indexing coverage is hidden while the useful conclusion remains", () => {
+  const fixture = model();
+  const existing = fixture.capabilityEvidence?.capabilities || {};
+  fixture.capabilityEvidence = {
+    ...(fixture.capabilityEvidence || {}),
+    capabilities: {
+      ...existing,
+      "technical.indexability": {
+        ...(existing["technical.indexability"] || {}),
+        status: "AVAILABLE",
+        coverage: { completed: 0, requested: 1000, failed: 0 },
+        limitations: [],
+      },
+    },
+  };
+  fixture.evidence.site.nonIndexablePages = [];
+  fixture.crossReportInterpretation = {
+    ...(fixture.crossReportInterpretation || {}),
+    constructs: {
+      ...(fixture.crossReportInterpretation?.constructs || {}),
+      indexability: "Clear",
+    },
+  };
+  const html = renderReportV2(fixture);
+  const visible = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.doesNotMatch(visible, /Search indexing\s+Reviewed\s+0\s*\/\s*1000/);
+  assert.match(visible, /No crawled page was found blocking search-engine indexing\./);
+  assert.match(html, /technical\.indexability|indexability/);
 });
 
+test("REPORT-CLEANUP-02: diagnostic codes stay in provenance but not client wording", () => {
+  const fixture = model();
+  const findingIds = fixture.decisionHierarchy.orderedFindingIds.slice(0, 3);
+  fixture.encyclopedia = {
+    status: "AVAILABLE",
+    priorityUnits: ["A03", "I01", "J04"].map((id, index) => ({
+      canonicalProblemId: id,
+      title: "Reviewed technical condition",
+      findingIds: [findingIds[index]],
+      frictionState: "FRICTION",
+      evidence: [{ sourceStatus: "AVAILABLE", evidenceRef: `fixture:${id}` }],
+    })),
+  };
+  const html = renderReportV2(fixture);
+  const visible = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.doesNotMatch(visible, /\b(?:A03|I01|J04)\b/);
+  assert.doesNotMatch(visible, /Confirm the observed .* condition at its recorded scope/i);
+  assert.match(visible, /Retest the slow mobile loading issue|Review the reported issue/);
+  assert.match(html, /data-encyclopedia-problem="A03"/);
+});
+
+// ---------------------------------------------------------------------------
+// WP-G-05 — v1 untouched (same model renders through the locked v1 renderer)
 test("WP-G-03a: executive priorities use CRO narratives while preserving canonical linkage", () => {
   const m = model();
   const html = renderReportV2(m);
@@ -940,4 +978,67 @@ test("MVP-CLIENT-08: an accepted friction cluster renders as one client priority
   const executive = html.slice(html.indexOf('id="executive"'), html.indexOf('id="pillars"'));
   assert.equal((executive.match(/data-priority-unit-type="accepted friction cluster"/g) || []).length, 1);
   assert.doesNotMatch(executive, /<li data-solution-id="[^"]+" data-priority-unit-type="accepted friction cluster"[\s\S]*<li data-solution-id="[^"]+" data-priority-unit-type="accepted friction cluster"/);
+});
+
+
+test("GACM-GENERALIZATION-01: seven-page report generalizes across eight business archetypes", () => {
+  const archetypes = [
+    { id: "local-service", url: "https://local.test", business: "Local Service", services: ["Plumbing"], goal: "Generate qualified enquiries", cta: "Request a Quote" },
+    { id: "consulting", url: "https://consulting.test", business: "Consulting Firm", services: ["Strategy Consulting"], goal: "Book consultations", cta: "Book a Consultation" },
+    { id: "ecommerce", url: "https://shop.test", business: "Online Shop", services: ["Products"], goal: "Sell products online", cta: "Buy Now" },
+    { id: "multi-location", url: "https://locations.test", business: "Multi Location", services: ["Regional Services"], goal: "Generate qualified enquiries", cta: "Find a Location" },
+    { id: "content-heavy", url: "https://publisher.test", business: "Publisher", services: ["Guides"], goal: "Grow newsletter or lead database", cta: "Subscribe" },
+    { id: "weak-small", url: "https://small.test", business: "Small Business", services: ["General Service"], goal: "Generate qualified enquiries", cta: "Contact" },
+    { id: "booking", url: "https://booking.test", business: "Booking Business", services: ["Appointments"], goal: "Book appointments or consultations", cta: "Book Now" },
+    { id: "purchase", url: "https://purchase.test", business: "Purchase Business", services: ["Direct Purchase"], goal: "Sell products online", cta: "Purchase" },
+  ];
+
+  for (const archetype of archetypes) {
+    const ev = evidence();
+    const host = new URL(archetype.url).hostname;
+    ev.site.targetUrl = archetype.url + "/";
+    ev.site.domain = host;
+    ev.site.services = archetype.services;
+    ev.site.pages = [{
+      title: archetype.business,
+      bodyText: archetype.business + " " + archetype.services.join(" "),
+      url: archetype.url + "/",
+      crawledUrl: archetype.url + "/",
+      headings: { h1: [archetype.business], h2: [], h3: [], h4: [] },
+      responseHeaders: {},
+    }];
+    ev.site.ctas = [{ text: archetype.cta, url: archetype.url + "/next", kind: "link" }];
+    ev.site.forms = archetype.id === "ecommerce" || archetype.id === "purchase"
+      ? []
+      : [{ action: "/submit" }];
+
+    const input = {
+      targetUrl: archetype.url,
+      businessName: archetype.business,
+      competitors: [],
+      services: archetype.services,
+      primaryGoal: archetype.goal,
+      market: archetype.id === "multi-location" ? "Multiple regions" : "Primary market",
+    };
+
+    const scored = scoreAudit(input, ev);
+    const html = renderReportV2(scored);
+
+    assert.match(html, /data-report-design="2\.0\.0"/, archetype.id + ": v2 authority");
+    assert.equal(REPORT_V2_VIEWER_PAGES.length, 7, archetype.id + ": seven governed viewer pages");
+    for (const page of REPORT_V2_VIEWER_PAGES) {
+      assert.match(html, new RegExp('data-viewer-page="' + page.pageId + '"'), archetype.id + ": " + page.pageId + " available");
+    }
+    assert.ok(html.includes(archetype.business), archetype.id + ": business identity rendered");
+
+    const visible = html
+      .replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>|<!--[\s\S]*?-->/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ");
+    assert.doesNotMatch(
+      visible,
+      /\b(?:AVAILABLE|PARTIAL|UNAVAILABLE|NOT_COLLECTED|NOT_CONNECTED|NOT_APPLICABLE)\b/,
+      archetype.id + ": internal evidence enums stay out of client copy",
+    );
+  }
 });

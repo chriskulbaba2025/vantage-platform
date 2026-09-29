@@ -6,8 +6,8 @@ test("normalizes tracking parameters without changing the resource path", () => 
   assert.equal(normalizeUrl("https://example.test/work?utm_source=chatgpt.com&ref=abc#x"), "https://example.test/work?ref=abc");
 });
 
-test("recognizes equivalent proof forms without upgrading their meaning", () => {
-  const proof = proofSemantics({ _contentEvidenceAvailable: true, pages: [{ title: "Project gallery", bodyText: "Completed work examples" }] });
+test("uses classified proof forms without rescanning raw page text", () => {
+  const proof = proofSemantics({ _contentEvidenceAvailable: true, trust: { completedWork: true }, pages: [{ title: "Project gallery", bodyText: "unclassified text" }] });
   assert.equal(proof.observed, true);
   assert.deepEqual(proof.forms, ["GALLERY_OR_COMPLETED_WORK"]);
   assert.match(proof.qualifier, /not treated as a detailed outcome case study/);

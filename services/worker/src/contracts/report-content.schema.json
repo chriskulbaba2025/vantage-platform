@@ -167,6 +167,8 @@
         "properties": {
           "findingId": { "type": "string", "minLength": 1 },
           "ruleId": { "type": "string", "minLength": 1 },
+          "dimension": { "type": "string" },
+          "module": { "type": "string" },
           "title": { "type": "string", "minLength": 1 },
           "severity": { "type": "string", "enum": ["High", "Medium", "Low"] },
           "confidence": { "type": "string" },
@@ -188,11 +190,83 @@
               "required": ["field", "observedValue"],
               "properties": {
                 "field": { "type": "string" },
-                "observedValue": {}
+                "observedValue": {},
+                "status": { "type": "string" }
               }
             }
           },
-          "implementationEffort": { "type": "string", "enum": ["L", "M", "H"] }
+          "implementationEffort": { "type": "string", "enum": ["L", "M", "H"] },
+          "finalPriority": { "type": ["number", "null"] }
+        }
+      }
+    },
+    "canonicalDecisionModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "source", "orderedFindingIds", "decisions"],
+      "properties": {
+        "version": { "type": "string" },
+        "source": { "type": "string" },
+        "orderedFindingIds": { "type": "array", "items": { "type": "string" } },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["findingId", "rank", "ruleId", "title", "evidence", "evidenceStatus", "confidence", "scoreBearing", "severity", "actionClass", "foundationBlocker", "businessImpact", "recommendation", "affectedUrls", "sourceProvenance"],
+            "properties": {
+              "findingId": { "type": "string" },
+              "rank": { "type": "integer", "minimum": 1 },
+              "ruleId": { "type": "string" },
+              "title": { "type": "string" },
+              "category": { "type": "string" },
+              "evidence": { "type": "array" },
+              "evidenceStatus": { "type": "array", "items": { "type": "string" } },
+              "confidence": { "type": "string" },
+              "scoreBearing": { "type": "boolean" },
+              "severity": { "type": "string" },
+              "finalPriority": { "type": ["number", "null"] },
+              "actionClass": { "type": "string" },
+              "foundationBlocker": { "type": "boolean" },
+              "businessImpact": { "type": "string" },
+              "recommendation": { "type": "string" },
+              "affectedUrls": { "type": "array", "items": { "type": "string" } },
+              "sourceProvenance": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "semanticEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "authority", "sourceStatus", "facts"],
+      "properties": {
+        "version": { "type": "string" },
+        "authority": { "type": "string", "const": "POST_CLASSIFICATION_DECISION_EVIDENCE" },
+        "sourceStatus": { "type": "string" },
+        "facts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["state", "observed", "sourceStatus", "provenance"],
+            "properties": {
+              "state": { "type": "string" },
+              "observed": { "type": "boolean" },
+              "sourceStatus": { "type": "string" },
+              "provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["source", "field", "urls"],
+                "properties": {
+                  "source": { "type": "string" },
+                  "field": { "type": "string" },
+                  "urls": { "type": "array", "items": { "type": "string", "format": "uri" } }
+                }
+              }
+            }
+          }
         }
       }
     },

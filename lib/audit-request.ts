@@ -6,6 +6,7 @@
  */
 
 export interface AuditFormInput {
+  idempotencyKey?: string;
   targetUrl: string;
   businessName: string;
   market?: string;
@@ -13,7 +14,6 @@ export interface AuditFormInput {
   primaryGoal?: string;
   services?: string[];
   competitors?: string[];
-  reportDesignVersion?: "1.0.0" | "2.0.0";
   ga4PropertyId?: string;
   gscSiteUrl?: string;
 }
@@ -22,6 +22,9 @@ export interface ValidationResult {
   valid: boolean;
   errors: Record<string, string>;
 }
+
+/** The report contract emitted by the user-facing new-audit flow. */
+export const CURRENT_REPORT_DESIGN_VERSION = "2.0.0" as const;
 
 const URL_RE = /^https?:\/\/.+/i;
 
@@ -54,6 +57,9 @@ export function validateAuditForm(input: Partial<AuditFormInput>): ValidationRes
 
   // PRYSM-NEXT-01 WP-H — business-context validation.
   const services = (input.services || []).map((s) => s.trim()).filter(Boolean);
+  if (services.length === 0) {
+    errors.services = "At least one service or offer is required.";
+  }
   if (services.length > 20) {
     errors.services = "Maximum 20 services or offers allowed.";
   }
@@ -63,6 +69,12 @@ export function validateAuditForm(input: Partial<AuditFormInput>): ValidationRes
   }
   if (input.primaryGoal && input.primaryGoal.length > 256) {
     errors.primaryGoal = "The conversion goal must be 256 characters or fewer.";
+  }
+  if (!input.primaryGoal || !input.primaryGoal.trim()) {
+    errors.primaryGoal = "Primary conversion goal is required.";
+  }
+  if (!input.market || !input.market.trim()) {
+    errors.market = "Market or location is required.";
   }
   if (input.market && input.market.length > 128) {
     errors.market = "Market or location must be 128 characters or fewer.";
@@ -96,6 +108,10 @@ export function buildAuditPayload(input: AuditFormInput): Record<string, unknown
     businessName: input.businessName.trim(),
   };
 
+  if (input.idempotencyKey?.trim()) {
+    payload.idempotencyKey = input.idempotencyKey.trim();
+  }
+
   if (input.market?.trim()) payload.market = input.market.trim();
   if (input.language?.trim()) payload.language = input.language.trim();
   if (input.primaryGoal?.trim()) payload.primaryGoal = input.primaryGoal.trim();
@@ -109,15 +125,10 @@ export function buildAuditPayload(input: AuditFormInput): Record<string, unknown
     payload.gsc = { siteUrl: input.gscSiteUrl.trim() };
   }
 
-  // Report v2 is the complete governed v2 product path in the web UI:
-  // design v2 + Narrative v2. Keep v1 explicitly paired with Narrative v1.
-  // The worker contract still supports independent version selection for
-  // controlled compatibility/testing paths; the browser does not expose an
-  // ambiguous mixed-version combination.
-  const isV2 = input.reportDesignVersion === "2.0.0";
   payload.report = {
-    designVersion: isV2 ? "2.0.0" : "1.0.0",
-    narrativeVersion: isV2 ? "2.0.0" : "1.0.0",
+    designVersion: CURRENT_REPORT_DESIGN_VERSION,
+    narrativeVersion: "1.0.0",
+    snapshotVersion: "1.0.0",
   };
 
   return payload;

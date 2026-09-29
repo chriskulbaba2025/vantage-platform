@@ -71,7 +71,7 @@
     "readinessMapNarrative": {
       "type": "string",
       "maxLength": 2000,
-      "description": "Narrative describing the conversion readiness map. Plain text only."
+      "description": "Narrative describing the readiness overview. Plain text only."
     },
     "contentOpportunityNarrative": {
       "type": "string",

@@ -14,9 +14,10 @@ function baseModel(overrides = {}) {
       title: "Residential plumbing",
       bodyText: "Residential plumbing services and completed work gallery.",
       crawledUrl: "https://client.test/services?utm_source=chatgpt.com",
-      headings: { h1: ["Residential plumbing"], h2: [] },
+       headings: { h1: ["Residential plumbing"], h2: [] },
+       signals: { completedWork: true },
     }],
-    trust: { pricing: true },
+    trust: { pricing: true, completedWork: true },
   };
   const findings = [
     { findingId: "trust-1", ruleId: "TRUST-1", dimension: "trust_eeat", scoreBearing: true, actionable: true, confidence: "supported", finalPriority: 1, title: "Pricing and proof placement" },

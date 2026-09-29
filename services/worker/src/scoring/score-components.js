@@ -4,6 +4,7 @@ import {
   BUSINESS_IMPACT_BASIS,
   governBusinessImpact,
 } from "./business-impact-policy.js";
+import { isObserved } from "../report-intelligence/semantic-evidence-authority.js";
 
 // ---------------------------------------------------------------------------
 // Scoring version (PRD v3.0 Â§15.1 + PRYSM-NEXT-01 WP-D/WP-J)
@@ -242,11 +243,14 @@ export const CONFIDENCE_LEVELS = Object.freeze({
 // Individual module scorers (0â€“100)
 // ---------------------------------------------------------------------------
 
-export function scoreTrust(site) {
+export function scoreTrust(site, semanticEvidence = null) {
+  const credentials = semanticEvidence ? isObserved(semanticEvidence, "FORMAL_CREDENTIAL") : site.trust.credentials;
+  const testimonials = semanticEvidence ? isObserved(semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials;
+  const caseStudies = semanticEvidence ? isObserved(semanticEvidence, "DETAILED_CASE_STUDY") : site.trust.caseStudies;
   return clamp(
-    (site.trust.credentials ? 25 : 0) +
-    (site.trust.testimonials ? 25 : 0) +
-    (site.trust.caseStudies ? 20 : 0) +
+    (credentials ? 25 : 0) +
+    (testimonials ? 25 : 0) +
+    (caseStudies ? 20 : 0) +
     (site.trust.policies ? 10 : 0) +
     (site.trust.contact ? 10 : 0) +
     (site.socialLinks.length ? 10 : 0),
@@ -261,11 +265,11 @@ export function scoreContent(site) {
   return clamp(pages + depth + services + education);
 }
 
-export function scoreConversion(site) {
+export function scoreConversion(site, semanticEvidence = null) {
   const ctaScore = Math.min(25, site.ctas.length * 5);
   const forms = site.forms.length ? 20 : 0;
   const pricing = site.trust.pricing ? 15 : 0;
-  const reassurance = (site.trust.policies ? 10 : 0) + (site.trust.testimonials ? 10 : 0);
+  const reassurance = (site.trust.policies ? 10 : 0) + ((semanticEvidence ? isObserved(semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials) ? 10 : 0);
   const contact = site.trust.contact ? 10 : 0;
   const hierarchy = site.ctas.length > 0 && site.ctas.length <= 8 ? 10 : 3;
   return clamp(ctaScore + forms + pricing + reassurance + contact + hierarchy);
@@ -494,8 +498,9 @@ function interactiveAssessment(
 /** v4 trust: trust.proof governs the score-bearing signals. */
 function scoreTrustV4({
   site,
+  semanticEvidence,
 }) {
-  return scoreTrust(site);
+  return scoreTrust(site, semanticEvidence);
 }
 
 /** v4 content: business-context services union (WP-D-05). */
@@ -503,6 +508,7 @@ function scoreContentV4({
   site,
   input,
   capabilities,
+  semanticEvidence,
 }) {
   const services =
     businessServices(
@@ -576,6 +582,7 @@ function scoreContentV4({
 function scoreConversionV4({
   site,
   capabilities,
+  semanticEvidence,
 }) {
   const cta =
     interactiveAssessment(
@@ -690,8 +697,9 @@ function scoreConversionV4({
         assessed:
           trustAssessed,
         points:
-          site.trust
-            .testimonials
+          (semanticEvidence
+            ? isObserved(semanticEvidence, "TESTIMONIAL_OR_REVIEW")
+            : site.trust.testimonials)
             ? 10
             : 0,
       },
@@ -952,6 +960,7 @@ function scoreFunnelCoverageV4({
   site,
   input,
   capabilities,
+  semanticEvidence,
 }) {
   const services =
     businessServices(
@@ -1018,7 +1027,7 @@ function scoreFunnelCoverageV4({
       assessed:
         trustAssessed,
       points:
-        site.trust.caseStudies
+        (semanticEvidence ? isObserved(semanticEvidence, "DETAILED_CASE_STUDY") : site.trust.caseStudies)
           ? 15
           : 0,
     },
@@ -1838,8 +1847,22 @@ export function calculateEvidenceConfidence(evidence, findings, now = null) {
     const ev = evidence[src.key];
     if (!ev || !ev.coverage) continue;
     const cov = ev.coverage;
+    const status = ev.sourceStatus;
+    if (status === SOURCE_STATUS.FAILED || status === SOURCE_STATUS.BLOCKED) {
+      if (src.required) completenessScores.push(0);
+      continue;
+    }
+    if (src.key === "performance" && cov.requested > 0) {
+      const usableScores = Number(ev.usableScores);
+      if (Number.isFinite(usableScores)) {
+        completenessScores.push(Math.round((usableScores / cov.requested) * 100));
+        continue;
+      }
+    }
     if (cov.requested > 0) {
       completenessScores.push(Math.round((cov.completed / cov.requested) * 100));
+    } else if (status === SOURCE_STATUS.AVAILABLE && src.required) {
+      completenessScores.push(100);
     }
   }
   factors.dataCompleteness = completenessScores.length
@@ -2423,18 +2446,21 @@ export function buildFindings(site, performance, gsc, opts = {}) {
 
   // Helper: detect trust-proof severity
   const trustProofConfidence =
-    !site.trust.testimonials && !site.trust.caseStudies && !site.trust.credentials
+    !(opts.semanticEvidence ? isObserved(opts.semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials) &&
+    !(opts.semanticEvidence ? isObserved(opts.semanticEvidence, "DETAILED_CASE_STUDY") : site.trust.caseStudies) &&
+    !(opts.semanticEvidence ? isObserved(opts.semanticEvidence, "FORMAL_CREDENTIAL") : site.trust.credentials)
       ? CONFIDENCE_LEVELS.DETERMINISTIC
-      : site.trust.testimonials || site.trust.credentials
+      : (opts.semanticEvidence ? isObserved(opts.semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials) ||
+          (opts.semanticEvidence ? isObserved(opts.semanticEvidence, "FORMAL_CREDENTIAL") : site.trust.credentials)
         ? CONFIDENCE_LEVELS.STRONGLY_SUPPORTED
         : CONFIDENCE_LEVELS.SUPPORTED;
 
   // â”€â”€ Crawl-dependent findings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     if (
-    !site.trust.testimonials &&
-    !site.trust.caseStudies &&
-    !site.trust.credentials
+    !(opts.semanticEvidence ? isObserved(opts.semanticEvidence, "TESTIMONIAL_OR_REVIEW") : site.trust.testimonials) &&
+    !(opts.semanticEvidence ? isObserved(opts.semanticEvidence, "DETAILED_CASE_STUDY") : site.trust.caseStudies) &&
+    !(opts.semanticEvidence ? isObserved(opts.semanticEvidence, "FORMAL_CREDENTIAL") : site.trust.credentials)
   ) {
     add({
       ruleId: "VAN-TRUST-001",

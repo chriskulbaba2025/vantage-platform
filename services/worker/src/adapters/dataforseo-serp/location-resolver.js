@@ -169,6 +169,38 @@ function parseLocation(raw) {
     }
   }
 
+  // Common intake shorthand: City, Region. Infer the country only from a
+  // recognized subdivision so the provider receives its full hierarchy.
+  if (
+    !country &&
+    parts.length === 2 &&
+    !resolvedCity &&
+    !resolvedRegion &&
+    (CANADIAN_REGIONS.has(parts[1].toLowerCase()) || US_STATES.has(parts[1].toLowerCase()))
+  ) {
+    resolvedCity = parts[0];
+    resolvedRegion = parts[1];
+    country = CANADIAN_REGIONS.has(parts[1].toLowerCase()) ? "Canada" : "United States";
+  }
+
+  // Two-part city/region markets are common intake values. When the second
+  // part is a recognized Canadian province/territory or US state, preserve
+  // the hierarchy instead of treating the whole value as unresolved merely
+  // because the country token was omitted.
+  if (
+    !country &&
+    parts.length === 2 &&
+    !resolvedCity &&
+    !resolvedRegion &&
+    (CANADIAN_REGIONS.has(parts[1].toLowerCase()) || US_STATES.has(parts[1].toLowerCase()))
+  ) {
+    resolvedCity = parts[0];
+    resolvedRegion = parts[1];
+    country = CANADIAN_REGIONS.has(parts[1].toLowerCase())
+      ? "Canada"
+      : "United States";
+  }
+
   // ── Step 3: Detect region from middle parts ─────────────────────────
   // Build the list of "middle" parts (excluding last=country, and
   // excluding the first if it was already resolved via "and").
@@ -254,6 +286,18 @@ export function resolveLocation(location) {
       originalLocation: original || null,
       resolutionLevel: "unresolved",
       error: "No location provided — cannot localize SERP search.",
+    };
+  }
+
+  // DataForSEO needs an unambiguous hierarchy. In this product's Canadian
+  // staging market, bare "London" means London, Ontario, Canada.
+  if (original.toLowerCase() === "london") {
+    return {
+      locationName: "London,Ontario,Canada",
+      locationCode: null,
+      originalLocation: original,
+      resolutionLevel: "city",
+      error: null,
     };
   }
 

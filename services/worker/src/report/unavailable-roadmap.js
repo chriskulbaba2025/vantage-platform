@@ -1,4 +1,4 @@
-/** Deterministic, client-safe next-step metadata for unavailable/partial evidence. */
+/** Deterministic, client-safe next-step metadata for unavailable evidence. */
 const ROADMAP = Object.freeze({
   accessibility: { requiredInformation: "A rendered mobile and responsive interaction assessment across representative pages.", enablement: "Enable a browser-based mobile/responsive assessment for the priority pages and repeat it at the key viewport sizes.", additionalInsight: "PRYSM could report observed viewport, layout, legibility, and tap-target results for the assessed pages." },
   partialCrawl: { requiredInformation: "A complete crawl response for the pages that were not returned in the current assessment.", enablement: "Allow the crawler to reach the remaining pages and retain their returned bodies and status codes.", additionalInsight: "PRYSM could distinguish site-wide patterns from observations limited to the collected pages." },

@@ -401,3 +401,28 @@ test("CONTRACT-CLOSURE-05: live binding sends strict schemas for Writer and Judg
   const rawWriter = JSON.parse(Buffer.from(await artifactStore.get(`${prefix}/call-01-response.json`)).toString("utf8"));
   assert.deepEqual(rawWriter.limitations[0].whatThisMeans.evidenceRefs, [CAP_REF, CAP_REF]);
 });
+
+test("CONTRACT-CLOSURE-06: context safety margin rejects before provider execution with a governed reason", async () => {
+  const input = productionShapedWriterInput();
+  const artifactStore = createMemoryArtifactStore();
+  let providerCalls = 0;
+  const binding = createNarrativeV2LiveBinding({
+    env: { ...baseEnv(), PRYSM_NARRATIVE_V2_MAX_INPUT_TOKENS: "1200" },
+    artifactStore,
+    clock: { now: () => FIXED_TS },
+    fetchImpl: async () => {
+      providerCalls += 1;
+      return providerResponse(rawWriterOutput());
+    },
+  });
+  binding.registerAuditScope({ tenantId: "omnipresence", clientId: "reboot", auditId: AUDIT_ID, executionId: "budget-test" });
+
+  await assert.rejects(
+    binding.writerExecutor({ prompt: "x".repeat(1500), passNumber: 1, writerInput: input }),
+    (error) => error.code === "NARRATIVE_V2_CONTEXT_BUDGET_EXCEEDED"
+      && /safe budget 960/.test(error.message)
+      && error.contextBudget.writerInput.categories.findings.estimatedTokens > 0,
+  );
+  assert.equal(providerCalls, 0);
+  assert.equal(await artifactStore.exists(`tenants/omnipresence/clients/reboot/audits/${AUDIT_ID}/report-v2/narrative-v2/live-usage/call-01-reservation.json`), false);
+});

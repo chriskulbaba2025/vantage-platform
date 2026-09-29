@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { normalizeUrl, domainOf, withTimeout } from "../utils.js";
 import { cleanText, extractPage } from "./page-extractor.js";
+import { summarizeBrandAssets } from "./brand-assets.js";
 import { SOURCE_STATUS, buildSourceStatus, EVIDENCE_ENVELOPE_VERSION } from "../scoring/evidence-contracts.js";
 
 async function fetchText(url, fetchImpl, timeoutMs = 20000) {
@@ -44,7 +45,7 @@ async function discoverSitemap(origin, fetchImpl, limitations) {
   return urls;
 }
 
-function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
+function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations, businessName = "") {
   const domain = domainOf(targetUrl);
   const allSchema = new Set(pages.flatMap((p) => p.schemaTypes));
   const allServices = new Set(pages.flatMap((p) => p.serviceCandidates));
@@ -105,6 +106,7 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
   const ctas = pages.flatMap((p) => p.ctas);
   const images = pages.flatMap((p) => p.images);
   const collectedAt = new Date().toISOString();
+  const brandIdentity = summarizeBrandAssets(pages, { canonicalDomain: domain, businessName: businessName || pages.flatMap((page) => page.identityCandidates || []).find((item) => item.source === "organization-schema" || item.source === "local-business-schema")?.value || "" });
   return {
     evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
     source: "prysm-crawler",
@@ -136,6 +138,8 @@ function summarize(pages, targetUrl, robotsText, sitemapUrls, limitations) {
     brokenInternalLinks: pages.filter((p) => p.status >= 400).map((p) => p.url),
     platform: uniquePlatforms[0] || "Unknown",
     services: [...allServices].slice(0, 12),
+    identityCandidates: pages.flatMap((p) => Array.isArray(p.identityCandidates) ? p.identityCandidates : []),
+    brandIdentity,
     topicKeywords,
     trust: {
       testimonials: pages.some((p) => p.signals.testimonials),
@@ -221,7 +225,7 @@ export async function crawlSite(input, options = {}) {
   }
 
   if (!pages.length) throw new Error(`No crawlable HTML pages found for ${targetUrl}`);
-  return summarize(pages, targetUrl, robotsText, sitemapUrls, limitations);
+  return summarize(pages, targetUrl, robotsText, sitemapUrls, limitations, options.businessName || "");
 }
 
 export async function crawlCompetitors(urls = [], options = {}) {

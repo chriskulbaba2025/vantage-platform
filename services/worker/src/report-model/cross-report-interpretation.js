@@ -654,21 +654,12 @@ function buildBuyerQuestionTruth(
 function buildTrustTruth(
   site,
   capabilities,
+  semanticEvidence,
 ) {
-  const trust =
-    site?.trust || {};
-
-  const observed =
-    [
-      trust.credentials,
-      trust.testimonials,
-      trust.caseStudies,
-      trust.policies,
-      trust.contact,
-    ].some(
-      (value) =>
-        value === true,
-    );
+  const trust = site?.trust || {};
+  const observed = semanticEvidence
+    ? Object.values(semanticEvidence.facts || {}).some((fact) => fact?.state === "OBSERVED") || trust.policies === true || trust.contact === true
+    : [trust.credentials, trust.testimonials, trust.caseStudies, trust.policies, trust.contact].some((value) => value === true);
 
   return capabilityTruth({
     capabilities,
@@ -1259,6 +1250,7 @@ export function buildCrossReportInterpretation({
   bands = {},
   conversionPaths = [],
   capabilities = {},
+  semanticEvidence = null,
 } = {}) {
   return Object.freeze({
     version:
@@ -1306,6 +1298,7 @@ export function buildCrossReportInterpretation({
           buildTrustTruth(
             site,
             capabilities,
+            semanticEvidence,
           ),
 
         performanceReadiness:

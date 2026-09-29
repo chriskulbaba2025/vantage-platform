@@ -72,19 +72,24 @@ export async function GET(
     if (result.status === 403) {
       return NextResponse.json({ error: "Report not available", code: "REPORT_NOT_APPROVED" }, { status: 403 });
     }
+    if (result.status === 410) {
+      return NextResponse.json({ error: "This report product is retired", code: "RETIRED_REPORT_UNAVAILABLE" }, { status: 410 });
+    }
     if (result.status === 404 || !result.body) {
       return NextResponse.json({ error: "Page not found" }, { status: 404 });
     }
 
     const contentType = result.contentType || (filename.endsWith(".html") ? "text/html; charset=utf-8" : "application/json");
 
-    const body =
-      REVIEWER_ONLY_STATES.has(state) && filename === "index.html"
-        ? result.body.toString("utf8").replace(
-            /<body([^>]*)>/i,
-            `<body$1><div style="max-width:1200px;margin:16px auto 0;padding:0 24px;"><a href="/" class="no-print" style="display:inline-block;text-decoration:none;font-weight:600;">← Back to Dashboard</a></div>`,
-          )
-        : result.body;
+    const showBackToDashboard =
+      filename === "executive.html" ||
+      (REVIEWER_ONLY_STATES.has(state) && (filename === "index.html" || filename === "snapshot.html"));
+    const body = showBackToDashboard
+      ? result.body.toString("utf8").replace(
+          /<body([^>]*)>/i,
+          `<body$1><div data-prysm-back-dashboard="true" class="no-print" style="max-width:1200px;margin:16px auto 0;padding:0 24px;"><a href="/audits/${encodeURIComponent(auditId)}" class="no-print" style="display:inline-block;text-decoration:none;font-weight:600;">← Back to Dashboard</a></div>`,
+        )
+      : result.body;
 
     return new NextResponse(body, {
       status: 200,

@@ -157,7 +157,7 @@ test("actionable non-security hierarchy rows still require canonical solutions",
 
 test("viewer architecture remains six primary pages plus Supporting Detail", () => {
   assert.deepEqual(REPORT_V2_VIEWER_PAGES.map((page) => page.pageId), [
-    "executive-scorecard", "priority-fixes", "conversion-paths", "content-ideas",
-    "trust-eeat", "competitor-benchmark", "supporting-detail",
+    "executive-scorecard", "priority-fixes", "conversion-paths", "trust-eeat",
+    "competitor-benchmark", "content-ideas", "supporting-detail",
   ]);
 });

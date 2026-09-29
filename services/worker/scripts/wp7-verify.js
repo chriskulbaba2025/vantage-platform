@@ -68,7 +68,7 @@ console.log("WP7 FULL VERIFICATION");
 console.log("=".repeat(60));
 
 // 1. Template/golden-master integrity
-run("1. Template integrity", "node src/report/verify-template.js");
+run("1. Current report retirement contract", "node --test src/report/legacy-report-retirement.test.js");
 
 // 2. Schema tests
 run("2. Schema tests", "node --test src/contracts/validator.test.js");

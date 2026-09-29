@@ -54,6 +54,8 @@ test("ACTIVATION-A-01: explicit v2 selection survives createAudit into the audit
     {
       targetUrl: "https://example.com",
       businessName: "Example",
+      market: "Canada",
+      primaryGoal: "Generate enquiries",
       services: ["Consulting"],
       report: { designVersion: "2.0.0" },
     },
@@ -63,7 +65,7 @@ test("ACTIVATION-A-01: explicit v2 selection survives createAudit into the audit
   assert.equal(captured[0].report.designVersion, "2.0.0", "designVersion 2.0.0 propagated");
 });
 
-test("ACTIVATION-A-02: absent selection leaves the request without a report override (v1 default)", async () => {
+test("ACTIVATION-A-02: absent selection persists the current Executive default with Snapshot V1", async () => {
   const captured = [];
   const orchestrator = {
     execute: async (auditRequest) => {
@@ -81,11 +83,12 @@ test("ACTIVATION-A-02: absent selection leaves the request without a report over
     config: { artifactDir: "." },
     validateContract: noopValidator,
   });
-  await service.createAudit({ targetUrl: "https://example.com", businessName: "Example" }, "tenant-a");
-  assert.equal(captured[0].report, undefined, "no report override ⇒ orchestrator default (v1)");
+  await service.createAudit({ targetUrl: "https://example.com", businessName: "Example", market: "Canada", primaryGoal: "Generate enquiries", services: ["Consulting"] }, "tenant-a");
+  assert.equal(captured[0].report.designVersion, "2.0.0");
+  assert.equal(captured[0].report.snapshotVersion, "1.0.0", "new audits select Snapshot V1 by default");
 });
 
-test("ACTIVATION-A-03: invalid design version is clamped to the v1 default", async () => {
+test("ACTIVATION-A-03: invalid design version remains explicit for fail-closed handling", async () => {
   const captured = [];
   const orchestrator = {
     execute: async (auditRequest) => {
@@ -104,10 +107,10 @@ test("ACTIVATION-A-03: invalid design version is clamped to the v1 default", asy
     validateContract: noopValidator,
   });
   await service.createAudit(
-    { targetUrl: "https://example.com", businessName: "Example", report: { designVersion: "9.9.9" } },
+    { targetUrl: "https://example.com", businessName: "Example", market: "Canada", primaryGoal: "Generate enquiries", services: ["Consulting"], report: { designVersion: "9.9.9" } },
     "tenant-a",
   );
-  assert.equal(captured[0].report.designVersion, "1.0.0", "unknown versions clamp to v1");
+  assert.equal(captured[0].report.designVersion, "9.9.9", "unknown versions are not converted into a renderer default");
 });
 
 // ---------------------------------------------------------------------------
@@ -120,7 +123,10 @@ async function makeRuntimeInReview({ auditId, tenantId, clientId }) {
   const artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
   const reportStore = createLocalReportStore({ baseDir: mkdtempSync(join(tmpdir(), "activation-c-")) });
   const runtime = createProductionRuntime({
-    config: { artifactDir: "." },
+    // Keep this boundary test deterministic and provider-free even when the
+    // developer shell exports a live narrative mode. The test exercises
+    // approval/page-contract selection, not live model configuration.
+    config: { artifactDir: ".", narrativeMode: "mock" },
     adapters: null,
     validateContract: noopValidator,
     artifactStore,
@@ -169,7 +175,7 @@ test("ACTIVATION-C-01: v2 approval proceeds without the v1 16-page set", async (
   assert.equal(result.designVersion, "2.0.0", "approval ran through the v2 contract branch");
 });
 
-test("ACTIVATION-C-02: v1 approval still requires the locked 16-page set", async () => {
+test("ACTIVATION-C-02: retired v1 approval fails closed without selecting legacy pages", async () => {
   const auditId = "22222222-2222-4333-8444-555555555555";
   const tenantId = "tenant-b";
   const clientId = "client-b";
@@ -178,7 +184,7 @@ test("ACTIVATION-C-02: v1 approval still requires the locked 16-page set", async
   // No v1 pages, no v2 manifest ⇒ the v1 preload must fail closed with 422.
   await assert.rejects(
     runtime.auditService.approveAudit(auditId, tenantId, "slug", "approver", undefined),
-    (err) => err.statusCode === 422 && /Draft report page missing/.test(err.message),
-    "v1 approval fails closed when the locked page set is missing",
+    (err) => err.code === "RETIRED_REPORT_UNAVAILABLE",
+    "retired v1 approval fails closed without legacy page selection",
   );
 });

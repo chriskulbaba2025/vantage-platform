@@ -71,6 +71,8 @@ test(
 
     const payload = calls[0].body[0];
 
+    assert.equal(payload.target, "example.com");
+
     assert.equal(
       payload.max_crawl_pages,
       250,

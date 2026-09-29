@@ -24,6 +24,22 @@ test("collectBacklinks uses live DataForSEO target payloads and finds competitor
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
 
+    if (String(url).endsWith("/history/live")) {
+      return new Response(JSON.stringify({
+        status_code: 20000,
+        tasks: [{ status_code: 20000, result: [{
+          date_from: "2025-01-01",
+          date_to: "2025-12-31",
+          items: Array.from({ length: 12 }, (_, index) => ({
+            date: `2025-${String(index + 1).padStart(2, "0")}-28`,
+            backlinks: index,
+            referring_domains: index,
+            referring_pages: index,
+          })),
+        }] }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+
     const items = target === "example.com"
       ? [{ page_from: "https://authority.example/article", domain_from: "authority.example", page_to: "https://example.com/", anchor: "stress recovery services", semantic_location: "article", domain_from_rank: 800, backlinks_spam_score: 5, external_links_count: 12 }]
       : [{ page_from: "https://opportunity.example/resources", domain_from: "opportunity.example", page_to: `https://${target}/`, anchor: "stress recovery coaching", semantic_location: "article", domain_from_rank: 900, backlinks_spam_score: 3, external_links_count: 10 }];
@@ -46,11 +62,32 @@ test("collectBacklinks uses live DataForSEO target payloads and finds competitor
   );
 
   assert.equal(result.sourceStatus, SOURCE_STATUS.AVAILABLE);
-  assert.equal(result.requestCount, 3);
+  assert.equal(result.requestCount, 5);
+  assert.equal(result.history.status, SOURCE_STATUS.AVAILABLE);
+  assert.equal(result.history.coverage.requested, 12);
   assert.equal(result.goodCount, 1);
   assert.equal(result.worthPursuingCount, 1);
   assert.ok(result.topWorthPursuingDomains.some((item) => item.referringDomain === "opportunity.example"));
   assert.ok(calls.every((call) => typeof call.tasks[0].target === "string"));
   assert.ok(calls.some((call) => call.tasks[0].target === "example.com"));
   assert.ok(calls.some((call) => call.tasks[0].target === "competitor.example"));
+});
+
+
+test("zero returned backlink records are UNAVAILABLE, never AVAILABLE", async () => {
+  const fetchImpl = async (url) => {
+    const result = String(url).endsWith("/summary/live")
+      ? [{ rank: null, backlinks: 0, referring_domains: 0, referring_pages: 0 }]
+      : [{ items: [] }];
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [{ status_code: 20000, result }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const result = await collectBacklinks("https://example.com", [], {
+    login: "user", password: "pass", fetchImpl,
+  });
+  assert.equal(result.sourceStatus, SOURCE_STATUS.UNAVAILABLE);
+  assert.equal(result.status, SOURCE_STATUS.UNAVAILABLE);
+  assert.equal(result._sourceStatus.errorCategory, "no_data");
 });

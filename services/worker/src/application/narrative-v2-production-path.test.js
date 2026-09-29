@@ -1559,3 +1559,192 @@ test("NV2-PROD-08: failed final Judge pass stops at NARRATIVE_FAILED with no Pas
     "no Judge pass 4 may execute",
   );
 });
+
+
+test("NV2-PROD-10: resume recovers a pre-Judge Writer failure from stored evidence with zero provider recollection", async () => {
+  const callCounts = {};
+  const countedAdapters = Object.fromEntries(
+    Object.entries(workingAdapters()).map(([name, adapter]) => [
+      name,
+      {
+        ...adapter,
+        execute: async (...args) => {
+          callCounts[name] = (callCounts[name] || 0) + 1;
+          return adapter.execute(...args);
+        },
+      },
+    ]),
+  );
+
+  let writerCalls = 0;
+  let judgeCalls = 0;
+
+  const { runtime } = buildRuntime({
+    adapters: countedAdapters,
+    narrativeV2: {
+      enabled: true,
+      writerExecutor: async ({ writerInput, passNumber }) => {
+        writerCalls += 1;
+        if (writerCalls === 1) {
+          const error = new Error("controlled pre-Judge Writer transport failure");
+          error.code = "WRITER_EXECUTION_FAILED";
+          error.stage = "WRITER";
+          error.passNumber = passNumber;
+          throw error;
+        }
+        return buildPassingWriterOutput({ writerInput, passNumber });
+      },
+      judgeExecutor: async ({ writerInput, passNumber }) => {
+        judgeCalls += 1;
+        return buildPassingJudgeResponse({ writerInput, passNumber });
+      },
+    },
+  });
+
+  const created = await runtime.auditService.createAudit({
+    ...baseInput(),
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  }, tenantId);
+
+  const failed = await waitForState(
+    runtime,
+    created.auditId,
+    [T.NARRATIVE_FAILED, T.DRAFT_RENDERED, T.RENDER_FAILED],
+  );
+  assert.equal(failed?.state, T.NARRATIVE_FAILED);
+  assert.equal(writerCalls, 1);
+  assert.equal(judgeCalls, 0);
+
+  const callsBeforeResume = { ...callCounts };
+  const resumed = await runtime.auditService.resumeAudit(created.auditId, tenantId);
+
+  assert.equal(resumed.finalState, T.DRAFT_RENDERED);
+  assert.deepEqual(
+    callCounts,
+    callsBeforeResume,
+    "pre-Judge narrative retry must not recollect any provider evidence",
+  );
+  assert.equal(writerCalls, 2, "resume executes one replacement Writer pass");
+  assert.equal(judgeCalls, 1, "resume reaches Judge only after the replacement Writer succeeds");
+
+  const current = await runtime.lifecycleService.currentState(created.auditId, tenantId);
+  assert.equal(current?.state, T.DRAFT_RENDERED);
+});
+
+test("NV2-PROD-10A: retry failure preserves the original immutable failure artifact", async () => {
+  let writerCalls = 0;
+  const { runtime, artifactStore } = buildRuntime({
+    narrativeV2: {
+      enabled: true,
+      writerExecutor: async ({ writerInput, passNumber }) => {
+        writerCalls += 1;
+        const error = new Error(`controlled Writer failure ${writerCalls}`);
+        error.code = "WRITER_EXECUTION_FAILED";
+        error.stage = "WRITER";
+        error.passNumber = passNumber;
+        throw error;
+      },
+      judgeExecutor: async () => {
+        throw new Error("Judge must not execute after Writer failure");
+      },
+    },
+  });
+
+  const created = await runtime.auditService.createAudit({
+    ...baseInput(),
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  }, tenantId);
+
+  const failed = await waitForState(
+    runtime,
+    created.auditId,
+    [T.NARRATIVE_FAILED, T.DRAFT_RENDERED, T.RENDER_FAILED],
+  );
+  assert.equal(failed?.state, T.NARRATIVE_FAILED);
+
+  const originalFailureKey =
+    `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}`
+    + "/report-v2/narrative-v2/failure.json";
+  const originalFailure = await readJson(artifactStore, originalFailureKey);
+  assert.match(originalFailure.message, /controlled Writer failure 1/);
+
+  const resumed = await runtime.auditService.resumeAudit(created.auditId, tenantId);
+  assert.equal(resumed.finalState, T.NARRATIVE_FAILED);
+  assert.equal(writerCalls, 2);
+
+  const preservedFailure = await readJson(artifactStore, originalFailureKey);
+  assert.deepEqual(preservedFailure, originalFailure);
+  assert.doesNotMatch(
+    String(resumed),
+    /already exists with different bytes/i,
+    "retry must not mask the underlying Writer failure with an immutable-write conflict",
+  );
+});
+
+test("NV2-PROD-11: resume stays fail-closed for Judge-stage Narrative failures", async () => {
+  const callCounts = {};
+  const countedAdapters = Object.fromEntries(
+    Object.entries(workingAdapters()).map(([name, adapter]) => [
+      name,
+      {
+        ...adapter,
+        execute: async (...args) => {
+          callCounts[name] = (callCounts[name] || 0) + 1;
+          return adapter.execute(...args);
+        },
+      },
+    ]),
+  );
+
+  let writerCalls = 0;
+  let judgeCalls = 0;
+
+  const { runtime } = buildRuntime({
+    adapters: countedAdapters,
+    narrativeV2: {
+      enabled: true,
+      writerExecutor: async ({ writerInput, passNumber }) => {
+        writerCalls += 1;
+        return buildPassingWriterOutput({ writerInput, passNumber });
+      },
+      judgeExecutor: async ({ passNumber }) => {
+        judgeCalls += 1;
+        const error = new Error("controlled Judge transport failure");
+        error.code = "JUDGE_EXECUTION_FAILED";
+        error.stage = "JUDGE";
+        error.passNumber = passNumber;
+        throw error;
+      },
+    },
+  });
+
+  const created = await runtime.auditService.createAudit({
+    ...baseInput(),
+    report: { designVersion: "2.0.0", narrativeVersion: "2.0.0" },
+  }, tenantId);
+
+  const failed = await waitForState(
+    runtime,
+    created.auditId,
+    [T.NARRATIVE_FAILED, T.DRAFT_RENDERED, T.RENDER_FAILED],
+  );
+  assert.equal(failed?.state, T.NARRATIVE_FAILED);
+
+  const callsBeforeResume = { ...callCounts };
+  const writerCallsBeforeResume = writerCalls;
+  const judgeCallsBeforeResume = judgeCalls;
+
+  const resumed = await runtime.auditService.resumeAudit(created.auditId, tenantId);
+
+  assert.equal(resumed, T.NARRATIVE_FAILED);
+  assert.deepEqual(
+    callCounts,
+    callsBeforeResume,
+    "Judge-stage failure must not re-enter provider collection through resume",
+  );
+  assert.equal(writerCalls, writerCallsBeforeResume);
+  assert.equal(judgeCalls, judgeCallsBeforeResume);
+
+  const current = await runtime.lifecycleService.currentState(created.auditId, tenantId);
+  assert.equal(current?.state, T.NARRATIVE_FAILED);
+});

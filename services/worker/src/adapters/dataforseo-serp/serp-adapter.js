@@ -10,9 +10,10 @@
  */
 
 import { querySerp } from "./dataforseo-serp-client.js";
+import { collectDataForSeoEnrichment } from "./dataforseo-enrichment-client.js";
 import { crawlCompetitors } from "../../evidence/site-crawler.js";
 
-const ADAPTER_VERSION = "1.2.0";
+const ADAPTER_VERSION = "1.3.0";
 const AUDIENCE_SCOPES = new Set(["local", "regional", "national"]);
 
 function domainKey(value) {
@@ -641,6 +642,34 @@ export async function execute({
     ...dedupedSerpItems,
   ];
 
+  let enrichment = {
+    businessProfile: null,
+    localMaps: [],
+    labs: { domainRank: null, competitors: [] },
+    limitations: [],
+  };
+
+  // Enrichment is downstream of a successful authenticated SERP run. Avoid
+  // spending additional provider requests when SERP is disconnected or when
+  // every keyword failed; those states must remain explicit and complete.
+  if (!signal?.aborted && options.login && options.password && successfulQueries === totalRequested && totalRequested > 0) {
+    try {
+      enrichment = await collectDataForSeoEnrichment({
+        targetUrl: auditRequest.targetUrl,
+        businessName: auditRequest.businessName,
+        market: options.location,
+        language: options.language,
+        keywords,
+        login: options.login,
+        password: options.password,
+        fetchImpl: controlledFetch,
+        signal,
+      });
+    } catch (error) {
+      enrichment.limitations = [`DataForSEO enrichment failed: ${error.message}`];
+    }
+  }
+
   const completedAt = new Date().toISOString();
 
   /*
@@ -681,6 +710,7 @@ export async function execute({
     suppliedResults: suppliedResultSummaries,
     serpStatus,
     errors: limitations,
+    enrichment,
   };
 
   /*
@@ -744,6 +774,11 @@ export async function execute({
       providerLocation: options.location,
       keywordCount: keywords.length,
       resultCount: combinedItems.length,
+      businessProfile: enrichment.businessProfile,
+      unmatchedBusinessProfile: enrichment.unmatchedBusinessProfile,
+      localMaps: enrichment.localMaps,
+      labs: enrichment.labs,
+      enrichmentLimitations: enrichment.limitations,
     },
   };
 

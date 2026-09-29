@@ -21,6 +21,9 @@ import {
   isValidSourceStatus,
 } from "../scoring/evidence-contracts.js";
 import { SCORING_VERSION } from "../scoring/score-components.js";
+import { resolveBusinessDisplayName } from "../identity/business-display-name.js";
+import { buildCanonicalDecisionModel } from "../report/canonical-decision-model.js";
+import { buildSemanticEvidenceAuthority } from "../report-intelligence/semantic-evidence-authority.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -50,7 +53,7 @@ function sha256(str) {
 function buildIdentity(auditRequest, evidence) {
   const site = evidence.site || {};
   const domain = site.domain || (() => { try { return new URL(auditRequest.targetUrl || "https://unknown").hostname; } catch { return "unknown"; } })();
-  const name = auditRequest.businessName || domain || "Website Audit";
+  const name = resolveBusinessDisplayName(auditRequest, site);
   return {
     name,
     domain,
@@ -233,8 +236,10 @@ function buildLimitations(evidence, scoreSet) {
 function buildFindings(findings) {
   if (!Array.isArray(findings)) return [];
   return findings.slice(0, MAX_FINDINGS).map((f) => ({
-    findingId: f.findingId || "",
-    ruleId: f.ruleId || "",
+      findingId: f.findingId || "",
+      ruleId: f.ruleId || "",
+      dimension: f.dimension || "",
+      module: f.module || "",
     title: f.title || "",
     severity: f.severity || "Medium",
     confidence: f.confidence || "deterministic",
@@ -243,10 +248,12 @@ function buildFindings(findings) {
     recommendation: f.recommendation || f.fix || "",
     verificationMethod: f.verificationMethod || "",
     affectedUrls: (f.affectedUrls || []).filter(Boolean).slice(0, MAX_AFFECTED_URLS),
-    evidence: (f.evidence || []).slice(0, MAX_EVIDENCE_RECORDS).map((e) => ({
-      field: e.field || "",
-      observedValue: e.observedValue ?? null,
-    })),
+      evidence: (f.evidence || []).slice(0, MAX_EVIDENCE_RECORDS).map((e) => ({
+        field: e.field || "",
+        observedValue: e.observedValue ?? null,
+        status: e.status || e.sourceStatus || e._evidenceStatus || "UNKNOWN",
+      })),
+      finalPriority: typeof f.finalPriority === "number" ? f.finalPriority : null,
     implementationEffort: f.implementationEffort || f.effort || "M",
   }));
 }
@@ -296,6 +303,10 @@ export function buildReportContentPackage({
   if (!scoreSet) throw new Error("scoreSet is required");
 
   // ── Build package ────────────────────────────────────────────────────
+  const canonicalDecisionModel = buildCanonicalDecisionModel({ findings, scoreSet });
+  if (scoreSet.contractVersion === "2.0.0" && !canonicalDecisionModel) {
+    throw new Error("Current report package requires the persisted canonical decision hierarchy");
+  }
   const pkg = {
     contractVersion: "1.0.0",
     packageVersion: PACKAGE_VERSION,
@@ -314,6 +325,8 @@ export function buildReportContentPackage({
     performanceCoverage: buildPerformanceCoverage(canonicalEvidence),
     limitations: buildLimitations(canonicalEvidence, scoreSet),
     findings: buildFindings(findings),
+    ...(canonicalDecisionModel ? { canonicalDecisionModel } : {}),
+    semanticEvidence: buildSemanticEvidenceAuthority(canonicalEvidence),
     siteMetrics: buildSiteMetrics(canonicalEvidence),
     trustFlags: buildTrustFlags(canonicalEvidence),
     technical: buildTechnical(canonicalEvidence),

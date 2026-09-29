@@ -1,3 +1,9 @@
+import {
+  buildSemanticEvidenceAuthority,
+  isObserved,
+  semanticFact,
+} from "./semantic-evidence-authority.js";
+
 /**
  * Deterministic report-intelligence ledger.
  *
@@ -49,30 +55,22 @@ function normalizeUrl(value) {
   }
 }
 
-function siteText(site) {
-  const pages = Array.isArray(site?.pages) ? site.pages : [];
-  return pages.map((page) => [
-    page?.title,
-    page?.description,
-    page?.bodyText,
-    ...(page?.headings?.h1 || []),
-    ...(page?.headings?.h2 || []),
-  ].join(" ")).join(" ").toLowerCase();
-}
-
-function proofSemantics(site) {
-  const trust = site?.trust || {};
-  const corpus = siteText(site);
+function proofSemantics(authorityOrEvidence) {
+  const authority = authorityOrEvidence?.facts
+    ? authorityOrEvidence
+    : buildSemanticEvidenceAuthority(authorityOrEvidence?.site ? authorityOrEvidence : { site: authorityOrEvidence });
   const forms = [];
-  if (trust.testimonials === true || /\btestimonial|review|rated\b/.test(corpus)) forms.push("TESTIMONIAL_OR_REVIEW");
-  if (trust.caseStudies === true || /\bcase study|customer story|client story|results? story|outcome/.test(corpus)) forms.push("CUSTOMER_STORY_OR_RESULT");
-  if (/\bportfolio|gallery|completed work|projects?\b/.test(corpus)) forms.push("GALLERY_OR_COMPLETED_WORK");
-  if (trust.credentials === true || /\bcredential|certif|award|licensed|years of experience/.test(corpus)) forms.push("CREDENTIAL_OR_EXPERIENCE");
+  if (isObserved(authority, "TESTIMONIAL_OR_REVIEW")) forms.push("TESTIMONIAL_OR_REVIEW");
+  if (isObserved(authority, "CUSTOMER_OUTCOME")) forms.push("CUSTOMER_STORY_OR_RESULT");
+  if (isObserved(authority, "DETAILED_CASE_STUDY")) forms.push("CUSTOMER_STORY_OR_RESULT");
+  if (isObserved(authority, "COMPLETED_WORK")) forms.push("GALLERY_OR_COMPLETED_WORK");
+  if (isObserved(authority, "FORMAL_CREDENTIAL")) forms.push("CREDENTIAL_OR_EXPERIENCE");
+  if (isObserved(authority, "OPERATING_EXPERIENCE")) forms.push("CREDENTIAL_OR_EXPERIENCE");
   return {
-    status: statusOf(site?._contentEvidenceAvailable === true ? "AVAILABLE" : site?._contentEvidenceAvailable === false ? "UNAVAILABLE" : site?.sourceStatus),
+    status: authority.sourceStatus,
     forms: [...new Set(forms)],
     observed: forms.length > 0,
-    qualifier: forms.includes("GALLERY_OR_COMPLETED_WORK") && !forms.includes("CUSTOMER_STORY_OR_RESULT")
+    qualifier: isObserved(authority, "COMPLETED_WORK") && !isObserved(authority, "DETAILED_CASE_STUDY")
       ? "Completed-work evidence was observed; it is not treated as a detailed outcome case study."
       : null,
   };
@@ -146,11 +144,12 @@ function buildDimensionMeaning(score, band) {
   return `${band} reflects the deterministic score across its governed inputs; it is not a claim that every buyer interaction is strong.`;
 }
 
-export function buildSemanticLedger({ scoreSet = {}, findings = [], decisionEvidence = {}, contentIdeas = scoreSet.contentIdeas } = {}) {
+export function buildSemanticLedger({ scoreSet = {}, findings = [], decisionEvidence = {}, semanticEvidence = null, contentIdeas = scoreSet.contentIdeas } = {}) {
   const site = decisionEvidence?.site || {};
   const sourceStatus = decisionEvidence?.sourceStatus || {};
   const contentStatus = statusOf(sourceStatus.content || (site?._contentEvidenceAvailable === true ? "AVAILABLE" : site?._contentEvidenceAvailable === false ? "UNAVAILABLE" : "UNKNOWN"));
-  const trustProof = proofSemantics(site);
+  const authority = semanticEvidence || buildSemanticEvidenceAuthority(decisionEvidence);
+  const trustProof = proofSemantics(authority);
   const opportunityRows = Object.entries(contentIdeas || {})
     .filter(([, rows]) => Array.isArray(rows))
     .flatMap(([stage, rows]) => rows.map((row) => {
@@ -183,6 +182,7 @@ export function buildSemanticLedger({ scoreSet = {}, findings = [], decisionEvid
   return {
     version: SEMANTIC_LEDGER_VERSION,
     evidenceAuthority: "DETERMINISTIC_EVIDENCE_ENGINE",
+    semanticEvidence: authority,
     sourceStatus: Object.fromEntries(Object.entries(sourceStatus).map(([key, value]) => [key, statusOf(value)])),
     dimensions,
     concepts: {
@@ -190,7 +190,11 @@ export function buildSemanticLedger({ scoreSet = {}, findings = [], decisionEvid
       contentCoverage: { status: contentStatus },
       pricing: { status: statusOf(site?.trust?.pricing === true ? "AVAILABLE" : contentStatus) },
       conversionPath: { status: statusOf(sourceStatus.conversion || contentStatus) },
-      completedWork: { observed: trustProof.forms.includes("GALLERY_OR_COMPLETED_WORK"), evidenceForms: trustProof.forms },
+      completedWork: semanticFact(authority, "COMPLETED_WORK"),
+      detailedCaseStudy: semanticFact(authority, "DETAILED_CASE_STUDY"),
+      operatingExperience: semanticFact(authority, "OPERATING_EXPERIENCE"),
+      formalCredential: semanticFact(authority, "FORMAL_CREDENTIAL"),
+      customerOutcome: semanticFact(authority, "CUSTOMER_OUTCOME"),
     },
     contentOpportunities: opportunityRows,
     contradictions,

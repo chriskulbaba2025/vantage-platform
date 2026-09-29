@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildWriterInput, WRITER_INPUT_VERSION } from "./writer-input.js";
+import { buildWriterInput, measureWriterInputBudget, WRITER_INPUT_VERSION } from "./writer-input.js";
 
 const AUDIT_ID = "11111111-1111-4111-8111-111111111111";
 const FINDING_ID = "finding-technical-001";
@@ -422,4 +422,95 @@ test("WRITER-V2-09: capability evidence without canonical audit identity fails c
     }),
     /capabilityEvidence\.auditId is required/,
   );
+});
+
+test("WRITER-CONTEXT-01: large competitor and footprint projections compact without changing governed statuses or findings", () => {
+  const largeComparisons = Array.from({ length: 180 }, (_, index) => ({
+    name: `Competitor ${index}`,
+    url: `https://competitor-${index}.example/`,
+    status: index < 4 ? "AVAILABLE" : "Insufficient Evidence",
+    topic: "x".repeat(700),
+    offerClarity: index < 4 ? "Moderate" : "Not Assessed",
+    trustProof: index < 4 ? "Partial" : "Not Assessed",
+    ctaClarity: index < 4 ? "Moderate" : "Not Assessed",
+    contentDepth: index < 4 ? "Moderate" : "Not Assessed",
+    eeat: index < 4 ? "Partial" : "Not Assessed",
+    pathClarity: index < 4 ? "Moderate" : "Not Assessed",
+  }));
+  const largeFootprint = {
+    status: "PARTIAL",
+    incomplete: true,
+    discoveredUrlCount: 5000,
+    assessedUrlCount: 20,
+    coverage: { usableSitemap: true, complete: false },
+    priorityUrls: Array.from({ length: 100 }, (_, index) => `https://example.com/page-${index}`),
+    clusters: Array.from({ length: 120 }, (_, index) => ({
+      id: `cluster-${index}`,
+      pattern: `/family/${index}/{segment}`,
+      discoveredUrlCount: index + 1,
+      representativeUrls: [`https://example.com/family/${index}/representative`],
+      requiresRepresentativeAssessment: true,
+      reasonCodes: ["LARGE_REPEATED_FAMILY"],
+      hugeStoredDetail: "raw detail ".repeat(100),
+    })),
+    prioritySelection: {
+      strategyVersion: "1.0.0",
+      priorityUrlCap: 20,
+      mustHaveUrls: ["https://example.com/"],
+      representativeUrls: [],
+      supplementalUrls: [],
+      materialFamilyCount: 120,
+      representedMaterialFamilyCount: 120,
+      unrepresentedMaterialFamilyCount: 0,
+      materialFamilies: [],
+    },
+    limitations: ["Assessment is partial"],
+  };
+  const packet = buildWriterInput({
+    auditId: AUDIT_ID,
+    auditRequest: request(),
+    scoreSet: scoreSet({
+      competitors: { comparisons: largeComparisons },
+      siteFootprint: largeFootprint,
+      contentIdeas: {
+        awareness: Array.from({ length: 300 }, (_, index) => ({
+          topic: `Large buyer topic ${index} ${"detail ".repeat(20)}`,
+          question: `How does buyer need ${index} work?`,
+          rationale: "Stored rationale remains governed evidence.",
+        })),
+      },
+    }),
+    findings: [finding()],
+    capabilityEvidence: capabilityEvidence(),
+    decisionEvidence: { site: { pages: [{ bodyText: "stored raw body" }] }, sourceStatus: { content: "PARTIAL" } },
+  });
+
+  const budget = measureWriterInputBudget(packet);
+  assert.ok(budget.bytes < 60_000, `compacted packet was ${budget.bytes} bytes`);
+  assert.equal(packet.findings[0].findingId, FINDING_ID);
+  assert.equal(packet.capabilityContext.capabilities["trust.proof"].status, "PARTIAL");
+  assert.equal(packet.deterministicAnalysis.competitors.comparisonCount, 180);
+  assert.equal(packet.deterministicAnalysis.competitors.statusCounts["Insufficient Evidence"], 176);
+  assert.equal(packet.deterministicAnalysis.competitors.omittedComparisonCount, 0);
+  assert.equal(packet.deterministicAnalysis.siteFootprint.clusterSummary.clusterCount, 120);
+  assert.equal(packet.deterministicAnalysis.siteFootprint.incomplete, true);
+  assert.equal(packet.deterministicAnalysis.semanticLedger.summaryVersion, "1.0.0");
+  assert.equal(packet.deterministicAnalysis.semanticLedger.opportunityCount, 300);
+  assert.ok(packet.deterministicAnalysis.semanticLedger.omittedOpportunityCount > 0);
+  assert.equal(JSON.stringify(packet).includes("hugeStoredDetail"), false);
+});
+
+test("WRITER-CONTEXT-02: normal packets expose deterministic category accounting", () => {
+  const packet = buildWriterInput({
+    auditId: AUDIT_ID,
+    auditRequest: request(),
+    scoreSet: scoreSet(),
+    findings: [finding()],
+    capabilityEvidence: capabilityEvidence(),
+  });
+  const budget = measureWriterInputBudget(packet);
+  assert.equal(budget.compactionVersion, "1.0.0");
+  assert.ok(budget.categories.findings.estimatedTokens > 0);
+  assert.ok(budget.categories.referenceIndex.estimatedTokens > 0);
+  assert.ok(budget.estimatedTokens < budget.targetEstimatedTokens);
 });

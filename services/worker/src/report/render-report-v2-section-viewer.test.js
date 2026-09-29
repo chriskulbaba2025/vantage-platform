@@ -131,7 +131,7 @@ function model() {
 
 const EXPECTED_PRIMARY_PAGES = [
   "Executive Scorecard", "Priority Fixes", "Conversion Journey",
-  "Content Opportunities", "Trust & Credibility", "Competitor Comparison",
+  "Trust & Credibility", "Competitor Comparison", "Content Opportunities",
 ];
 
 const EXPECTED_SUPPORTING_PAGES = [
@@ -336,27 +336,52 @@ test("SUPPORTING-DETAIL-NAV-01: all local Supporting Detail hashes stay on Suppo
   assert.doesNotMatch(html, /route\.targetId[\s\S]{0,300}#executive-scorecard/);
 });
 
-test("PRYSM-V2-SECTION-VIEWER-02: current page has browser print/PDF control and print isolation", () => {
+test("PRYSM-V2-SECTION-VIEWER-02: browser print/PDF control prints the full seven-page report in governed order", () => {
   const html = renderReportV2(model());
 
   assert.match(
     html,
-    />Print or save this page as PDF<\/button>/,
+    />Print or save full report as PDF<\/button>/,
   );
 
   assert.match(
     html,
-    /onclick="window\.print\(\)"/,
+    /onclick="printFullReport\(\)"/,
   );
 
   assert.match(
     html,
-    /body\.viewer-ready main > section:not\(\.viewer-active\)/,
+    /window\.printFullReport = function printFullReport\(\)/,
   );
 
   assert.match(
     html,
-    /body\.viewer-ready main > section\.viewer-active \{ display:block !important; \}/,
+    /document\.body\.classList\.add\("print-full-report"\)/,
+  );
+
+  assert.match(
+    html,
+    /section\.style\.order = String\(order\+\+\)/,
+  );
+
+  assert.match(
+    html,
+    /firstExistingSection\.classList\.add\("print-page-start"\)/,
+  );
+
+  assert.match(
+    html,
+    /body\.viewer-ready:not\(\.print-full-report\) main > section:not\(\.viewer-active\)/,
+  );
+
+  assert.match(
+    html,
+    /body\.print-full-report main > section\.viewer-section \{\s*display:block !important;/,
+  );
+
+  assert.match(
+    html,
+    /body\.print-full-report main > section\.print-page-start \{/,
   );
 
   assert.match(
@@ -375,7 +400,7 @@ test("PRYSM-V2-SECTION-VIEWER-02: viewer remains accessible and keeps navigation
 
   assert.match(
     html,
-    /aria-label="Print or save this page as PDF"/,
+    /aria-label="Print or save full seven-page report as PDF"/,
   );
 
   assert.match(

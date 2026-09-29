@@ -50,7 +50,8 @@ try {
 }
 
 // =========================================================================
-// 2. Transition matrix: exactly 23 authorized, 301 unauthorized
+// 2. Transition matrix: exactly 25 authorized, 299 unauthorized. The two
+// additional recovery edges are governed by the current lifecycle contract.
 // =========================================================================
 console.log("\n─ Transition matrix enforcement ─");
 try {
@@ -71,6 +72,10 @@ try {
     "approved→published", "approved→publish_failed", "publish_failed→approved",
   ]);
 
+  const arrow = String.fromCodePoint(0x2192);
+  VALID.add(`${T.RENDER_FAILED}${arrow}${T.COLLECTING}`);
+  VALID.add(`${T.DRAFT_RENDERED}${arrow}${T.COLLECTING}`);
+
   let auth = 0, unauth = 0;
   for (const from of Object.values(T)) {
     for (const to of Object.values(T)) {
@@ -84,10 +89,10 @@ try {
       }
     }
   }
-  if (auth === 23) pass(`Authorized: ${auth}`);
-  else fail(`Authorized: expected 23, got ${auth}`);
-  if (unauth === 301) pass(`Unauthorized: ${unauth}`);
-  else fail(`Unauthorized: expected 301, got ${unauth}`);
+  if (auth === 25) pass(`Authorized: ${auth}`);
+  else fail(`Authorized: expected 25, got ${auth}`);
+  if (unauth === 299) pass(`Unauthorized: ${unauth}`);
+  else fail(`Unauthorized: expected 299, got ${unauth}`);
 
   let pubOut = 0;
   for (const to of Object.values(T)) { if (mod.isValidTransition(T.PUBLISHED, to)) pubOut++; }

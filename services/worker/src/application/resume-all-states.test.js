@@ -76,7 +76,7 @@ function okSourceResult(source, evidence = {}) {
 }
 
 const SITE_EVIDENCE = {
-  sourceStatus: "AVAILABLE", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
+  sourceStatus: "AVAILABLE", rawArtifactRef: "fixture://governed-onpage-evidence", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
   pages: [{ url: "https://proof.example.com", title: "Proof", headings: { h1: ["Proof"], h2: [], h3: [] }, description: "D", content: { text: "x", wordCount: 300 }, images: [], links: { internal: [], external: [] }, statusCode: 200 }],
   services: ["Governed Evidence Service"], trust: { credentials: true }, platform: "ProofCMS", schemaTypes: ["ProfessionalService"],
   statusCounts: { "200": 1 }, totalWords: 300, averageWords: 300, missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,

@@ -7,7 +7,7 @@
  * Live mode: Calls DataForSEO REST API using DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD.
  * Fixture mode: Reads from supplied fixture data (no credentials required).
  *
- * PRD v3.0 §8: Primary crawl provider for Vantage Phase 1.
+ * Primary crawl provider for the governed website audit.
  */
 
 // ---------------------------------------------------------------------------

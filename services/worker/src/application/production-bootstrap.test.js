@@ -158,8 +158,8 @@ await test("Production bootstrap — zero provider calls", async (t) => {
     const { createProductionAdapters } = await import("./production-bootstrap.js");
     const adapters = createProductionAdapters();
 
-    assert.equal(adapters.backlinks.adapterVersion, "1.0.0",
-      "backlinks adapter should have version 1.0.0");
+    assert.equal(adapters.backlinks.adapterVersion, "1.1.0",
+      "backlinks adapter should have version 1.1.0");
     assert.equal(typeof adapters.backlinks.execute, "function",
       "backlinks.execute should be a function");
 
@@ -227,8 +227,8 @@ await test("Production bootstrap — zero provider calls", async (t) => {
       "createBacklinksAdapter should be a function");
     assert.equal(typeof mod.execute, "function",
       "execute should be a function");
-    assert.equal(mod.ADAPTER_VERSION, "1.0.0",
-      "ADAPTER_VERSION should be 1.0.0");
+    assert.equal(mod.ADAPTER_VERSION, "1.1.0",
+      "ADAPTER_VERSION should be 1.1.0");
   });
 
   // =========================================================================
@@ -245,7 +245,7 @@ await test("Production bootstrap — zero provider calls", async (t) => {
 
     assert.equal(after - before, 0,
       `createBacklinksAdapter() triggered ${after - before} HTTP call(s)`);
-    assert.equal(adapter.adapterVersion, "1.0.0");
+    assert.equal(adapter.adapterVersion, "1.1.0");
     assert.equal(typeof adapter.execute, "function");
   });
 
@@ -262,6 +262,11 @@ await test("Production bootstrap — zero provider calls", async (t) => {
   //   6. Live network calls = 0
 
   await t.test("BL-12: controlled execute() invokes mock provider through real production path", async () => {
+    const savedLogin = process.env.DATAFORSEO_LOGIN;
+    const savedPassword = process.env.DATAFORSEO_PASSWORD;
+    delete process.env.DATAFORSEO_LOGIN;
+    delete process.env.DATAFORSEO_PASSWORD;
+
     // --- Phase 1: NOT_CONNECTED when no credentials (fail-closed proof) ---
 
     const { createBacklinksAdapter } = await import(
@@ -394,12 +399,44 @@ await test("Production bootstrap — zero provider calls", async (t) => {
           headers: { "content-type": "application/json" },
         });
       }
+      if (urlStr.includes("/referring_domains/live")) {
+        return new Response(JSON.stringify({
+          status_code: 20000,
+          status_message: "Ok.",
+          tasks: [{
+            id: "mock-referring-domains-task",
+            status_code: 20000,
+            result: [{ items: [{ domain: "referrer-a.com", rank: 500, backlinks: 2, referring_pages: 2 }] }],
+          }],
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (urlStr.includes("/history/live")) {
+        return new Response(JSON.stringify({
+          status_code: 20000,
+          status_message: "Ok.",
+          tasks: [{
+            id: "mock-history-task",
+            status_code: 20000,
+            result: [{
+              items: Array.from({ length: 12 }, (_, index) => ({
+                date: `2025-${String(index + 1).padStart(2, "0")}-28`,
+                backlinks: index + 1,
+                referring_domains: index + 1,
+              })),
+            }],
+          }],
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       throw new Error(`Unexpected mock fetch call: ${urlStr}`);
     };
 
     // Set fake credentials so execute() proceeds past NOT_CONNECTED
-    const savedLogin = process.env.DATAFORSEO_LOGIN;
-    const savedPassword = process.env.DATAFORSEO_PASSWORD;
     process.env.DATAFORSEO_LOGIN = "mock-login@example.com";
     process.env.DATAFORSEO_PASSWORD = "mock-password";
 
@@ -419,23 +456,26 @@ await test("Production bootstrap — zero provider calls", async (t) => {
       });
       const controlledAfter = capturedCalls.length;
 
-      // ---- Assertion 1: exact mock provider call count === 2 ----
-      // No competitors → 1 summary + 1 backlinks = 2 DataForSEO requests.
-      assert.equal(mockCalls.length, 2,
-        `controlled provider call count: ${mockCalls.length} (expected exactly 2)`);
+      // ---- Assertion 1: exact mock provider call count === 4 ----
+      // Backlinks v1.1 enrichment: summary + backlinks + referring domains + 12-month history.
+      assert.equal(mockCalls.length, 4,
+        `controlled provider call count: ${mockCalls.length} (expected exactly 4)`);
 
       // ---- Assertion 2: exact mocked endpoints in production order ----
-      // collectBacklinks() calls /summary/live first, then /backlinks/live.
+      // collectBacklinks() calls the v1.1 enrichment endpoints in order.
       const endpoint = (i) => {
         const u = mockCalls[i]?.url || "";
         if (u.includes("/summary/live")) return "/summary/live";
         if (u.includes("/backlinks/live")) return "/backlinks/live";
+        if (u.includes("/referring_domains/live")) return "/referring_domains/live";
+        if (u.includes("/history/live")) return "/history/live";
         return u;
       };
-      assert.equal(endpoint(0), "/summary/live",
-        `call[0] must be /summary/live, got ${endpoint(0)}`);
-      assert.equal(endpoint(1), "/backlinks/live",
-        `call[1] must be /backlinks/live, got ${endpoint(1)}`);
+      assert.deepEqual(
+        mockCalls.map((_, i) => endpoint(i)),
+        ["/summary/live", "/backlinks/live", "/referring_domains/live", "/history/live"],
+        "backlinks v1.1 provider sequence must remain governed",
+      );
       for (const c of mockCalls) {
         assert.equal(c.method, "POST", "all DataForSEO calls must be POST");
       }
@@ -447,7 +487,7 @@ await test("Production bootstrap — zero provider calls", async (t) => {
       // ---- Assertion 4: production normalized/evidence contract ----
       assert.ok(execResult.sourceResult, "sourceResult must exist");
       assert.equal(execResult.sourceResult.provider, "DataForSEO");
-      assert.equal(execResult.sourceResult.adapterVersion, "1.0.0");
+      assert.equal(execResult.sourceResult.adapterVersion, "1.1.0");
       assert.equal(execResult.sourceResult.source, "backlinks");
       // Status should be AVAILABLE since mock returned valid data
       assert.ok(

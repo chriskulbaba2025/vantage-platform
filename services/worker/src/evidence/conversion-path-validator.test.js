@@ -31,6 +31,7 @@ function makeMockPage(overrides = {}) {
     text: "Book Now",
     attrs: { href: "https://x.com/book" },
   });
+  const ctas = overrides.ctas || [cta];
   const form = overrides.form ?? null;
   const menuToggle = overrides.menuToggle ?? makeMockElement({ text: "menu", visible: true });
   const navLinks = overrides.navLinks ?? [makeMockElement({ text: "Home" }), makeMockElement({ text: "Services" })];
@@ -46,7 +47,7 @@ function makeMockPage(overrides = {}) {
     },
     async $$(selector) {
       if (selector.includes("nav") || selector.includes("header")) return navLinks;
-      if (selector.includes("a[href]")) return [cta];
+      if (selector.includes("a[href]")) return ctas;
       if (selector.includes("form")) return [form].filter(Boolean);
       if (selector.includes("input") || selector.includes("textarea")) return fields;
       return [];
@@ -128,6 +129,53 @@ test("WP-E-01: passing site → PASS status with desktop+mobile checks, screensh
   assert.ok(Buffer.isBuffer(contact._screenshotBuffer), "desktop screenshot captured");
   assert.equal(page.calls.screenshots, 2, "one screenshot per page (desktop pass)");
   assert.equal(result.summary.pass, 2);
+});
+
+test("WP-E-01: responsive CTA selection ignores hidden desktop duplicates when a visible semantic CTA exists", async () => {
+  const hiddenDesktopCta = makeMockElement({
+    text: "Book Now",
+    visible: false,
+    attrs: { href: "https://x.com/desktop-book" },
+  });
+  const visibleMobileCta = makeMockElement({
+    text: "Book Now",
+    visible: true,
+    enabled: true,
+    attrs: { href: "https://x.com/mobile-book" },
+  });
+  const page = makeMockPage({ ctas: [hiddenDesktopCta, visibleMobileCta] });
+  const pw = makeMockPlaywright({ page });
+
+  const result = await validateConversionPaths({
+    targetUrl: "https://x.com",
+    keyPages: [{ url: "https://x.com/contact", role: "conversion" }],
+    playwrightImpl: pw,
+  });
+
+  assert.equal(result.pages[0].checks.desktop.cta.visible, true);
+  assert.equal(result.pages[0].checks.desktop.cta.interactable, true);
+  assert.equal(result.pages[0].checks.desktop.cta.target, "https://x.com/mobile-book");
+  assert.equal(result.pages[0].checks.mobile.cta.visible, true);
+  assert.equal(result.pages[0].checks.mobile.cta.interactable, true);
+  assert.equal(result.pages[0].checks.mobile.cta.target, "https://x.com/mobile-book");
+});
+
+test("WP-E-01: unrecognized mobile navigation control stays unknown instead of false failure", async () => {
+  const hiddenLinks = [
+    makeMockElement({ text: "Home", visible: false }),
+    makeMockElement({ text: "Services", visible: false }),
+  ];
+  const page = makeMockPage({ navLinks: hiddenLinks, hasToggle: false });
+  const pw = makeMockPlaywright({ page });
+
+  const result = await validateConversionPaths({
+    targetUrl: "https://x.com",
+    keyPages: [{ url: "https://x.com/contact", role: "conversion" }],
+    playwrightImpl: pw,
+  });
+
+  assert.equal(result.pages[0].checks.mobile.menu.found, true);
+  assert.equal(result.pages[0].checks.mobile.menu.usable, null);
 });
 
 test("WP-E-01: same-origin destination loads via GET navigation; external target never navigated", async () => {

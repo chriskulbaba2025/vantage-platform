@@ -3,7 +3,7 @@
  *
  * Proves the full data path from audit input through normalization,
  * DataForSEO API call, task-level error detection, audit.json state,
- * and client-report rendering.
+ * and current report-product boundaries.
  *
  * Production fixture:
  *   language: en-CA
@@ -22,7 +22,6 @@ import { querySerp } from "./dataforseo-serp-client.js";
 import { normalizeLanguage } from "./locale-normalizer.js";
 import { resolveLocation } from "./location-resolver.js";
 import { collectCompetitorOpportunities } from "../../evidence/competitor-opportunity-layer.js";
-import { competitorBenchmark } from "../../report/sections-conversion.js";
 import { SOURCE_STATUS, ERROR_CATEGORY } from "../../scoring/evidence-contracts.js";
 import { competitorComparison } from "../../scoring/report-model.js";
 
@@ -459,159 +458,11 @@ test("S-08: audit.json records full canonical state on SERP failure", async () =
 });
 
 // ---------------------------------------------------------------------------
-// S-09: Report renders limitation when SERP failed
+// S-09/S-10: retired renderer assertions removed
 // ---------------------------------------------------------------------------
-
-test("S-09: report renders SERP failure limitation, not empty success", () => {
-  // Build a model with FAILED SERP source
-  const competitorOpps = {
-    topics: [{ topic: "Consulting", query: "Consulting Ottawa and Ontario, Canada" }],
-    candidates: { qualified: [], excluded: [], totalSerp: 0, totalSupplied: 0, totalQualified: 0, totalExcluded: 0 },
-    gaps: [],
-    allGaps: [],
-    sources: {
-      dataforseoSerp: {
-        status: "FAILED",
-        taskIds: ["task-fail-009"],
-        candidateCount: 0,
-        taskErrors: [{ topic: "Consulting Ottawa and Ontario, Canada", taskId: "task-fail-009", statusCode: 40401, statusMessage: "Invalid location specified." }],
-        normalizedLanguage: "English",
-        normalizedLocation: "Ottawa,Ontario,Canada",
-        originalLanguage: "en-CA",
-        originalLocation: "Ottawa and Ontario, Canada",
-      },
-      supplied: { status: "NOT_APPLICABLE", candidateCount: 0 },
-    },
-    limitations: ['DataForSEO SERP for "Consulting Ottawa and Ontario, Canada": SERP task 0 failed: status_code=40401, message="Invalid location specified."'],
-    collectedAt: new Date().toISOString(),
-    coverage: { topicsRequested: 1, serpCandidatesFound: 0, suppliedCandidatesFound: 0 },
-    evidenceVersion: "1.0.0",
-    source: "competitor-opportunity-layer",
-    sourceStatus: "UNAVAILABLE",
-  };
-
-  const model = {
-    input: { businessName: "Example Consulting", location: "Ottawa and Ontario, Canada", language: "en-CA" },
-    evidence: { site: { domain: "example.com", services: ["Consulting"], ctas: [], forms: [], trust: { testimonials: false } } },
-    competitors: competitorComparison([], competitorOpps),
-    crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Not Assessed", conversionPathClarity: "Not Assessed", trustProof: "Not Assessed", mobileUsability: "Not Assessed", indexability: "Not Assessed" } },
-    competitorOpportunities: competitorOpps,
-    scores: { contentDepth: 40, conversionPathways: 40 },
-    bands: { trust: "Not Assessed" },
-    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
-  };
-
-  const html = competitorBenchmark(model);
-
-  // â”€â”€ Must render the SERP failure limitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.ok(html.includes("Source limitation"),
-    "Report must render source limitation for SERP failure");
-  assert.ok(html.includes("FAILED") || html.includes("status_code=40401"),
-    "Report must surface the SERP failure status");
-  assert.ok(html.includes("Invalid location"),
-    "Report must include the provider error message");
-
-  // â”€â”€ Must NOT say competitors were absent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.ok(html.includes("Competitor analysis continues with supplied-competitor evidence only") ||
-    html.includes("localized competitor evidence could not be collected"),
-    "Report must explain the limitation, not claim competitors are absent");
-
-  // â”€â”€ Must NOT render empty competitor results as success â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // The "No qualified gaps" message is OK because there truly are no gaps
-  // But we must not claim SERP analysis was successful
-  assert.equal(html.includes("DataForSEO SERP analysis of"), false,
-    "Must not claim SERP analysis contributed when it failed");
-
-  // â”€â”€ Must include normalized locale info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.ok(html.includes("English"), "Report must show normalized language");
-  assert.ok(html.includes("Ottawa,Ontario,Canada"), "Report must show normalized location");
-
-  // â”€â”€ Must not leak credentials or stack traces â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.equal(html.includes("test-login"), false, "Must not expose credentials");
-  assert.equal(html.includes("test-pass"), false, "Must not expose credentials");
-  assert.equal(html.includes("at querySerp"), false, "Must not expose stack traces");
-  assert.equal(html.includes("at collectCompetitorOpportunities"), false, "Must not expose stack traces");
-});
-
-// ---------------------------------------------------------------------------
-// S-10: Report renders success normally when SERP succeeds
-// ---------------------------------------------------------------------------
-
-test("S-10: report renders competitor evidence normally on SERP success", () => {
-  const competitorOpps = {
-    topics: [{ topic: "Consulting", query: "Consulting Ottawa and Ontario, Canada" }],
-    candidates: {
-      qualified: [
-        { candidateUrl: "https://comp1.example/services", domain: "comp1.example", topic: "Consulting", discoverySource: "dataforseo-serp", pageType: "service", approvalStatus: "approved", qualificationPassed: true },
-      ],
-      excluded: [],
-      totalSerp: 1, totalSupplied: 0, totalQualified: 1, totalExcluded: 0,
-    },
-    gaps: [{
-      clientTopic: "Consulting",
-      competitorPage: "https://comp1.example/services",
-      competitorDomain: "comp1.example",
-      clientCoverage: "present",
-      observedCompetitorCoverage: ["Services page with 5 sections"],
-      conversionRelevance: "High",
-      confidence: "Moderate",
-      recommendation: "Create or strengthen content for Consulting",
-      limitationStatement: "Based on visible on-page SERP evidence only.",
-      gapPassed: true,
-      approvalStatus: "approved",
-      qualificationPassed: true,
-    }],
-    allGaps: [],
-    sources: {
-      dataforseoSerp: {
-        status: "AVAILABLE",
-        taskIds: ["task-success-010"],
-        candidateCount: 1,
-        normalizedLanguage: "English",
-        normalizedLocation: "Ottawa,Ontario,Canada",
-        originalLanguage: "en-CA",
-        originalLocation: "Ottawa and Ontario, Canada",
-      },
-      supplied: { status: "NOT_APPLICABLE", candidateCount: 0 },
-    },
-    limitations: [],
-    collectedAt: new Date().toISOString(),
-    coverage: { topicsRequested: 1, serpCandidatesFound: 1, suppliedCandidatesFound: 0 },
-    evidenceVersion: "1.0.0",
-    source: "competitor-opportunity-layer",
-    sourceStatus: "AVAILABLE",
-  };
-
-  const model = {
-    input: { businessName: "Example Consulting", location: "Ottawa and Ontario, Canada", language: "en-CA" },
-    evidence: { site: { domain: "example.com", services: ["Consulting"], ctas: [], forms: [], trust: { testimonials: false } } },
-    competitors: competitorComparison([], competitorOpps),
-    crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Not Assessed", conversionPathClarity: "Not Assessed", trustProof: "Not Assessed", mobileUsability: "Not Assessed", indexability: "Not Assessed" } },
-    competitorOpportunities: competitorOpps,
-    scores: { contentDepth: 50, conversionPathways: 50 },
-    bands: { trust: "Not Assessed" },
-    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
-  };
-
-  const html = competitorBenchmark(model);
-
-  // â”€â”€ Must show successful SERP analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.ok(html.includes("AVAILABLE"), "Report must show AVAILABLE SERP status");
-  assert.ok(html.includes("task-success-010"), "Report must include task ID");
-
-  // â”€â”€ Must render qualified gaps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.ok(html.includes("Qualified Competitor Gaps"), "Must render gap section");
-  assert.ok(html.includes("comp1.example"), "Must render competitor domain");
-  assert.ok(html.includes("Consulting"), "Must render topic");
-
-  // â”€â”€ Must NOT show failure limitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.equal(html.includes("Source limitation"), false,
-    "Must not show failure limitation on success");
-
-  // â”€â”€ Must include normalized locale info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  assert.ok(html.includes("English"), "Report must show normalized language");
-  assert.ok(html.includes("Ottawa,Ontario,Canada"), "Report must show normalized location");
-});
+// These cases previously assembled incomplete report models and asserted the
+// deleted legacy renderer output. Provider status, task errors, competitor
+// evidence, and current V2 rendering are covered by the dedicated suites.
 
 // ---------------------------------------------------------------------------
 // S-11: Location resolution failure prevents API call
@@ -820,26 +671,14 @@ test("S-15: missing task-level status_code becomes FAILED source and renders lim
   assert.notEqual(opp.sources.dataforseoSerp.status, "UNAVAILABLE");
 
   // â”€â”€ Report must render source limitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const { competitorBenchmark } = await import("../../report/sections-conversion.js");
-  const { competitorComparison } = await import("../../scoring/report-model.js");
-  const model = {
-    input: { businessName: "Test", location: "Ottawa and Ontario, Canada", language: "en-CA" },
-    evidence: { site: { domain: "test.com", services: ["Consulting"], ctas: [], forms: [], trust: { testimonials: false } } },
-    competitors: competitorComparison([], opp),
-    crossReportInterpretation: { version: "1.0.0", constructs: { offerClarity: "Observed service scope", ctaClarity: "Not Assessed", conversionPathClarity: "Not Assessed", trustProof: "Not Assessed", mobileUsability: "Not Assessed", indexability: "Not Assessed" } },
-    competitorOpportunities: opp,
-    scores: { contentDepth: 40, conversionPathways: 40 },
-    bands: { trust: "Not Assessed" },
-    contentIdeas: { tofu: [], mofu: [], bofu: [], leading: [] },
-  };
-  const html = competitorBenchmark(model);
-  assert.ok(html.includes("Source limitation"), "Report must render source limitation");
-  assert.ok(html.includes("FAILED"), "Report must show FAILED status");
-});
+  // Presentation rendering is covered by the governed V2 renderer suite.
+  // This provider-path test preserves only the provider and competitor-layer
+  // contract above; it must not depend on a report renderer.
 
-// ---------------------------------------------------------------------------
 // S-16: Null task-level status_code â†’ FAILED source, no empty success
 // ---------------------------------------------------------------------------
+
+});
 
 test("S-16: null task-level status_code becomes FAILED source, not empty success", async () => {
   const fetchImpl = async () => {

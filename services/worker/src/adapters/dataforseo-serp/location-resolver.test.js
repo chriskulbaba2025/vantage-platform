@@ -205,6 +205,27 @@ test("LOC-09d: Calgary, Alberta, Canada", () => {
   assert.equal(result.locationName, "Calgary,Alberta,Canada");
 });
 
+test("LOC-09e: London, Ontario without country resolves to city/region", () => {
+  const result = resolveLocation("London, Ontario");
+  assert.equal(result.error, null);
+  assert.equal(result.resolutionLevel, "city");
+  assert.equal(result.locationName, "London,Ontario,Canada");
+});
+
+test("LOC-09f: bare London resolves to London, Ontario, Canada", () => {
+  const result = resolveLocation("London");
+  assert.equal(result.error, null);
+  assert.equal(result.resolutionLevel, "city");
+  assert.equal(result.locationName, "London,Ontario,Canada");
+});
+
+test("LOC-09g: Portland, Oregon without country resolves to city/region", () => {
+  const result = resolveLocation("Portland, Oregon");
+  assert.equal(result.error, null);
+  assert.equal(result.resolutionLevel, "city");
+  assert.equal(result.locationName, "Portland,Oregon,United States");
+});
+
 // ---------------------------------------------------------------------------
 // LOC-10: Original location always preserved
 // ---------------------------------------------------------------------------

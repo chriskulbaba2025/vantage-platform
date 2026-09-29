@@ -130,7 +130,7 @@
                 services: req?.services || [],
                 primaryGoal: req?.primaryGoal || '',
                 market: req?.market || '',
-                reportDesignVersion: req?.report?.designVersion || '1.0.0',
+                reportDesignVersion: req?.report?.designVersion || '2.0.0',
                 slug: slugify(req?.businessName || ''),
               };
             },

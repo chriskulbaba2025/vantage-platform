@@ -30,6 +30,9 @@ async function captureAuditRequest(input) {
     {
       targetUrl: "https://example.com",
       businessName: "Example",
+      market: "Canada",
+      primaryGoal: "Generate enquiries",
+      services: ["Consulting"],
       ...input,
     },
     "tenant-a",

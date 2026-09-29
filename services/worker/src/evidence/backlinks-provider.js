@@ -113,17 +113,22 @@ function normalize(record, context) {
   };
 }
 
-function summarize(records, summary, competitors, requestCount, startedAt, completedAt) {
+function summarize(records, summary, competitors, requestCount, startedAt, completedAt, enrichment = {}) {
   const byBucket = (name) => records.filter((r) => r.bucket === name);
   const good = byBucket("good");
   const bad = byBucket("bad");
   const worth = byBucket("worth_pursuing");
   const ignored = byBucket("ignore");
+  const noRecords = records.length === 0;
+  const limitations = noRecords
+    ? ["Backlink provider completed successfully but returned no backlink records; authority evidence is unavailable."]
+    : [];
+  const effectiveStatus = noRecords ? SOURCE_STATUS.UNAVAILABLE : SOURCE_STATUS.AVAILABLE;
   return {
     evidenceVersion: EVIDENCE_ENVELOPE_VERSION,
     source: "dataforseo",
-    sourceStatus: SOURCE_STATUS.AVAILABLE,
-    status: SOURCE_STATUS.AVAILABLE, // canonical alias
+    sourceStatus: effectiveStatus,
+    status: effectiveStatus, // canonical alias
     provider: "dataforseo",
     totalBacklinksReviewed: records.length,
     goodCount: good.length,
@@ -141,6 +146,18 @@ function summarize(records, summary, competitors, requestCount, startedAt, compl
       backlinksSpamScore: summary.backlinks_spam_score ?? null,
       targetSpamScore: summary.target_spam_score ?? null,
     },
+    topReferringDomains: enrichment.topReferringDomains || [],
+    backlinkHistory: enrichment.backlinkHistory || [],
+    history: {
+      status: (enrichment.backlinkHistory || []).length > 0 ? SOURCE_STATUS.AVAILABLE : SOURCE_STATUS.UNAVAILABLE,
+      coverage: {
+        requested: 12,
+        completed: Math.min(12, (enrichment.backlinkHistory || []).length),
+        failed: Math.max(0, 12 - (enrichment.backlinkHistory || []).length),
+      },
+    },
+    enrichmentLimitations: enrichment.limitations || [],
+    limitations: [...limitations, ...(enrichment.limitations || [])],
     competitors,
     requestCount,
     collectedAt: completedAt,
@@ -148,15 +165,15 @@ function summarize(records, summary, competitors, requestCount, startedAt, compl
     rawArtifactRef: null,
     _sourceStatus: buildSourceStatus({
       provider: "dataforseo",
-      adapterVersion: "1.0.0",
+      adapterVersion: "1.1.0",
       startedAt,
       completedAt,
       requestId: null,
       retryCount: 0,
       returnedRecordCount: records.length,
       expectedRecordCount: null,
-      errorCategory: null,
-      limitation: null,
+      errorCategory: noRecords ? ERROR_CATEGORY.NO_DATA : null,
+      limitation: noRecords ? limitations[0] : null,
       rawArtifactRef: null,
     }),
     records,
@@ -181,7 +198,7 @@ export async function collectBacklinks(targetUrl, competitors = [], options = {}
       rawArtifactRef: null,
       _sourceStatus: buildSourceStatus({
         provider: "dataforseo",
-        adapterVersion: "1.0.0",
+        adapterVersion: "1.1.0",
         startedAt,
         completedAt,
         requestId: null,
@@ -202,6 +219,60 @@ export async function collectBacklinks(targetUrl, competitors = [], options = {}
   const backlinksBody = await post("/backlinks/live", [{ target, include_subdomains: true, limit: options.limit || 500, order_by: ["rank,desc"] }], options);
   requestCount++;
   const targetItems = allItems(backlinksBody);
+
+  const enrichment = {
+    topReferringDomains: [],
+    backlinkHistory: [],
+    limitations: [],
+  };
+
+  try {
+    const referringDomainsBody = await post("/referring_domains/live", [{
+      target,
+      include_subdomains: true,
+      exclude_internal_backlinks: true,
+      limit: 25,
+      order_by: ["rank,desc"],
+    }], options);
+    requestCount++;
+    enrichment.topReferringDomains = allItems(referringDomainsBody).slice(0, 25).map((item) => ({
+      domain: item.domain || item.target || null,
+      rank: item.rank ?? null,
+      backlinks: item.backlinks ?? null,
+      referringPages: item.referring_pages ?? null,
+      firstSeen: item.first_seen || null,
+      lostDate: item.lost_date || null,
+    }));
+  } catch (error) {
+    enrichment.limitations.push(`Referring domains unavailable: ${error.message}`);
+  }
+
+  try {
+    const now = new Date();
+    const dateTo = now.toISOString().slice(0, 10);
+    const from = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate()));
+    const dateFrom = from.toISOString().slice(0, 10);
+    const historyBody = await post("/history/live", [{
+      target,
+      date_from: dateFrom,
+      date_to: dateTo,
+    }], options);
+    requestCount++;
+    const historyResult = firstResult(historyBody);
+    enrichment.backlinkHistory = (historyResult.items || []).slice(-12).map((item) => ({
+      date: item.date || null,
+      rank: item.rank ?? null,
+      backlinks: item.backlinks ?? null,
+      newBacklinks: item.new_backlinks ?? null,
+      lostBacklinks: item.lost_backlinks ?? null,
+      referringDomains: item.referring_domains ?? null,
+      newReferringDomains: item.new_referring_domains ?? null,
+      lostReferringDomains: item.lost_referring_domains ?? null,
+    }));
+  } catch (error) {
+    enrichment.limitations.push(`Backlink history unavailable: ${error.message}`);
+  }
+
   const competitorItems = [];
   for (const competitor of competitorDomains) {
     const body = await post("/backlinks/live", [{ target: competitor, include_subdomains: true, limit: options.competitorLimit || 250, order_by: ["rank,desc"] }], options);
@@ -224,14 +295,14 @@ export async function collectBacklinks(targetUrl, competitors = [], options = {}
     if (!dedup.has(key)) dedup.set(key, normalize(item, context));
   }
   const completedAt = new Date().toISOString();
-  return summarize([...dedup.values()], firstResult(summaryBody), competitorDomains, requestCount, startedAt, completedAt);
+  return summarize([...dedup.values()], firstResult(summaryBody), competitorDomains, requestCount, startedAt, completedAt, enrichment);
 }
 
 // ---------------------------------------------------------------------------
 // Governed execute() contract — WP6 universal adapter interface
 // ---------------------------------------------------------------------------
 
-const BACKLINKS_ADAPTER_VERSION = "1.0.0";
+const BACKLINKS_ADAPTER_VERSION = "1.1.0";
 
 /**
  * Execute the backlinks adapter behind the universal source contract.
@@ -297,6 +368,8 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
       authoritySummary: envelope.authoritySummary,
       topGoodLinks: envelope.topGoodLinks,
       topWorthPursuingDomains: envelope.topWorthPursuingDomains,
+      topReferringDomains: envelope.topReferringDomains,
+      backlinkHistory: envelope.backlinkHistory,
     };
     const rawBytes = Buffer.from(JSON.stringify(rawPayload), "utf-8");
 
@@ -318,7 +391,7 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         completed: envelope.totalBacklinksReviewed || 0,
         failed: 0,
       },
-      limitations: [],
+      limitations: envelope.limitations || [],
       evidence: {
         sourceStatus: envelope.sourceStatus || envelope.status,
         totalBacklinksReviewed: envelope.totalBacklinksReviewed,
@@ -329,6 +402,9 @@ export async function execute({ auditRequest, source, executionId, sourceExecuti
         topGoodLinks: envelope.topGoodLinks || [],
         topBadLinks: envelope.topBadLinks || [],
         topWorthPursuingDomains: envelope.topWorthPursuingDomains || [],
+        topReferringDomains: envelope.topReferringDomains || [],
+        backlinkHistory: envelope.backlinkHistory || [],
+        enrichmentLimitations: envelope.enrichmentLimitations || [],
         backlinks: envelope.backlinks || [],
         collectedAt: envelope.collectedAt || completedAt,
         coverage: envelope.coverage || null,

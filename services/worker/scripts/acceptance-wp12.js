@@ -28,7 +28,7 @@ const { createMemoryArtifactStore } = await import("../src/storage/memory-artifa
 const { createGovernedArtifactStore, buildArtifactKey } = await import("../src/storage/governed-artifact-store.js");
 const { createMemoryLifecycleRepository } = await import("../src/lifecycle/memory-repository.js");
 const { createLifecycleService } = await import("../src/lifecycle/lifecycle-service.js");
-const { createLocalReportStore, REQUIRED_APPROVED_PAGE_FILENAMES } = await import("../src/storage/report-store.js");
+const { createLocalReportStore } = await import("../src/storage/report-store.js");
 const { LIFECYCLE_STATE } = await import("../src/lifecycle/state-enum.js");
 const { buildCapabilityEvidence, persistCapabilityEvidence } = await import("../src/evidence/capability-evidence.js");
 const { scoreFromCanonicalEvidence } = await import("../src/scoring/scoring-service.js");
@@ -384,15 +384,12 @@ console.log("\n--- WP12-REVIEW-01/APPROVAL-01: Review and approval ---");
     check("REVIEW-01: incomplete rejected", e.message.includes("incomplete") || e.statusCode === 422, e.message);
   }
 
-  // Approval
-  const pages = new Map();
-  for (const fn of REQUIRED_APPROVED_PAGE_FILENAMES) {
-    pages.set(fn, `<!DOCTYPE html><html><body>${fn}</body></html>`);
-  }
-  const approveResult = await svc.approveAudit(seeded.auditId, "wp12-tenant", slug, "approver@test.com", pages);
+  // Approval uses the current Executive V2 artifact. The retired 16-page
+  // renderer is intentionally not part of the approval contract.
+  const approveResult = await svc.approveAudit(seeded.auditId, "wp12-tenant", slug, "approver@test.com", new Map());
   check("APPROVAL-01: status = approved", approveResult.status === "approved", `Got ${approveResult.status}`);
   check("APPROVAL-01: approver persisted", approveResult.approval?.approver === "approver@test.com");
-  check("APPROVAL-01: 16 final artifacts", (approveResult.artifacts?.final || []).length === 16);
+  check("APPROVAL-01: current approved artifact", approveResult.designVersion === "2.0.0" && (approveResult.artifacts || []).length === 1 && approveResult.artifacts[0].filename === "index.html");
 }
 
 // =============================================================================
@@ -402,7 +399,7 @@ console.log("\n--- WP12-ARTIFACT-01: Artifact proof ---");
 
 {
   const seeded = await seedToDraftRendered("https://artifact-test.com", "Artifact Test", "wp12-tenant");
-  check("ARTIFACT-01: page artifacts exist", (seeded.pageArtifacts || []).length === 16);
+  check("ARTIFACT-01: current page artifact exists", (seeded.pageArtifacts || []).length >= 1 && seeded.pageArtifacts.some((art) => art.filename === "index.html"));
 
   for (const art of (seeded.pageArtifacts || [])) {
     const stored = await artifactStore.get(art.key);
@@ -410,7 +407,7 @@ console.log("\n--- WP12-ARTIFACT-01: Artifact proof ---");
     check(`ARTIFACT-01: ${art.filename} SHA match`, storedHash === art.sha256);
     check(`ARTIFACT-01: ${art.filename} bytes=${art.bytes}`, stored.length === art.bytes);
   }
-  check("ARTIFACT-01: 16/16 artifacts verified", true);
+  check("ARTIFACT-01: current artifacts verified", (seeded.pageArtifacts || []).length >= 1);
 }
 
 // =============================================================================
@@ -487,7 +484,14 @@ console.log("\n--- WP12-TIMEOUT-01: Production runtime hard timeout ---");
   const tenantId = "wp12-timeout-tenant";
 
   const { auditId } = await hangRuntime.auditService.createAudit(
-    { targetUrl: "https://hang-test.example.com", businessName: "Hang Test", language: "en-CA" },
+    {
+      targetUrl: "https://hang-test.example.com",
+      businessName: "Hang Test",
+      market: "Canada",
+      primaryGoal: "Generate qualified enquiries",
+      services: ["Website assessment"],
+      language: "en-CA",
+    },
     tenantId,
   );
 

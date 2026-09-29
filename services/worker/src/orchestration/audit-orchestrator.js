@@ -27,6 +27,7 @@ import { loadAuditRequest } from "./audit-request-persistence.js";
 import { classifyFailure, RECOVERY_ACTION } from "./failure-classification.js";
 import { hydrateCurrentReportModel } from "../report-model/current-model.js";
 import { buildCanonicalSolutionSet } from "../solution/solution-authority-provider.js";
+import { evaluateReportEvidenceSufficiency, reportEvidenceInsufficientError } from "../report/evidence-sufficiency.js";
 
 const T = LIFECYCLE_STATE;
 
@@ -106,8 +107,17 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function artifactScope({ tenantId, clientId, auditId, category, artifactName }) {
-  return { tenantId, clientId, auditId, category, artifactName };
+function artifactScope({ tenantId, clientId, auditId, category, artifactName, artifactRevision }) {
+  return { tenantId, clientId, auditId, category, artifactName, ...(artifactRevision ? { artifactRevision } : {}) };
+}
+
+function requestArtifactScope(auditRequest) {
+  return {
+    tenantId: auditRequest.tenantId,
+    clientId: auditRequest.clientId,
+    auditId: auditRequest.auditId,
+    ...(auditRequest.crawl?.recoveryRevision ? { artifactRevision: auditRequest.crawl.recoveryRevision } : {}),
+  };
 }
 
 /**
@@ -331,6 +341,7 @@ export function createAuditOrchestrator({
       tenantId: auditRequest.tenantId, clientId: auditRequest.clientId,
       auditId: auditRequest.auditId, category: "raw",
       artifactName: `${source}-${executionId}.json`,
+      artifactRevision: auditRequest.crawl?.recoveryRevision,
     });
     const record = await artifactStore.put({ bytes: rawBytes, contentType, scope, source, executionId });
     const rb = await artifactStore.get(record.key);
@@ -349,6 +360,7 @@ export function createAuditOrchestrator({
       tenantId: auditRequest.tenantId, clientId: auditRequest.clientId,
       auditId: auditRequest.auditId, category: "normalized",
       artifactName: `${source}.json`,
+      artifactRevision: auditRequest.crawl?.recoveryRevision,
     });
     const record = await artifactStore.put({ bytes, contentType: "application/json", scope, source });
     const rb = await artifactStore.get(record.key);
@@ -431,7 +443,7 @@ export function createAuditOrchestrator({
       try {
         await persistSourceCheckpointManifest({
           store: artifactStore,
-          scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
+          scope: requestArtifactScope(auditRequest),
           source: item.source,
           sourceExecutionKey: identityForManifest.sourceExecutionKey,
           completedAt: c.now(),
@@ -479,13 +491,22 @@ export function createAuditOrchestrator({
     const completed = [];
     for (const item of plan) {
       const registeredVersion = getAdapterVersion(item.source) || "1.0.0";
+      const expectedSourceExecutionKey = buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion }).sourceExecutionKey;
       const restored = await loadAndVerifySourceCheckpointManifest({
         store: artifactStore,
-        scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
+        scope: requestArtifactScope(auditRequest),
         source: item.source,
         validateContract,
-        expectedSourceExecutionKey: buildSourceExecutionIdentity({ auditRequest, source: item.source, adapterVersion: registeredVersion }).sourceExecutionKey,
-      });
+        expectedSourceExecutionKey,
+      }) || (auditRequest.crawl?.recoveryRevision
+        ? await loadAndVerifySourceCheckpointManifest({
+          store: artifactStore,
+          scope: { tenantId: auditRequest.tenantId, clientId: auditRequest.clientId, auditId: auditRequest.auditId },
+          source: item.source,
+          validateContract,
+          expectedSourceExecutionKey,
+        })
+        : null);
       if (restored) {
         // PRYSM-CLOSE-13: decide recovery from the PERSISTED failure
         // classification.  Transient failures and recoverable provider-task
@@ -496,6 +517,16 @@ export function createAuditOrchestrator({
           errorCategory: restored.sourceResult?.errorCategory,
           requestId: restored.sourceResult?.requestId,
         });
+        // An evidence-sufficiency recovery must retry a failed core website
+        // source so its adapter can apply an approved access fallback.  A
+        // failed checkpoint is not evidence that the source was successfully
+        // assessed and must not be restored as if it were complete.  Other
+        // successful checkpoints remain reusable and no unrelated source is
+        // recollected.
+        const retryFailedCoreWebsiteSource = auditRequest.crawl?.recoveryRevision
+          && item.source === "dataforseo-onpage"
+          && restored.sourceResult?.status === "FAILED";
+        if (retryFailedCoreWebsiteSource) continue;
         if (classification.action === RECOVERY_ACTION.RESTORE) {
           completed.push({ source: item.source, completed: true, restored });
         }
@@ -567,6 +598,7 @@ export function createAuditOrchestrator({
     const scope = artifactScope({
       tenantId: auditRequest.tenantId, clientId: auditRequest.clientId,
       auditId: auditRequest.auditId, category: "canonical", artifactName: "evidence.json",
+      artifactRevision: auditRequest.crawl?.recoveryRevision,
     });
     const canonicalRecord = await artifactStore.put({ bytes: evidenceBytes, contentType: "application/json", scope });
     const rb = await artifactStore.get(canonicalRecord.key);
@@ -582,7 +614,7 @@ export function createAuditOrchestrator({
   // -------------------------------------------------------------------
   async function governedCollection(auditRequest, executionId) {
     const { auditId, tenantId, clientId } = auditRequest;
-    const scope = { tenantId, clientId, auditId };
+    const scope = requestArtifactScope(auditRequest);
 
     // 1. Build source plan
     const plan = buildSourcePlan({
@@ -630,6 +662,15 @@ export function createAuditOrchestrator({
       // the normalized artifact; pass it through as a resume hint.
       let effectiveAuditRequest = auditRequest;
       if (item.source === "dataforseo-onpage") {
+        if (auditRequest.crawl?.recoveryRevision) {
+          effectiveAuditRequest = {
+            ...auditRequest,
+            crawl: {
+              ...(auditRequest.crawl || {}),
+              publicAccessFallbackOnly: true,
+            },
+          };
+        }
         try {
           const normKey = buildArtifactKey({
             tenantId: auditRequest.tenantId,
@@ -641,7 +682,9 @@ export function createAuditOrchestrator({
           const prevBytes = await artifactStore.get(normKey);
           if (prevBytes) {
             const prev = JSON.parse(Buffer.from(prevBytes).toString("utf8"));
-            if (prev?.requestId && (prev?.errorCategory === "timeout" || prev?.status === "FAILED")) {
+            if (!auditRequest.crawl?.recoveryRevision
+              && prev?.requestId
+              && (prev?.errorCategory === "timeout" || prev?.status === "FAILED")) {
               effectiveAuditRequest = {
                 ...auditRequest,
                 crawl: { ...(auditRequest.crawl || {}), resumeTaskId: prev.requestId },
@@ -670,6 +713,7 @@ export function createAuditOrchestrator({
     const decisionResult = buildDecisionEvidence({
       allSourceResults,
       suppliedCompetitors: auditRequest.competitors || [],
+      auditRequest,
       validateContract,
     });
     if (decisionResult.errors.length > 0) {
@@ -839,7 +883,7 @@ export function createAuditOrchestrator({
    */
   async function runGovernedScoring({ auditRequest, executionId, startedAt, allSourceResults, canonicalRecord }) {
     const { tenantId, clientId, auditId } = auditRequest;
-    const scope = { tenantId, clientId, auditId };
+    const scope = requestArtifactScope(auditRequest);
 
     // DE-07: scoring has ONE input — the persisted, verified, schema-validated
     // decision-evidence.json.  No canonical-evidence.json fallback, no
@@ -961,7 +1005,7 @@ export function createAuditOrchestrator({
    */
   async function runGovernedNarrative({ auditRequest, executionId, startedAt }) {
     const { tenantId, clientId, auditId } = auditRequest;
-    const scope = { tenantId, clientId, auditId };
+    const scope = requestArtifactScope(auditRequest);
 
     // Load WP8 ReportContentPackage from artifact store
     let reportPackage;
@@ -1087,7 +1131,7 @@ export function createAuditOrchestrator({
    */
   async function renderReportV2Governed({ auditRequest, executionId, startedAt, scoringModel, decisionEvidence, scoreSet }) {
     const { tenantId, clientId, auditId } = auditRequest;
-    const scope = { tenantId, clientId, auditId };
+    const scope = requestArtifactScope(auditRequest);
     let rendererCallCount = 0;
 
     // Fail-closed: capability evidence is a required v2 input.  CRIT defect
@@ -1115,6 +1159,8 @@ export function createAuditOrchestrator({
     });
 
     const { renderReportV2 } = await import("../report/render-report-v2.js");
+    const { buildSnapshotV1Projection, renderSnapshotV1 } = await import("../report/snapshot-v1.js");
+    const { resolveSnapshotV1CtaUrl } = await import("../report/snapshot-config.js");
     rendererCallCount += 1;
     let html;
     try {
@@ -1152,6 +1198,39 @@ export function createAuditOrchestrator({
       throw new Error("Report v2 persist failed: " + persistErr.message);
     }
 
+    let snapshotRecord = null;
+    let snapshotHtml = null;
+    if (auditRequest.report?.snapshotVersion === "1.0.0") {
+      try {
+        const snapshotPackage = buildReportContentPackage({
+          auditRequest,
+          canonicalEvidence: decisionEvidence,
+          findings: scoringModel.findings || [],
+          scoreSet,
+        });
+        snapshotHtml = renderSnapshotV1(buildSnapshotV1Projection({
+          auditRequest,
+          canonicalEvidence: decisionEvidence,
+          reportContentPackage: snapshotPackage,
+          reviewDate: startedAt,
+          ctaConfig: { ctaUrl: resolveSnapshotV1CtaUrl(auditRequest) },
+        }));
+        const snapshotBytes = Buffer.from(snapshotHtml, "utf-8");
+        const snapshotArtifactName = `pages/snapshot-v1.${sha256(snapshotBytes).slice(0, 16)}.html`;
+        snapshotRecord = await artifactStore.put({
+          bytes: snapshotBytes,
+          contentType: "text/html",
+          scope: { tenantId, clientId, auditId, category: "report-v2", artifactName: snapshotArtifactName },
+        });
+        const snapshotStored = await artifactStore.get(snapshotRecord.key);
+        if (!snapshotStored || snapshotStored.length !== snapshotBytes.length) throw new Error("Snapshot read-back mismatch");
+      } catch (snapshotErr) {
+        await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+          "snapshot-v1-render-failed:" + (snapshotErr.message || "").slice(0, 200), null);
+        throw new Error("Snapshot v1 rendering failed: " + snapshotErr.message);
+      }
+    }
+
     // Versioned manifest contract: the v2 manifest validates against the
     // DISTINCT report-manifest-v2 schema (frozen v1 schema remains const
     // 1.0.0 and governs v1 manifests only).
@@ -1182,7 +1261,7 @@ export function createAuditOrchestrator({
         ga4: decisionEvidence.ga4?.sourceStatus || "NOT_APPLICABLE",
         gsc: decisionEvidence.gsc?.sourceStatus || "NOT_APPLICABLE",
       },
-      files: ["index.html"],
+      files: ["index.html", ...(snapshotRecord ? ["snapshot.html"] : [])],
       auditId,
       lifecycleStatus: "DRAFT_RENDERED",
     };
@@ -1212,8 +1291,8 @@ export function createAuditOrchestrator({
       pageCount: 1,
       manifestKey: manifestRecord.key,
       manifestRecord,
-      pageArtifacts: Object.freeze([{ filename: "index.html", key: record.key, sha256: record.sha256, bytes: record.bytes }]),
-      renderedPages: new Map([["index.html", html]]),
+      pageArtifacts: Object.freeze([{ filename: "index.html", key: record.key, sha256: record.sha256, bytes: record.bytes }, ...(snapshotRecord ? [{ filename: "snapshot.html", key: snapshotRecord.key, sha256: snapshotRecord.sha256, bytes: snapshotRecord.bytes }] : [])]),
+      renderedPages: new Map([["index.html", html], ...(snapshotRecord ? [["snapshot.html", snapshotHtml]] : [])]),
       rendererCallCount,
       reportDesignVersion: REPORT_DESIGN_V2,
       n8nCallCount: _n8nCallCounter.count,
@@ -1226,7 +1305,7 @@ export function createAuditOrchestrator({
 
   async function runGovernedRendering({ auditRequest, executionId, startedAt, injectPageFailure }) {
     const { tenantId, clientId, auditId } = auditRequest;
-    const scope = { tenantId, clientId, auditId };
+    const scope = requestArtifactScope(auditRequest);
     let rendererCallCount = 0;
 
     // Load WP8 ReportContentPackage
@@ -1324,6 +1403,17 @@ export function createAuditOrchestrator({
       throw new Error("Finalization gate failed: " + (gate.errors || []).map((e) => e.message).join("; "));
     }
 
+    // Reportability is a separate contract from renderability. Core
+    // first-party evidence must be sufficient before either report product
+    // can become client-facing. This gate runs before both v1 and v2 paths.
+    const evidenceSufficiency = evaluateReportEvidenceSufficiency(decisionEvidence);
+    if (!evidenceSufficiency.reportable) {
+      const blocked = reportEvidenceInsufficientError(evidenceSufficiency);
+      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+        `report-evidence-insufficient:${evidenceSufficiency.reasons.join("; ").slice(0, 200)}`, null);
+      throw blocked;
+    }
+
     // ── PRYSM-NEXT-01 WP-G — report design version boundary ────────────
     // Design v2.0.0 renders a DISTINCT single-page executive report through
     // its own renderer + artifact namespace (report-v2/).  v1.0.0 (default)
@@ -1335,86 +1425,57 @@ export function createAuditOrchestrator({
       });
     }
 
-    // --- Build COMPLETE ReportViewModel (validates WP8+WP9+scoring+evidence) ---
-    // PRYSM-CLOSE-07: assemble the complete model (including governed decision
-    // evidence), validate the complete model, freeze, and render the SAME object.
-    // No augmentation or replacement after validation.
-    const vmResult = buildReportViewModel({
-      reportPackage, narrative, scoringModel, validateContract,
-      reportVersion: scoringModel.scoringVersion, now: c.now(),
-      decisionEvidence,
-      capabilityEvidence,
+    // No historical report renderer is a fallback for an unsupported product.
+    await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+      "render-retired-report-design-requested", null);
+    throw Object.assign(new Error("Requested report product is unavailable"), {
+      code: "RETIRED_REPORT_UNAVAILABLE", statusCode: 409,
     });
 
-    if (!vmResult.valid) {
-      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
-        "render-view-model-invalid:" + (vmResult.errors || []).join("; ").slice(0, 200), null);
-      throw new Error("ReportViewModel build failed: " + (vmResult.errors || []).join("; "));
-    }
+    // Unsupported historical product requests fail closed. No legacy renderer,
+    // report namespace, or compatibility artifact is selected here.
+    await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+      "render-retired-report-design-requested", null);
+    throw Object.assign(new Error("Requested report product is unavailable"), {
+      code: "RETIRED_REPORT_UNAVAILABLE", statusCode: 409,
+    });
 
-    // --- Renderer input: the exact validated object, frozen ---
-    const rendererModel = Object.freeze(vmResult.model);
-
-    // --- Render all 16 approved pages via locked renderer ---
-    const { renderApprovedReport } = _rendererImpl
-      ? { renderApprovedReport: _rendererImpl }
-      : await import("../report/render-approved-report.js");
-    rendererCallCount++;
-
-    let rendered;
-    try {
-      rendered = renderApprovedReport(rendererModel);
-    } catch (renderErr) {
-      console.error(`[runGovernedRendering] Pages render failed for ${auditId}:`, renderErr.message);
-      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
-        "render-pages-failed:" + (renderErr.message || "").slice(0, 200), null);
-      throw new Error("Approved page rendering failed: " + renderErr.message);
-    }
-
-    // --- Inject page failure if requested (for WP10-RENDER-FAIL-01 proof) ---
-    if (injectPageFailure && rendered.pages) {
-      // Simulate: delete one required page to trigger partial failure
-      rendered.pages.delete("scorecard.html");
-      // Also remove from filenames so the size check catches it
-      rendered.filenames = rendered.filenames.filter(f => f !== "scorecard.html");
-    }
-
-    // Validate all expected pages exist
-    const actualPageCount = rendered.pages.size;
-    if (actualPageCount < 16 || rendered.filenames.length < 16) {
-      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
-        "render-incomplete-pages:" + actualPageCount + "-of-16", null);
-      throw new Error(`Incomplete page set: ${actualPageCount} pages, expected 16`);
-    }
-
-    // --- Persist all pages atomically ---
-    const persistedArtifacts = [];
-    const pageDir = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages`;
-    try {
-      for (const [filename, html] of rendered.pages) {
-        if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
-          throw new Error(`Invalid page filename: ${filename}`);
-        }
-        const bytes = Buffer.from(html, "utf-8");
-        const record = await artifactStore.put({
-          bytes,
-          contentType: "text/html",
-          scope: { tenantId, clientId, auditId, category: "report", artifactName: `pages/${filename}` },
+    // Snapshot V1 is a separate client-facing projection of the same locked
+    // evidence and score set. Persist it beside the unchanged Executive
+    // Report page set; it is not counted as an Executive Report page.
+    let snapshotRecord = null;
+    let snapshotHtml = null;
+    if (auditRequest.report?.snapshotVersion === "1.0.0") {
+      try {
+        const { buildSnapshotV1Projection, renderSnapshotV1 } = await import("../report/snapshot-v1.js");
+        const { resolveSnapshotV1CtaUrl } = await import("../report/snapshot-config.js");
+        const snapshotPackage = buildReportContentPackage({
+          auditRequest,
+          canonicalEvidence: decisionEvidence,
+          findings: scoringModel.findings || [],
+          scoreSet: scoreSetRaw || {},
         });
-        // Read-back verify
-        const stored = await artifactStore.get(record.key);
-        if (!stored || stored.length !== bytes.length) {
-          throw new Error(`Read-back mismatch for ${filename}: stored ${stored?.length}, expected ${bytes.length}`);
-        }
-        if (sha256(stored) !== sha256(bytes)) {
-          throw new Error(`SHA-256 mismatch for ${filename}`);
-        }
-        persistedArtifacts.push({ filename, key: record.key, sha256: record.sha256, bytes: record.bytes });
+        snapshotHtml = renderSnapshotV1(buildSnapshotV1Projection({
+          auditRequest,
+          canonicalEvidence: decisionEvidence,
+          reportContentPackage: snapshotPackage,
+          reviewDate: startedAt,
+          ctaConfig: { ctaUrl: resolveSnapshotV1CtaUrl(auditRequest) },
+        }));
+        const snapshotBytes = Buffer.from(snapshotHtml, "utf-8");
+        const snapshotArtifactName = `pages/snapshot-v1.${sha256(snapshotBytes).slice(0, 16)}.html`;
+        snapshotRecord = await artifactStore.put({
+          bytes: snapshotBytes,
+          contentType: "text/html",
+          scope: { tenantId, clientId, auditId, category: "report", artifactName: snapshotArtifactName },
+        });
+        const snapshotStored = await artifactStore.get(snapshotRecord.key);
+        if (!snapshotStored || snapshotStored.length !== snapshotBytes.length) throw new Error("Snapshot read-back mismatch");
+      } catch (snapshotErr) {
+        await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
+          "snapshot-v1-render-failed:" + (snapshotErr.message || "").slice(0, 200), null);
+        throw new Error("Snapshot v1 rendering failed: " + snapshotErr.message);
       }
-    } catch (persistErr) {
-      await doTransition(auditId, tenantId, executionId, T.RENDER_FAILED,
-        "render-persist-failed:" + (persistErr.message || "").slice(0, 200), null);
-      throw new Error("Page persist failed: " + persistErr.message);
     }
 
     // --- Build ReportArtifactManifest ---
@@ -1444,7 +1505,7 @@ export function createAuditOrchestrator({
         ga4: reportPackage.sourceStatus?.ga4 || "NOT_APPLICABLE",
         gsc: reportPackage.sourceStatus?.gsc || "NOT_APPLICABLE",
       },
-      files: persistedArtifacts.map(a => a.filename),
+      files: [...persistedArtifacts.map(a => a.filename), ...(snapshotRecord ? ["snapshot.html"] : [])],
       auditId,
       lifecycleStatus: "DRAFT_RENDERED",
     };
@@ -1479,6 +1540,8 @@ export function createAuditOrchestrator({
       manifestRecord,
       pageArtifacts: Object.freeze(persistedArtifacts),
       renderedPages: rendered.pages,  // Map<filename, html> for store integration
+      snapshotArtifact: snapshotRecord ? Object.freeze({ filename: "snapshot.html", key: snapshotRecord.key, sha256: snapshotRecord.sha256, bytes: snapshotRecord.bytes }) : null,
+      snapshotHtml,
       rendererCallCount,
       n8nCallCount: _n8nCallCounter.count,
       narrativeCacheHit: null, narrativeCallsMade: null, narrativeCost: null,
@@ -1516,7 +1579,7 @@ export function createAuditOrchestrator({
     const executionId = opts.executionId || randomUUID();
     const startedAt = c.now();
     const { tenantId, clientId, auditId, idempotencyKey } = auditRequest;
-    const scope = { tenantId, clientId, auditId };
+    const scope = requestArtifactScope(auditRequest);
 
     // 1. Validate request
     const validation = await validateRequest(auditRequest);
@@ -1693,12 +1756,19 @@ export function createAuditOrchestrator({
     }
 
     // 3a5. DRAFT_RENDERED, IN_REVIEW, APPROVED, PUBLISHED — governed WP10 terminal/idempotent states
-    if (cs.state === T.DRAFT_RENDERED || cs.state === T.IN_REVIEW || cs.state === T.APPROVED || cs.state === T.PUBLISHED) {
+    if (cs.state === T.DRAFT_RENDERED && opts.forceEvidenceRecovery === true) {
+      await doTransition(auditId, tenantId, executionId, T.COLLECTING, "insufficient-evidence-recovery");
+    }
+    if (cs.state === T.RENDER_FAILED && opts.forceEvidenceRecovery === true) {
+      await doTransition(auditId, tenantId, executionId, T.COLLECTING, "insufficient-evidence-recovery");
+    }
+
+    if (cs.state === T.DRAFT_RENDERED && opts.forceEvidenceRecovery !== true || cs.state === T.IN_REVIEW || cs.state === T.APPROVED || cs.state === T.PUBLISHED) {
       return buildSummary({ auditRequest, executionId, finalState: cs.state, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });
     }
 
     // 3a6. RENDER_FAILED — can recover to NARRATIVE_READY
-    if (cs.state === T.RENDER_FAILED) {
+    if (cs.state === T.RENDER_FAILED && opts.forceEvidenceRecovery !== true) {
       // Attempt recovery: go back to NARRATIVE_READY for re-render
       await doTransition(auditId, tenantId, executionId, T.NARRATIVE_READY, "render-failed-recovery", null);
       return buildSummary({ auditRequest, executionId, finalState: T.NARRATIVE_READY, resumed: false, allSourceResults: [], canonicalRecord: null, startedAt });

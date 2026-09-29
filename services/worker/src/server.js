@@ -15,6 +15,10 @@ import { createSlidingWindowLimiter } from "./utils/rate-limiter.js";
 import { LOCAL_DETERMINISTIC_ONPAGE_FIXTURES } from "./local/deterministic-audit-fixture.js";
 import { validateStage2StagingPersistence } from "./local/stage2-staging-persistence.js";
 import { createPostgresIdentityRepository } from "./identity/postgres-identity-repository.js";
+import { reportArtifactCandidates } from "./report/report-artifact-routing.js";
+import { ensurePersistedSnapshotV1 } from "./report/snapshot-backfill.js";
+import { evaluateReportEvidenceSufficiency, reportEvidenceInsufficientError } from "./report/evidence-sufficiency.js";
+import { isAllowedReportManifest, rejectRetiredReport } from "./report/report-product-contract.js";
 
 // =============================================================================
 // Request handler factory — injectable for testing
@@ -701,6 +705,36 @@ export function createRequestHandler({
             return send(res, 404, { error: "Audit not found" });
           }
           if (!currentState) return send(res, 404, { error: "Audit not found" });
+
+          // Evaluate reportability after audit authorization but before the
+          // lifecycle role gate. This keeps a newly failed/held audit from
+          // degrading into a generic 403 and ensures both report products
+          // expose the same non-technical incomplete-audit state.
+          if (governedArtifacts) {
+            try {
+              const requestedClientId = url.searchParams.get("clientId") || "";
+              const artifactRevision = typeof auditService.getCurrentArtifactRevision === "function"
+                ? await auditService.getCurrentArtifactRevision(auditId, access.tenantId)
+                : null;
+              const decisionKey = `tenants/${access.tenantId}/clients/${requestedClientId}/audits/${auditId}/canonical/decision-evidence.json${artifactRevision ? `.${artifactRevision}` : ""}`;
+              const decisionBytes = await governedArtifacts.get(decisionKey);
+              const evaluation = evaluateReportEvidenceSufficiency(JSON.parse(Buffer.from(decisionBytes).toString("utf8")));
+              if (!evaluation.reportable) throw reportEvidenceInsufficientError(evaluation);
+            } catch (gateErr) {
+              if (gateErr?.code === "REPORT_EVIDENCE_INSUFFICIENT") {
+                return send(res, gateErr.statusCode || 409, {
+                  error: gateErr.clientMessage,
+                  code: gateErr.code,
+                  reportable: false,
+                });
+              }
+              return send(res, 409, {
+                error: "This audit is incomplete because the website evidence could not be verified.",
+                code: "REPORT_EVIDENCE_INSUFFICIENT",
+                reportable: false,
+              });
+            }
+          }
           const reportAuth = authorizeReportAccess({
             auth: access.auth,
             auditTenant: access.tenantId,
@@ -724,21 +758,51 @@ export function createRequestHandler({
             // (tenant + role gate) has ALREADY passed above; the v2 page is
             // retrieved from the governed artifact store only for audits
             // whose manifest declares design 2.0.0.
-            if (governedArtifacts && filename === "index.html") {
-              const v2Key = `tenants/${reportAuth.tenantId}/clients/${clientId}/audits/${auditId}/report-v2/pages/index.html`;
-              try {
-                const v2Bytes = await governedArtifacts.get(v2Key);
-                if (v2Bytes && v2Bytes.length > 0) {
+            if (governedArtifacts && (filename === "index.html" || filename === "snapshot.html" || filename === "executive.html")) {
+              const artifactRevision = typeof auditService.getCurrentArtifactRevision === "function"
+                ? await auditService.getCurrentArtifactRevision(auditId, reportAuth.tenantId)
+                : null;
+              if (filename === "index.html" || filename === "snapshot.html") {
+                const recovered = await ensurePersistedSnapshotV1({
+                  store: governedArtifacts,
+                  scope: {
+                    tenantId: reportAuth.tenantId,
+                    clientId,
+                    auditId,
+                    ...(artifactRevision ? { artifactRevision } : {}),
+                  },
+                });
+                if (recovered) {
                   res.writeHead(200, {
                     "content-type": "text/html; charset=utf-8",
-                    "content-length": v2Bytes.length,
+                    "content-length": recovered.length,
                     "cache-control": "no-store",
                   });
-                  return res.end(v2Bytes);
+                  return res.end(recovered);
                 }
-              } catch (v2Err) {
-                // Fall through to the v1 path when no v2 artifact exists.
-                void v2Err;
+              }
+              for (const candidate of reportArtifactCandidates(filename)) {
+                const manifestKey = `tenants/${reportAuth.tenantId}/clients/${clientId}/audits/${auditId}/${candidate.category}/manifest.json${artifactRevision ? `.${artifactRevision}` : ""}`;
+                const key = `tenants/${reportAuth.tenantId}/clients/${clientId}/audits/${auditId}/${candidate.category}/${candidate.artifactName}${artifactRevision ? `.${artifactRevision}` : ""}`;
+                try {
+                  const manifestBytes = await governedArtifacts.get(manifestKey);
+                  const manifest = JSON.parse(Buffer.from(manifestBytes).toString("utf8"));
+                  if (!isAllowedReportManifest(manifest)) throw rejectRetiredReport();
+                  const bytes = await governedArtifacts.get(key);
+                  if (bytes && bytes.length > 0) {
+                    res.writeHead(200, {
+                      "content-type": "text/html; charset=utf-8",
+                      "content-length": bytes.length,
+                      "cache-control": "no-store",
+                    });
+                    return res.end(bytes);
+                  }
+                } catch (artifactErr) {
+                  void artifactErr;
+                }
+              }
+              if (filename === "index.html" || filename === "snapshot.html") {
+                return send(res, 404, { error: "Report artifact not found", code: "SNAPSHOT_ARTIFACT_NOT_FOUND" });
               }
             }
 
@@ -748,6 +812,13 @@ export function createRequestHandler({
             res.writeHead(200, { "content-type": ct, "content-length": Buffer.byteLength(payload), "cache-control": "no-store" });
             return res.end(payload);
           } catch (err) {
+            if (err.code === "REPORT_EVIDENCE_INSUFFICIENT") {
+              return send(res, err.statusCode || 409, {
+                error: err.clientMessage,
+                code: err.code,
+                reportable: false,
+              });
+            }
             if (err.statusCode === 403) {
               return send(res, 403, { error: err.message, code: err.code || "REPORT_NOT_APPROVED", lifecycleStatus: err.lifecycleStatus || "unknown" });
             }
@@ -902,6 +973,7 @@ import { createProductionRuntime } from "./application/production-runtime.js";
 import { createPostgresLifecycleRepository } from "./lifecycle/postgres-repository.js";
 import { createGovernedArtifactStore, createFsArtifactStore, buildKey as buildArtifactKey } from "./storage/governed-artifact-store.js";
 import { createFileLifecycleRepository } from "./lifecycle/file-repository.js";
+import { CANONICAL_SOURCES } from "./lifecycle/source-plan.js";
 
 /**
  * Initialize the durable PostgreSQL runtime before any local fallback can be
@@ -1213,6 +1285,260 @@ if (lifecycleRepo && artifactStore) {
   } catch (e) {
     console.error("Production runtime initialization failed:", e.message);
   }
+}
+
+// PRYSM-DATA-VIS-01: read-only startup snapshot of persisted audit evidence.
+// Uses the same PostgreSQL lifecycle service and report-store/S3 readback path
+// as the application. No credentials, raw evidence payloads, or mutations are logged.
+if (auditService && store && process.env.VANTAGE_TEST_MODE !== "true" && process.env.RAILWAY_ENVIRONMENT_ID) {
+  Promise.resolve()
+    .then(async () => {
+      const tenantId = config.vantageTenantId || "default";
+      const audits = await auditService.listAudits(tenantId);
+      const snapshot = [];
+      const countish = (value) => {
+        if (Array.isArray(value)) return value.length;
+        if (value && typeof value === "object") return Object.keys(value).length;
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") return value.trim() ? 1 : 0;
+        return value ? 1 : 0;
+      };
+      for (const audit of audits) {
+        const row = {
+          auditId: audit.auditId,
+          businessName: audit.businessName || "",
+          targetUrl: audit.targetUrl || "",
+          lifecycleState: audit.latestState || null,
+          slug: null,
+          reportStore: null,
+          evidence: null,
+        };
+        try {
+          const status = await auditService.getAuditStatus(audit.auditId, tenantId);
+          row.lifecycleState = status?.state || row.lifecycleState;
+          row.slug = status?.slug || null;
+          row.sourceStatus = status?.sourceStatus || null;
+
+          // Governed artifact visibility: source checkpoints are the authoritative
+          // provider execution/persistence boundary, independent of report-store evidence.json.
+          row.governedSources = {};
+          for (const source of CANONICAL_SOURCES) {
+            const checkpointKey = buildArtifactKey({
+              tenantId,
+              clientId: audit.clientId,
+              auditId: audit.auditId,
+              category: "manifests",
+              artifactName: `source-checkpoint-${source}.json`,
+            });
+            try {
+              const checkpointBytes = await artifactStore.get(checkpointKey);
+              const checkpoint = JSON.parse(checkpointBytes.toString("utf-8"));
+              const normalizedKey = checkpoint?.normalizedArtifact?.key || null;
+              const rawKey = checkpoint?.rawArtifact?.key || null;
+              let sourceResult = null;
+              let normalizedReadable = false;
+              let rawReadable = false;
+              if (normalizedKey) {
+                const normalizedBytes = await artifactStore.get(normalizedKey);
+                normalizedReadable = Boolean(normalizedBytes?.length);
+                if (normalizedReadable) sourceResult = JSON.parse(normalizedBytes.toString("utf-8"));
+              }
+              if (rawKey) {
+                const rawBytes = await artifactStore.get(rawKey);
+                rawReadable = Boolean(rawBytes?.length);
+              }
+              row.governedSources[source] = {
+                checkpoint: true,
+                completedAt: checkpoint?.completedAt || null,
+                sourceExecutionKeyPresent: Boolean(checkpoint?.sourceExecutionKey),
+                normalized: {
+                  present: Boolean(normalizedKey),
+                  readable: normalizedReadable,
+                  key: normalizedKey,
+                },
+                raw: {
+                  present: Boolean(rawKey),
+                  readable: rawReadable,
+                  key: rawKey,
+                },
+                result: sourceResult ? {
+                  status: sourceResult.status || sourceResult.sourceStatus || null,
+                  provider: sourceResult.provider || null,
+                  adapterVersion: sourceResult.adapterVersion || null,
+                  requestIdPresent: Boolean(sourceResult.requestId),
+                  retryCount: sourceResult.retryCount ?? null,
+                  fallbackUsed: sourceResult.evidence?.fallbackUsed ?? sourceResult.fallbackUsed ?? null,
+                  limitationCount: Array.isArray(sourceResult.limitations) ? sourceResult.limitations.length : 0,
+                  evidenceKeys: sourceResult.evidence && typeof sourceResult.evidence === "object"
+                    ? Object.keys(sourceResult.evidence).sort()
+                    : [],
+                  checklistSignals: (() => {
+                    const e = sourceResult.evidence || {};
+                    if (source === "dataforseo-onpage") {
+                      return {
+                        pageCount: e.pageCount ?? countish(e.pages),
+                        serviceCount: countish(e.services),
+                        formCount: countish(e.forms),
+                        ctaCount: countish(e.ctas),
+                        schemaTypeCount: countish(e.schemaTypes),
+                        trustSignalCount: countish(e.trust),
+                        topicKeywordCount: countish(e.topicKeywords),
+                        internalLinkCount: e.internalLinkCount ?? null,
+                        contentEvidenceAvailable: e._contentEvidenceAvailable ?? null,
+                        interactiveEvidenceAvailable: e._interactiveEvidenceAvailable ?? null,
+                      };
+                    }
+                    if (source === "pagespeed") {
+                      return {
+                        intendedProvider: e.intendedProvider || null,
+                        mobileStatus: e.mobile?.status || null,
+                        desktopStatus: e.desktop?.status || null,
+                        mobilePerformanceScorePresent: e.mobile?.scores?.performance != null,
+                        desktopPerformanceScorePresent: e.desktop?.scores?.performance != null,
+                        testedUrlCount: countish(e.testedUrls),
+                        pageResultCount: countish(e.pageResults),
+                        fallbackUsed: e.fallbackUsed ?? null,
+                        phoneFieldStatus: e.fieldData?.phone?.status || null,
+                        desktopFieldStatus: e.fieldData?.desktop?.status || null,
+                      };
+                    }
+                    if (source === "dataforseo-serp") {
+                      return {
+                        keywordCount: e.keywordCount ?? null,
+                        resultCount: e.resultCount ?? null,
+                        competitorCount: countish(e.competitors),
+                        suppliedCompetitorCount: countish(e.suppliedCompetitors),
+                        localMapsCount: countish(e.localMaps),
+                        businessProfilePresent: countish(e.businessProfile) > 0,
+                        labsPresent: countish(e.labs) > 0,
+                        labsFieldCount: countish(e.labs),
+                        enrichmentLimitationCount: countish(e.enrichmentLimitations),
+                        providerLocationPresent: countish(e.providerLocation) > 0,
+                      };
+                    }
+                    if (source === "backlinks") {
+                      return {
+                        totalBacklinksReviewed: e.totalBacklinksReviewed ?? countish(e.backlinks),
+                        authoritySummaryPresent: countish(e.authoritySummary) > 0,
+                        referringDomainCount: countish(e.topReferringDomains),
+                        backlinkHistoryCount: countish(e.backlinkHistory),
+                        worthPursuingDomainCount: countish(e.topWorthPursuingDomains),
+                        enrichmentLimitationCount: countish(e.enrichmentLimitations),
+                      };
+                    }
+                    return {};
+                  })(),
+                } : null,
+              };
+            } catch (err) {
+              row.governedSources[source] = {
+                checkpoint: false,
+                error: err?.name === "NoSuchKey" || err?.name === "NotFound"
+                  ? "NOT_FOUND"
+                  : (err?.message || String(err)).slice(0, 240),
+              };
+            }
+          }
+
+          row.canonicalArtifacts = {};
+          for (const artifactName of [
+            "audit-request.json",
+            "evidence.json",
+            "decision-evidence.json",
+            "capability-evidence.json",
+            "conversion-path-validation.json",
+            "scores.json",
+            "findings.json",
+          ]) {
+            const key = buildArtifactKey({
+              tenantId,
+              clientId: audit.clientId,
+              auditId: audit.auditId,
+              category: "canonical",
+              artifactName,
+            });
+            try {
+              const bytes = await artifactStore.get(key);
+              let parsed = null;
+              try { parsed = JSON.parse(bytes.toString("utf-8")); } catch {}
+              row.canonicalArtifacts[artifactName] = {
+                readable: Boolean(bytes?.length),
+                bytes: bytes?.length || 0,
+                topLevelKeys: parsed && typeof parsed === "object" ? Object.keys(parsed).sort() : [],
+                checklistSignals: artifactName === "conversion-path-validation.json" && parsed
+                  ? {
+                      status: parsed.status || null,
+                      pageCount: countish(parsed.pages),
+                      limitationCount: countish(parsed.limitations),
+                      summary: parsed.summary || null,
+                    }
+                  : artifactName === "decision-evidence.json" && parsed
+                    ? {
+                        sitePageCount: countish(parsed.site?.pages),
+                        competitorCount: countish(parsed.competitors),
+                        suppliedCompetitorCount: countish(parsed.suppliedCompetitors),
+                        contentOpportunityCount: countish(parsed.competitorOpportunities?.allGaps || parsed.competitorOpportunities?.candidates?.qualified),
+                        performancePresent: Boolean(parsed.performance),
+                        backlinksPresent: Boolean(parsed.backlinks),
+                      }
+                    : artifactName === "capability-evidence.json" && parsed
+                      ? {
+                          capabilityCount: countish(parsed.capabilities),
+                          summaryPresent: Boolean(parsed.summary),
+                        }
+                      : null,
+              };
+            } catch (err) {
+              row.canonicalArtifacts[artifactName] = { readable: false, error: "NOT_FOUND_OR_UNREADABLE" };
+            }
+          }
+          if (row.slug) {
+            const reportStatus = await store.getStatus(row.slug, audit.auditId);
+            row.reportStore = reportStatus ? {
+              status: reportStatus.status || null,
+              artifacts: reportStatus.artifacts || null,
+              publication: reportStatus.publication ? {
+                artifactCount: reportStatus.publication.artifactCount || reportStatus.publication.verifiedArtifacts?.length || 0,
+                verifiedArtifacts: (reportStatus.publication.verifiedArtifacts || []).map((a) => a.filename),
+              } : null,
+            } : null;
+            const committed = await store.readCommittedArtifacts(row.slug, audit.auditId);
+            if (committed) {
+              const evidence = committed.evidence || {};
+              const sourceSummary = {};
+              for (const [key, value] of Object.entries(evidence)) {
+                if (!value || typeof value !== "object") continue;
+                sourceSummary[key] = {
+                  status: value.sourceStatus || value.status || value._sourceStatus?.status || null,
+                  provider: value.provider || value.source || value.intendedProvider || value._sourceStatus?.provider || null,
+                  fallbackUsed: value.fallbackUsed ?? null,
+                  limitationCount: Array.isArray(value.limitations) ? value.limitations.length : 0,
+                };
+              }
+              row.evidence = {
+                topLevelKeys: Object.keys(evidence).sort(),
+                sources: sourceSummary,
+                hasModel: Boolean(committed.model),
+                txId: committed.txId || null,
+                hasReviewRecord: Boolean(committed.reviewRecord),
+              };
+            }
+          }
+        } catch (err) {
+          row.inspectionError = err?.message || String(err);
+        }
+        snapshot.push(row);
+      }
+      console.log("PRYSM_DATA_VISIBILITY_SNAPSHOT " + JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        tenantId,
+        auditCount: snapshot.length,
+        audits: snapshot,
+      }));
+    })
+    .catch((err) => {
+      console.error("PRYSM_DATA_VISIBILITY_SNAPSHOT_FAILED", err?.message || String(err));
+    });
 }
 
 // PRYSM-CLOSE-10: reclaim audits stranded by a previous process termination.

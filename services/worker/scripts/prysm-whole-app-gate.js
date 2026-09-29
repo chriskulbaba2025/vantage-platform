@@ -22,8 +22,7 @@ const commands = [
   ["--test", "src/report-model/current-consumer-parity.test.js", "base, Narrative v2, and replay current-model parity"],
   ["scripts/pdv4-assembled-finalization-gate.js", "P-B14/P-B15 assembled persistence and finalization branches"],
   ["scripts/p4-serp-qualification-gate.js", "P-B16 SERP evidence-grounded qualification branch"],
-  ["--test", "src/report/p6-unavailable-roadmap.test.js", "P-B17 status-preserving actionability roadmap"],
-  ["--test", "src/audit/approved-pages.test.js", "P-B17 approved-page render lifecycle"],
+  ["--test", "src/report/legacy-report-retirement.test.js", "P-B17 retired report cannot be served"],
 ];
 
 try {

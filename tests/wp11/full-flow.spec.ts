@@ -197,10 +197,11 @@ test.describe("WP11 Full Browser Flow", () => {
     // 4. Open the audit detail page and wait for the draft review card.
     await page.goto(`${NEXT_URL}/audits/${auditId}`, { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { name: "Draft Report" })).toBeVisible({ timeout: 30_000 });
-    const draftButton = page.getByRole("link", { name: "View Draft Report" });
+    const draftButton = page.getByRole("link", { name: "View Snapshot" });
     await expect(draftButton).toBeVisible();
     await expect(draftButton).toHaveAttribute("href", `/audits/${auditId}/report`);
-    console.log("  [x] DRAFT-REVIEW-01: Draft Report button visible on detail page");
+    await expect(page.getByRole("link", { name: "View Executive Report" })).toBeVisible();
+    console.log("  [x] DRAFT-REVIEW-01: Snapshot and Executive Report choices visible on detail page");
 
     // 4. Click the button — must resolve to the internal report page for the
     //    SAME audit ID without a 404.

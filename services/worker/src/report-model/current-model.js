@@ -1,5 +1,7 @@
 import { buildEncyclopediaProjection } from "../encyclopedia/index.js";
 import { buildSemanticLedger } from "../report-intelligence/semantic-ledger.js";
+import { buildSemanticEvidenceAuthority } from "../report-intelligence/semantic-evidence-authority.js";
+import { buildCanonicalDecisionModel } from "../report/canonical-decision-model.js";
 
 /**
  * Canonical current report-model hydration boundary.
@@ -38,6 +40,8 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
   }
   if (!Array.isArray(findings)) throw new Error("Current report model requires findings");
 
+  const semanticEvidence = buildSemanticEvidenceAuthority(decisionEvidence);
+
   return {
     scoringVersion: scoreSet.scoringVersion,
     generatedAt: scoreSet.generatedAt,
@@ -52,6 +56,7 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
     rootCauseRuleId: scoreSet.rootCauseRuleId,
     rootCause: scoreSet.rootCause,
     decisionHierarchy: scoreSet.decisionHierarchy,
+    canonicalDecisionModel: buildCanonicalDecisionModel({ findings, scoreSet }),
     findings,
     renderingDiagnostics: scoreSet.renderingDiagnostics,
     suppressedFindingReasons: scoreSet.suppressedFindingReasons,
@@ -67,10 +72,12 @@ export function hydrateCurrentReportModel({ scoreSet, findings, decisionEvidence
     contentIdeas: scoreSet.contentIdeas,
     competitors: scoreSet.competitors,
     crossReportInterpretation: scoreSet.crossReportInterpretation,
+    semanticEvidence,
     semanticLedger: buildSemanticLedger({
       scoreSet,
       findings,
       decisionEvidence,
+      semanticEvidence,
       contentIdeas: scoreSet.contentIdeas,
     }),
   };

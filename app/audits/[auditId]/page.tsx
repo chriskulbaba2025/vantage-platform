@@ -68,9 +68,6 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
         {(status! as Record<string, unknown>).market && (
           <p><strong>Market:</strong> {(status! as Record<string, unknown>).market as string}</p>
         )}
-        {(status! as Record<string, unknown>).reportDesignVersion === "2.0.0" && (
-          <p><strong>Report design:</strong> 2.0.0 — Executive conversion-readiness report</p>
-        )}
         <p><strong>Audit ID:</strong> <code>{auditId}</code></p>
         <p><strong>Version:</strong> {status!.version}</p>
         <p><strong>Created:</strong> {formatAuditTimestamp(status!.createdAt)}</p>
@@ -110,7 +107,7 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
 
       {(state === "draft_rendered" || state === "in_review") && (
         <div className="card" style={{ borderColor: "var(--amber)" }}>
-          <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Draft Report</h2>
+          <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Reports</h2>
           {/* PRYSM-NEXT-ACTIVATION defect B — a separately authenticated
               principal reaches the draft report through their session; the
               WORKER still enforces the tenant/role gate server-side before
@@ -118,8 +115,17 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
               cookie remains supported for internal reviewer compatibility. */}
           {principal || isValidReviewerToken(reviewerCookie.get(REVIEWER_COOKIE)?.value) ? (
             <>
-              <p>The governed draft report is ready. Access is enforced by your account role.</p>
-              <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Draft Report</a>
+              <p>The governed draft reports are ready. Access is enforced by your account role.</p>
+              <div className="flex-row" style={{ gap: 12, alignItems: "stretch", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 280px" }}>
+                  <p><strong>PRIMARY · Snapshot V1</strong><br />One-page conversion-readiness snapshot. Default report.</p>
+                  <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Snapshot</a>
+                </div>
+                <div style={{ flex: "1 1 280px" }}>
+                  <p><strong>SECONDARY · Executive Report</strong><br />Seven-page detailed executive report.</p>
+                  <a href={`/audits/${auditId}/report/executive.html`} className="btn btn-outline">View Executive Report</a>
+                </div>
+              </div>
             </>
           ) : (
             <p>Draft reports are reviewer-only. Sign in as a reviewer to open the internal review page.</p>
@@ -129,9 +135,18 @@ export default async function AuditDetailPage({ params }: { params: Promise<{ au
 
       {(state === "approved" || state === "published") && (
         <div className="card" style={{ borderColor: "var(--green)" }}>
-          <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Approved Report</h2>
-          <p>The governed report is approved and ready to review.</p>
-          <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Report</a>
+          <h2 style={{ fontSize: "1rem", marginBottom: 8 }}>Reports</h2>
+          <p>The governed reports are approved and ready to review.</p>
+          <div className="flex-row" style={{ gap: 12, alignItems: "stretch", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 280px" }}>
+              <p><strong>PRIMARY · Snapshot V1</strong><br />One-page conversion-readiness snapshot. Default report.</p>
+              <a href={`/audits/${auditId}/report`} className="btn btn-primary">View Snapshot</a>
+            </div>
+            <div style={{ flex: "1 1 280px" }}>
+              <p><strong>SECONDARY · Executive Report</strong><br />Seven-page detailed executive report.</p>
+              <a href={`/audits/${auditId}/report/executive.html`} className="btn btn-outline">View Executive Report</a>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { collectPerformance, collectPerformanceForPages, normalizeLighthouse } from "./pagespeed-client.js";
+import { collectPerformance, collectPerformanceForPages, normalizeLighthouse, execute as executePageSpeed } from "./pagespeed-client.js";
 import { SOURCE_STATUS, ERROR_CATEGORY } from "../scoring/evidence-contracts.js";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +39,53 @@ test("normalizeLighthouse produces stable score and metric contract", () => {
   assert.equal(result.metrics.lcpMs, 2600);
   assert.equal(result.opportunities[0].id, "unused-javascript");
   assert.equal(result.status, SOURCE_STATUS.AVAILABLE);
+});
+
+test("unkeyed universal execution attempts PSI and accepts a successful response", async () => {
+  const previous = process.env.GOOGLE_PAGESPEED_API_KEY;
+  const previousLegacy = process.env.PAGESPEED_API_KEY;
+  delete process.env.GOOGLE_PAGESPEED_API_KEY;
+  delete process.env.PAGESPEED_API_KEY;
+  try {
+    const result = await executePageSpeed({
+      auditRequest: { targetUrl: "https://example.com", performance: { fetchImpl: async (url) => {
+        assert.match(String(url), /pagespeedonline/);
+        return psiResponse();
+      } } },
+      source: "pagespeed",
+    });
+    assert.equal(result.sourceResult.status, SOURCE_STATUS.AVAILABLE);
+  } finally {
+    if (previous === undefined) delete process.env.GOOGLE_PAGESPEED_API_KEY;
+    else process.env.GOOGLE_PAGESPEED_API_KEY = previous;
+    if (previousLegacy === undefined) delete process.env.PAGESPEED_API_KEY;
+    else process.env.PAGESPEED_API_KEY = previousLegacy;
+  }
+});
+
+test("configured PageSpeed key remains part of PSI request", async () => {
+  let seen = "";
+  const result = await executePageSpeed({
+    auditRequest: { targetUrl: "https://example.com", performance: { pagespeedApiKey: "configured-test-key", fetchImpl: async (url) => {
+      seen = String(url);
+      return psiResponse();
+    } } },
+    source: "pagespeed",
+  });
+  assert.equal(result.sourceResult.status, SOURCE_STATUS.AVAILABLE);
+  assert.match(seen, /key=configured-test-key/);
+});
+
+test("unkeyed PSI/provider failure remains FAILED and does not become AVAILABLE", async () => {
+  const result = await executePageSpeed({
+    auditRequest: { targetUrl: "https://example.com", performance: {
+      fetchImpl: async () => errorResponse(500, "provider error"),
+      localRunner: async () => { throw new Error("fallback unavailable"); },
+    } },
+    source: "pagespeed",
+  });
+  assert.notEqual(result.sourceResult.status, SOURCE_STATUS.AVAILABLE);
+  assert.equal(result.sourceResult.status, SOURCE_STATUS.FAILED);
 });
 
 // ---------------------------------------------------------------------------

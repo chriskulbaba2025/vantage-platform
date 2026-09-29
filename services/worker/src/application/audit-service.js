@@ -10,6 +10,9 @@
 
 import { randomUUID } from "node:crypto";
 import { buildArtifactKey } from "../storage/artifact-key.js";
+import { validateNewAuditIntake } from "./intake-contract.js";
+import { evaluateReportEvidenceSufficiency, reportEvidenceInsufficientError } from "../report/evidence-sufficiency.js";
+import { rejectRetiredReport, isCurrentExecutiveHtml } from "../report/report-product-contract.js";
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -64,6 +67,7 @@ export function createAuditApplicationService({
    * @returns {Promise<object>} execution summary
    */
   async function createAudit(input, tenantId) {
+    validateNewAuditIntake(input);
     // Build governed AuditRequest
     const auditId = randomUUID();
     const clientId = buildClientId(input.targetUrl, input.businessName);
@@ -77,7 +81,7 @@ export function createAuditApplicationService({
       idempotencyKey,
       targetUrl: normalizeUrl(input.targetUrl),
       businessName: input.businessName.trim(),
-      market: input.market || "",
+      market: normalizeMarket(input.market),
       language: input.language || "en-CA",
       primaryGoal: input.primaryGoal || "",
       services: input.services || [],
@@ -110,15 +114,13 @@ export function createAuditApplicationService({
     if (input.performance && typeof input.performance === "object") {
       auditRequest.performance = input.performance;
     }
-    // PRYSM-NEXT-ACTIVATION defect A — the report design selection must
-    // survive the production request boundary.  Strict allowlist; v1
-    // remains the default when the field is absent.
-    if (input.report && typeof input.report === "object") {
-      auditRequest.report = {
-        designVersion:
-          input.report.designVersion === "2.0.0" ? "2.0.0" : "1.0.0",
-      };
-    }
+    // Current Executive is the governed default. Snapshot V1 remains an
+    // explicit companion projection; no retired design is an implicit path.
+    auditRequest.report = {
+      designVersion:
+        input.report?.designVersion ?? "2.0.0",
+      snapshotVersion: "1.0.0",
+    };
     if (input.serp && typeof input.serp === "object") {
       auditRequest.serp = input.serp;
     }
@@ -215,6 +217,16 @@ export function createAuditApplicationService({
       })),
       sourceStatus: evidenceLockedEvent?.sourceStatus || null,
     };
+  }
+
+  async function getCurrentArtifactRevision(auditId, tenantId) {
+    const events = await lifecycleService.history(auditId, tenantId).catch(() => []);
+    for (const event of [...events].reverse()) {
+      const key = String(event.artifactKey || "");
+      const match = key.match(/\.(r[0-9]+)$/);
+      if (match) return match[1];
+    }
+    return null;
   }
 
   // -------------------------------------------------------------------
@@ -384,6 +396,9 @@ export function createAuditApplicationService({
    * Serves approved pages for approved and published (client access).
    */
   async function getReportPage(tenantId, clientId, auditId, filename, slug) {
+    if (!["index.html", "snapshot.html", "executive.html"].includes(filename)) {
+      throw rejectRetiredReport("Historical report routes are unavailable");
+    }
     // Check lifecycle state via lifecycle repo (canonical)
     let currentState;
     try {
@@ -403,6 +418,23 @@ export function createAuditApplicationService({
       const err = new Error("Audit not found");
       err.statusCode = 404;
       throw err;
+    }
+
+    // Report artifacts may predate the evidence-sufficiency contract. Recheck
+    // the persisted decision evidence at delivery so stale rendered bytes
+    // cannot bypass the same gate used by the renderer.
+    try {
+      const artifactRevision = await getCurrentArtifactRevision(auditId, tenantId);
+      const decisionKey = buildArtifactKey({ tenantId, clientId, auditId, category: "canonical", artifactName: "decision-evidence.json", artifactRevision });
+      const decisionBytes = await artifactStore.get(decisionKey);
+      const decisionEvidence = JSON.parse(Buffer.from(decisionBytes).toString("utf8"));
+      const evaluation = evaluateReportEvidenceSufficiency(decisionEvidence);
+      if (!evaluation.reportable) throw reportEvidenceInsufficientError(evaluation);
+    } catch (err) {
+      if (err?.code === "REPORT_EVIDENCE_INSUFFICIENT") throw err;
+      // A missing/unreadable decision-evidence artifact is itself not enough
+      // evidence for client delivery; fail closed without exposing internals.
+      throw reportEvidenceInsufficientError(evaluateReportEvidenceSufficiency({}));
     }
 
     const READABLE_STATES = new Set(["draft_rendered", "in_review", "approved", "published"]);
@@ -429,20 +461,22 @@ export function createAuditApplicationService({
     }
 
     // Read from governed artifact store
-    const artifactKey = `tenants/${tenantId}/clients/${clientId}/audits/${auditId}/report/pages/${filename}`;
+    const artifactRevision = await getCurrentArtifactRevision(auditId, tenantId);
+    const artifactKey = buildArtifactKey({
+      tenantId, clientId, auditId,
+      category: "report-v2",
+      artifactName: "pages/index.html",
+      artifactRevision,
+    });
     let bytes;
     try {
       bytes = await artifactStore.get(artifactKey);
     } catch {
-      // Fallback to report store local read
-      try {
-        const relative = `${slug}/${auditId}/${filename}`;
-        bytes = await reportStore.readFile(relative);
-      } catch {
-        const err = new Error("Report file not found");
-        err.statusCode = 404;
-        throw err;
-      }
+      throw rejectRetiredReport("Current Executive Report artifact is unavailable");
+    }
+
+    if (!isCurrentExecutiveHtml(Buffer.from(bytes).toString("utf8"))) {
+      throw rejectRetiredReport("Stored report artifact is not an allowed current product");
     }
 
     return {
@@ -456,6 +490,7 @@ export function createAuditApplicationService({
   return Object.freeze({
     createAudit,
     getAuditStatus,
+    getCurrentArtifactRevision,
     listAudits,
     submitReview,
     approveAudit,
@@ -466,6 +501,40 @@ export function createAuditApplicationService({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const CANADIAN_REGIONS = new Set([
+  "ontario", "quebec", "british columbia", "alberta", "manitoba",
+  "saskatchewan", "nova scotia", "new brunswick",
+  "newfoundland and labrador", "prince edward island",
+  "northwest territories", "yukon", "nunavut",
+]);
+
+const US_STATES = new Set([
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+  "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho",
+  "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana",
+  "maine", "maryland", "massachusetts", "michigan", "minnesota",
+  "mississippi", "missouri", "montana", "nebraska", "nevada",
+  "new hampshire", "new jersey", "new mexico", "new york",
+  "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
+  "pennsylvania", "rhode island", "south carolina", "south dakota",
+  "tennessee", "texas", "utah", "vermont", "virginia", "washington",
+  "west virginia", "wisconsin", "wyoming", "district of columbia",
+]);
+
+export function normalizeMarket(raw) {
+  const market = typeof raw === "string" ? raw.trim() : "";
+  if (!market) return "";
+
+  const parts = market.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length !== 2) return market;
+
+  const region = parts[1].toLowerCase();
+  if (CANADIAN_REGIONS.has(region)) return `${parts[0]}, ${parts[1]}, Canada`;
+  if (US_STATES.has(region)) return `${parts[0]}, ${parts[1]}, United States`;
+
+  return market;
+}
 
 function normalizeUrl(raw) {
   let url = raw.trim();

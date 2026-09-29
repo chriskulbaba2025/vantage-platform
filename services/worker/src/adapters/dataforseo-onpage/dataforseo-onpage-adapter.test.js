@@ -3029,6 +3029,8 @@ test("T-BLOCKED-04: customRobotsTxt option reaches client taskPost", async () =>
       clientOptions: { mode: "live", fetchImpl },
     });
     assert.ok(capturedBody, "Must have captured taskPost body");
+    assert.equal(capturedBody[0].target, "example.com",
+      "task_post must receive the provider domain contract, not the full URL");
     assert.equal(capturedBody[0].custom_robots_txt, "User-agent: *\nDisallow: /",
       "custom_robots_txt must be in the task_post request");
   } finally {

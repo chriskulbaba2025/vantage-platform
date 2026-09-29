@@ -57,7 +57,7 @@ function okSourceResult(source, evidence = {}) {
 
 function workingAdapters() {
   const siteEvidence = {
-    sourceStatus: "AVAILABLE", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
+    sourceStatus: "AVAILABLE", rawArtifactRef: "fixture://governed-onpage-evidence", domain: "proof.example.com", targetUrl: "https://proof.example.com", pageCount: 1,
     pages: [{ url: "https://proof.example.com", title: "Proof", headings: { h1: ["Proof"], h2: [], h3: [] }, description: "D", content: { text: "x", wordCount: 300 }, images: [], links: { internal: [], external: [] }, statusCode: 200 }],
     services: ["Governed Evidence Service"], trust: { credentials: true }, platform: "ProofCMS", schemaTypes: ["ProfessionalService"],
     statusCounts: { "200": 1 }, totalWords: 300, averageWords: 300, missingTitles: 0, missingDescriptions: 0, missingCanonicals: 0,
@@ -145,25 +145,33 @@ test("PRYSM-V2-PROD-01a: production boundary persists report.designVersion 2.0.0
   );
 });
 
-test("PRYSM-V2-PROD-01b: strict allowlist — invalid designVersion coerces to 1.0.0", async () => {
+test("PRYSM-V2-PROD-01b: unknown designVersion fails closed", async () => {
   const artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
   const runtime = await buildRuntime(artifactStore);
   const created = await runtime.auditService.createAudit(
     { ...baseInput(), report: { designVersion: "9.9.9" } },
     tenantId,
   );
-  await waitForState(runtime, created.auditId, [T.DRAFT_RENDERED], 30000);
+  await waitForState(runtime, created.auditId, [T.RENDER_FAILED], 30000);
   const persisted = await readPersistedRequest(artifactStore, created);
   assert.ok(persisted, "canonical AuditRequest must be persisted");
-  assert.equal(persisted.report?.designVersion ?? null, "1.0.0", "non-2.0.0 values must coerce to the governed v1 design");
+  assert.equal(persisted.report?.designVersion ?? null, "9.9.9", "unknown versions remain explicit and cannot select a renderer");
 });
 
-test("PRYSM-V2-PROD-01c: absent report selection keeps the governed v1 default (no report field)", async () => {
+test("PRYSM-SNAPSHOT-V1-DEFAULT: absent report selection preserves Snapshot intent without legacy artifact routing", async () => {
   const artifactStore = createGovernedArtifactStore({ store: createMemoryArtifactStore() });
   const runtime = await buildRuntime(artifactStore);
   const created = await runtime.auditService.createAudit(baseInput(), tenantId);
   await waitForState(runtime, created.auditId, [T.DRAFT_RENDERED], 30000);
   const persisted = await readPersistedRequest(artifactStore, created);
   assert.ok(persisted, "canonical AuditRequest must be persisted");
-  assert.equal(persisted.report ?? null, null, "absent selection must not fabricate a report field");
+  assert.equal(persisted.report?.designVersion, "2.0.0");
+  assert.equal(persisted.report?.snapshotVersion, "1.0.0", "new audits must persist the Snapshot V1 default");
+  const retiredSnapshotKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report/pages/snapshot.html`;
+  const retiredExecutiveKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report/pages/index.html`;
+  assert.equal(await artifactStore.exists(retiredSnapshotKey), false, "retired report namespace is not served");
+  assert.equal(await artifactStore.exists(retiredExecutiveKey), false, "retired Executive namespace is not served");
+  const executiveKey = `tenants/${tenantId}/clients/${created.clientId}/audits/${created.auditId}/report-v2/pages/index.html`;
+  const executive = await artifactStore.get(executiveKey);
+  assert.match(executive.toString("utf8"), /data-report-design="2\.0\.0"/);
 });

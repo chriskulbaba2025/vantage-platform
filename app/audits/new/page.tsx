@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { validateAuditForm, buildAuditPayload, type AuditFormInput } from "@/lib/audit-request";
+import { useRef, useState } from "react";
+import {
+  validateAuditForm,
+  buildAuditPayload,
+  type AuditFormInput,
+} from "@/lib/audit-request";
 import { useRouter } from "next/navigation";
 
 type AudienceScope = "local" | "regional" | "national";
@@ -13,20 +17,6 @@ const GOAL_OPTIONS = [
   "Grow newsletter or lead database",
   "Other",
 ];
-
-function deriveBusinessName(raw: string): string {
-  let value = raw.trim();
-  if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
-  try {
-    const host = new URL(value).hostname.replace(/^www\./i, "");
-    const label = host.split(".")[0] || "Website";
-    return label
-      .replace(/[-_]+/g, " ")
-      .replace(/\b\w/g, (letter) => letter.toUpperCase());
-  } catch {
-    return "Website Audit";
-  }
-}
 
 function parseServices(raw: string): string[] {
   return raw
@@ -47,17 +37,14 @@ export default function NewAuditPage() {
   const [audienceScope, setAudienceScope] = useState<AudienceScope>("local");
   const [servicesRaw, setServicesRaw] = useState("");
   const [primaryGoal, setPrimaryGoal] = useState(GOAL_OPTIONS[0]);
-  const [reportDesignVersion, setReportDesignVersion] = useState<"1.0.0" | "2.0.0">("1.0.0");
   const [customGoal, setCustomGoal] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const submissionKeyRef = useRef<string | null>(null);
   const [submitError, setSubmitError] = useState("");
 
   function handleTargetUrlChange(value: string) {
     setTargetUrl(value);
-    if (!businessName.trim()) {
-      setBusinessName(deriveBusinessName(value));
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -70,15 +57,19 @@ export default function NewAuditPage() {
     const goal =
       primaryGoal === "Other" ? customGoal.trim() : primaryGoal;
 
+    if (!submissionKeyRef.current) {
+      submissionKeyRef.current = crypto.randomUUID();
+    }
+
     const input: AuditFormInput = {
+      idempotencyKey: submissionKeyRef.current,
       targetUrl,
-      businessName: businessName.trim() || deriveBusinessName(targetUrl),
-      market: market.trim() || audienceScope,
+      businessName: businessName.trim(),
+      market: market.trim(),
       language: "en-CA",
       competitors,
       services: parseServices(servicesRaw),
       primaryGoal: goal || "Generate qualified enquiries",
-      reportDesignVersion,
     };
 
     const validation = validateAuditForm(input);
@@ -142,14 +133,14 @@ export default function NewAuditPage() {
             type="text"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
-            placeholder="Derived from the website address"
+            placeholder="Enter the human-readable business name"
             aria-required="true"
           />
           {errors.businessName && <p className="form-error">{errors.businessName}</p>}
         </div>
 
         <div className="form-group">
-          <label htmlFor="services">Primary services or offers <span style={{ color: "var(--muted)", fontWeight: 400 }}>(comma-separated, up to 20)</span></label>
+          <label htmlFor="services">Primary services or offers * <span style={{ color: "var(--muted)", fontWeight: 400 }}>(comma-separated, up to 20)</span></label>
           <input
             id="services"
             type="text"
@@ -191,7 +182,7 @@ export default function NewAuditPage() {
             placeholder="e.g. Toronto, Ontario (or a region/country)"
           />
           <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>
-            Leave blank to use the competing-audience scope below.
+            Enter the primary geography or market used for evidence collection.
           </p>
         </div>
 
@@ -209,18 +200,9 @@ export default function NewAuditPage() {
         </div>
 
         <div className="form-group">
-          <label htmlFor="reportDesignVersion">Report design *</label>
-          <select
-            id="reportDesignVersion"
-            value={reportDesignVersion}
-            onChange={(e) => setReportDesignVersion(e.target.value as "1.0.0" | "2.0.0")}
-          >
-            <option value="1.0.0">Standard multi-page report (v1)</option>
-            <option value="2.0.0">Executive conversion-readiness report (v2)</option>
-          </select>
-          <p style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>
-            The executive report answers readiness, evidence confidence,
-            coverage, problem pillars, and top blockers in one view.
+          <label>Reports</label>
+          <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 6 }}>
+            Prysm creates a one-page Snapshot V1 by default. The existing seven-page Executive Report is available separately after the audit.
           </p>
         </div>
 

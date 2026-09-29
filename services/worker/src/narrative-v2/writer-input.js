@@ -16,6 +16,202 @@ import { buildSemanticLedger } from "../report-intelligence/semantic-ledger.js";
 
 export const WRITER_INPUT_VERSION = "1.2.0";
 
+// The provider ceiling is deployment-configurable. These packet-level caps
+// keep ordinary audits well below that ceiling even before prompt instructions
+// and revision context are added. Raw evidence remains in canonical artifacts;
+// these are only Writer-facing projections.
+export const WRITER_CONTEXT_COMPACTION_VERSION = "1.0.0";
+export const WRITER_CONTEXT_TARGET_BYTES = 60_000;
+const COMPETITOR_SUMMARY_BYTES = 12_000;
+const SITE_FOOTPRINT_SUMMARY_BYTES = 12_000;
+const CONTENT_IDEA_SUMMARY_BYTES = 8_000;
+const SEMANTIC_LEDGER_SUMMARY_BYTES = 6_000;
+
+function serializedBytes(value) {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function boundedText(value, max = 500) {
+  return typeof value === "string" && value.length > max
+    ? `${value.slice(0, max - 1)}…`
+    : value;
+}
+
+function countStatuses(rows) {
+  return rows.reduce((out, row) => {
+    const status = row?.status || "UNKNOWN";
+    out[status] = (out[status] || 0) + 1;
+    return out;
+  }, {});
+}
+
+function compactCompetitors(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (serializedBytes(value) <= COMPETITOR_SUMMARY_BYTES) return cloneDefined(value);
+
+  const comparisons = Array.isArray(value.comparisons) ? value.comparisons : [];
+  const assessed = comparisons.filter((row) => row?.status !== "Insufficient Evidence");
+  const selected = assessed.slice(0, 12).map((row) => ({
+    name: boundedText(row?.name, 160),
+    url: boundedText(row?.url, 300),
+    status: row?.status,
+    topic: boundedText(row?.topic, 500),
+    offerClarity: row?.offerClarity,
+    trustProof: row?.trustProof,
+    ctaClarity: row?.ctaClarity,
+    contentDepth: row?.contentDepth,
+    eeat: row?.eeat,
+    pathClarity: row?.pathClarity,
+  }));
+
+  return {
+    summaryVersion: WRITER_CONTEXT_COMPACTION_VERSION,
+    sourceStatus: value.sourceStatus,
+    comparisonCount: comparisons.length,
+    assessedComparisonCount: assessed.length,
+    statusCounts: countStatuses(comparisons),
+    comparisons: selected,
+    omittedComparisonCount: Math.max(0, assessed.length - selected.length),
+    omittedEvidenceMeaning: "Omitted competitor rows remain stored in canonical evidence; no omitted row is treated as negative evidence.",
+    opportunities: Array.isArray(value.opportunities)
+      ? value.opportunities.slice(0, 12).map((row) => cloneDefined(row))
+      : value.opportunities,
+  };
+}
+
+function compactSiteFootprint(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (serializedBytes(value) <= SITE_FOOTPRINT_SUMMARY_BYTES) return cloneDefined(value);
+
+  const clusters = Array.isArray(value.clusters) ? value.clusters : [];
+  const materialFamilies = Array.isArray(value.prioritySelection?.materialFamilies)
+    ? value.prioritySelection.materialFamilies
+    : [];
+  return {
+    summaryVersion: WRITER_CONTEXT_COMPACTION_VERSION,
+    status: value.status,
+    incomplete: value.incomplete,
+    discoveredUrlCount: value.discoveredUrlCount,
+    assessedUrlCount: value.assessedUrlCount,
+    coverage: cloneDefined(value.coverage),
+    limitations: Array.isArray(value.limitations)
+      ? value.limitations.map((item) => boundedText(item, 300))
+      : value.limitations,
+    priorityUrls: Array.isArray(value.priorityUrls)
+      ? value.priorityUrls.slice(0, 20)
+      : value.priorityUrls,
+    clusterSummary: {
+      clusterCount: clusters.length,
+      materialFamilyCount: materialFamilies.length,
+      representativeUrls: clusters
+        .flatMap((cluster) => cluster?.representativeUrls || [])
+        .slice(0, 30),
+      patterns: clusters.slice(0, 30).map((cluster) => ({
+        id: cluster?.id,
+        pattern: boundedText(cluster?.pattern, 180),
+        discoveredUrlCount: cluster?.discoveredUrlCount,
+        requiresRepresentativeAssessment: cluster?.requiresRepresentativeAssessment,
+        reasonCodes: cloneDefined(cluster?.reasonCodes),
+      })),
+    },
+    prioritySelection: value.prioritySelection
+      ? {
+          strategyVersion: value.prioritySelection.strategyVersion,
+          priorityUrlCap: value.prioritySelection.priorityUrlCap,
+          mustHaveUrls: value.prioritySelection.mustHaveUrls?.slice(0, 10),
+          representativeUrls: value.prioritySelection.representativeUrls?.slice(0, 20),
+          supplementalUrls: value.prioritySelection.supplementalUrls?.slice(0, 20),
+          materialFamilyCount: value.prioritySelection.materialFamilyCount,
+          representedMaterialFamilyCount: value.prioritySelection.representedMaterialFamilyCount,
+          unrepresentedMaterialFamilyCount: value.prioritySelection.unrepresentedMaterialFamilyCount,
+        }
+      : undefined,
+    omittedEvidenceMeaning: "Repeated URL-family detail remains stored in canonical evidence; this summary preserves coverage counts and representative references.",
+  };
+}
+
+function compactContentIdeas(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (serializedBytes(value) <= CONTENT_IDEA_SUMMARY_BYTES) return cloneDefined(value);
+  const out = {};
+  for (const [stage, rows] of Object.entries(value)) {
+    out[stage] = Array.isArray(rows)
+      ? rows.slice(0, 12).map((row) => {
+          if (typeof row === "string") return boundedText(row, 400);
+          return {
+            topic: boundedText(row?.topic || row?.idea || row?.query, 400),
+            question: boundedText(row?.question || row?.buyerQuestion, 400),
+            action: row?.action,
+            rationale: boundedText(row?.rationale || row?.reason, 500),
+          };
+        })
+      : rows;
+  }
+  out.summaryVersion = WRITER_CONTEXT_COMPACTION_VERSION;
+  out.omittedEvidenceMeaning = "Additional deterministic topic rows remain stored and are not treated as assessed negative evidence.";
+  return out;
+}
+
+function compactSemanticLedger(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (serializedBytes(value) <= SEMANTIC_LEDGER_SUMMARY_BYTES) return value;
+
+  const opportunities = Array.isArray(value.contentOpportunities)
+    ? value.contentOpportunities
+    : [];
+  const selected = opportunities.slice(0, 8).map((row) => ({
+    stage: boundedText(row?.stage, 60),
+    topic: boundedText(row?.topic, 180),
+    action: row?.action,
+    reason: boundedText(row?.reason, 240),
+    coverage: row?.coverage
+      ? {
+          state: row.coverage.state,
+          matchCount: row.coverage.matchCount,
+          urls: Array.isArray(row.coverage.urls)
+            ? row.coverage.urls.slice(0, 3)
+            : row.coverage.urls,
+        }
+      : row?.coverage,
+  }));
+
+  const normalizedUrls = Array.isArray(value.provenance?.normalizedUrls)
+    ? value.provenance.normalizedUrls
+    : [];
+  const findingIds = Array.isArray(value.provenance?.findingIds)
+    ? value.provenance.findingIds
+    : [];
+
+  return {
+    summaryVersion: WRITER_CONTEXT_COMPACTION_VERSION,
+    version: value.version,
+    evidenceAuthority: value.evidenceAuthority,
+    sourceStatus: cloneDefined(value.sourceStatus),
+    dimensions: cloneDefined(value.dimensions),
+    concepts: cloneDefined(value.concepts),
+    contentOpportunities: selected,
+    opportunityCount: opportunities.length,
+    omittedOpportunityCount: Math.max(0, opportunities.length - selected.length),
+    omittedEvidenceMeaning: "Additional semantic opportunity rows and URL coverage remain stored in canonical evidence; omitted rows are not treated as negative evidence.",
+    contradictions: cloneDefined(value.contradictions),
+    usefulness: cloneDefined(value.usefulness),
+    routing: cloneDefined(value.routing),
+    provenance: {
+      findingIds,
+      normalizedUrls: normalizedUrls.slice(0, 40),
+      omittedNormalizedUrlCount: Math.max(0, normalizedUrls.length - 40),
+    },
+  };
+}
+
+function compactDeterministicAnalysis(scoreSet) {
+  const analysis = copyOwn(scoreSet, DETERMINISTIC_ANALYSIS_FIELDS);
+  if (analysis.competitors) analysis.competitors = compactCompetitors(analysis.competitors);
+  if (analysis.siteFootprint) analysis.siteFootprint = compactSiteFootprint(analysis.siteFootprint);
+  if (analysis.contentIdeas) analysis.contentIdeas = compactContentIdeas(analysis.contentIdeas);
+  return analysis;
+}
+
 const CAPABILITY_REQUIRED_FIELDS = Object.freeze([
   "capability",
   "status",
@@ -785,11 +981,7 @@ export function buildWriterInput({
 
   // Includes governed representative-site coverage when it exists.
   // Absence remains absence; nothing is reconstructed here.
-  const deterministicAnalysis =
-    copyOwn(
-      scoreSet,
-      DETERMINISTIC_ANALYSIS_FIELDS,
-    );
+  const deterministicAnalysis = compactDeterministicAnalysis(scoreSet);
 
   deterministicAnalysis.semanticLedger = buildSemanticLedger({
     scoreSet,
@@ -797,6 +989,9 @@ export function buildWriterInput({
     decisionEvidence,
     contentIdeas: scoreSet.contentIdeas,
   });
+  deterministicAnalysis.semanticLedger = compactSemanticLedger(
+    deterministicAnalysis.semanticLedger,
+  );
 
   deterministicAnalysis.conversionInfluence =
     buildWriterConversionInfluence(
@@ -860,4 +1055,37 @@ export function buildWriterInput({
   return Object.freeze(
     packet,
   );
+}
+
+/**
+ * Deterministic category accounting used by the live preflight. The packet is
+ * already compacted when this is called, so the report measures exactly what
+ * can cross the Writer boundary rather than raw stored artifacts.
+ */
+export function measureWriterInputBudget(writerInput) {
+  if (!writerInput || typeof writerInput !== "object") {
+    throw new Error("writerInput is required for budget measurement");
+  }
+  const categories = {};
+  for (const [key, value] of Object.entries(writerInput)) {
+    if (key === "referenceIndex") continue;
+    categories[key] = {
+      bytes: serializedBytes(value),
+      estimatedTokens: Math.ceil(serializedBytes(value) / 1.5),
+    };
+  }
+  const referenceBytes = serializedBytes(writerInput.referenceIndex || {});
+  categories.referenceIndex = {
+    bytes: referenceBytes,
+    estimatedTokens: Math.ceil(referenceBytes / 1.5),
+  };
+  const bytes = serializedBytes(writerInput);
+  return Object.freeze({
+    compactionVersion: WRITER_CONTEXT_COMPACTION_VERSION,
+    bytes,
+    estimatedTokens: Math.ceil(bytes / 1.5),
+    categories: Object.freeze(categories),
+    targetBytes: WRITER_CONTEXT_TARGET_BYTES,
+    targetEstimatedTokens: Math.ceil(WRITER_CONTEXT_TARGET_BYTES / 1.5),
+  });
 }

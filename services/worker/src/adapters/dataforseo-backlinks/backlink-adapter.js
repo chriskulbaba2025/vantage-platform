@@ -15,7 +15,7 @@
 
 import { execute as backlinksExecute } from "../../evidence/backlinks-provider.js";
 
-const ADAPTER_VERSION = "1.0.0";
+const ADAPTER_VERSION = "1.1.0";
 
 /**
  * Create a governed production backlinks adapter.

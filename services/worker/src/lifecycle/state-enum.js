@@ -77,8 +77,11 @@ export const TRANSITION_MAP = Object.freeze({
   [T.NARRATIVE_PENDING]: new Set([T.NARRATIVE_READY, T.NARRATIVE_FAILED]),
   [T.NARRATIVE_FAILED]:  new Set([T.NARRATIVE_PENDING]),
   [T.NARRATIVE_READY]:   new Set([T.DRAFT_RENDERED, T.RENDER_FAILED]),
-  [T.RENDER_FAILED]:     new Set([T.NARRATIVE_READY]),
-  [T.DRAFT_RENDERED]:    new Set([T.IN_REVIEW]),
+  [T.RENDER_FAILED]:     new Set([T.NARRATIVE_READY, T.COLLECTING]),
+  // A historically rendered audit may be reopened only when the governed
+  // evidence-sufficiency recovery proves the persisted core evidence is
+  // insufficient. This is not a general report rewrite path.
+  [T.DRAFT_RENDERED]:    new Set([T.IN_REVIEW, T.COLLECTING]),
   [T.IN_REVIEW]:         new Set([T.APPROVED, T.APPROVAL_REJECTED]),
   [T.APPROVAL_REJECTED]: new Set([T.IN_REVIEW]),
   [T.APPROVED]:          new Set([T.PUBLISHED, T.PUBLISH_FAILED]),

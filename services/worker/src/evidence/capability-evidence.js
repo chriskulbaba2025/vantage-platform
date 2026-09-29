@@ -247,8 +247,16 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
         "Provider pages endpoint returned no page body content (metadata-only crawl)",
       );
     } else {
-      status = CAPABILITY_STATUS.UNAVAILABLE;
-      limitations.push("Page body content evidence was not collected");
+      const siteStatus = String(site?.sourceStatus || "");
+      if (siteStatus === "AVAILABLE" || siteStatus === "PARTIAL") {
+        status = CAPABILITY_STATUS.PARTIAL;
+        limitations.push(
+          "Page body-content availability is unknown for an otherwise viable site source; no absence claim is permitted.",
+        );
+      } else {
+        status = CAPABILITY_STATUS.UNAVAILABLE;
+        limitations.push("Page body content evidence was not collected");
+      }
     }
 
  if (
@@ -298,6 +306,11 @@ function deriveCapabilities(evidence, auditId, pathValidationEvidence) {
   } else {
     status = CAPABILITY_STATUS.AVAILABLE;
   }
+} else if (contentState === "unknown" && ["AVAILABLE", "PARTIAL"].includes(String(site?.sourceStatus || ""))) {
+  status = CAPABILITY_STATUS.PARTIAL;
+  limitations.push(
+    "Body-content availability is unknown for an otherwise viable site source; conclusions are limited and no absence claim is permitted.",
+  );
 } else {
   status = CAPABILITY_STATUS.UNAVAILABLE;
   limitations.push(limitation);
@@ -1196,10 +1209,18 @@ caps[name] = capability({
       status: labStatus,
       coverage: perfCoverage,
       provenance: perfProv,
-      limitations: labLimitations,
+      limitations: [
+        ...labLimitations,
+        ...(labStatus === CAPABILITY_STATUS.PARTIAL &&
+        performance?.usableScores !== undefined &&
+        !(Number(performance.usableScores) > 0)
+          ? ["No measurable lab performance score was returned"]
+          : []),
+      ],
       requiredFieldsPresent:
         labStatus === "AVAILABLE" ||
-        labStatus === "PARTIAL",
+        (labStatus === "PARTIAL" &&
+          (performance?.usableScores === undefined || Number(performance.usableScores) > 0)),
     });
 
     const fieldData =

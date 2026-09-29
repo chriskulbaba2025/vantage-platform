@@ -35,7 +35,7 @@ console.log("=".repeat(60));
 console.log("WP9 FULL VERIFICATION");
 console.log("=".repeat(60));
 
-run("1. Template integrity", "node src/report/verify-template.js");
+run("1. Current report retirement contract", "node --test src/report/legacy-report-retirement.test.js");
 run("2. Schema tests", "node --test src/contracts/validator.test.js");
 run("3. Artifact tests", "node --test test-fixtures/artifacts/memory-artifact-store.test.js");
 run("4. Lifecycle tests", "node --test test-fixtures/lifecycle/memory-repository.test.js");

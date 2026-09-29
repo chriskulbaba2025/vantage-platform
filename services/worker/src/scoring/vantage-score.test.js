@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { scoreAudit } from "./vantage-score.js";
 import { scorePerformance } from "./score-components.js";
-import { renderReport } from "../report/render-report.js";
 import { SOURCE_STATUS } from "./evidence-contracts.js";
 import { buildCapabilityEvidence } from "../evidence/capability-evidence.js";
 
@@ -397,30 +396,6 @@ test("scoreAudit with valid performance preserves normal behavior", () => {
   assert.ok(model.evidenceConfidenceScore >= 80);
 });
 
-test("Lighthouse fallback renders PASS gate and numeric metrics in the report", async () => {
-  const model = scoreAudit(
-    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence({ performance: lighthouseFallbackPerf() }),
-  );
-  assert.equal(model.evidence.performance.sourceStatus, SOURCE_STATUS.AVAILABLE);
-  assert.equal(
-    model.evidence.performance.mobile.source,
-    "lighthouse-cli-fallback",
-  );
-  assert.equal(model.scores.performance, 75); // clamp(average(62, 88))
-
-  const html = await renderReport(model);
-  assert.match(html, /Performance.*PASS/);
-  assert.doesNotMatch(html, /No performance result was measured/);
-  assert.match(html, />62</);
-  assert.match(html, />88</);
-  assert.match(html, /3\.1s/);
-  assert.match(html, /1\.4s/);
-  assert.match(html, /0\.6s/);
-  assert.match(html, />180ms</);
-  assert.match(html, />45ms</);
-});
-
 // -----------------------------------------------------------------------
 // NEW: Crawl gate tests (PRD v3.0 §8.6)
 // -----------------------------------------------------------------------
@@ -551,21 +526,7 @@ test("PARTIAL crawl scores available evidence normally", () => {
   assert.equal(model._crawlSuppressed, undefined);
 });
 
-test("scoreAudit renders report with FAILED crawl without crashing", async () => {
-  const model = scoreAudit(
-    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence({ site: failedSite() }),
-  );
-
-  // Verify model doesn't crash rendering
-  const html = await renderReport(model);
-  assert.ok(html.length > 0);
-  assert.match(html, /Prysm Phase 1 Audit/);
-  // Report should indicate crawl issues without crashing
-  assert.ok(typeof html === "string");
-});
-
-test("no-crawl fallback preserves independent performance evidence through report projection", async () => {
+test("no-crawl preserves independent performance evidence in the score model", () => {
   const model = scoreAudit(
     { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
     evidence({ site: failedSite() }),
@@ -576,8 +537,6 @@ test("no-crawl fallback preserves independent performance evidence through repor
   assert.equal(model.scores.technicalPerformanceDimension, 76);
   assert.equal(model.moduleEligibility.performance, true);
 
-  const html = await renderReport(model);
-  assert.ok(html.includes("Prysm Phase 1 Audit"));
   assert.equal(model.readinessStatus, "Insufficient Evidence for Overall Score");
   assert.equal(model.moduleEligibility.performance, true);
 });
@@ -1465,46 +1424,6 @@ test("moduleEligibility has entries for all modules", () => {
   for (const modId of Object.keys(MODULES)) {
     assert.ok(modId in model.moduleEligibility, `Missing module eligibility for ${modId}`);
   }
-});
-
-// ---------------------------------------------------------------------------
-// N. Render report with provisional state
-// ---------------------------------------------------------------------------
-
-test("renderReport with provisional model does not crash", async () => {
-  // Use a normal model (Complete status)
-  const model = scoreAudit(
-    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence(),
-  );
-
-  const html = await renderReport(model);
-  assert.ok(html.length > 0);
-  assert.match(html, /Prysm Phase 1 Audit/);
-  assert.match(html, /Scoring version/);
-});
-
-test("renderReport with Insufficient Evidence state does not crash", async () => {
-  const model = scoreAudit(
-    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence({ site: failedSite() }),
-  );
-
-  const html = await renderReport(model);
-  assert.ok(html.length > 0);
-  assert.match(html, /Insufficient Evidence/);
-});
-
-test("renderReport with Provisional state shows assessed weight", async () => {
-  // Use performance FAILED to get 90% assessed (Complete, not provisional)
-  // For a true provisional test, we use normal (100%) and verify it shows assessed weight
-  const model = scoreAudit(
-    { targetUrl: "https://example.com", businessName: "Example", competitors: [] },
-    evidence(),
-  );
-
-  const html = await renderReport(model);
-  assert.match(html, /Assessed weight/);
 });
 
 // =============================================================================
